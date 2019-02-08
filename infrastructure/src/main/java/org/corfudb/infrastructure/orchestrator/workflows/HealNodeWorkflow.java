@@ -1,18 +1,16 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
@@ -33,7 +31,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         super(new AddNodeRequest(healNodeRequest.getEndpoint()));
         this.request = healNodeRequest;
         this.actions = ImmutableList.of(new HealNodeToLayout(),
-                new RestoreRedundancyAndMergeSegments());
+                new RestoreRedundancyMergeSegments());
     }
 
     @Override
@@ -59,41 +57,6 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
             runtime.invalidateLayout();
             newLayout = new Layout(runtime.getLayoutView().getLayout());
-        }
-    }
-
-    /**
-     * This action attempts to restore redundancy for all servers across all segments
-     * starting from the oldest segment. It then collapses the segments once the set of
-     * servers in the 2 oldest subsequent segments are equal.
-     */
-    class RestoreRedundancyAndMergeSegments extends Action {
-        @Nonnull
-        @Override
-        public String getName() {
-            return "RestoreRedundancyAndMergeSegments";
-        }
-
-        @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws OutrankedException,
-                                                               ExecutionException,
-                                                               InterruptedException {
-            // Catchup all servers across all segments.
-            while (newLayout.getSegments().size() > 1) {
-
-                // Currently the state is transferred for the complete segment.
-                // TODO: Add stripe specific transfer granularity for optimization.
-                // Get the set of servers present in the second segment but not in the first
-                // segment.
-                Set<String> lowRedundancyServers = Sets.difference(
-                        newLayout.getSegments().get(1).getAllLogServers(),
-                        newLayout.getSegments().get(0).getAllLogServers());
-                // Transfer the replicated segment to the difference set calculated above.
-                stateTransfer(lowRedundancyServers, runtime, newLayout.getSegments().get(0));
-                runtime.getLayoutManagementView().mergeSegments(new Layout(newLayout));
-                runtime.invalidateLayout();
-                newLayout = runtime.getLayoutView().getLayout();
-            }
         }
     }
 }

@@ -1,33 +1,26 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
-import com.google.common.collect.ContiguousSet;
-import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Range;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.ArrayList;
+
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
+import static org.corfudb.infrastructure.orchestrator.actions.StateTransfer.*;
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 /**
@@ -122,89 +115,6 @@ public class AddNodeWorkflow implements IWorkflow {
     }
 
     /**
-     * Fetch and propagate the trimMark to the new/healing nodes. Else, a FastLoader reading from
-     * them will have to mark all the already trimmed entries as holes.
-     * Transfer an address segment from a cluster to a set of specified nodes.
-     * There are no cluster reconfigurations, hence no epoch change side effects.
-     *
-     * @param endpoints destination nodes
-     * @param runtime   The runtime to read the segment from
-     * @param segment   segment to transfer
-     */
-    protected void stateTransfer(Set<String> endpoints, CorfuRuntime runtime,
-                                 Layout.LayoutSegment segment) throws ExecutionException, InterruptedException {
-
-        int batchSize = runtime.getParameters().getBulkReadSize();
-
-        long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
-        // Send the trimMark to the new/healing nodes.
-        // If this times out or fails, the Action performing the stateTransfer fails and retries.
-        for (String endpoint : endpoints) {
-            // TrimMark is the first address present on the log unit server.
-            // Perform the prefix trim on the preceding address = (trimMark - 1).
-            // Since the LU will reject trim decisions made from older epochs, we
-            // need to adjust the new trim mark to have the new layout's epoch.
-            Token prefixToken = new Token(newLayout.getEpoch(), trimMark - 1);
-            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(newLayout)
-                    .getLogUnitClient(endpoint)
-                    .prefixTrim(prefixToken));
-        }
-
-        if (trimMark > segment.getEnd()) {
-            log.info("stateTransfer: Nothing to transfer, trimMark {} greater than end of segment {}",
-                    trimMark, segment.getEnd());
-            return;
-        }
-
-        // State transfer should start from segment start address or trim mark whichever is lower.
-        long segmentStart = Math.max(trimMark, segment.getStart());
-
-        for (long chunkStart = segmentStart; chunkStart < segment.getEnd()
-                ; chunkStart = chunkStart + batchSize) {
-            long chunkEnd = Math.min((chunkStart + batchSize - 1), segment.getEnd() - 1);
-
-            long ts1 = System.currentTimeMillis();
-
-            Map<Long, ILogData> dataMap = runtime.getAddressSpaceView()
-                    .cacheFetch(ContiguousSet.create(
-                            Range.closed(chunkStart, chunkEnd),
-                            DiscreteDomain.longs()));
-
-            long ts2 = System.currentTimeMillis();
-
-            log.info("stateTransfer: read {}-{} in {} ms", chunkStart, chunkEnd, (ts2 - ts1));
-
-            List<LogData> entries = new ArrayList<>();
-            for (long x = chunkStart; x <= chunkEnd; x++) {
-                if (dataMap.get(x) == null) {
-                    log.error("Missing address {} in range {}-{}", x, chunkStart, chunkEnd);
-                    throw new IllegalStateException("Missing address");
-                }
-                entries.add((LogData) dataMap.get(x));
-            }
-
-            for (String endpoint : endpoints) {
-                // Write segment chunk to the new logunit
-                ts1 = System.currentTimeMillis();
-                boolean transferSuccess = runtime.getLayoutView().getRuntimeLayout(newLayout)
-                        .getLogUnitClient(endpoint)
-                        .writeRange(entries).get();
-                ts2 = System.currentTimeMillis();
-
-                if (!transferSuccess) {
-                    log.error("stateTransfer: Failed to transfer {}-{} to {}", chunkStart,
-                            chunkEnd, endpoint);
-                    throw new IllegalStateException("Failed to transfer!");
-                }
-
-                log.info("stateTransfer: Transferred address chunk [{}, {}] to {} in {} ms",
-                        chunkStart, chunkEnd, endpoint, (ts2 - ts1));
-            }
-        }
-    }
-
-
-    /**
      * The new server is caught up with all data.
      * This server is then added to all the segments to mark it open to all reads and writes.
      */
@@ -217,8 +127,8 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws OutrankedException,
-                                                               ExecutionException,
-                                                               InterruptedException {
+                ExecutionException,
+                InterruptedException {
             runtime.invalidateLayout();
             newLayout = runtime.getLayoutView().getLayout();
 
@@ -236,7 +146,7 @@ public class AddNodeWorkflow implements IWorkflow {
                 // The new server is already a part of the last segment. This is based on an
                 // assumption that the newly added node is not removed from the layout.
                 for (int i = 0; i < newLayout.getSegments().size() - 1; i++) {
-                    stateTransfer(Collections.singleton(request.getEndpoint()),
+                    transfer(newLayout, Collections.singleton(request.getEndpoint()),
                             runtime,
                             newLayout.getSegments().get(i));
                 }

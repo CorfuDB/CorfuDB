@@ -1,5 +1,7 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -9,6 +11,7 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.Sleep;
 import org.junit.After;
@@ -29,6 +32,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.function.Predicate;
 
 /**
  * Integration tests.
@@ -164,6 +168,28 @@ public class AbstractIT extends AbstractCorfuTest {
                         endpoint, se);
             }
         }
+    }
+
+    /**
+     * Refreshes the layout and waits for a limited time for the refreshed layout to
+     * satisfy the expected verifier.
+     *
+     * @param verifier     Layout predicate to test the refreshed layout.
+     * @param corfuRuntime corfu runtime.
+     */
+    public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuRuntime corfuRuntime) {
+        corfuRuntime.invalidateLayout();
+        Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (verifier.test(refreshedLayout)) {
+                break;
+            }
+            corfuRuntime.invalidateLayout();
+            refreshedLayout = corfuRuntime.getLayoutView().getLayout();
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+        assertThat(verifier.test(refreshedLayout)).isTrue();
     }
 
     /**

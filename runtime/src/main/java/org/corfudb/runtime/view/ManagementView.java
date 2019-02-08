@@ -34,6 +34,7 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.workflows.AddNode;
 import org.corfudb.runtime.view.workflows.ForceRemoveNode;
 import org.corfudb.runtime.view.workflows.HealNode;
+import org.corfudb.runtime.view.workflows.RestoreRedundancyMergeSegments;
 import org.corfudb.runtime.view.workflows.RemoveNode;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
@@ -117,6 +118,21 @@ public class ManagementView extends AbstractView {
     public void healNode(@Nonnull String endpointToHeal, int retry, @Nonnull Duration timeout,
                          @Nonnull Duration pollPeriod) {
         new HealNode(endpointToHeal, runtime, retry, timeout, pollPeriod).invoke();
+    }
+
+    /**
+     * Restore redundancy and merge all split segments.
+     *
+     * @param endpointToRestoreRedundancy Endpoint whose redundancy is to be restored.
+     * @param retry                       the number of times to retry a workflow if it fails
+     * @param timeout                     total time to wait before the workflow times out
+     * @param pollPeriod                  the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void mergeSegments(@Nonnull String endpointToRestoreRedundancy, int retry, @Nonnull Duration timeout,
+                              @Nonnull Duration pollPeriod) {
+        new RestoreRedundancyMergeSegments(endpointToRestoreRedundancy, runtime, retry, timeout, pollPeriod).invoke();
     }
 
     /**
@@ -279,6 +295,9 @@ public class ManagementView extends AbstractView {
     public ClusterStatusReport getClusterStatus() {
         Layout layout;
         ClusterStatusReliability statusReliability = ClusterStatusReliability.STRONG_QUORUM;
+
+        // Get layout servers from runtime set of layout servers (specified in connection string).
+        // This list is refreshed whenever a new layout is fetched.
         List<String> layoutServers = runtime.getLayoutServers().stream()
                 .map(endpoint -> NodeLocator.getLegacyEndpoint(NodeLocator.parseString(endpoint)))
                 .collect(Collectors.toList());
@@ -383,7 +402,7 @@ public class ManagementView extends AbstractView {
      * @param layoutServers list of initial layout servers to retrieve layouts from.
      * @param discoverLayoutServers flag to indicate if we want to discover new layout servers from
      *                              the layouts retrieved from initial set of layout servers.
-     *                              Note: this is required as runtime.getLayoutServers might have been
+     *                              Note: this is required as runtime.getBootstrapLayoutServers might have been
      *                              initialized with a single server (from all in cluster).
      * @return Map of endpoint id and layout.
      */
