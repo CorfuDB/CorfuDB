@@ -688,7 +688,12 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // We wait for failure to be detected and the cluster to stabilize by waiting for the epoch
         // to increment.
-        waitForEpochChange(refreshedEpoch -> refreshedEpoch > layout.getEpoch(), runtime);
+        waitFor(() -> {
+            runtime.invalidateLayout();
+            Layout refreshedLayout = runtime.getLayoutView().getLayout();
+            return refreshedLayout.getAllActiveServers().size() == 2
+                    && refreshedLayout.getUnresponsiveServers().contains("localhost:9000");
+        });
 
         // Ensure writes still going through. Daemon writer thread does not ensure this.
         // Fail test if write fails.
@@ -711,10 +716,15 @@ public class ClusterReconfigIT extends AbstractIT {
         // PART 2.
         // Reviving same node.
         corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
-        final long epochAfterHealingNode = 3L;
 
         // Waiting node to be healed and added back to the layout.
-        waitForEpochChange(refreshedEpoch -> refreshedEpoch >= epochAfterHealingNode, runtime);
+        waitFor(() -> {
+            runtime.invalidateLayout();
+            Layout refreshedLayout = runtime.getLayoutView().getLayout();
+            return refreshedLayout.getSegments().size() == 1
+                    && refreshedLayout.getUnresponsiveServers().size() == 0
+                    && refreshedLayout.getAllActiveServers().size() == layout.getAllServers().size();
+        });
         verifyData(runtime);
 
         shutdownCorfuServer(corfuServer_1);

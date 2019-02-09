@@ -33,6 +33,7 @@ import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Integration tests.
@@ -190,6 +191,17 @@ public class AbstractIT extends AbstractCorfuTest {
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
         }
         assertThat(verifier.test(refreshedLayout)).isTrue();
+    }
+
+    /**
+     * Wait for the Supplier (some condition) to return true.
+     *
+     * @param supplier Supplier to test condition
+     */
+    public static void waitFor(Supplier<Boolean> supplier) {
+        while (!supplier.get()) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
     }
 
     /**
