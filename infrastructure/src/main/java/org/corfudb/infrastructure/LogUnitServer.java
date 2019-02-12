@@ -333,7 +333,6 @@ public class LogUnitServer extends AbstractServer {
 
     private synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-        streamLog.release(address, (LogData) entry);
     }
 
     /**
