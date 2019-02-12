@@ -54,6 +54,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 public class ServerContext implements AutoCloseable {
+
     // Layout Server
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
@@ -66,10 +67,6 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
-    private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
-    private static final String KEY_TAIL_SEGMENT = "CURRENT";
-    private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
-    private static final String KEY_STARTING_ADDRESS = "CURRENT";
     private static final String KEY_SEQUENCER = "SEQUENCER";
     private static final String PREFIX_SEQUENCER_EPOCH = "EPOCH";
 
@@ -447,30 +444,6 @@ public class ServerContext implements AutoCloseable {
 
     public void setLayoutInHistory(Layout layout) {
         dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
-    }
-
-    public long getTailSegment() {
-        Long tailSegment = dataStore.get(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT);
-        return tailSegment == null ? 0 : tailSegment;
-    }
-
-    public void setTailSegment(long tailSegment) {
-        dataStore.put(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT, tailSegment);
-    }
-
-    /**
-     * Returns the dataStore starting address.
-     *
-     * @return the starting address
-     */
-    public long getStartingAddress() {
-        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
-                KEY_STARTING_ADDRESS);
-        return startingAddress == null ? 0 : startingAddress;
-    }
-
-    public void setStartingAddress(long startingAddress) {
-        dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
     }
 
     /**
