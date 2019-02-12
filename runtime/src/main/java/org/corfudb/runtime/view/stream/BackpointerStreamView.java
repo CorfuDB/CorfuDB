@@ -238,12 +238,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                       final long startAddress,
                                       final long stopAddress,
                                       final Function<ILogData, BackpointerOp> filter) {
-        log.trace("followBackPointers: stmreadId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
+        log.trace("followBackpointers: streamId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
                 "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
         // Whether or not we added entries to the queue.
         boolean entryAdded = false;
         // The current address which we are reading from.
         long currentAddress = startAddress;
+
+        boolean startingSingleStep = true;
 
         // Loop until we have reached the stop address.
         while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
@@ -252,7 +254,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // Read the current address
             ILogData d;
             try {
-                log.trace("followBackPointers: readAddress[{}]", currentAddress);
+                log.trace("followBackpointers: readAddress[{}]", currentAddress);
                 d = read(currentAddress);
             } catch (TrimmedException e) {
                 if (options.ignoreTrimmed) {
@@ -266,13 +268,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {
-                log.trace("followBackPointers: address[{}] contains streamId[{}], apply filter", currentAddress,
+                log.trace("followBackpointers: address[{}] contains streamId[{}], apply filter", currentAddress,
                         streamId);
                 // Check whether we should include the address
                 BackpointerOp op = filter.apply(d);
                 if (op == BackpointerOp.INCLUDE
                         || op == BackpointerOp.INCLUDE_STOP) {
-                    log.trace("followBackPointers: Adding backpointer to address[{}] to queue", currentAddress);
+                    log.trace("followBackpointers: Adding backpointer to address[{}] to queue", currentAddress);
                     queue.add(currentAddress);
                     entryAdded = true;
                     // Check if we need to stop
@@ -286,23 +288,32 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // Now calculate the next address
             // Try using backpointers first
 
-            log.trace("followBackPointers: calculate the next address");
+            log.trace("followBackpointers: calculate the next address");
 
             if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
                 long tmp = d.getBackpointer(streamId);
-                log.trace("followBackPointers: backpointer points to {}", tmp);
+                log.trace("followBackpointers: backpointer points to {}", tmp);
                 // if backpointer is a valid log address or Address.NON_EXIST
                 // (beginning of the stream), do not single step back on the log
                 if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
                     currentAddress = tmp;
                     singleStep = false;
+                    if (!startingSingleStep) {
+                        // A started single step period finishes here, refresh flag for next cycle.
+                        log.info("followBackpointers[{}]: Found backpointer for this stream at address {}. Stop single step downgrade.");
+                        startingSingleStep = true;
+                    }
                 }
             }
 
             if (singleStep) {
+                if (startingSingleStep) {
+                    startingSingleStep = false;
+                    log.info("followBackpointers[{}]: Found hole at address {}. Starting single step downgrade.", this, currentAddress);
+                }
                 // backpointers failed, so we're
                 // downgrading to a linear scan
-                log.warn("followBackPointers[{}]: downgrading to single step, found hole at {}", this, currentAddress);
+                log.trace("followBackpointers[{}]: downgrading to single step, found hole at {}", this, currentAddress);
                 currentAddress = currentAddress - 1;
             }
         }
