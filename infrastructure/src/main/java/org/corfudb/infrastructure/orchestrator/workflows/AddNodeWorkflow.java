@@ -73,18 +73,14 @@ public class AddNodeWorkflow implements IWorkflow {
             return "BootstrapNode";
         }
 
+        /**
+         * Completes if bootstrap was successful.
+         *
+         * @param runtime A runtime that the action will use to execute
+         */
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            try {
-                runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint());
-            } catch (Exception e) {
-                if (e.getCause() instanceof AlreadyBootstrappedException) {
-                    log.info("BootstrapNode: Node {} already bootstrapped, skipping.", request.getEndpoint());
-                } else {
-                    log.error("execute: Error during bootstrap", e);
-                    throw e;
-                }
-            }
+            runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint()).get();
         }
     }
 
