@@ -313,7 +313,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // Loop until we have reached the stop address.
         while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
-            backpointerCount++;
 
             // Read the current address
             ILogData d;
@@ -360,6 +359,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // if backpointer is a valid log address or Address.NON_EXIST
                 // (beginning of the stream), do not single step back on the log
                 if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
+                    backpointerCount++;
                     currentAddress = tmp;
                     singleStep = false;
                     if (!startingSingleStep) {
@@ -407,7 +407,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
                 context.checkpointSuccessNumEntries = 1L;
                 context.checkpointSuccessBytes = (long) data.getSizeEstimate();
-                context.checkpointSuccessEndAddr = data.getGlobalAddress();
             }
             else if (data.getCheckpointId().equals(context.checkpointSuccessId)) {
                 context.checkpointSuccessNumEntries++;
@@ -460,7 +459,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
-
                     return true;
                 }
             } catch (TrimmedException te) {
@@ -522,16 +520,33 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return fillFromResolved(latestTokenValue, context);
         }
 
+        // Stop address should be set to the max resolved address between our regular stream and checkpoint stream
+        // as all addresses below this limit are guaranteed to be known by the stream layer.
+        // FIXME: GIT issue #1814 snapshot address might not be present, we default to the start address
+        // (we might be missing the address space in the range start-snapshot, but this has no correctness
+        // implications). This should be the right code (once we assume snapshot address is always present):
+        // long stopAddress = Long.max(context.maxResolution, context.checkpointSnapshotAddress);
+        long cpMaxAddress = Long.max(context.checkpointSnapshotAddress, context.checkpointSuccessStartAddr);
+        long stopAddress = Long.max(cpMaxAddress, context.maxResolution);
+
+        // We move from the resolved queue to the read queue any available addresses
+        // between globalPointer and max resolved address, to take advantage of the already available
+        // addresses in the resolved queue.
+        if (fillFromResolved(context.maxResolution, context)) {
+            stopAddress = context.maxResolution;
+            log.trace("fillReadQueue[{}]: added {} addresses from resolved queue, stop address set to: {}", this, context.readQueue.size(), stopAddress);
+
+        }
+
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
         // log pointer -or- the checkpoint snapshot address, because all
         // values from the beginning of the stream up to the snapshot address
         // should be reflected. For each address which is less than
         // maxGlobalAddress, we insert it into the read queue.
-
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
-                Long.max(context.getGlobalPointer(), context.checkpointSnapshotAddress),
+                stopAddress,
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();

@@ -35,6 +35,9 @@ message LogEntry {
     optional int64 checkpointedStreamId_least_significant = 14;
     //  Tail of the stream at the time of taking the checkpoint snapshot.
     optional int64 checkpointedStreamStartLogAddress = 15;
+    // Checkpoint snapshot address
+    optional int64 checkpointedStreamSnapshotAddress = 19;
+
 
     // ClientId is the Corfu runtime id that created this LogEntry
     optional int64 clientId_least_significant = 16;

@@ -381,6 +381,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
             logData.setCheckpointedStreamStartLogAddress(
                     entry.getCheckpointedStreamStartLogAddress());
+
+            logData.setCheckpointedStreamSnapshotAddress(
+                    entry.getCheckpointedStreamSnapshotAddress());
         }
 
         return logData;
@@ -732,6 +735,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     entry.getCheckpointedStreamId().getMostSignificantBits());
             logEntryBuilder.setCheckpointedStreamStartLogAddress(
                     entry.getCheckpointedStreamStartLogAddress());
+            logEntryBuilder.setCheckpointedStreamSnapshotAddress(
+                    entry.getCheckpointedStreamSnapshotAddress());
         }
 
         return logEntryBuilder.build();

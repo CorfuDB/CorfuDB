@@ -180,6 +180,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 setCheckpointedStreamStartLogAddress(
                         Long.parseLong(cp.getDict()
                                 .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)));
+                setCheckpointedStreamSnapshotAddress(
+                        Long.parseLong(cp.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS)));
             }
         }
     }
