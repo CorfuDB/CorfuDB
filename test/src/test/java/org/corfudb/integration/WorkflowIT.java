@@ -1,23 +1,25 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.corfudb.integration.Harness.run;
 
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutBuilder;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * This integration test verifies the behaviour of the add node workflow. In particular, a single node
@@ -28,6 +30,7 @@ import java.util.List;
  * back the data generated while growing the cluster to verify that it is correct and can be read
  * from a three node cluster.
  * <p>
+ *
  * Created by Maithem on 12/1/17.
  */
 @Slf4j
@@ -42,14 +45,6 @@ public class WorkflowIT extends AbstractIT {
     final Duration timeout = Duration.ofMinutes(5);
     final Duration pollPeriod = Duration.ofMillis(50);
     final int workflowNumRetry = 3;
-
-    private Process runServer(int port, boolean single) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(host)
-                .setPort(port)
-                .setSingle(single)
-                .runServer();
-    }
 
     @Test
     public void addAndRemoveNodeIT() throws Exception {
@@ -359,5 +354,274 @@ public class WorkflowIT extends AbstractIT {
 
         // Shutdown two nodes
         run(n1.shutdown, n2.shutdown);
+    }
+
+    /**
+     * This test checks that data is not lost if the runtime GC is triggered right after the stream
+     * has synced back to a version that falls in the space of trimmed addresses.
+     * To this end, we verify that after GC syncing to the most recent version of the stream does not end in data loss.
+     *
+     * The steps performed in this test are the following:
+     *
+     * 1. Create a table.
+     * 2. Within a transaction write (numDataEntries - 2) entries to table.
+     * 3. Checkpoint table.
+     * 4. Write 2 more entries to table.
+     *
+     * Log should look like this:
+     *
+     * [         'table' Stream        ]            [ 'table' ]
+     * +-------------------------------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12  |
+     * +-------------------------------------------------------+
+     *                                 [ checkpoint ]       ^
+     *                                                     Global
+     *                                                     Pointer
+     *
+     *  5. Initiate a snapshot transaction in a version that moves the pointer to the space of addresses to trim.
+     *     We initiate a snapshot transaction to version 1.
+     *
+     * [         'table' Stream        ]            [ 'table' ]
+     * +-------------------------------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12  |
+     * +-------------------------------------------------------+
+     *       ^                         [ checkpoint ]
+     *      Global
+     *      Pointer
+     *
+     *  6. Trim the log. On the server side, addresses 0-7 will be trimmed.
+     *  7. Trigger runtime GC.
+     *  8. Assert that after running GC we are not losing data.
+     *  9. Trigger runtime GC for the second time (since GC is deferred in one cycle).
+     *  10. Assert that initiating a snapshot transaction on a trimmed address is aborted with the right cause.
+     *  11. Assert again that pointer was not moved and data is not lost.
+     *
+     */
+    @Test
+    public void testRuntimeGCForActiveTransactionsInTrimRangeSingleThread() throws Exception {
+        // Run single node server and create runtime
+        runDefaultServer();
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+
+        final int numDataEntries = 10;
+
+        // (1)
+        CorfuTable<Integer, String> table = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
+                })
+                .setStreamName("test")
+                .open();
+
+        // (2)
+        for (int i = 0; i < numDataEntries - 2; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+            table.put(i, String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        // (3)
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(table);
+        Token prefixTrim = mcw.appendCheckpoints(corfuRuntime, "author");
+
+        // (4)
+        for (int i = numDataEntries - 2; i < numDataEntries; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+            table.put(i, String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        // (5)
+        // Force the global pointer to move back to the space of addresses to be trimmed.
+        corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                .snapshot(new Token(0,1))
+                .build()
+                .begin();
+        table.get(0);
+        corfuRuntime.getObjectsView().TXEnd();
+
+        // (6)
+        corfuRuntime.getAddressSpaceView().prefixTrim(prefixTrim);
+
+        // (7)
+        corfuRuntime.getGarbageCollector().runRuntimeGC();
+
+        // (8)
+        assertThat(table).hasSize(numDataEntries);
+        for(int i = 0; i < numDataEntries; i++) {
+            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+        }
+
+        // (9)
+        corfuRuntime.getGarbageCollector().runRuntimeGC();
+
+        // (10)
+        assertThatThrownBy(() -> {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                .snapshot(new Token(0,1))
+                .build()
+                .begin();
+            table.get(0);
+            corfuRuntime.getObjectsView().TXEnd();})
+                .isInstanceOf(TransactionAbortedException.class)
+                .hasCauseInstanceOf(TrimmedException.class);
+
+        // (11)
+        assertThat(table).hasSize(numDataEntries);
+        for(int i = 0; i < numDataEntries; i++) {
+            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+        }
+    }
+
+    /**
+     * This test ensures that any ongoing transaction which snapshot is positioned
+     * in the space of trimmed addresses does not incur in data loss. Steps of this test:
+     *
+     * 1. Create a table
+     * 2. On T0 (thread 0, main thread) write one entry into the table. Await.
+     *
+     *    ['table']
+     *     +---+
+     *     | 0 |
+     *     +---+
+     *
+     * 3. Start T1 (Thread 1). Begin write_after_write transaction, write one entry to set the tx snapshot to @0. Await.
+     *    Note: this is not reflected in the log as the tx has not ended.
+     * 4. On T0 write (numElements - 2) entries.
+     *
+     * [         'table' Stream        ]
+     * +-------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+     * +-------------------------------+
+     *
+     * 5. On T0 checkpoint.
+     *
+     * [         'table' Stream        ]
+     * +--------------------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+     * +--------------------------------------------+
+     *                                 [ checkpoint ]
+     *
+     * 6. On T0 add 3 more entries to the log, log should look like this: (await)
+     *
+     *
+     * [         'table' Stream        ]            [    'table'   ]
+     * +-----------------------------------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+     * +-----------------------------------------------------------+
+     *                                 [ checkpoint ]            ^
+     *                                                         Global
+     *                                                         Pointer
+     *
+     * 7. On T1, do an access on table, to force globalPointer to move to snapshot position @0
+     * 8. On T0, prefixTrim @7
+     * 9. On T0, trigger runtimeGC
+     * 10. Attempt to access table, we should not have any data loss.
+     * 11. Initiate a snapshot transaction in the space of trimmed addresses, should be aborted.
+     * 12. Attempt to access table, we should not have any data loss.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testRuntimeGCForActiveTransactionsInTrimRangeMultiThread() throws Exception {
+        // Run single node server and create runtime
+        runDefaultServer();
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+
+        int initKey = 0;
+        final int numDataEntries = 10;
+
+        // (1)
+        CorfuTable<Integer, String> table = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
+                })
+                .setStreamName("test")
+                .open();
+
+        // (2)
+        corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+        table.put(initKey, String.valueOf(initKey));
+        corfuRuntime.getObjectsView().TXEnd();
+
+        initKey++;
+
+        CountDownLatch countDownLatch1 = new CountDownLatch(1);
+        CountDownLatch countDownLatch2 = new CountDownLatch(1);
+        CountDownLatch countDownLatch3 = new CountDownLatch(1);
+
+        Thread t = new Thread(() -> {
+            // (3)
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+            table.put(numDataEntries, String.valueOf(numDataEntries));
+                    countDownLatch1.countDown();
+            try {
+                countDownLatch2.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            // TODO(Anny): when debugging found that on this access the VLO is reset, not sure if this is
+            // efficient or there is a bug, further look into this...
+            // (7)
+            table.get(0);
+            corfuRuntime.getObjectsView().TXEnd();
+            countDownLatch3.countDown();
+        });
+        t.start();
+
+        countDownLatch1.await();
+
+        // (4)
+        for (int i = initKey; i < numDataEntries - 2; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+            table.put(i, String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        // (5)
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(table);
+        Token prefixTrim = mcw.appendCheckpoints(corfuRuntime, "author");
+
+        // (6)
+        for (int i = numDataEntries - 2; i < numDataEntries; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+            table.put(i, String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        countDownLatch2.countDown();
+        countDownLatch3.await();
+
+        // (8)
+        corfuRuntime.getAddressSpaceView().prefixTrim(prefixTrim);
+
+        // (9) Note: run it twice so we enforce the trim at stream layer which is deferred in one cycle
+        corfuRuntime.getGarbageCollector().runRuntimeGC();
+        corfuRuntime.getGarbageCollector().runRuntimeGC();
+
+        // (10)
+        assertThat(table).hasSize(numDataEntries + 1);
+        for(int i = 0; i <= numDataEntries; i++) {
+            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+        }
+
+        t.join();
+
+        // (11)
+        assertThatThrownBy(() -> {
+            final int snapshotTxAddress = 4;
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0, snapshotTxAddress))
+                    .build().begin();
+            table.get(0);
+            corfuRuntime.getObjectsView().TXEnd();
+        }).isInstanceOf(TransactionAbortedException.class).hasCauseInstanceOf((TrimmedException.class));
+
+        // (12)
+        assertThat(table).hasSize(numDataEntries + 1);
+        for(int i = 0; i <= numDataEntries; i++) {
+            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+        }
     }
 }
