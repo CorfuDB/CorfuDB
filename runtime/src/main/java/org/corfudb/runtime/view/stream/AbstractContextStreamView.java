@@ -114,14 +114,20 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     @Override
     public final synchronized ILogData nextUpTo(final long maxGlobal) {
-        // Don't do anything if we've already exceeded the global
-        // pointer.
-        if (getCurrentContext().globalPointer > maxGlobal) {
+        // Don't attempt to sync the stream up to maxGlobal if max Global already falls
+        // in the range of trimmed addresses (as marked by the GC trim mark)
+        // It is safe to throw a TrimmedException as this address no longer exists in the log.
+        // Note: still we should validate the global pointer at the end, because we might attempt to sync up to
+        // max global but max address for this stream might still be below.
+        getCurrentContext().validateGlobalPointerPosition(maxGlobal);
+
+        // Don't do anything if we've already exceeded the global pointer.
+        if (getCurrentContext().getGlobalPointer() > maxGlobal) {
             return null;
         }
 
         // Pop the context if it has changed.
-        if (getCurrentContext().globalPointer
+        if (getCurrentContext().getGlobalPointer()
                 >= getCurrentContext().maxGlobalAddress) {
             final T last = streamContexts.pollFirst();
             log.trace("Completed context {}@{}, removing.",
@@ -143,6 +149,12 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             if (processEntryForContext(entry)) {
                 return nextUpTo(maxGlobal);
             }
+        } else {
+            // We've reached the end of our lookup (no next entry), we might have not reached maxGlobal
+            // which was over trim mark (guaranteed on the first validation).
+            // This is the final position of our global pointer, check for the
+            // last time if it is not set before the trim mark;
+            getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
         }
 
         // Return the entry.
@@ -155,12 +167,17 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
     public final synchronized List<ILogData> remainingUpTo(long maxGlobal) {
 
         // Pop the context if it has changed.
-        if (getCurrentContext().globalPointer
+        if (getCurrentContext().getGlobalPointer()
                 >= getCurrentContext().maxGlobalAddress) {
             final T last = streamContexts.pollFirst();
             log.trace("Completed context {}@{}, removing.",
                     last.id, last.maxGlobalAddress);
         }
+
+        // Don't attempt to sync the stream up to maxGlobal if max Global falls in the range of trimmed addresses
+        // (as marked by the GC trim mark)
+        // It is safe to throw a TrimmedException as this address no longer exists in the log.
+        getCurrentContext().validateGlobalPointerPosition(maxGlobal);
 
         final List<ILogData> entries = getNextEntries(getCurrentContext(), maxGlobal,
                 this::doesEntryUpdateContext);
@@ -169,7 +186,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         if (entries.size() == 0) {
             // We've resolved up to maxGlobal, so remember it. (if it wasn't max)
             if (maxGlobal != Address.MAX) {
-                getCurrentContext().globalPointer = maxGlobal;
+                // Set Global Pointer and check that it is not pointing to an address in the trimmed space.
+                getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
             }
             return entries;
         }
@@ -193,9 +211,12 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Otherwise update the pointer
         if (maxGlobal != Address.MAX) {
-            getCurrentContext().globalPointer = maxGlobal;
+            // Set Global Pointer and check that it is not pointing to an address in the trimmed space.
+            getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
         } else {
+            // Update pointer from log data and then validate final position of the pointer against GC trim mark.
             updatePointer(entries.get(entries.size() - 1));
+            getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
         }
 
         // And return the entries.
@@ -246,6 +267,14 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                                                      Function<ILogData, Boolean> contextCheckFn) {
         final List<ILogData> dataList = new ArrayList<>();
         ILogData thisData;
+
+        // Don't attempt to retrieve entries up to maxGlobal if max Global falls in the range of trimmed addresses
+        // (as marked by the GC trim mark).
+        // It is safe to throw a TrimmedException as this address no longer exists in the log.
+        // Note: still we should validate the pointer's position after we sync the stream, as final address
+        // could be less than maxGlobal
+        getCurrentContext().validateGlobalPointerPosition(maxGlobal);
+
         while ((thisData = getNextEntry(context, maxGlobal)) != null) {
             // Add this read to the list of reads to return.
             dataList.add(thisData);
@@ -259,6 +288,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                 break;
             }
         }
+
+        getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
         return dataList;
     }
 
@@ -277,11 +308,14 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      *
      * @param data  The entry to use to update the pointer.
      */
-    protected void updatePointer(final ILogData data) {
+    private void updatePointer(final ILogData data) {
         // Update the global pointer, if it is non-checkpoint data.
         if (data.getType() == DataType.DATA && !data.hasCheckpointMetadata()) {
-            getCurrentContext().globalPointer =
-                    data.getGlobalAddress();
+            // Note: here we only set the global pointer and do not validate its position with respect to the trim mark,
+            // as the pointer is expected to be moving step by step (for instance when syncing a stream up to maxGlobal)
+            // The validation is deferred to these methods which call it in advance based on the expected final position
+            // of the pointer.
+            getCurrentContext().setGlobalPointer(data.getGlobalAddress());
         }
     }
 
@@ -329,6 +363,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
     @Override
     public String toString() {
-        return Utils.toReadableId(baseContext.id) + "@" + getCurrentContext().globalPointer;
+        return Utils.toReadableId(baseContext.id) + "@" + getCurrentContext().getGlobalPointer();
     }
 }
