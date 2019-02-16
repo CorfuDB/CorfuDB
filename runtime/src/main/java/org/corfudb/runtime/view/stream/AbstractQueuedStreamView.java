@@ -332,7 +332,9 @@ public abstract class AbstractQueuedStreamView extends
         if (context.resolvedQueue.first() == context.getGlobalPointer()) {
             log.trace("previous[{}]: reached the beginning of the stream resetting" +
                     " the stream pointer to checkpoint version {}", this, context.checkpointSuccessStartAddr);
-            context.setGlobalPointerCheckGCTrimMark(context.checkpointSuccessStartAddr);
+            // Note: this is a checkpoint, we do not need to verify it is before the trim mark, it actually should be
+            // cause this is the last address of the trimmed range.
+            context.setGlobalPointer(context.checkpointSuccessStartAddr);
             return null;
         }
 
