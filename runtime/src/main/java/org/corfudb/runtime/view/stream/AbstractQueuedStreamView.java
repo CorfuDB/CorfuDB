@@ -91,7 +91,9 @@ public abstract class AbstractQueuedStreamView extends
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
-            context.globalPointer = context.checkpointSuccessStartAddr;
+            // Note: this is a checkpoint, we do not need to verify it is before the trim mark, it actually should be
+            // cause this is the last address of the trimmed range.
+            context.setGlobalPointer(context.checkpointSuccessStartAddr);
         } else {
             getFrom = context.readQueue;
         }
@@ -189,8 +191,8 @@ public abstract class AbstractQueuedStreamView extends
 
         // Update the global pointer
         if (readFrom.size() > 0) {
-            context.globalPointer = readFrom.get(readFrom.size() - 1)
-                    .getGlobalAddress();
+            context.setGlobalPointerCheckGCTrimMark(readFrom.get(readFrom.size() - 1)
+                    .getGlobalAddress());
         }
 
         return readFrom;
@@ -272,39 +274,39 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     public synchronized ILogData previous() {
         final QueuedStreamContext context = getCurrentContext();
-        final long oldPointer = context.globalPointer;
+        final long oldPointer = context.getGlobalPointer();
 
         log.trace("previous[{}]: max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
 
         // If never read, there would be no pointer to the previous entry.
-        if (context.globalPointer == Address.NEVER_READ) {
+        if (context.getGlobalPointer() == Address.NEVER_READ) {
             return null;
         }
 
         // If we're attempt to go prior to most recent checkpoint, we
         // throw a TrimmedException.
-        if (context.globalPointer - 1 < context.checkpointSuccessStartAddr) {
+        if (context.getGlobalPointer() - 1 < context.checkpointSuccessStartAddr) {
             throw new TrimmedException();
         }
 
         // Otherwise, the previous entry should be resolved, so get
         // one less than the current.
         Long prevAddress = context
-                .resolvedQueue.lower(context.globalPointer);
+                .resolvedQueue.lower(context.getGlobalPointer());
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
         if (prevAddress == null && Address.isAddress(context.minResolution)
                 || prevAddress != null && prevAddress <= context.minResolution) {
-            context.globalPointer = prevAddress == null ? Address.NEVER_READ :
-                    prevAddress - 1L;
+            context.setGlobalPointerCheckGCTrimMark(prevAddress == null ? Address.NEVER_READ :
+                    prevAddress - 1L);
 
             remainingUpTo(context.minResolution);
             context.minResolution = Address.NON_ADDRESS;
-            context.globalPointer = oldPointer;
+            context.setGlobalPointerCheckGCTrimMark(oldPointer);
             prevAddress = context
-                    .resolvedQueue.lower(context.globalPointer);
+                    .resolvedQueue.lower(context.getGlobalPointer());
             log.trace("previous[{}]: updated resolved queue {}", this, context.resolvedQueue);
         }
 
@@ -313,8 +315,7 @@ public abstract class AbstractQueuedStreamView extends
 
         if (prevAddress != null) {
             log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
-            // Update the global pointer
-            context.globalPointer = prevAddress;
+            context.setGlobalPointerCheckGCTrimMark(prevAddress);
             return read(prevAddress);
         }
 
@@ -324,14 +325,14 @@ public abstract class AbstractQueuedStreamView extends
             // entry
             log.trace("previous[{}]: reached the beginning of the stream resetting" +
                     " the stream pointer to {}", this, Address.NON_ADDRESS);
-            context.globalPointer = Address.NON_ADDRESS;
+            context.setGlobalPointerCheckGCTrimMark(Address.NON_ADDRESS);
             return null;
         }
 
-        if (context.resolvedQueue.first() == context.globalPointer) {
+        if (context.resolvedQueue.first() == context.getGlobalPointer()) {
             log.trace("previous[{}]: reached the beginning of the stream resetting" +
                     " the stream pointer to checkpoint version {}", this, context.checkpointSuccessStartAddr);
-            context.globalPointer = context.checkpointSuccessStartAddr;
+            context.setGlobalPointerCheckGCTrimMark(context.checkpointSuccessStartAddr);
             return null;
         }
 
@@ -346,10 +347,10 @@ public abstract class AbstractQueuedStreamView extends
     public synchronized ILogData current() {
         final QueuedStreamContext context = getCurrentContext();
 
-        if (Address.nonAddress(context.globalPointer)) {
+        if (Address.nonAddress(context.getGlobalPointer())) {
             return null;
         }
-        return read(context.globalPointer);
+        return read(context.getGlobalPointer());
     }
 
     /**
@@ -357,7 +358,7 @@ public abstract class AbstractQueuedStreamView extends
      * */
     @Override
     public long getCurrentGlobalPosition() {
-        return getCurrentContext().globalPointer;
+        return getCurrentContext().getGlobalPointer();
     }
 
 

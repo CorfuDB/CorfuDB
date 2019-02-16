@@ -60,16 +60,31 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     @Override
     public void gc(long trimMark) {
-        // Remove all the entries that are strictly less than
-        // the trim mark
-        getCurrentContext().readCpQueue.headSet(trimMark).clear();
-        getCurrentContext().readQueue.headSet(trimMark).clear();
-        getCurrentContext().resolvedQueue.headSet(trimMark).clear();
+        // GC stream only if the pointer is ahead from the trim mark (last untrimmed address),
+        // this guarantees that the data to be discarded is already applied to the stream and data will not be lost.
+        // Note: if the pointer is behind, discarding the data immediately will incur in data
+        // loss as checkpoints are only loaded on resets. We don't want to trigger resets as this slows
+        // the runtime.
+        if (getCurrentContext().getGlobalPointer() >= getCurrentContext().getGcTrimMark()) {
+            log.debug("gc[{}]: start GC on stream {} for trim mark {}", this, this.getId(),
+                    getCurrentContext().getGcTrimMark());
+            // Remove all the entries that are strictly less than
+            // the trim mark
+            getCurrentContext().readCpQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
+            getCurrentContext().readQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
+            getCurrentContext().resolvedQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
 
-        if (!getCurrentContext().resolvedQueue.isEmpty()) {
-            getCurrentContext().minResolution = getCurrentContext()
-                    .resolvedQueue.first();
+            if (!getCurrentContext().resolvedQueue.isEmpty()) {
+                getCurrentContext().minResolution = getCurrentContext()
+                        .resolvedQueue.first();
+            }
+        } else {
+            log.debug("gc[{}]: GC not performed on stream {} for this cycle. Global pointer {} is below trim mark {)",
+                    this, this.getId(), getCurrentContext().getGlobalPointer(), getCurrentContext().getGcTrimMark());
         }
+
+        // Set the trim mark for next GC Cycle
+        getCurrentContext().setGcTrimMark(trimMark);
     }
 
     /**
@@ -195,7 +210,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     public boolean getHasNext(QueuedStreamContext context) {
         return  !context.readQueue.isEmpty()
                 || runtime.getSequencerView().query(context.id).getToken().getSequence()
-                        > context.globalPointer;
+                        > context.getGlobalPointer();
     }
 
     /**
@@ -208,16 +223,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     protected boolean fillFromResolved(final long maxGlobal,
                                        final QueuedStreamContext context) {
         // There's nothing to read if we're already past maxGlobal.
-        if (maxGlobal < context.globalPointer) {
+        if (maxGlobal < context.getGlobalPointer()) {
             return false;
         }
         // Get the subset of the resolved queue, which starts at
         // globalPointer and ends at maxAddress inclusive.
         NavigableSet<Long> resolvedSet =
-                context.resolvedQueue.subSet(context.globalPointer,
+                context.resolvedQueue.subSet(context.getGlobalPointer(),
                         false, maxGlobal, true);
+
         // Put those elements in the read queue
         context.readQueue.addAll(resolvedSet);
+
         return !context.readQueue.isEmpty();
     }
 
@@ -376,12 +393,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     protected boolean fillReadQueue(final long maxGlobal,
                                  final QueuedStreamContext context) {
         log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
-                maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
+                maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
 
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult
         // a checkpoint first.
-        if (context.globalPointer == Address.NEVER_READ &&
+        if (context.getGlobalPointer() == Address.NEVER_READ &&
                 context.checkpointSuccessId == null) {
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
@@ -394,6 +411,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
+
                     return true;
                 }
             } catch (TrimmedException te) {
@@ -409,14 +427,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If we already reached maxAddress ,
         // we return since there is nothing left to do.
-        if (context.globalPointer >= maxAddress) {
+        if (context.getGlobalPointer() >= maxAddress) {
             return false;
         }
 
         // If everything is available in the resolved
         // queue, use it
         if (context.maxResolution >= maxAddress
-                && context.minResolution < context.globalPointer) {
+                && context.minResolution < context.getGlobalPointer()) {
             return fillFromResolved(maxGlobal, context);
         }
 
@@ -451,7 +469,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // If everything is available in the resolved
         // queue, use it
         if (context.maxResolution >= latestTokenValue
-                && context.minResolution < context.globalPointer) {
+                && context.minResolution < context.getGlobalPointer()) {
             return fillFromResolved(latestTokenValue, context);
         }
 
@@ -464,7 +482,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
-                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                Long.max(context.getGlobalPointer(), context.checkpointSnapshotAddress),
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
