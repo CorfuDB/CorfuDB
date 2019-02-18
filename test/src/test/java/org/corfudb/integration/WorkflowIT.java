@@ -624,4 +624,99 @@ public class WorkflowIT extends AbstractIT {
             assertThat(table.get(i)).isEqualTo(String.valueOf(i));
         }
     }
+
+    /**
+     *
+     * This test checks that post-trim initiated transactions which access streams that have all their
+     * updates in the checkpoint space, are able to successfully complete before and after runtimeGC.
+     *
+     *
+     * The steps of this test are the following:
+     *
+     * 1. Open 'table' backed by stream 'test'
+     * 2. Add 5 entries to 'table'
+     * 3. Checkpoint 'table'
+     *
+     * [  'table' Stream   ]
+     * +-------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+     * +-------------------------------+
+     *                     [ checkpoint]
+     *
+     * 4. Trim the log.
+     * 5. Initiate snapshot transaction @(0, 2) should complete succesfully as runtimeGC has not been triggered and
+     * this has been resolved locally.
+     * 6. Start optimistic transaction @snapshot(0, 7), read all 5 entries (before runtime GC), should succeed.
+     * 7. Run runtime GC
+     * 8. Start optimistic transaction @snapshot(0, 7) again, read all 5 entries (after runtime GC), should succeed
+     * as well.
+     * 9. Run snapshot transaction after runtime GC, this should fail as entries have been cleared from address space.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testRuntimeGCWithStreamWithNoUpdatesAfterCheckpoint() throws Exception {
+        // Run single node server and create runtime
+        runDefaultServer();
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+
+        final int numDataEntries = 5;
+
+        // (1) Open table backed by stream 'test'
+        CorfuTable<Integer, String> table = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
+                })
+                .setStreamName("test")
+                .open();
+
+        // (2) Add 5 entries
+        for (int i = 0; i < numDataEntries; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+            table.put(i, String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        // (3) Checkpoint 'table'
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(table);
+        Token prefixTrim = mcw.appendCheckpoints(corfuRuntime, "author");
+
+        // (4) Trim
+        corfuRuntime.getAddressSpaceView().prefixTrim(prefixTrim);
+
+        // (5) Initiate Snapshot Transaction (before runtime GC) should complete as data is kept locally
+        corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                .snapshot(new Token(0,2))
+                .build()
+                .begin();
+        table.get(0);
+        corfuRuntime.getObjectsView().TXEnd();
+
+        // (5) Start optimistic transaction @snapshot(0, 7), read all 5 entries (before runtime GC)
+        for(int i = 0; i < numDataEntries; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        // (7) Run GC
+        corfuRuntime.getGarbageCollector().runRuntimeGC();
+
+        // (8) Start optimistic transaction @snapshot(0, 7), read all 5 entries (after runtime GC)
+        for(int i = 0; i < numDataEntries; i++) {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+            corfuRuntime.getObjectsView().TXEnd();
+        }
+
+        // (9) Snapshot in trimmed addresses (after runtimeGC), should fail as address space has been GCa
+        assertThatThrownBy(() -> {
+            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0, 2))
+                    .build()
+                    .begin();
+            table.get(0);
+            corfuRuntime.getObjectsView().TXEnd();
+        }).isInstanceOf(TransactionAbortedException.class).hasCauseInstanceOf(TrimmedException.class);
+    }
 }

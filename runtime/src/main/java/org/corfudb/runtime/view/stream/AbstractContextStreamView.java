@@ -149,12 +149,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             if (processEntryForContext(entry)) {
                 return nextUpTo(maxGlobal);
             }
-        } else {
-            // We've reached the end of our lookup (no next entry), we might have not reached maxGlobal
-            // which was over trim mark (guaranteed on the first validation).
-            // This is the final position of our global pointer, check for the
-            // last time if it is not set before the trim mark;
-            getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
         }
 
         // Return the entry.
