@@ -79,7 +79,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         .resolvedQueue.first();
             }
         } else {
-            log.debug("gc[{}]: GC not performed on stream {} for this cycle. Global pointer {} is below trim mark {)",
+            log.debug("gc[{}]: GC not performed on stream {} for this cycle. Global pointer {} is below trim mark {}",
                     this, this.getId(), getCurrentContext().getGlobalPointer(), getCurrentContext().getGcTrimMark());
         }
 
