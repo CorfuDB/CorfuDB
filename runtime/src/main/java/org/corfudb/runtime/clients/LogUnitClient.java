@@ -33,7 +33,6 @@ import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
 
@@ -63,13 +62,6 @@ public class LogUnitClient extends AbstractClient {
 
     public LogUnitClient setMetricRegistry(@NonNull MetricRegistry metricRegistry) {
         this.metricRegistry = metricRegistry;
-        return this;
-    }
-
-    int maxWrite;
-
-    public LogUnitClient setMaxWrite(int limit) {
-        this.maxWrite = limit;
         return this;
     }
 
@@ -105,7 +97,6 @@ public class LogUnitClient extends AbstractClient {
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
-        checkWriteSize(wr.getData());
         CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
         return cf.thenApply(x -> {
             context.stop();
@@ -121,19 +112,7 @@ public class LogUnitClient extends AbstractClient {
      *     write completes.
      */
     public CompletableFuture<Boolean> write(ILogData payload) {
-        checkWriteSize(payload);
         return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));
-    }
-
-    /**
-     * Verify that max payload is enforced if a limit is configured
-     *
-     * @param ld the LogData to check
-     */
-    private void checkWriteSize(ILogData ld) {
-        if (maxWrite != 0 && ld.getSizeEstimate() > maxWrite) {
-            throw new WriteSizeException(ld.getSizeEstimate(), maxWrite);
-        }
     }
 
     /**
@@ -155,7 +134,6 @@ public class LogUnitClient extends AbstractClient {
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type, null, payload);
         wr.setRank(rank);
         wr.setGlobalAddress(address);
-        checkWriteSize(wr.getData());
         CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
         return cf.thenApply(x -> {
             context.stop();
