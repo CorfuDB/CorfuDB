@@ -14,7 +14,9 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -40,6 +42,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     final StreamOptions options;
 
+    /**
+     * Max write limit.
+     */
+    final int maxWrite;
+
     /** Create a new backpointer stream view.
      *
      * @param runtime   The runtime to use for accessing the log.
@@ -50,12 +57,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                  @Nonnull final StreamOptions options) {
         super(runtime, streamId);
         this.options = options;
+        maxWrite = runtime.getParameters().getMaxWriteSize();
     }
 
     public BackpointerStreamView(final CorfuRuntime runtime,
                                  final UUID streamId) {
-        super(runtime, streamId);
-        this.options = StreamOptions.DEFAULT;
+        this(runtime, streamId, StreamOptions.DEFAULT);
     }
 
     @Override
@@ -97,6 +104,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     public long append(Object object,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
+        final LogData ld = new LogData(DataType.DATA, object);
+        // Validate if the  size of the log data is under max write size.
+        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+
         // First, we get a token from the sequencer.
         TokenResponse tokenResponse = runtime.getSequencerView()
                 .next(id);
@@ -120,8 +131,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // exception here - any other exception we should pass up
             // to the client.
             try {
-                runtime.getAddressSpaceView()
-                        .write(tokenResponse, object);
+                runtime.getAddressSpaceView().write(tokenResponse, ld);
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken().getSequence();

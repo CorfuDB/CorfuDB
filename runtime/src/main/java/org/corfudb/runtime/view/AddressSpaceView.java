@@ -149,7 +149,12 @@ public class AddressSpaceView extends AbstractView {
      * @throws WrongEpochException  If the token epoch is invalid.
      */
     public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
-        final ILogData ld = new LogData(DataType.DATA, data);
+        ILogData ld;
+        if (data instanceof ILogData) {
+            ld = (ILogData) data;
+        } else {
+            ld = new LogData(DataType.DATA, data);
+        }
 
         layoutHelper(e -> {
             Layout l = e.getLayout();
