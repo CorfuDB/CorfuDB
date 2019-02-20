@@ -145,8 +145,7 @@ public class RuntimeLayout {
     public LogUnitClient getLogUnitClient(String endpoint) {
         return ((LogUnitClient) getClient(LogUnitClient.class, endpoint))
                 .setMetricRegistry(getRuntime().getMetrics() != null
-                        ? getRuntime().getMetrics() : CorfuRuntime.getDefaultMetrics())
-                .setMaxWrite(getRuntime().getParameters().getMaxWriteSize());
+                        ? getRuntime().getMetrics() : CorfuRuntime.getDefaultMetrics());
     }
 
     public ManagementClient getManagementClient(String endpoint) {
