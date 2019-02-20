@@ -183,8 +183,11 @@ case "$1" in
     status)
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
+    dump)
+        /usr/tanuki/bin/corfu-server-wrapper $1
+        ;;
     *)
-        log_action_msg "Usage $0 {start|profile|stop|restart|status}"
+        log_action_msg "Usage $0 {start|profile|stop|restart|status|dump}"
         exit 1
         ;;
 esac
