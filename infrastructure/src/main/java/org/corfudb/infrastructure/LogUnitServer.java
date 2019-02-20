@@ -36,6 +36,8 @@ import org.corfudb.util.Utils;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 
@@ -83,6 +85,13 @@ public class LogUnitServer extends AbstractServer {
     private final StreamLogCompaction logCleaner;
     private final BatchWriter<Long, ILogData> batchWriter;
 
+    private final ExecutorService executor;
+
+    @Override
+    public ExecutorService getExecutor() {
+        return executor;
+    }
+
     /**
      * Returns a new LogUnitServer.
      * @param serverContext context object providing settings and objects
@@ -90,6 +99,8 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
+        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
+                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
