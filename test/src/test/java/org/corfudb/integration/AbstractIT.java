@@ -268,6 +268,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
+                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
                 .runServer();
     }
 
