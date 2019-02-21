@@ -70,7 +70,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public static final int VERSION = 2;
     public static final int RECORDS_PER_LOG_FILE = 10000;
     private final String logDir;
-    private final boolean noVerify;
+    private final boolean verify;
     private final ServerContext serverContext;
     private ConcurrentMap<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
@@ -102,7 +102,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
-        this.noVerify = noVerify;
+        this.verify = !noVerify;
         this.serverContext = serverContext;
         verifyLogs();
         // Starting address initialization should happen before
@@ -160,12 +160,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Write the header for a Corfu log file.
      *
-     * @param fc      The file channel to use.
+     * @param fileChannel      The file channel to use.
      * @param version The version number to append to the header.
      * @param verify  Checksum verify flag
      * @throws IOException I/O exception
      */
-    public static void writeHeader(FileChannel fc, int version, boolean verify) throws IOException {
+    public static void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
 
         LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
@@ -173,8 +173,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
-        safeWrite(fc, buf);
-        fc.force(true);
+        safeWrite(fileChannel, buf);
+        fileChannel.force(true);
     }
 
     private static Metadata getMetadata(AbstractMessage message) {
@@ -251,8 +251,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         for (File file : files) {
             LogHeader header;
 
-            try (FileChannel fc = FileChannel.open(file.toPath())) {
-                header = parseHeader(fc);
+            try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
+                header = parseHeader(fileChannel);
             } catch (IOException e) {
                 throw new RuntimeException(e.getMessage(), e);
             }
@@ -268,7 +268,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new RuntimeException(msg);
             }
 
-            if (!noVerify && !header.getVerifyChecksum()) {
+            if (verify && !header.getVerifyChecksum()) {
                 String msg = String.format("Log file %s not generated with checksums, can't verify!",
                         file.getAbsoluteFile());
                 throw new RuntimeException(msg);
@@ -397,7 +397,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         if (metadata.getLengthChecksum() != Checksum.getChecksum(metadata.getLength())) {
-            throw new DataCorruptionException();
+            throw new DataCorruptionException("Metadata: invalid length checksum");
         }
 
         return metadata;
@@ -485,7 +485,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             return null;
         }
 
-        if (!noVerify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
+        if (verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
             throw new DataCorruptionException("Checksum mismatch detected while trying to read file " + ch);
         }
 
@@ -505,24 +505,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param sh Object containing state for the segment to be read
      */
     private void readAddressSpace(SegmentHandle sh) throws IOException {
-        FileChannel fc = sh.getWriteChannel();
-        fc.position(0);
+        FileChannel fileChannel = sh.getWriteChannel();
+        fileChannel.position(0);
 
-        LogHeader header = parseHeader(fc);
+        LogHeader header = parseHeader(fileChannel);
         if (header == null) {
             log.warn("Couldn't find log header for {}, creating new header.", sh.getFileName());
-            boolean verify = true;
-            if (noVerify) {
-                verify = false;
-            }
-            writeHeader(fc, VERSION, verify);
+            writeHeader(fileChannel, VERSION, verify);
             return;
         }
 
-        while (fc.size() - fc.position() > 0) {
-            long channelOffset = fc.position();
-            Metadata metadata = parseMetadata(fc);
-            LogEntry entry = parseEntry(fc, metadata);
+        while (fileChannel.size() - fileChannel.position() > 0) {
+            long channelOffset = fileChannel.position();
+            Metadata metadata = parseMetadata(fileChannel);
+            LogEntry entry = parseEntry(fileChannel, metadata);
 
             if (entry == null) {
                 // Metadata or Entry were partially written
@@ -534,8 +530,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 // bytes than the partially written buffer. In that case, the log unit can't
                 // determine if the bytes correspond to a partially written buffer that needs
                 // to be ignored, or if the bytes correspond to a corrupted metadata field.
-                fc.truncate(fc.position());
-                fc.force(true);
+                fileChannel.truncate(fileChannel.position());
+                fileChannel.force(true);
                 return;
             }
 
@@ -557,7 +553,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
     private LogData readRecord(SegmentHandle sh, long address) throws IOException {
-        FileChannel fc = sh.getReadChannel();
+        FileChannel fileChannel = sh.getReadChannel();
 
         AddressMetaData metaData = sh.getKnownAddresses().get(address);
         if (metaData == null) {
@@ -566,7 +562,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fc.read(entryBuf, metaData.offset);
+            fileChannel.read(entryBuf, metaData.offset);
             return getLogData(LogEntry.parseFrom(entryBuf.array()));
         } catch (InvalidProtocolBufferException e) {
             throw new DataCorruptionException();
