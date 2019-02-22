@@ -34,18 +34,8 @@ if [ -f /vmware_studio_build_in_progress ]; then
     exit 0
 fi
 
-ADDITIONAL_MULTIROLE_CONF="../conf/corfu-server-wrapper_multirole.conf"
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
-
-# When deployed with policy role, use multirole setting to allocate 18% memory
-# Else remove the multirole related configuration to use 20% memory
-if [ "$NODE_TYPE" != "nsx-manager" ] && [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager" ] && [ "$NODE_TYPE" != "nsx-policy-manager nsx-manager" ]; then
-    # Determine the absolute path to delete the multirole conf file
-    SCRIPTPATH=$(readlink -f $0)
-    SCRIPTBASE=$(dirname $SCRIPTPATH)
-    rm -f "$SCRIPTBASE/$ADDITIONAL_MULTIROLE_CONF"
-fi
 
 # If it's not a converged appliance (manager, policy manager, and controller) appliance then remove the
 # converged appliance related configuration
