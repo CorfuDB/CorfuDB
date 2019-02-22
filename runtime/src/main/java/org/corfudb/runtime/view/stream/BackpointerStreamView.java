@@ -2,6 +2,7 @@ package org.corfudb.runtime.view.stream;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -11,6 +12,7 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.Range;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -25,7 +27,9 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.util.Utils;
 
 
@@ -194,6 +198,38 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
     }
 
+    /**
+     * Reads data from an address in the address space. It will give the writer a chance to complete based on the time
+     * when the reads of which this individual read is a step started. If the reads have been going on for longer than
+     * the grace period given for a writer to complete a write, the subsequent individual read calls will immediately
+     * fill the hole on absence of data at the given address.
+     *
+     * @param address       Address to read.
+     * @param readStartTime Start time of the range of reads.
+     * @return ILogData at the address.
+     */
+    private ILogData read(final long address, long readStartTime) {
+        if (System.currentTimeMillis() - readStartTime < runtime.getParameters().getHoleFillTimeout().toMillis()) {
+            try {
+                return runtime.getAddressSpaceView().read(address);
+            } catch (TrimmedException te) {
+                processTrimmedException(te);
+                throw te;
+            }
+        } else {
+            RuntimeLayout runtimeLayout = runtime.getLayoutView().getRuntimeLayout();
+            ChainReplicationProtocol replicationProtocol = (ChainReplicationProtocol) runtime
+                    .getLayoutView()
+                    .getLayout()
+                    .getReplicationMode(address)
+                    .getReplicationProtocol(runtime);
+            return replicationProtocol
+                    .readRange(runtimeLayout, Range.encloseAll(Arrays.asList(address)), false)
+                    .get(address);
+
+        }
+    }
+
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
@@ -267,6 +303,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                       final Function<ILogData, BackpointerOp> filter) {
         log.trace("followBackpointers: streamId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
                 "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
+        long readStartTime = System.currentTimeMillis();
         // Whether or not we added entries to the queue.
         boolean entryAdded = false;
         // The current address which we are reading from.
@@ -282,7 +319,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             ILogData d;
             try {
                 log.trace("followBackpointers: readAddress[{}]", currentAddress);
-                d = read(currentAddress);
+                d = read(currentAddress, readStartTime);
             } catch (TrimmedException e) {
                 if (options.ignoreTrimmed) {
                     log.warn("followBackpointers: Ignoring trimmed exception for address[{}]," +
@@ -327,7 +364,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     singleStep = false;
                     if (!startingSingleStep) {
                         // A started single step period finishes here, refresh flag for next cycle.
-                        log.info("followBackpointers[{}]: Found backpointer for this stream at address {}. Stop single step downgrade.");
+                        log.info("followBackpointers[{}]: Found backpointer for this stream at address {}."
+                                + "Stop single step downgrade.", this, currentAddress);
                         startingSingleStep = true;
                     }
                 }
@@ -336,7 +374,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             if (singleStep) {
                 if (startingSingleStep) {
                     startingSingleStep = false;
-                    log.info("followBackpointers[{}]: Found hole at address {}. Starting single step downgrade.", this, currentAddress);
+                    log.info("followBackpointers[{}]: Found hole at address {}. Starting single step downgrade.",
+                            this, currentAddress);
                 }
                 // backpointers failed, so we're
                 // downgrading to a linear scan
