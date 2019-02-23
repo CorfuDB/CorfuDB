@@ -266,6 +266,9 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
+                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
+                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getTails(), e
+                        );
                         currOp.setException(e);
                         res.add(currOp);
                     }
