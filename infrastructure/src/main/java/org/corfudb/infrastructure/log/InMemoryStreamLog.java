@@ -121,11 +121,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public void release(long address, LogData entry) {
-        // in memory, do nothing
-    }
-
-    @Override
     public synchronized void compact() {
         // Prefix Trim
         for (long address : logCache.keySet()) {

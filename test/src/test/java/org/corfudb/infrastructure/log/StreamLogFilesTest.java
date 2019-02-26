@@ -23,6 +23,7 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -660,8 +661,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int serializedEntrySize = 100;
         byte[] entryBytes = new byte[serializedEntrySize];
         Metadata metadata = Metadata.newBuilder()
-                .setPayloadChecksum(StreamLogFiles.getChecksum(serializedEntrySize))
-                .setLengthChecksum(StreamLogFiles.getChecksum(entryBytes.length))
+                .setPayloadChecksum(Checksum.getChecksum(serializedEntrySize))
+                .setLengthChecksum(Checksum.getChecksum(entryBytes.length))
                 .setLength(entryBytes.length)
                 .build();
 
