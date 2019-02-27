@@ -1405,6 +1405,78 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     /**
+     * This test verifies that if the adjacent segments have same number of servers,
+     * state transfer is not happened, while merge segments can succeed.
+     *
+     * The test first creates a layout with 3 segments.
+     *
+     * Segment 1: 0 -> 5 (exclusive) Node 0, Node 1
+     * Segment 2: 5 -> 10 (exclusive) Node 0, Node 1
+     * Segment 3: 10 -> infinity (exclusive) Node 0, Node 1
+     *
+     * Now drop all the read response from Node 1, so that we make sure state transfer
+     * will fail if it happens.
+     *
+     * Finally verify merge segments succeed with only one segment in the new layout.
+     */
+    @Test
+    public void verifyStateTransferNotHappenButMergeSucceeds() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        final long segmentSize = 5L;
+        final int numSegments = 3;
+
+        Layout layout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(segmentSize)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(segmentSize)
+                .setEnd(segmentSize * 2)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(segmentSize * 2)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        // Drop read responses to make sure state transfer will fail if it happens
+        addServerRule(SERVERS.PORT_1, new TestRule().matches(m ->
+                m.getMsgType().equals(CorfuMsgType.READ_RESPONSE)).drop());
+
+        bootstrapAllServers(layout);
+
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        for (int i = 0; i < segmentSize * numSegments; i++) {
+            testStream.append("testPayload".getBytes());
+        }
+
+        // Verify that segments merged without state transfer
+        waitForLayoutChange(l -> l.getSegments().size() == 1, rt);
+    }
+
+    /**
      * This test starts with a cluster of 3 at epoch 1 with PORT_0 as the primary sequencer.
      * Now runtime_1 writes 5 entries to streams A and B each.
      * The token count has increased from 0-9.

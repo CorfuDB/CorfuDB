@@ -46,6 +46,12 @@ public class StateTransfer {
                                 CorfuRuntime runtime,
                                 Layout.LayoutSegment segment) throws ExecutionException, InterruptedException {
 
+        if (endpoints.isEmpty()) {
+            log.debug("stateTransfer: No server needs to transfer for segment [{} - {}], " +
+                    "skipping state transfer for this segment.", segment.getStart(), segment.getEnd());
+            return;
+        }
+
         int batchSize = runtime.getParameters().getBulkReadSize();
 
         long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
