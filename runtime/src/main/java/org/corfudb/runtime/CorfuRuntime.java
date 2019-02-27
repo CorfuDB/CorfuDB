@@ -373,7 +373,6 @@ public class CorfuRuntime {
         static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
                 ImmutableMap.<ChannelOption, Object>builder()
                         .put(ChannelOption.TCP_NODELAY, true)
-                        .put(ChannelOption.SO_KEEPALIVE, true)
                         .put(ChannelOption.SO_REUSEADDR, true)
                         .build();
 

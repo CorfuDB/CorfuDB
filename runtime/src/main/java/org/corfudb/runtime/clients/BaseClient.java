@@ -38,6 +38,7 @@ public class BaseClient implements IClient {
 
     /**
      * Ping the endpoint, synchronously.
+     * Note: this ping is epoch aware
      *
      * @return True, if the endpoint was reachable, false otherwise.
      */
