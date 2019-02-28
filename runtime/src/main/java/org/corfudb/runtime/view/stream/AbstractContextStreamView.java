@@ -114,13 +114,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     @Override
     public final synchronized ILogData nextUpTo(final long maxGlobal) {
-        // Don't attempt to sync the stream up to maxGlobal if max Global already falls
-        // in the range of trimmed addresses (as marked by the GC trim mark)
-        // It is safe to throw a TrimmedException as this address no longer exists in the log.
-        // Note: still we should validate the global pointer at the end, because we might attempt to sync up to
-        // max global but max address for this stream might still be below.
-        getCurrentContext().validateGlobalPointerPosition(maxGlobal);
-
         // Don't do anything if we've already exceeded the global pointer.
         if (getCurrentContext().getGlobalPointer() > maxGlobal) {
             return null;

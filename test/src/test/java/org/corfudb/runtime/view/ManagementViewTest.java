@@ -8,7 +8,6 @@ import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -17,9 +16,11 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -34,6 +35,8 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -895,10 +898,37 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
     }
 
+    /**
+     * Checks for updates trailing layout servers.
+     * The layout is partially committed with epoch 2 except for ENDPOINT_0.
+     * All commit messages from the cluster are intercepted.
+     * The test checks whether at least one of the 3 management agents patches the layout server with the latest
+     * layout.
+     * If a commit message with any other epoch is sent, the test fails.
+     */
     @Test
     public void updateTrailingLayoutServers() throws Exception {
 
         Layout layout = new Layout(getManagementTestLayout());
+
+        AtomicBoolean commitWithDifferentEpoch = new AtomicBoolean(false);
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        TestRule interceptCommit = new TestRule().matches(corfuMsg -> {
+            if (corfuMsg.getMsgType().equals(CorfuMsgType.LAYOUT_COMMITTED)) {
+                if (((CorfuPayloadMsg<LayoutCommittedRequest>) corfuMsg).getPayload().getLayout().getEpoch() == 2) {
+                    latch.countDown();
+                } else {
+                    commitWithDifferentEpoch.set(true);
+                }
+            }
+            return true;
+        });
+
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), interceptCommit);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(), interceptCommit);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(), interceptCommit);
+
         final long highRank = 10L;
 
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().always().drop());
@@ -917,6 +947,43 @@ public class ManagementViewTest extends AbstractViewTest {
 
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout().getEpoch()).isEqualTo(2L);
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(layout);
+        latch.await();
+        assertThat(commitWithDifferentEpoch.get()).isFalse();
+    }
+
+    /**
+     * Tests a 3 node cluster.
+     * All Prepare messages are first blocked. Then a seal is issued for epoch 2.
+     * The test then ensures that no layout is committed for the epoch 2.
+     * We ensure that no layout is committed other than the Paxos path.
+     */
+    @Test
+    public void blockLayoutUpdateAfterSeal() {
+
+        Layout layout = new Layout(getManagementTestLayout());
+
+        TestRule dropPrepareMsg = new TestRule()
+                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.LAYOUT_PREPARE))
+                .drop();
+
+        // Block Paxos round by blocking all prepare methods.
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), dropPrepareMsg);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(), dropPrepareMsg);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(), dropPrepareMsg);
+
+        // Seal the layout.
+        layout.setEpoch(2L);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
+
+        // Wait for the cluster to move the layout with epoch 2 without the Paxos round.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {
+                fail();
+            }
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
     }
 
     /**
@@ -1335,6 +1402,78 @@ public class ManagementViewTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
         assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+    }
+
+    /**
+     * This test verifies that if the adjacent segments have same number of servers,
+     * state transfer is not happened, while merge segments can succeed.
+     *
+     * The test first creates a layout with 3 segments.
+     *
+     * Segment 1: 0 -> 5 (exclusive) Node 0, Node 1
+     * Segment 2: 5 -> 10 (exclusive) Node 0, Node 1
+     * Segment 3: 10 -> infinity (exclusive) Node 0, Node 1
+     *
+     * Now drop all the read response from Node 1, so that we make sure state transfer
+     * will fail if it happens.
+     *
+     * Finally verify merge segments succeed with only one segment in the new layout.
+     */
+    @Test
+    public void verifyStateTransferNotHappenButMergeSucceeds() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        final long segmentSize = 5L;
+        final int numSegments = 3;
+
+        Layout layout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(segmentSize)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(segmentSize)
+                .setEnd(segmentSize * 2)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(segmentSize * 2)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        // Drop read responses to make sure state transfer will fail if it happens
+        addServerRule(SERVERS.PORT_1, new TestRule().matches(m ->
+                m.getMsgType().equals(CorfuMsgType.READ_RESPONSE)).drop());
+
+        bootstrapAllServers(layout);
+
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        for (int i = 0; i < segmentSize * numSegments; i++) {
+            testStream.append("testPayload".getBytes());
+        }
+
+        // Verify that segments merged without state transfer
+        waitForLayoutChange(l -> l.getSegments().size() == 1, rt);
     }
 
     /**
