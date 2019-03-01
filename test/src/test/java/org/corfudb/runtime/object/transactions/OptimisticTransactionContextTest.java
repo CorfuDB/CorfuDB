@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -14,6 +15,7 @@ import lombok.Data;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -123,9 +125,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      */
     @Test
     public void checkSlowWriterTxAbortsOnHoleFill() {
+
+        // The default hole fill timeout duration is 10 seconds. In case of aborting a transaction with cause
+        // overwrite, 5 write attempts are made. This totals to 50 seconds.
+        // Modifying this timeout to 1 second to avoid test timeout after 1 minute.
+        final Duration holeFillTimeout = Duration.ofSeconds(1);
         UUID streamID = UUID.randomUUID();
         CorfuRuntime rtWriter = getDefaultRuntime();
-        CorfuRuntime rtReader = getDefaultRuntime();
+        CorfuRuntime rtReader = getNewRuntime(CorfuRuntimeParameters.builder()
+                .holeFillTimeout(holeFillTimeout)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
 
         Map<String, String> map = rtWriter
                 .getObjectsView().build()
