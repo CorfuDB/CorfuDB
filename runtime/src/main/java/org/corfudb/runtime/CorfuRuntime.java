@@ -871,7 +871,7 @@ public class CorfuRuntime {
                 .filter(endpoint -> !layout.getAllServers()
                         // Converting to legacy endpoint format as the layout only contains
                         // legacy format - host:port.
-                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
+                        .contains(endpoint.toEndpointUrl()))
                 .forEach(endpoint -> {
                     try {
                         nodeRouterPool.getNodeRouters().get(endpoint).stop();

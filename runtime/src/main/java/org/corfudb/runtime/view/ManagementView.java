@@ -299,7 +299,7 @@ public class ManagementView extends AbstractView {
         // Get layout servers from runtime set of layout servers (specified in connection string).
         // This list is refreshed whenever a new layout is fetched.
         List<String> layoutServers = runtime.getLayoutServers().stream()
-                .map(endpoint -> NodeLocator.getLegacyEndpoint(NodeLocator.parseString(endpoint)))
+                .map(endpoint -> NodeLocator.parseString(endpoint).toEndpointUrl())
                 .collect(Collectors.toList());
 
         try {
