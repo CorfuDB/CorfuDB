@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -2033,5 +2034,49 @@ public class ManagementViewTest extends AbstractViewTest {
         writeRandomEntryToTable(table);
 
         future.cancel(true);
+    }
+
+    /**
+     * Tests the partial bootstrap scenario while adding a new node.
+     * Starts with cluster of 1 node: PORT_0.
+     * We then bootstrap the layout server of PORT_1 with a layout.
+     * Then the bootstrapNewNode is triggered. This should detect the same layout and complete the bootstrap.
+     */
+    @Test
+    public void testPartialBootstrapNodeSuccess() throws ExecutionException, InterruptedException {
+        corfuRuntime = getDefaultRuntime();
+        addServer(SERVERS.PORT_1);
+        Layout layout = corfuRuntime.getLayoutView().getLayout();
+
+        // Bootstrap the layout server.
+        corfuRuntime.getLayoutView().getRuntimeLayout().getLayoutClient(SERVERS.ENDPOINT_1).bootstrapLayout(layout);
+        // Attempt bootstrapping the node. The node should attempt bootstrapping both the components Layout Server and
+        // Management Server.
+        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).get()).isTrue();
+    }
+
+    /**
+     * Tests the partial bootstrap scenario while adding a new node.
+     * Starts with cluster of 1 node: PORT_0.
+     * We then bootstrap the layout server of PORT_1 with a layout.
+     * A rule is added to prevent the management server from being bootstrapped. Then the bootstrapNewNode is
+     * triggered. This should fail and throw a timeout exception.
+     */
+    @Test
+    public void testPartialBootstrapNodeFailure() {
+        corfuRuntime = getDefaultRuntime();
+        addServer(SERVERS.PORT_1);
+        Layout layout = corfuRuntime.getLayoutView().getLayout();
+
+        // Bootstrap the layout server.
+        corfuRuntime.getLayoutView().getRuntimeLayout().getLayoutClient(SERVERS.ENDPOINT_1).bootstrapLayout(layout);
+
+        addClientRule(corfuRuntime, new TestRule().matches(corfuMsg ->
+                corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)).drop());
+
+        // Attempt bootstrapping the node. The node should attempt bootstrapping both the components Layout Server and
+        // Management Server.
+        assertThatThrownBy(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1)::get)
+                .hasRootCauseInstanceOf(TimeoutException.class);
     }
 }
