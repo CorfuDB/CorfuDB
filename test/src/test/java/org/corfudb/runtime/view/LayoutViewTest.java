@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import java.util.UUID;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -17,7 +18,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,17 +53,15 @@ public class LayoutViewTest extends AbstractViewTest {
         });
     }
 
-    //@Test
+    @Test
     public void canGetLayout() {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = r.getLayoutView().getCurrentLayout();
-        assertThat(l.asJSONString())
-                .isNotNull();
+        assertThat(l.asJSONString()).isNotNull();
     }
 
     @Test
-    public void canSetLayout()
-            throws Exception {
+    public void canSetLayout() {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1)
@@ -76,28 +81,29 @@ public class LayoutViewTest extends AbstractViewTest {
                 .isEqualTo(1L);
     }
 
-    /** Make sure that trying to set a layout with the wrong cluster id results
-     *  in a wrong epoch exception.
+    /**
+     * Make sure that trying to set a layout with the wrong cluster id results
+     * in a wrong epoch exception.
      */
     @Test
     public void cannotSetLayoutWithWrongId()
-        throws Exception {
+            throws Exception {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = new TestLayoutBuilder()
-            .setEpoch(1)
-            .addLayoutServer(SERVERS.PORT_0)
-            .addSequencer(SERVERS.PORT_0)
-            .buildSegment()
-            .buildStripe()
-            .addLogUnit(SERVERS.PORT_0)
-            .addToSegment()
-            .addToLayout()
-            .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
-            .build();
+                .setEpoch(1)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
+                .build();
         r.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         r.invalidateLayout();
         assertThatThrownBy(() -> r.getLayoutView().updateLayout(l, 1L))
-            .isInstanceOf(WrongClusterException.class);
+                .isInstanceOf(WrongClusterException.class);
     }
 
     @Test
@@ -430,6 +436,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
+        final Layout currentLayout = new Layout(l);
 
         getManagementServer(SERVERS.PORT_0).shutdown();
         getManagementServer(SERVERS.PORT_1).shutdown();
@@ -470,11 +477,11 @@ public class LayoutViewTest extends AbstractViewTest {
         // STEP 1
         final long rank1 = 1L;
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_2, new TestRule().drop().always());
-        Layout alreadyProposedLayout1 = corfuRuntime.getLayoutView().prepare(l1.getEpoch(), rank1);
+        Layout alreadyProposedLayout1 = corfuRuntime.getLayoutView().prepare(currentLayout, l1.getEpoch(), rank1);
         assertThat(alreadyProposedLayout1).isNull();
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().drop().always());
         try {
-            alreadyProposedLayout1 = corfuRuntime.getLayoutView().propose(l1.getEpoch(), rank1, l1);
+            alreadyProposedLayout1 = corfuRuntime.getLayoutView().propose(currentLayout, l1.getEpoch(), rank1, l1);
         } catch (QuorumUnreachableException ignore) {
         }
         assertThat(alreadyProposedLayout1).isNull();
@@ -483,11 +490,11 @@ public class LayoutViewTest extends AbstractViewTest {
         // STEP 2
         final long rank2 = 2L;
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().drop().always());
-        Layout alreadyProposedLayout2 = corfuRuntime.getLayoutView().prepare(l2.getEpoch(), rank2);
+        Layout alreadyProposedLayout2 = corfuRuntime.getLayoutView().prepare(currentLayout, l2.getEpoch(), rank2);
         assertThat(alreadyProposedLayout2).isNull();
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_2, new TestRule().drop().always());
         try {
-            alreadyProposedLayout2 = corfuRuntime.getLayoutView().propose(l2.getEpoch(), rank2, l2);
+            alreadyProposedLayout2 = corfuRuntime.getLayoutView().propose(currentLayout, l2.getEpoch(), rank2, l2);
         } catch (QuorumUnreachableException ignore) {
         }
         assertThat(alreadyProposedLayout2).isNull();
@@ -496,19 +503,19 @@ public class LayoutViewTest extends AbstractViewTest {
         // STEP 3
         final long rank3 = 3L;
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_2, new TestRule().drop().always());
-        Layout alreadyProposedLayout3 = corfuRuntime.getLayoutView().prepare(l.getEpoch(), rank3);
+        Layout alreadyProposedLayout3 = corfuRuntime.getLayoutView().prepare(currentLayout, l.getEpoch(), rank3);
         assertThat(alreadyProposedLayout3).isEqualTo(l2);
         clearClientRules(corfuRuntime);
 
         final long rank4 = 4L;
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().drop().always());
-        alreadyProposedLayout3 = corfuRuntime.getLayoutView().prepare(l.getEpoch(), rank4);
+        alreadyProposedLayout3 = corfuRuntime.getLayoutView().prepare(currentLayout, l.getEpoch(), rank4);
         assertThat(alreadyProposedLayout3).isEqualTo(l1);
         clearClientRules(corfuRuntime);
 
         final long rank5 = 5L;
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().drop().always());
-        alreadyProposedLayout3 = corfuRuntime.getLayoutView().prepare(l.getEpoch(), rank5);
+        alreadyProposedLayout3 = corfuRuntime.getLayoutView().prepare(currentLayout, l.getEpoch(), rank5);
         assertThat(alreadyProposedLayout3).isEqualTo(l2);
         clearClientRules(corfuRuntime);
     }
@@ -554,6 +561,7 @@ public class LayoutViewTest extends AbstractViewTest {
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime1 = getRuntime(l).connect();
         CorfuRuntime corfuRuntime2 = getRuntime(l).connect();
+        final Layout currentLayout = new Layout(l);
 
         getManagementServer(SERVERS.PORT_0).shutdown();
         getManagementServer(SERVERS.PORT_1).shutdown();
@@ -596,7 +604,7 @@ public class LayoutViewTest extends AbstractViewTest {
 
         // STEP 1: Send prepare to all 3 nodes with rank 1.
         final long rank1 = 1L;
-        Layout alreadyProposedLayout1 = corfuRuntime1.getLayoutView().prepare(l1.getEpoch(), rank1);
+        Layout alreadyProposedLayout1 = corfuRuntime1.getLayoutView().prepare(currentLayout, l1.getEpoch(), rank1);
         assertThat(alreadyProposedLayout1).isNull();
 
         // PORT_2 drops the oncoming propose message.
@@ -614,10 +622,9 @@ public class LayoutViewTest extends AbstractViewTest {
         // Asynchronously send a propose message to PORT_0 and PORT_1 (PORT_2 is disabled)
         Future<Boolean> future = executorService.submit(() -> {
             try {
-                corfuRuntime1.getLayoutView().propose(l1.getEpoch(), rank1, l1);
-            } catch (QuorumUnreachableException e) {
+                corfuRuntime1.getLayoutView().propose(currentLayout, l1.getEpoch(), rank1, l1);
+            } catch (QuorumUnreachableException | OutrankedException e) {
                 return true;
-            } catch (OutrankedException ignore) {
             }
             return false;
         });
@@ -634,7 +641,7 @@ public class LayoutViewTest extends AbstractViewTest {
         // After propose delayed, send a prepare to PORT_1 and PORT_2.
         final long rank2 = 2L;
         addClientRule(corfuRuntime2, SERVERS.ENDPOINT_0, new TestRule().drop().always());
-        Layout alreadyProposedLayout2 = corfuRuntime2.getLayoutView().prepare(l2.getEpoch(), rank2);
+        Layout alreadyProposedLayout2 = corfuRuntime2.getLayoutView().prepare(currentLayout, l2.getEpoch(), rank2);
         assertThat(alreadyProposedLayout2).isNull();
 
         while (messageLocks.isEmpty()) {
@@ -643,7 +650,7 @@ public class LayoutViewTest extends AbstractViewTest {
         // release the held propose message
         releaseMessages(SERVERS.ENDPOINT_1, CorfuMsgType.LAYOUT_PROPOSE);
         try {
-            alreadyProposedLayout2 = corfuRuntime2.getLayoutView().propose(l2.getEpoch(), rank2, l2);
+            alreadyProposedLayout2 = corfuRuntime2.getLayoutView().propose(currentLayout, l2.getEpoch(), rank2, l2);
             assertThat(alreadyProposedLayout2).isEqualTo(l2);
         } catch (QuorumUnreachableException ignore) {
         }
@@ -656,8 +663,7 @@ public class LayoutViewTest extends AbstractViewTest {
         clearClientRules(corfuRuntime1);
 
         final long rank3 = 3L;
-        Layout alreadyProposedLayout3 = corfuRuntime1.getLayoutView().prepare(l.getEpoch(), rank3);
+        Layout alreadyProposedLayout3 = corfuRuntime1.getLayoutView().prepare(currentLayout, l.getEpoch(), rank3);
         assertThat(alreadyProposedLayout3).isEqualTo(l2);
-
     }
 }

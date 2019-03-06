@@ -1,11 +1,11 @@
 package org.corfudb.runtime.view;
 
-import static java.util.Arrays.stream;
-
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -59,43 +58,71 @@ public class LayoutView extends AbstractView {
 
     /**
      * Drives the consensus protocol for persisting the new Layout.
-     * TODO currently the code can drive only one Layout change.
-     * If it has to drive a previously incomplete round
-     * TODO it will drop it's own set of changes. Need to revisit this.
+     * Currently the code can drive only one Layout change.
+     * If it has to drive a previously incomplete round it will drop it's own set of changes.
      * A change of layout proposal consists of a rank and the desired layout.
+     * The new to-be-proposed layout can only have an epoch ONE greater than the current epoch.
      *
      * @param layout The layout to propose.
-     * @param rank The rank for the proposed layout.
-     *
-     * @throws QuorumUnreachableException Thrown if responses not received from a majority of
-     *                                    layout servers.
-     * @throws OutrankedException outranked exception, i.e., higher rank.
-     * @throws WrongEpochException wrong epoch number.
+     * @param rank   The rank for the proposed layout.
+     * @throws QuorumUnreachableException Thrown if responses not received from a majority of layout servers.
+     * @throws OutrankedException         outranked exception, i.e., higher rank.
+     * @throws WrongEpochException        wrong epoch number.
      */
-    @SuppressWarnings("unchecked")
-    public void updateLayout(Layout layout, long rank)
-            throws QuorumUnreachableException, OutrankedException, WrongEpochException {
+    public void updateLayout(Layout layout, long rank) throws OutrankedException {
+
         // Note this step is done because we have added the layout to the Epoch.
         long epoch = layout.getEpoch();
+
+        // We now fetch the latest layout known to the runtime.
         Layout currentLayout = getLayout();
+
+        // Check if the proposed layout has epoch one greater than the current epoch.
+        // The layout increments are densely monotonic.
         if (currentLayout.getEpoch() != epoch - 1) {
             log.error("Runtime layout has epoch {} but expected {} to move to epoch {}",
                     currentLayout.getEpoch(), epoch - 1, epoch);
             throw new WrongEpochException(epoch - 1);
         }
         if (currentLayout.getClusterId() != null
-            && !currentLayout.getClusterId().equals(layout.getClusterId())) {
+                && !currentLayout.getClusterId().equals(layout.getClusterId())) {
             log.error("updateLayout: Requested layout has cluster Id {} but expected {}",
                     layout.getClusterId(), currentLayout.getClusterId());
             throw new WrongClusterException(currentLayout.getClusterId(), layout.getClusterId());
         }
-        //phase 1: prepare with a given rank.
-        Layout alreadyProposedLayout = prepare(epoch, rank);
+
+        // phase 1: prepare with a given rank.
+        Layout alreadyProposedLayout = prepare(currentLayout, epoch, rank);
+        // Note: If a layout has already been proposed, we drop our layout and complete the round with the proposed
+        // layout.
         Layout layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
-        //phase 2: propose the new layout.
-        propose(epoch, rank, layoutToPropose);
-        //phase 3: committed
+        // phase 2: propose the new layout.
+        propose(currentLayout, epoch, rank, layoutToPropose);
+        // phase 3: committed
         committed(epoch, layoutToPropose);
+    }
+
+    private <T> List<CompletableFuture<T>> requestParallel(final Layout currentLayout,
+                                                           final Function<String, CompletableFuture<T>> function) {
+        return currentLayout.getLayoutServers().stream()
+                .map(layoutServer -> {
+                    CompletableFuture<T> cf = new CompletableFuture<>();
+                    try {
+                        cf = function.apply(layoutServer);
+                    } catch (Exception e) {
+                        cf.completeExceptionally(e);
+                    }
+                    return cf;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private <T> void waitForAnyCompletion(final List<CompletableFuture<T>> completableFutureList) {
+        try {
+            CompletableFuture.anyOf(completableFutureList.stream().toArray(CompletableFuture[]::new)).get();
+        } catch (Exception ignored) {
+            // We only wait for a completable future to complete here. All exceptions are ignored.
+        }
     }
 
     /**
@@ -103,93 +130,64 @@ public class LayoutView extends AbstractView {
      *
      * @param rank The rank for the proposed layout.
      * @return layout
-     * @throws QuorumUnreachableException Thrown if responses not received from a majority of
-     *                                    layout servers.
-     * @throws OutrankedException outranked exception, i.e., higher rank.
-     * @throws WrongEpochException wrong epoch number.
+     * @throws QuorumUnreachableException Thrown if responses not received from a majority of layout servers.
+     * @throws OutrankedException         outranked exception, i.e., higher rank.
+     * @throws WrongEpochException        wrong epoch number.
      */
-    @SuppressWarnings("unchecked")
-    public Layout prepare(long epoch, long rank)
-            throws QuorumUnreachableException, OutrankedException, WrongEpochException {
+    public Layout prepare(Layout currentLayout, long epoch, long rank) {
 
-        CompletableFuture<LayoutPrepareResponse>[] prepareList = getLayout().getLayoutServers()
-                .stream()
-                .map(x -> {
-                    CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
-                    try {
-                        // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).prepare(epoch, rank);
-                    } catch (Exception e) {
-                        cf.completeExceptionally(e);
-                    }
-                    return cf;
-                })
-                .toArray(CompletableFuture[]::new);
-        LayoutPrepareResponse[] acceptList;
-        long timeouts = 0L;
-        long wrongEpochRejected = 0L;
-        while (true) {
-            // do we still have enough for a quorum?
-            if (prepareList.length < getQuorumNumber()) {
-                log.debug("prepare: Quorum unreachable, remaining={}, required={}", prepareList,
-                        getQuorumNumber());
-                throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
+        final List<LayoutPrepareResponse> acceptList = new ArrayList<>();
+        final AtomicInteger rejected = new AtomicInteger(0);
+
+        final List<CompletableFuture<LayoutPrepareResponse>> pendingList = requestParallel(currentLayout,
+                layoutServer -> getRuntimeLayout().getLayoutClient(layoutServer).prepare(epoch, rank));
+
+        // Stay in loop until we get enough responses.
+        // Or until we get enough rejects in which case we throw a QuorumUnreachableException.
+        while (acceptList.size() < getQuorumNumber()) {
+
+            if (pendingList.size() + acceptList.size() < getQuorumNumber()) {
+                log.debug("prepare: Quorum unreachable, remaining={}, required={}",
+                        pendingList.size(), getQuorumNumber());
+                throw new QuorumUnreachableException(pendingList.size(), getQuorumNumber());
             }
 
             // wait for someone to complete.
-            try {
-                CFUtils.getUninterruptibly(CompletableFuture.anyOf(prepareList),
-                        OutrankedException.class, TimeoutException.class, NetworkException.class,
-                        WrongEpochException.class);
-            } catch (TimeoutException | NetworkException e) {
-                timeouts++;
-            } catch (WrongEpochException we) {
-                wrongEpochRejected++;
-            }
+            waitForAnyCompletion(pendingList);
 
-            // remove errors.
-            prepareList = stream(prepareList)
-                    .filter(x -> !x.isCompletedExceptionally())
-                    .toArray(CompletableFuture[]::new);
-            // count successes.
-            acceptList = stream(prepareList)
-                    .map(x -> {
-                        try {
-                            return x.getNow(null);
-                        } catch (Exception e) {
-                            return null;
-                        }
-                    })
-                    .filter(x -> x != null)
-                    .toArray(LayoutPrepareResponse[]::new);
-
-            log.debug("prepare: Successful responses={}, needed={}, timeouts={}, "
-                            + "wrongEpochRejected={}",
-                    acceptList.length, getQuorumNumber(), timeouts, wrongEpochRejected);
-
-            if (acceptList.length >= getQuorumNumber()) {
-                break;
-            }
-        }
-        // Return any layouts that have been proposed before.
-        List<LayoutPrepareResponse> list = Arrays.stream(acceptList)
-                .filter(x -> x.getLayout() != null)
-                .collect(Collectors.toList());
-        if (list.isEmpty()) {
-            return null;
-        } else {
-            // Choose the layout with the highest rank proposed before.
-            long highestReturnedRank = Long.MIN_VALUE;
-            Layout layoutWithHighestRank = null;
-
-            for (LayoutPrepareResponse layoutPrepareResponse : list) {
-                if (layoutPrepareResponse.getRank() > highestReturnedRank) {
-                    highestReturnedRank = layoutPrepareResponse.getRank();
-                    layoutWithHighestRank = layoutPrepareResponse.getLayout();
+            // remove errors or completed futures.
+            pendingList.removeIf(cf -> {
+                try {
+                    LayoutPrepareResponse layoutPrepareResponse = cf.getNow(null);
+                    if (layoutPrepareResponse != null) {
+                        // count successes.
+                        acceptList.add(layoutPrepareResponse);
+                        return true;
+                    }
+                } catch (Exception e) {
+                    // Exception is instance of CompletionException wrapping the thrown Exception.
+                    if (e.getCause() instanceof OutrankedException) {
+                        throw (OutrankedException) e.getCause();
+                    }
+                    rejected.incrementAndGet();
+                    return true;
                 }
-            }
-            return layoutWithHighestRank;
+
+                // Do not remove from pending list if the future has not been completed.
+                return false;
+            });
+
+            log.debug("prepare: Successful responses={}, needed={}, rejected={}",
+                    acceptList.size(), getQuorumNumber(), rejected);
         }
+
+        // Return any layouts that have been proposed before.
+        return acceptList.stream()
+                .filter(x -> x.getLayout() != null)
+                // Choose the layout with the highest rank proposed before.
+                .max(Comparator.comparingLong(LayoutPrepareResponse::getRank))
+                .map(LayoutPrepareResponse::getLayout)
+                .orElse(null);
     }
 
     /**
@@ -197,60 +195,47 @@ public class LayoutView extends AbstractView {
      *
      * @throws QuorumUnreachableException Thrown if responses not received from a majority of
      *                                    layout servers.
-     * @throws OutrankedException outranked exception, i.e., higher rank.
+     * @throws OutrankedException         outranked exception, i.e., higher rank.
      */
-    @SuppressWarnings("unchecked")
-    public Layout propose(long epoch, long rank, Layout layout)
-            throws QuorumUnreachableException, OutrankedException {
-        CompletableFuture<Boolean>[] proposeList = getLayout().getLayoutServers().stream()
-                .map(x -> getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout))
-                .toArray(CompletableFuture[]::new);
+    public Layout propose(Layout currentLayout, long epoch, long rank, Layout layout) {
 
-        long timeouts = 0L;
-        long wrongEpochRejected = 0L;
-        while (true) {
+        final AtomicInteger acceptedProposals = new AtomicInteger(0);
+        final AtomicInteger rejected = new AtomicInteger(0);
+
+        final List<CompletableFuture<Boolean>> proposeList = requestParallel(currentLayout,
+                layoutServer -> getRuntimeLayout().getLayoutClient(layoutServer).propose(epoch, rank, layout));
+
+        while (acceptedProposals.get() < getQuorumNumber()) {
             // do we still have enough for a quorum?
-            if (proposeList.length < getQuorumNumber()) {
-                log.debug("propose: Quorum unreachable, remaining={}, required={}", proposeList,
-                        getQuorumNumber());
-                throw new QuorumUnreachableException(proposeList.length, getQuorumNumber());
+            if ((proposeList.size() + acceptedProposals.get()) < getQuorumNumber()) {
+                log.debug("propose: Quorum unreachable, remaining={}, required={}", proposeList, getQuorumNumber());
+                throw new QuorumUnreachableException(proposeList.size(), getQuorumNumber());
             }
 
             // wait for someone to complete.
-            try {
-                CFUtils.getUninterruptibly(CompletableFuture.anyOf(proposeList),
-                        OutrankedException.class, TimeoutException.class, NetworkException.class,
-                        WrongEpochException.class);
-            } catch (TimeoutException | NetworkException e) {
-                timeouts++;
-            } catch (WrongEpochException we) {
-                wrongEpochRejected++;
-            }
+            waitForAnyCompletion(proposeList);
 
             // remove errors.
-            proposeList = stream(proposeList)
-                    .filter(x -> !x.isCompletedExceptionally())
-                    .toArray(CompletableFuture[]::new);
+            proposeList.removeIf(cf -> {
+                try {
+                    if (cf.getNow(false)) {
+                        // count successes.
+                        acceptedProposals.incrementAndGet();
+                        return true;
+                    }
+                } catch (Exception e) {
+                    // Exception is instance of CompletionException wrapping the thrown Exception.
+                    if (e.getCause() instanceof OutrankedException) {
+                        throw (OutrankedException) e.getCause();
+                    }
+                    rejected.incrementAndGet();
+                    return true;
+                }
+                return false;
+            });
 
-            // count successes.
-            long count = stream(proposeList)
-                    .map(x -> {
-                        try {
-                            return x.getNow(false);
-                        } catch (Exception e) {
-                            return false;
-                        }
-                    })
-                    .filter(x -> x)
-                    .count();
-
-            log.debug("propose: Successful responses={}, needed={}, timeouts={}, "
-                            + "wrongEpochRejected={}",
-                    count, getQuorumNumber(), timeouts, wrongEpochRejected);
-
-            if (count >= getQuorumNumber()) {
-                break;
-            }
+            log.debug("propose: Successful responses={}, needed={}, rejected={}",
+                    acceptedProposals.get(), getQuorumNumber(), rejected);
         }
 
         return layout;
@@ -258,10 +243,6 @@ public class LayoutView extends AbstractView {
 
     /**
      * Send committed layout to the old Layout servers and the new Layout Servers.
-     * TODO Current policy is to send the committed layout once. Need to revisit this in order
-     * TODO to drive the new layout to all the involved LayoutServers.
-     * TODO The new layout servers are not bootstrapped and will reject committed messages.
-     * TODO Need to fix this.
      *
      * @throws WrongEpochException wrong epoch number.
      */
@@ -272,49 +253,40 @@ public class LayoutView extends AbstractView {
     /**
      * Send committed layout to the old Layout servers and the new Layout Servers.
      * If force is true, then the layout forced on all layout servers.
+     *
+     * @throws WrongEpochException wrong epoch number.
      */
-    @SuppressWarnings("unchecked")
-    public void committed(long epoch, Layout layout, boolean force)
-            throws WrongEpochException {
-        CompletableFuture<Boolean>[] commitList = layout.getLayoutServers().stream()
-                .map(x -> {
-                    CompletableFuture<Boolean> cf = new CompletableFuture<>();
-                    try {
-                        // Connection to router can cause network exception too.
-                        if (force) {
-                            cf = getRuntimeLayout(layout).getLayoutClient(x).force(layout);
-                        } else {
-                            cf = getRuntimeLayout(layout).getLayoutClient(x).committed(epoch, layout);
-                        }
-                    } catch (NetworkException e) {
-                        cf.completeExceptionally(e);
+    public void committed(long epoch, Layout layout, boolean force) {
+        List<CompletableFuture<Boolean>> commitList = requestParallel(layout,
+                layoutServer -> {
+                    if (force) {
+                        return getRuntimeLayout(layout).getLayoutClient(layoutServer).force(layout);
                     }
-                    return cf;
-                })
-                .toArray(CompletableFuture[]::new);
+                    return getRuntimeLayout(layout).getLayoutClient(layoutServer).committed(epoch, layout);
+                });
 
-        int timeouts = 0;
-        int responses = 0;
-        while (responses < commitList.length) {
-            // wait for someone to complete.
-            try {
-                CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
-                        WrongEpochException.class, TimeoutException.class, NetworkException.class);
-            } catch (WrongEpochException e) {
-                if (!force) {
-                    throw  e;
+        final AtomicInteger acceptedCommits = new AtomicInteger(0);
+        final AtomicInteger rejected = new AtomicInteger(0);
+        while (acceptedCommits.get() < commitList.size()) {
+
+            waitForAnyCompletion(commitList);
+
+            commitList.removeIf(cf -> {
+                try {
+                    if (cf.getNow(false)) {
+                        // count successes.
+                        acceptedCommits.incrementAndGet();
+                        return true;
+                    }
+                } catch (Exception e) {
+                    log.warn("committed: Error while committing", e);
+                    rejected.incrementAndGet();
+                    return true;
                 }
-                log.warn("committed: Error while force committing", e);
-            } catch (TimeoutException | NetworkException e) {
-                log.warn("committed: Error while committing", e);
-                timeouts++;
-            }
-            responses++;
-            commitList = Arrays.stream(commitList)
-                    .filter(x -> !x.isCompletedExceptionally())
-                    .toArray(CompletableFuture[]::new);
+                return false;
+            });
 
-            log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
+            log.debug("committed: Successful responses={}, rejected={}", acceptedCommits.get(), rejected.get());
         }
     }
 
