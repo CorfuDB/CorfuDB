@@ -73,9 +73,15 @@ public class SequencerCacheTest extends AbstractObjectTest {
             }
         });
 
-        for (int i = 0; i < 10; i++) {
-            cache.put("1", 1L);
-            cache.put("2", 2L);
+        final String firstKey = "1";
+        final String secondKey = "2";
+        final long firstValue = 1L;
+        final long secondValue = 2L;
+        final int iterations = 10;
+
+        for (int i = 0; i < iterations; i++) {
+            cache.put(firstKey, firstValue);
+            cache.put(secondKey, secondValue);
 
             assertThat(cache.getIfPresent("1")).as("iteration: %s", i).isNull();
 

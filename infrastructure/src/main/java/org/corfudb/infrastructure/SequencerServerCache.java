@@ -10,6 +10,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Address;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -51,27 +53,40 @@ public class SequencerServerCache {
                 .build();
     }
 
+    /**
+     * Limited cache by size.
+     * Eviction policy described here https://github.com/ben-manes/caffeine/wiki/Writer
+     * @param cacheSize cache size
+     */
     public SequencerServerCache(long cacheSize) {
-        RemovalListener<String, Long> removalListener = (String key, Long globalAddress, RemovalCause cause) -> {
-            if (cause == RemovalCause.REPLACED) {
-                return;
+        CacheWriter<String, Long> writer = new CacheWriter<String, Long>() {
+            @Override
+            public void write(@Nonnull String key, @Nonnull Long value) {
+                //ignore
             }
 
-            log.trace(
-                    "Updating maxConflictWildcard. Old = '{}', new ='{}' conflictParam = '{}'. Cause = '{}'",
-                    maxConflictWildcard, globalAddress, key, cause
-            );
+            @Override
+            public void delete(@Nonnull String key, @Nullable Long globalAddress, @Nonnull RemovalCause cause) {
+                if (cause == RemovalCause.REPLACED) {
+                    return;
+                }
 
-            if (globalAddress == null) {
-                globalAddress = Address.NOT_FOUND;
+                log.trace(
+                        "Updating maxConflictWildcard. Old = '{}', new ='{}' conflictParam = '{}'. Cause = '{}'",
+                        maxConflictWildcard, globalAddress, key, cause
+                );
+
+                if (globalAddress == null) {
+                    globalAddress = Address.NOT_FOUND;
+                }
+                maxConflictWildcard = Math.max(globalAddress, maxConflictWildcard);
             }
-            maxConflictWildcard = Math.max(globalAddress, maxConflictWildcard);
         };
 
         this.conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
                 .executor(Runnable::run)
-                .removalListener(removalListener)
+                .writer(writer)
                 .recordStats()
                 .build();
     }
@@ -98,7 +113,7 @@ public class SequencerServerCache {
     }
 
     public long size() {
-        return asMap().size();
+        return conflictToGlobalTailCache.estimatedSize();
     }
 
     public void put(String conflictHashCode, long newTail) {
@@ -114,9 +129,5 @@ public class SequencerServerCache {
         log.info("updateMaxConflictAddress, new address: {}", newMaxConflictWildcard);
         maxConflictWildcard = newMaxConflictWildcard;
         maxConflictNewSequencer = newMaxConflictWildcard;
-    }
-
-    public ConcurrentMap<String, Long> asMap() {
-        return conflictToGlobalTailCache.asMap();
     }
 }
