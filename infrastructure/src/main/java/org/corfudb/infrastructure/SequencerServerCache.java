@@ -4,7 +4,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.RemovalListener;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +11,6 @@ import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Sequencer server cache.
@@ -62,7 +60,22 @@ public class SequencerServerCache {
      * @param cacheSize cache size
      */
     public SequencerServerCache(long cacheSize) {
-        CacheWriter<String, Long> writer = new CacheWriter<String, Long>() {
+        this.conflictToGlobalTailCache = Caffeine.newBuilder()
+                .maximumSize(cacheSize)
+                //Performing periodic maintenance using current thread (synchronously)
+                .executor(Runnable::run)
+                .writer(getDefaultCacheWriter())
+                .recordStats()
+                .build();
+    }
+
+    private CacheWriter<String, Long> getDefaultCacheWriter() {
+        return new CacheWriter<String, Long>() {
+            /**
+             * Let caffeine do its work
+             * @param key a key
+             * @param value a value
+             */
             @Override
             public void write(@Nonnull String key, @Nonnull Long value) {
                 //ignore
@@ -77,7 +90,7 @@ public class SequencerServerCache {
             @Override
             public void delete(@Nonnull String key, @Nullable Long globalAddress, @Nonnull RemovalCause cause) {
                 if (cause == RemovalCause.REPLACED) {
-                    return;
+                    throw new IllegalStateException("The conflict stream");
                 }
 
                 log.trace(
@@ -91,22 +104,22 @@ public class SequencerServerCache {
                 maxConflictWildcard = Math.max(globalAddress, maxConflictWildcard);
             }
         };
-
-        this.conflictToGlobalTailCache = Caffeine.newBuilder()
-                .maximumSize(cacheSize)
-                //Performing periodic maintenance using current thread (synchronously)
-                .executor(Runnable::run)
-                .writer(writer)
-                .recordStats()
-                .build();
     }
 
+    /**
+     * Returns the value associated with the {@code key} in this cache,
+     * or {@code null} if there is no cached value for the {@code key}.
+     *
+     * @param conflictKeyHash conflict stream
+     * @return global address
+     */
     public Long getIfPresent(String conflictKeyHash) {
         return conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
     }
 
     /**
      * Invalidate all records up to a trim mark.
+     *
      * @param trimMark trim mark
      */
     public void invalidate(long trimMark) {
@@ -115,7 +128,7 @@ public class SequencerServerCache {
         long entries = 0;
         for (String key : conflictToGlobalTailCache.asMap().keySet()) {
             Long currTrimMark = getIfPresent(key);
-            if (currTrimMark >= trimMark) {
+            if (currTrimMark == null || currTrimMark >= trimMark) {
                 continue;
             }
 
@@ -126,19 +139,35 @@ public class SequencerServerCache {
 
     }
 
+    /**
+     * The cache size
+     * @return cache size
+     */
     public long size() {
         return conflictToGlobalTailCache.estimatedSize();
     }
 
+    /**
+     * Put a value in the cache
+     * @param conflictHashCode conflict stream
+     * @param newTail global tail
+     */
     public void put(String conflictHashCode, long newTail) {
         conflictToGlobalTailCache.put(conflictHashCode, newTail);
     }
 
+    /**
+     * Discard all entries in the cache
+     */
     public void invalidateAll() {
         log.info("Invalidate sequencer server cache");
         conflictToGlobalTailCache.invalidateAll();
     }
 
+    /**
+     * Update max conflict wildcard by a new address
+     * @param newMaxConflictWildcard new conflict wildcard
+     */
     public void updateMaxConflictAddress(long newMaxConflictWildcard) {
         log.info("updateMaxConflictAddress, new address: {}", newMaxConflictWildcard);
         maxConflictWildcard = newMaxConflictWildcard;
