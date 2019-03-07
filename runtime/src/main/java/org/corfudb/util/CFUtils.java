@@ -14,12 +14,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by mwei on 9/15/15.
  */
-@Slf4j
 public class CFUtils {
 
     private static final ScheduledExecutorService scheduler =
