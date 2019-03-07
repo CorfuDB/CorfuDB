@@ -48,14 +48,17 @@ public class SequencerServerCache {
         this.conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
                 .writer(writer)
+                //Performing periodic maintenance using current thread (synchronously)
                 .executor(Runnable::run)
                 .recordStats()
                 .build();
     }
 
     /**
-     * Limited cache by size.
-     * Eviction policy described here https://github.com/ben-manes/caffeine/wiki/Writer
+     * The cache limited by size.
+     * For a synchronous cache we are using a same-thread executor (Runnable::run)
+     * https://github.com/ben-manes/caffeine/issues/90
+     *
      * @param cacheSize cache size
      */
     public SequencerServerCache(long cacheSize) {
@@ -65,6 +68,12 @@ public class SequencerServerCache {
                 //ignore
             }
 
+            /**
+             * Eviction policy https://github.com/ben-manes/caffeine/wiki/Writer
+             * @param key stream id
+             * @param globalAddress global address
+             * @param cause a removal cause
+             */
             @Override
             public void delete(@Nonnull String key, @Nullable Long globalAddress, @Nonnull RemovalCause cause) {
                 if (cause == RemovalCause.REPLACED) {
@@ -85,6 +94,7 @@ public class SequencerServerCache {
 
         this.conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
+                //Performing periodic maintenance using current thread (synchronously)
                 .executor(Runnable::run)
                 .writer(writer)
                 .recordStats()
@@ -95,6 +105,10 @@ public class SequencerServerCache {
         return conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
     }
 
+    /**
+     * Invalidate all records up to a trim mark.
+     * @param trimMark trim mark
+     */
     public void invalidate(long trimMark) {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
 
@@ -120,7 +134,7 @@ public class SequencerServerCache {
         conflictToGlobalTailCache.put(conflictHashCode, newTail);
     }
 
-    public void invalidate() {
+    public void invalidateAll() {
         log.info("Invalidate sequencer server cache");
         conflictToGlobalTailCache.invalidateAll();
     }

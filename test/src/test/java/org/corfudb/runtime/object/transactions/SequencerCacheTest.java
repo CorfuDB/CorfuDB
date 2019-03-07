@@ -80,14 +80,16 @@ public class SequencerCacheTest extends AbstractObjectTest {
         final int iterations = 10;
 
         for (int i = 0; i < iterations; i++) {
+            criticalVariable.set(false);
+
             cache.put(firstKey, firstValue);
             cache.put(secondKey, secondValue);
 
-            assertThat(cache.getIfPresent("1")).as("iteration: %s", i).isNull();
+            assertThat(cache.size()).isOne();
+            assertThat(cache.getIfPresent("1")).isNull();
 
-            cache.invalidate();
+            cache.invalidateAll();
             assertThat(cache.size()).isZero();
-            criticalVariable.set(false);
         }
     }
 }
