@@ -324,9 +324,9 @@ public class SequencerServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
-        long initialToken = msg.getPayload().getGlobalTail();
-        Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
-        long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
+        final long initialToken = msg.getPayload().getGlobalTail();
+        final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
+        final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
 
         // Boolean flag to denote whether this bootstrap message is just updating an existing
         // primary sequencer with the new epoch (if set to true) or bootstrapping a currently
