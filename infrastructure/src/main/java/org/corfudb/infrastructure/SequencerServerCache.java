@@ -5,12 +5,14 @@ import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.UUID;
 
 /**
  * Sequencer server cache.
@@ -23,7 +25,7 @@ public class SequencerServerCache {
      * <p>
      * a cache of recent conflict keys and their latest global-log position.
      */
-    private final Cache<String, Long> conflictToGlobalTailCache;
+    private final Cache<ConflictTxStream, Long> conflictToGlobalTailCache;
 
     /**
      * A "wildcard" representing the maximal update timestamp of
@@ -42,7 +44,7 @@ public class SequencerServerCache {
     private long maxConflictNewSequencer = Address.NOT_FOUND;
 
     @VisibleForTesting
-    public SequencerServerCache(long cacheSize, CacheWriter<String, Long> writer) {
+    public SequencerServerCache(long cacheSize, CacheWriter<ConflictTxStream, Long> writer) {
         this.conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
                 .writer(writer)
@@ -69,28 +71,29 @@ public class SequencerServerCache {
                 .build();
     }
 
-    private CacheWriter<String, Long> getDefaultCacheWriter() {
-        return new CacheWriter<String, Long>() {
+    private CacheWriter<ConflictTxStream, Long> getDefaultCacheWriter() {
+        return new CacheWriter<ConflictTxStream, Long>() {
             /**
              * Let caffeine do its work
              * @param key a key
              * @param value a value
              */
             @Override
-            public void write(@Nonnull String key, @Nonnull Long value) {
+            public void write(@Nonnull ConflictTxStream key, @Nonnull Long value) {
                 //ignore
             }
 
             /**
              * Eviction policy https://github.com/ben-manes/caffeine/wiki/Writer
-             * @param key stream id
+             * @param key  conflict stream
              * @param globalAddress global address
              * @param cause a removal cause
              */
             @Override
-            public void delete(@Nonnull String key, @Nullable Long globalAddress, @Nonnull RemovalCause cause) {
+            public void delete(@Nonnull ConflictTxStream key, Long globalAddress, @Nonnull RemovalCause cause) {
                 if (cause == RemovalCause.REPLACED) {
-                    throw new IllegalStateException("The conflict stream");
+                    String errMsg = String.format("Override error. Conflict key: %s, address: %s", key, globalAddress);
+                    throw new IllegalStateException(errMsg);
                 }
 
                 log.trace(
@@ -110,11 +113,11 @@ public class SequencerServerCache {
      * Returns the value associated with the {@code key} in this cache,
      * or {@code null} if there is no cached value for the {@code key}.
      *
-     * @param conflictKeyHash conflict stream
+     * @param conflictKey conflict stream
      * @return global address
      */
-    public Long getIfPresent(String conflictKeyHash) {
-        return conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
+    public Long getIfPresent(ConflictTxStream conflictKey) {
+        return conflictToGlobalTailCache.getIfPresent(conflictKey);
     }
 
     /**
@@ -126,7 +129,7 @@ public class SequencerServerCache {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
 
         long entries = 0;
-        for (String key : conflictToGlobalTailCache.asMap().keySet()) {
+        for (ConflictTxStream key : conflictToGlobalTailCache.asMap().keySet()) {
             Long currTrimMark = getIfPresent(key);
             if (currTrimMark == null || currTrimMark >= trimMark) {
                 continue;
@@ -149,11 +152,11 @@ public class SequencerServerCache {
 
     /**
      * Put a value in the cache
-     * @param conflictHashCode conflict stream
+     * @param conflictStream conflict stream
      * @param newTail global tail
      */
-    public void put(String conflictHashCode, long newTail) {
-        conflictToGlobalTailCache.put(conflictHashCode, newTail);
+    public void put(ConflictTxStream conflictStream, long newTail) {
+        conflictToGlobalTailCache.put(conflictStream, newTail);
     }
 
     /**
@@ -172,5 +175,24 @@ public class SequencerServerCache {
         log.info("updateMaxConflictAddress, new address: {}", newMaxConflictWildcard);
         maxConflictWildcard = newMaxConflictWildcard;
         maxConflictNewSequencer = newMaxConflictWildcard;
+    }
+
+    /**
+     * Contains the conflict hash code for a stream ID and conflict param.
+     */
+    @EqualsAndHashCode
+    static class ConflictTxStream {
+        private final UUID streamId;
+        private final String conflictParam;
+
+        public ConflictTxStream(UUID streamId, byte[] conflictParam) {
+            this.streamId = streamId;
+            this.conflictParam = Utils.bytesToHex(conflictParam);
+        }
+
+        @Override
+        public String toString() {
+            return streamId.toString() + conflictParam;
+        }
     }
 }

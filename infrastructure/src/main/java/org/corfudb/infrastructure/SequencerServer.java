@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -176,17 +177,6 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
-     * Get the conflict hash code for a stream ID and conflict param.
-     *
-     * @param streamId      The stream ID.
-     * @param conflictParam The conflict parameter.
-     * @return A conflict hash code.
-     */
-    private String getConflictHashCode(UUID streamId, byte[] conflictParam) {
-        return streamId.toString() + Utils.bytesToHex(conflictParam);
-    }
-
-    /**
      * If the request submits a timestamp (a global offset) that is less than one of the
      * global offsets of a streams specified in the request, then abort; otherwise commit.
      *
@@ -233,8 +223,7 @@ public class SequencerServer extends AbstractServer {
             // for each key pair, check for conflict; if not present, check against the wildcard
             for (byte[] conflictParam : conflictParamSet) {
 
-                String conflictKeyHash = getConflictHashCode(conflictStream.getKey(), conflictParam);
-                Long keyAddress = cache.getIfPresent(conflictKeyHash);
+                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(), conflictParam));
 
                 log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
 
@@ -548,7 +537,7 @@ public class SequencerServer extends AbstractServer {
                     .forEach((key, value) -> {
                         // insert an entry with the new timestamp using the hash code based on the param
                         // and the stream id.
-                        value.forEach(conflictParam -> cache.put(getConflictHashCode(key, conflictParam), newTail - 1));
+                        value.forEach(conflictParam -> cache.put(new ConflictTxStream(key, conflictParam), newTail - 1));
                     });
         }
 
@@ -564,5 +553,4 @@ public class SequencerServer extends AbstractServer {
         super.shutdown();
         executor.shutdownNow();
     }
-
 }
