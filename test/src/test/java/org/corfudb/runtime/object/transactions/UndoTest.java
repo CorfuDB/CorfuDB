@@ -133,10 +133,12 @@ public class UndoTest extends AbstractTransactionsTest {
                 .setTypeToken(new TypeToken<SMRMap<Integer, String>>() {
                 })
                 .open();
+
         final int specialKey = 10;
         final String normalValue = "z", specialValue = "y";
         final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
 
+        long counterStart = System.currentTimeMillis();
         // populate the map with many elements
         for (int i = 0; i < mapSize; i++)
             testMap.put(i, normalValue);
@@ -201,6 +203,11 @@ public class UndoTest extends AbstractTransactionsTest {
             testStatus += "undo rebuild time=" +
                     String.format("%.0f", (float)(endTime-startTime))
                     + "ms";
+            getRuntime().getObjectsView().TXEnd();
+        });
+
+        t(1, () -> {
+            getRuntime().getObjectsView().TXEnd();
         });
 
     }

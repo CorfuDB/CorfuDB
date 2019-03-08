@@ -11,12 +11,14 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-
+import java.util.stream.Collectors;
 
 
 /**
@@ -85,7 +87,52 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         return readRange(runtimeLayout, range, true);
     }
 
+    @Override
+    public Map<Long, ILogData> multiRead(RuntimeLayout runtimeLayout, List<Long> addresses, boolean waitForWrite) {
+        // TODO(Anny): start address and log unit client might differ as there can be multiple segments...
+        log.trace("ChainReplicationProtocol-multiRead: multiple read for addresses {}", addresses);
+        Long startAddress = addresses.get(0);
+        int numUnits = runtimeLayout.getLayout().getSegmentLength(startAddress);
+        Map<Long, LogData> logResult =  CFUtils.getUninterruptibly(runtimeLayout
+                        .getLogUnitClient(startAddress, numUnits - 1)
+                        .read(addresses)).getAddresses();
 
+        // In case of holes, use the standard backoff policy for hole fill for
+        // the first entry in the list. All subsequent holes in the list can
+        // be hole filled without waiting as we have already waited for the first
+        // hole.
+        boolean wait = !waitForWrite;
+        Map<Long, ILogData> returnResult = new TreeMap<>();
+        for (Map.Entry<Long, LogData> entry : logResult.entrySet()) {
+            long address = entry.getKey();
+            ILogData value = entry.getValue();
+            if (value == null || value.isEmpty()) {
+                log.trace("ChainReplicationProtocol-multiRead: read value at address {} is EMPTY. ", address);
+                if (!wait) {
+                    log.trace("ChainReplicationProtocol-multiRead: wait for the write on address {}, if not present then hole fill", address);
+                    value = read(runtimeLayout, address);
+                    log.trace("ChainReplicationProtocol-multiRead: value for {} is now: {}", address, value.getType().toString());
+                    wait = true;
+                } else {
+                    log.trace("ChainReplicationProtocol-multiRead: don't wait for the write on address {}, if not present then hole fill", address);
+                    // try to read the value
+                    value = CFUtils.getUninterruptibly(runtimeLayout
+                            .getLogUnitClient(startAddress, numUnits - 1).read(address))
+                            .getAddresses().get(address);
+                    // if value is null, fill the hole and get the value.
+                    if (value == null || value.isEmpty()) {
+                        log.trace("ChainReplicationProtocol-multiRead: fill the hole directly for entry {}", address);
+                        holeFill(runtimeLayout, address);
+                        value = peek(runtimeLayout, address);
+                    }
+                }
+            }
+
+            returnResult.put(entry.getKey(), value);
+        }
+
+        return returnResult;
+    }
 
     @Override
     public Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {

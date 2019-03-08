@@ -1,6 +1,8 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
 import java.util.Optional;
@@ -105,14 +107,43 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Otherwise we remove entries one at a time from the read queue.
-        if (getFrom.size() > 0) {
-            final long thisRead = getFrom.pollFirst();
-            ILogData ld = read(thisRead);
-            if (getFrom == context.readQueue) {
-                addToResolvedQueue(context, thisRead, ld);
+        boolean getNext = false;
+        do {
+            if (getFrom.size() > 0) {
+                final long thisRead = getFrom.pollFirst();
+                final int batchSize = 10;
+                int counter = 1;
+                List<Long> batchRead = new ArrayList<>();
+                batchRead.add(thisRead);
+                Iterator<Long> it = getFrom.iterator();
+
+                while (it.hasNext() && counter < batchSize) {
+                    batchRead.add(it.next());
+                    counter++;
+                }
+
+                log.trace("getNextEntry[{}]: reading {}, if not present read batch of addresses: {}", this, thisRead, batchRead);
+                ILogData ld = readRange(thisRead, batchRead);
+
+                if (getFrom == context.readQueue) {
+                    // Validate data entry belongs to this stream, if not skip
+                    // This verification protects against the case when tokens were issued for a stream by the sequencer,
+                    // but never written to, when a sequencer failover occurs and therefore these tokens are reassigned
+                    // to potentially a new stream, causing invalidation of theses addresses for this stream.
+                    if (ld.containsStream(this.id)) {
+                        addToResolvedQueue(context, thisRead, ld);
+                        return ld;
+                    } else {
+                        log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.", this, thisRead);
+                        getNext = true;
+                    }
+                } else {
+                    return ld;
+                }
+            } else {
+                getNext = false;
             }
-            return ld;
-        }
+        } while(getNext);
 
         // None of the potential reads ended up being part of this
         // stream, so we return null.
@@ -206,6 +237,10 @@ public abstract class AbstractQueuedStreamView extends
      */
     protected abstract @Nonnull ILogData read(final long address);
 
+
+    protected abstract @Nonnull ILogData readRange(final long address, @Nonnull final List<Long> addresses);
+
+
     /**
      * Given a list of addresses, retrieve the data as a list in the same
      * order of the addresses given in the list.
@@ -234,7 +269,7 @@ public abstract class AbstractQueuedStreamView extends
      *                      False, otherwise.
      */
     protected abstract boolean fillReadQueue(final long maxGlobal,
-                                          final QueuedStreamContext context);
+                                             final QueuedStreamContext context);
 
     /**
      * {@inheritDoc}
@@ -295,6 +330,7 @@ public abstract class AbstractQueuedStreamView extends
         // one less than the current.
         Long prevAddress = context
                 .resolvedQueue.lower(context.getGlobalPointer());
+
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
         if (prevAddress == null && Address.isAddress(context.minResolution)

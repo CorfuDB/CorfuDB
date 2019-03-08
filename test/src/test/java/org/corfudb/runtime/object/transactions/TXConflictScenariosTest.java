@@ -289,7 +289,6 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
 
         // state 1: do some puts/gets
         addTestStep( (task_num) -> {
-
             // put to a task-exclusive entry
             testMap.put(Integer.toString(task_num),
                     Integer.toString(task_num));

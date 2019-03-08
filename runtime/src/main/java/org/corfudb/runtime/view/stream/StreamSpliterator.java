@@ -61,6 +61,7 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator<ILogData
         if (next == null) {
             return false;
         }
+
         // Otherwise, apply
         action.accept(next);
         return true;

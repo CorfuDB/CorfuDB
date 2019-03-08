@@ -13,10 +13,10 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRecoveryMsg> {
+public class SequencerRecoveryMsg implements ICorfuPayload<SequencerRecoveryMsg> {
 
     private Long globalTail;
-    private Map<UUID, Long> streamTails;
+    private Map<UUID, StreamAddressSpace> streamsAddressSpaceMap;
     private Long sequencerEpoch;
 
     /**
@@ -26,9 +26,9 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
      */
     private Boolean bootstrapWithoutTailsUpdate;
 
-    public SequencerTailsRecoveryMsg(ByteBuf buf) {
+    public SequencerRecoveryMsg(ByteBuf buf) {
         globalTail = ICorfuPayload.fromBuffer(buf, Long.class);
-        streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        streamsAddressSpaceMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);
         sequencerEpoch = ICorfuPayload.fromBuffer(buf, Long.class);
         bootstrapWithoutTailsUpdate = ICorfuPayload.fromBuffer(buf, Boolean.class);
     }
@@ -37,7 +37,7 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
     public void doSerialize(ByteBuf buf) {
 
         ICorfuPayload.serialize(buf, globalTail);
-        ICorfuPayload.serialize(buf, streamTails);
+        ICorfuPayload.serialize(buf, streamsAddressSpaceMap);
         ICorfuPayload.serialize(buf, sequencerEpoch);
         ICorfuPayload.serialize(buf, bootstrapWithoutTailsUpdate);
     }

@@ -293,7 +293,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
     public static CorfuRuntime createRuntime(String endpoint) {
         CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(true)
+                .setCacheDisabled(false)
                 .connect();
         return rt;
     }

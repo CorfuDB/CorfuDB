@@ -460,6 +460,7 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+
     /**
      * A view of streamsView in the Corfu server instance.
      */
@@ -704,6 +705,9 @@ public class CorfuRuntime {
         }
 
         stop(true);
+
+        // Shutdown address loader background thread
+        this.getAddressSpaceView().stop();
 
         // Shutdown the event loop
         if (parameters.shutdownNettyEventLoop) {

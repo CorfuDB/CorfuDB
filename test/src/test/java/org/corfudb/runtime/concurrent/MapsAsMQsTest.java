@@ -18,7 +18,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
     public void TXBegin() { OptimisticTXBegin(); }
 
 
-    protected int numIterations = PARAMETERS.NUM_ITERATIONS_LOW;
+    protected int numIterations = 2;
 
     /**
      * This test verifies commit atomicity against concurrent -read- activity,
@@ -46,12 +46,14 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
 
             for (int i = 0; i < numIterations; i++) {
                 // place a value in the map
+                System.out.println("- sending 1st trigger");
                 log.debug("- sending 1st trigger {}", i);
                 testMap1.put(1L, (long) i);
 
                 // await for the consumer condition to circulate back
                 s2.acquire();
 
+                System.out.println("- s2.await() finished");
                 log.debug("- s2.await() finished at {}", i);
             }
         });
@@ -64,11 +66,16 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
 
             int busyDelay = 1; // millisecs
 
+            System.out.println("- wait  1st trigger");
+
             for (int i = 0; i < numIterations; i++) {
                 while (testMap1.get(1L) == null || testMap1.get(1L) != (long) i) {
                     log.debug( "- wait for 1st trigger {}", i);
                     Thread.sleep(busyDelay);
                 }
+
+                System.out.println("- received  1st trigger");
+
                 log.debug( "- received 1st trigger {}", i);
 
                 // 1st producer signal through lock
@@ -107,10 +114,14 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
 
             int busyDelay = 1; // millisecs
 
+            System.out.println("- wait  2nd trigger");
+
             for (int i = 0; i < numIterations; i++) {
                 while (testMap1.get(2L) == null || testMap1.get(2L) != (long) i)
                     Thread.sleep(busyDelay);
                 log.debug( "- received 2nd trigger {}", i);
+
+                System.out.println("- received  2nd trigger");
 
                 // 2nd producer signal through lock
                 // 2nd producer signal

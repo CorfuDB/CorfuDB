@@ -47,25 +47,32 @@ public enum CorfuMsgType {
     // Sequencer Messages
     TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
-    BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
+    BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerRecoveryMsg>>(){}),
     SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<Long>>() {}),
     SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),
     SEQUENCER_METRICS_RESPONSE(25, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true),
+    STREAMS_ADDRESS_REQUEST(26, new TypeToken<CorfuPayloadMsg<StreamsAddressRequest>>(){}),
+    STREAMS_ADDRESS_RESPONSE(27, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
+    ALL_STREAMS_ADDRESS_REQUEST(33, TypeToken.of(CorfuMsg.class)),
     MULTIPLE_READ_REQUEST(35, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
     FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<FillHoleRequest>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
-    TAIL_REQUEST(41, TypeToken.of(CorfuMsg.class)),
-    TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
+    LOG_TAIL_REQUEST(39, TypeToken.of(CorfuMsg.class)),
+    LOG_TAIL_RESPONSE(40, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    TAILS_REQUEST(41, TypeToken.of(CorfuMsg.class)),
+    TAILS_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
     COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
     TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),
     TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
+    LOG_ADDRESS_SPACE_REQUEST(48, TypeToken.of(CorfuMsg.class)),
+    LOG_ADDRESS_SPACE_RESPONSE(49, new TypeToken<CorfuPayloadMsg<LogAddressSpaceResponse>>(){}),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
@@ -77,7 +84,6 @@ public enum CorfuMsgType {
     ERROR_DATA_CORRUPTION(57, TypeToken.of(CorfuMsg.class)),
     ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
-
 
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),

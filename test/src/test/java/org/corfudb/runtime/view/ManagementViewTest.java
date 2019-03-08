@@ -1845,7 +1845,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Since the fast loader will retrieve the tails from the head node,
         // we need to drop all tail requests to hang the FastObjectLoaders
         addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> {
-            if (m.getMsgType().equals(CorfuMsgType.TAIL_RESPONSE)) {
+            if (m.getMsgType().equals(CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)) {
                 semaphore.release();
                 return true;
             }
@@ -1868,7 +1868,6 @@ public class ManagementViewTest extends AbstractViewTest {
         Layout layout2 = new Layout(corfuRuntime.getLayoutView().getLayout());
         layout2.setEpoch(layout2.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(layout2).sealMinServerSet();
-
 
         clearClientRules(managementRuntime0);
         clearClientRules(managementRuntime1);

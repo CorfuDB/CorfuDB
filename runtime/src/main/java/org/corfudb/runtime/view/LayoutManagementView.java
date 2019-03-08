@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getTails;
+import static org.corfudb.util.Utils.getLogTail;
 
 import java.util.Collections;
 import java.util.Map;
@@ -16,7 +16,8 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
+import org.corfudb.protocols.wireprotocol.StreamAddressSpace;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -148,7 +149,7 @@ public class LayoutManagementView extends AbstractView {
             }
             if (isLogUnitServer) {
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getTails(currentLayout, runtime).getLogTail(),
+                        getLogTail(currentLayout, runtime),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -194,7 +195,7 @@ public class LayoutManagementView extends AbstractView {
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,
-                    getTails(currentLayout, runtime).getLogTail(),
+                    getLogTail(currentLayout, runtime),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
@@ -419,7 +420,7 @@ public class LayoutManagementView extends AbstractView {
                 }
 
                 long maxTokenRequested = -1L;
-                Map<UUID, Long> streamTails = Collections.emptyMap();
+                Map<UUID, StreamAddressSpace> streamsAddressSpace = Collections.emptyMap();
                 boolean bootstrapWithoutTailsUpdate = true;
 
                 // Reconfigure Primary Sequencer if required
@@ -429,11 +430,12 @@ public class LayoutManagementView extends AbstractView {
 
                     //TODO(Maithem) why isn't this getting the tails
                     // from utils?
-                    TailsResponse tails = runtime.getAddressSpaceView().getAllTails();
+                    LogAddressSpaceResponse logAddressSpace = runtime.getAddressSpaceView().getLogAddressSpace();
 
-                    maxTokenRequested = tails.getLogTail();
-                    streamTails = tails.getStreamTails();
-                    verifyStreamTailsMap(streamTails);
+                    maxTokenRequested = logAddressSpace.getLogTail();
+                    streamsAddressSpace = logAddressSpace.getStreamsAddressSpace();
+                    // TODO (Anny) these are not actually the tails, do we need the tails at this stage?
+//                    verifyStreamTailsMap(streamsAddressSpace);
 
                     // Incrementing the maxTokenRequested value for sequencer reset.
                     maxTokenRequested++;
@@ -444,7 +446,7 @@ public class LayoutManagementView extends AbstractView {
                 boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
                         runtime.getLayoutView().getRuntimeLayout(newLayout)
                                 .getPrimarySequencerClient()
-                                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
+                                .bootstrap(maxTokenRequested, streamsAddressSpace, newLayout.getEpoch(),
                                         bootstrapWithoutTailsUpdate));
                 lastKnownSequencerEpoch = newLayout.getEpoch();
                 if (sequencerBootstrapResult) {
@@ -490,7 +492,7 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Verifies whether there are any invalid streamTails.
+     * Verifies whether there are any invalid stream tails.
      *
      * @param streamTails Stream tails map obtained from the fastSMRLoader.
      */

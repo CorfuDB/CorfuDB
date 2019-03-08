@@ -184,14 +184,32 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     }
 
     /**
-     * Handle a TAIL_RESPONSE message.
+     * Handle a TAILS_RESPONSE message.
      *
      * @param msg Incoming Message
      * @param ctx Context
      * @param r   Router
      */
-    @ClientHandler(type = CorfuMsgType.TAIL_RESPONSE)
+    @ClientHandler(type = CorfuMsgType.TAILS_RESPONSE)
     private static Object handleTailResponse(CorfuPayloadMsg<TailsResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.LOG_TAIL_RESPONSE)
+    private static Object handleLogTailResponse(CorfuPayloadMsg<TailsResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.STREAMS_ADDRESS_RESPONSE)
+    private static Object handleStreamsAddressResponse(CorfuPayloadMsg<TailsResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
+    private static Object handleLogAddressSpaceResponse(CorfuPayloadMsg<TailsResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

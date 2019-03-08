@@ -20,7 +20,10 @@ public class BatchWriterOperation {
         PREFIX_TRIM,
         SEAL,
         RESET,
-        TAILS_QUERY
+        LOG_TAIL_QUERY,
+        TAILS_QUERY,
+        STREAMS_ADDRESS_QUERY,
+        LOG_ADDRESS_SPACE_QUERY
     }
 
     private final Type type;

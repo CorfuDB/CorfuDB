@@ -9,7 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -18,6 +21,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
  * This class implements the StreamLog interface using a Java hash map.
  * The stream log is only stored in-memory and not persisted.
  * This should only be used for testing.
+ *
  * Created by maithem on 7/21/16.
  */
 @Slf4j
@@ -77,12 +81,35 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public synchronized TailsResponse getTails() {
+    public synchronized Long getLogTail() {
+        return logMetadata.getGlobalTail();
+    }
+
+    @Override
+    public synchronized TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
         for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
             tails.put(entry.getKey(), entry.getValue());
         }
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public synchronized StreamsAddressResponse getStreamsAddressSpace() {
+        return new StreamsAddressResponse(getCopyStreamsAddressSpace());
+    }
+
+    @Override
+    public synchronized LogAddressSpaceResponse getLogAddressSpace() {
+        return new LogAddressSpaceResponse(logMetadata.getGlobalTail(), getCopyStreamsAddressSpace());
+    }
+
+    private Map<UUID, StreamAddressSpace> getCopyStreamsAddressSpace() {
+        Map<UUID, StreamAddressSpace> streamAddressSpace = new HashMap<>(logMetadata.getStreamsAddressSpaceMap().size());
+        for (Map.Entry<UUID, StreamAddressSpace> entry : logMetadata.getStreamsAddressSpaceMap().entrySet()) {
+            streamAddressSpace.put(entry.getKey(), entry.getValue());
+        }
+        return streamAddressSpace;
     }
 
     @Override

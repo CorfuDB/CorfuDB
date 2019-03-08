@@ -82,7 +82,7 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
             throw new UnrecoverableCorfuInterruptedError(ie);
         } catch (RetryExhaustedException ree) {
             // Retries exhausted. Hole filling.
-            log.debug("peekUntilHoleFillRequired: Address:{} empty. Hole-filling.", address);
+            log.error("peekUntilHoleFillRequired: Address:{} empty. Hole-filling.", address);
         }
 
         throw new HoleFillRequiredException("No data after " + holeFillThreshold.toMillis() + "ms.");

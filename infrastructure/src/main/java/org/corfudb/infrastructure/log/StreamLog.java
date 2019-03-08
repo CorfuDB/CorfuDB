@@ -3,7 +3,9 @@ package org.corfudb.infrastructure.log;
 import java.io.IOException;
 import java.util.List;
 
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 
@@ -50,9 +52,24 @@ public interface StreamLog {
     void compact();
 
     /**
-     * Get the global tail and stream tails.
+     * Get the global log tail.
      */
-    TailsResponse getTails();
+    Long getLogTail();
+
+    /**
+     * Get global and stream tails.
+     */
+    TailsResponse getAllTails();
+
+    /**
+     * Get streams address space.
+     */
+    StreamsAddressResponse getStreamsAddressSpace();
+
+    /**
+     * Get log address space (streams address space & global tail).
+     */
+    LogAddressSpaceResponse getLogAddressSpace();
 
     /**
      * Get the first untrimmed address in the address space.

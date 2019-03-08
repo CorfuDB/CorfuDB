@@ -12,11 +12,13 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -188,8 +190,38 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the globalTail once
      * received.
      */
-    public CompletableFuture<TailsResponse> getTail() {
-        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.msg());
+    public CompletableFuture<Long> getLogTail() {
+        return sendMessageWithFuture(CorfuMsgType.LOG_TAIL_REQUEST.msg());
+    }
+
+    /**
+     * Get all stream tails (i.e., maximum address written to every stream) and global tail.
+     *
+     * @return A CompletableFuture which will complete with the stream tails once
+     * received.
+     */
+    public CompletableFuture<TailsResponse> getTails() {
+        return sendMessageWithFuture(CorfuMsgType.TAILS_REQUEST.msg());
+    }
+
+    /**
+     * Get the address space for all streams.
+     *
+     * @return A CompletableFuture which will complete with the address space map for all streams once
+     * received.
+     */
+    public CompletableFuture<StreamsAddressResponse> getStreamsAddressSpace() {
+        return sendMessageWithFuture(CorfuMsgType.ALL_STREAMS_ADDRESS_REQUEST.msg());
+    }
+
+    /**
+     * Get the log address space which includes streams address space and global tail.
+     *
+     * @return A CompletableFuture which will complete with the log address space once
+     * received.
+     */
+    public CompletableFuture<LogAddressSpaceResponse> getLogAddressSpace() {
+        return sendMessageWithFuture(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST.msg());
     }
 
     /**
@@ -199,7 +231,6 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Long> getTrimMark() {
         return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
     }
-
 
     /**
      * Send a prefix trim request that will trim the log up to a certain address
