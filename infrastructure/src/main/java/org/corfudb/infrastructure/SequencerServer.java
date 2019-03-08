@@ -531,7 +531,6 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null) {
-            // and for each conflict param
             req.getTxnResolution()
                     .getWriteConflictParams()
                     .forEach((key, value) -> {
