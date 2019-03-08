@@ -10,6 +10,7 @@ import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -290,7 +291,7 @@ public class FastObjectLoader {
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getAddressSpaceView().getAllTails().getLogTail();
+        logTail = runtime.getAddressSpaceView().getLogTail();
     }
 
     private void resetAddressProcessed() {

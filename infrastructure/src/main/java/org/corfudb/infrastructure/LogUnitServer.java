@@ -22,6 +22,8 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -43,12 +45,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.*;
 
 
 /**
@@ -140,14 +137,30 @@ public class LogUnitServer extends AbstractServer {
      * Service an incoming request for maximum global address the log unit server has written.
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
-    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest: received a tail request {}", msg);
-        CorfuPayloadMsg<Void> tailsReqMsg = new CorfuPayloadMsg<>();
-        tailsReqMsg.copyBaseFields(msg);
-        batchWriter.<TailsResponse>addTask(TAILS_QUERY, tailsReqMsg)
+        batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
                 .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
                 .exceptionally(ex -> {
-                    handleException(ex, ctx, tailsReqMsg, r);
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    /**
+     * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
+     * This is used on sequencer bootstrap to provide the address maps for initialization.
+     */
+    @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
+    public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
+        payloadMsg.copyBaseFields(msg);
+        log.debug("handleLogAddressSpaceRequest: received a log address space request {}", msg);
+        batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
+                .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
+                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, payloadMsg, r);
                     return null;
                 });
     }

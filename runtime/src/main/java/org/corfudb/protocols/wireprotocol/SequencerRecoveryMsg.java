@@ -7,17 +7,18 @@ import java.util.UUID;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 /**
  * Created by rmichoud on 6/20/17.
  */
 @Data
 @AllArgsConstructor
-public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRecoveryMsg> {
+public class SequencerRecoveryMsg implements ICorfuPayload<SequencerRecoveryMsg> {
 
-    private Long globalTail;
-    private Map<UUID, Long> streamTails;
-    private Long sequencerEpoch;
+    private final Long globalTail;
+    private final Map<UUID, StreamAddressSpace> streamsAddressMap;
+    private final Long sequencerEpoch;
 
     /**
      * Boolean flag to denote whether this bootstrap message is just updating an existing primary
@@ -26,9 +27,9 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
      */
     private Boolean bootstrapWithoutTailsUpdate;
 
-    public SequencerTailsRecoveryMsg(ByteBuf buf) {
+    public SequencerRecoveryMsg(ByteBuf buf) {
         globalTail = ICorfuPayload.fromBuffer(buf, Long.class);
-        streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        streamsAddressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);
         sequencerEpoch = ICorfuPayload.fromBuffer(buf, Long.class);
         bootstrapWithoutTailsUpdate = ICorfuPayload.fromBuffer(buf, Boolean.class);
     }
@@ -37,7 +38,7 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
     public void doSerialize(ByteBuf buf) {
 
         ICorfuPayload.serialize(buf, globalTail);
-        ICorfuPayload.serialize(buf, streamTails);
+        ICorfuPayload.serialize(buf, streamsAddressMap);
         ICorfuPayload.serialize(buf, sequencerEpoch);
         ICorfuPayload.serialize(buf, bootstrapWithoutTailsUpdate);
     }

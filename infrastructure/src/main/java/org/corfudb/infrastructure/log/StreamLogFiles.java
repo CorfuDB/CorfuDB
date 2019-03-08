@@ -22,6 +22,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -219,7 +220,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public TailsResponse getTails() {
+    public long getLogTail() {
+        return logMetadata.getGlobalTail();
+    }
+
+    @Override
+    public TailsResponse getTails(List<UUID> streams) {
+        Map<UUID, Long> tails = new HashMap<>();
+        streams.forEach(stream -> {
+            tails.put(stream, logMetadata.getStreamTails().get(stream));
+        });
+        return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public StreamsAddressResponse getStreamsAddressSpace() {
+        return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
+    }
+
+    @Override
+    public TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
     }

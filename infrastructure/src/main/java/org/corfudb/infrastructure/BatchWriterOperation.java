@@ -22,7 +22,8 @@ public class BatchWriterOperation<T> {
         PREFIX_TRIM,
         SEAL,
         RESET,
-        TAILS_QUERY
+        TAILS_QUERY,
+        LOG_ADDRESS_SPACE_QUERY
     }
 
     private final Type type;

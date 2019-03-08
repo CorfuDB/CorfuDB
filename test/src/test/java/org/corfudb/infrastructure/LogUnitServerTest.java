@@ -251,7 +251,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkUnCachedWrites() {
+    public void checkUnCachedWrites() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()

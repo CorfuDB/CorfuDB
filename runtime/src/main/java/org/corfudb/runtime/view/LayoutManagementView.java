@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getTails;
+import static org.corfudb.util.Utils.getLogTail;
 
 import java.util.Collections;
 import java.util.Map;
@@ -16,15 +16,14 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.Utils;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -150,7 +149,7 @@ public class LayoutManagementView extends AbstractView {
             }
             if (isLogUnitServer) {
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getTails(currentLayout, runtime).getLogTail(),
+                        getLogTail(currentLayout, runtime),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -196,7 +195,7 @@ public class LayoutManagementView extends AbstractView {
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,
-                    getTails(currentLayout, runtime).getLogTail(),
+                    getLogTail(currentLayout, runtime),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
@@ -421,7 +420,7 @@ public class LayoutManagementView extends AbstractView {
                 }
 
                 long maxTokenRequested = -1L;
-                Map<UUID, Long> streamTails = Collections.emptyMap();
+                Map<UUID, StreamAddressSpace> streamsAddressSpace = Collections.emptyMap();
                 boolean bootstrapWithoutTailsUpdate = true;
 
                 // Reconfigure Primary Sequencer if required
@@ -429,15 +428,11 @@ public class LayoutManagementView extends AbstractView {
                         || !originalLayout.getPrimarySequencer()
                         .equals(newLayout.getPrimarySequencer())) {
 
-                    // The tails query and the sequencer recovery must be performed on the same
-                    // epoch. If they are not, we lose the atomicity of bootstrapping the sequencer
-                    // which can lead to data operations across epochs leaking into the
-                    // Address space causing inconsistencies and data loss.
-                    TailsResponse tails = Utils.getTails(newLayout, runtime);
+                    StreamsAddressResponse streamsAddressesResponse = runtime.getAddressSpaceView()
+                            .getLogAddressSpace();
 
-                    maxTokenRequested = tails.getLogTail();
-                    streamTails = tails.getStreamTails();
-                    verifyStreamTailsMap(streamTails);
+                    maxTokenRequested = streamsAddressesResponse.getLogTail();
+                    streamsAddressSpace = streamsAddressesResponse.getAddressMap();
 
                     // Incrementing the maxTokenRequested value for sequencer reset.
                     maxTokenRequested++;
@@ -448,7 +443,7 @@ public class LayoutManagementView extends AbstractView {
                 boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
                         runtime.getLayoutView().getRuntimeLayout(newLayout)
                                 .getPrimarySequencerClient()
-                                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
+                                .bootstrap(maxTokenRequested, streamsAddressSpace, newLayout.getEpoch(),
                                         bootstrapWithoutTailsUpdate));
                 lastKnownSequencerEpoch = newLayout.getEpoch();
                 if (sequencerBootstrapResult) {
@@ -494,7 +489,7 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Verifies whether there are any invalid streamTails.
+     * Verifies whether there are any invalid stream tails.
      *
      * @param streamTails Stream tails map obtained from the fastSMRLoader.
      */

@@ -13,4 +13,13 @@ public class SerializerException extends RuntimeException {
     public SerializerException(Byte type) {
         super("Serializer type code " + type.intValue() + " not found.");
     }
+
+    /**
+     * Constructor for SerializerException specifying exception message.
+     *
+     * @param message exception message.
+     */
+    public SerializerException(String message) {
+        super(message);
+    }
 }
