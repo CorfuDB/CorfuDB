@@ -13,16 +13,20 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 /**
  * Sequencer server cache.
  * Contains transaction conflict-resolution data structures.
- *
+ * <p>
  * The SequencerServer use its own thread/s. To guarantee correct tx conflict-resolution,
  * the {@link SequencerServerCache#conflictCache} must be updated
  * along with {@link SequencerServerCache#maxConflictWildcard} at the same time (atomically) to prevent race condition
  * when the conflict stream is already evicted from the cache but `maxConflictWildcard` is not updated yet,
  * which can cause situation when sequencer let the transaction go but the tx has to be cancelled.
+ * <p>
+ * SequencerServerCache achieves consistency by using single threaded cache. It's done by following code:
+ * `.executor(Runnable::run)`
  */
 @Slf4j
 public class SequencerServerCache {
@@ -150,6 +154,7 @@ public class SequencerServerCache {
 
     /**
      * The cache size
+     *
      * @return cache size
      */
     public long size() {
@@ -158,8 +163,9 @@ public class SequencerServerCache {
 
     /**
      * Put a value in the cache
+     *
      * @param conflictStream conflict stream
-     * @param newTail global tail
+     * @param newTail        global tail
      */
     public void put(ConflictTxStream conflictStream, long newTail) {
         conflictCache.put(conflictStream, newTail);
@@ -175,6 +181,7 @@ public class SequencerServerCache {
 
     /**
      * Update max conflict wildcard by a new address
+     *
      * @param newMaxConflictWildcard new conflict wildcard
      */
     public void updateMaxConflictAddress(long newMaxConflictWildcard) {
