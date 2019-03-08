@@ -50,8 +50,21 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @ServerHandler(type = CorfuMsgType.PING)
-    private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
+    }
+
+    /**
+     * Respond to a keep alive message.
+     * Note: this message ignores epoch.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.KEEP_ALIVE)
+    private void keepAlive(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     /**
@@ -84,7 +97,7 @@ public class BaseServer extends AbstractServer {
             long epoch = msg.getPayload();
             log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}", epoch);
             serverContext.setServerEpoch(epoch, r);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (WrongEpochException e) {
             log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
                     e.getCorrectEpoch(), msg.getPayload());

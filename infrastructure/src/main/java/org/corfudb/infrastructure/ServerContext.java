@@ -6,6 +6,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +19,8 @@ import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 
 import javax.annotation.Nonnull;
@@ -106,10 +107,6 @@ public class ServerContext implements AutoCloseable {
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
-    @Setter
-    private IReconfigurationHandlerPolicy healingHandlerPolicy;
-
-    @Getter
     private final EventLoopGroup clientGroup;
 
     @Getter
@@ -121,6 +118,12 @@ public class ServerContext implements AutoCloseable {
     @Getter
     @Setter
     private boolean bindToAllInterfaces = false;
+
+    @Getter (AccessLevel.PACKAGE)
+    private final NodeLocator nodeLocator;
+
+    @Getter (AccessLevel.PACKAGE)
+    private final String localEndpoint;
 
     @Getter
     private static final MetricRegistry metrics = new MetricRegistry();
@@ -139,7 +142,6 @@ public class ServerContext implements AutoCloseable {
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
         generateNodeId();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
-        this.healingHandlerPolicy = new SequencerHealingPolicy();
 
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
@@ -156,14 +158,14 @@ public class ServerContext implements AutoCloseable {
             bossGroup = getNewBossGroup();
         }
 
+        nodeLocator = NodeLocator
+                .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
+        localEndpoint = NodeLocator.getLegacyEndpoint(nodeLocator);
+
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
-    }
-
-    String getLocalEndpoint() {
-        return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
     }
 
     int getBaseServerThreadCount() {
@@ -262,7 +264,7 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
-                .bulkReadSize(Integer.valueOf((String) serverConfig.get("--batch-size")))
+                .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
                 .build();
     }
 
