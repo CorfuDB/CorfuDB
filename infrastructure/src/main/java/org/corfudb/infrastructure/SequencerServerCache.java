@@ -13,7 +13,6 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.UUID;
-import java.util.concurrent.Executor;
 
 /**
  * Sequencer server cache.
@@ -84,7 +83,7 @@ public class SequencerServerCache {
     private CacheWriter<ConflictTxStream, Long> getDefaultCacheWriter() {
         return new CacheWriter<ConflictTxStream, Long>() {
             /**
-             * Let caffeine do its work
+             * Don't do any additional actions during the write operation. Let caffeine write the record into the cache
              * @param key a key
              * @param value a value
              */
