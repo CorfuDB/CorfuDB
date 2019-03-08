@@ -8,6 +8,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.SequencerServerCache;
+import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.AbstractObjectTest;
@@ -16,16 +17,17 @@ import org.junit.Test;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Created by maithem on 7/24/17.
  */
 @Slf4j
-public class SequencerCacheTest extends AbstractObjectTest {
+public class SequencerServerCacheTest extends AbstractObjectTest {
 
     @Test
-    public void testSequencerCacheTrim() throws Exception {
+    public void testSequencerCacheTrim() {
 
         getDefaultRuntime();
 
@@ -60,21 +62,21 @@ public class SequencerCacheTest extends AbstractObjectTest {
     public void testCache() {
         final AtomicBoolean criticalVariable = new AtomicBoolean();
 
-        SequencerServerCache cache = new SequencerServerCache(1, new CacheWriter<String, Long>() {
+        SequencerServerCache cache = new SequencerServerCache(1, new CacheWriter<ConflictTxStream, Long>() {
             @Override
-            public void write(@Nonnull String key, @Nonnull Long value) {
+            public void write(@Nonnull ConflictTxStream key, @Nonnull Long value) {
                 log.info("Write: [{}, {}]. Thread: {}", key, value, Thread.currentThread().getName());
             }
 
             @Override
-            public void delete(@Nonnull String key, @Nullable Long value, @Nonnull RemovalCause cause) {
+            public void delete(@Nonnull ConflictTxStream key, @Nullable Long value, @Nonnull RemovalCause cause) {
                 log.info("Delete record: {}. Thread: {}", key, Thread.currentThread().getName());
                 criticalVariable.set(true);
             }
         });
 
-        final String firstKey = "1";
-        final String secondKey = "2";
+        final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
+        final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
         final long firstValue = 1L;
         final long secondValue = 2L;
         final int iterations = 10;
@@ -86,7 +88,7 @@ public class SequencerCacheTest extends AbstractObjectTest {
             cache.put(secondKey, secondValue);
 
             assertThat(cache.size()).isOne();
-            assertThat(cache.getIfPresent("1")).isNull();
+            assertThat(cache.getIfPresent(firstKey)).isNull();
 
             cache.invalidateAll();
             assertThat(cache.size()).isZero();

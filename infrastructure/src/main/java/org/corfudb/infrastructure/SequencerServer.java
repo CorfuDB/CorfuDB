@@ -551,6 +551,5 @@ public class SequencerServer extends AbstractServer {
     @Override
     public void shutdown() {
         super.shutdown();
-        executor.shutdownNow();
     }
 }

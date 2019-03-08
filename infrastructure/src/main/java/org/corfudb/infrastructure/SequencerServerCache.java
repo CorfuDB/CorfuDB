@@ -17,6 +17,12 @@ import java.util.UUID;
 /**
  * Sequencer server cache.
  * Contains transaction conflict-resolution data structures.
+ *
+ * The SequencerServer use its own thread/s. To guarantee correct tx conflict-resolution,
+ * the {@link SequencerServerCache#conflictCache} must be updated
+ * along with {@link SequencerServerCache#maxConflictWildcard} at the same time (atomically) to prevent race condition
+ * when the conflict stream is already evicted from the cache but `maxConflictWildcard` is not updated yet,
+ * which can cause situation when sequencer let the transaction go but the tx has to be cancelled.
  */
 @Slf4j
 public class SequencerServerCache {
@@ -25,7 +31,7 @@ public class SequencerServerCache {
      * <p>
      * a cache of recent conflict keys and their latest global-log position.
      */
-    private final Cache<ConflictTxStream, Long> conflictToGlobalTailCache;
+    private final Cache<ConflictTxStream, Long> conflictCache;
 
     /**
      * A "wildcard" representing the maximal update timestamp of
@@ -45,7 +51,7 @@ public class SequencerServerCache {
 
     @VisibleForTesting
     public SequencerServerCache(long cacheSize, CacheWriter<ConflictTxStream, Long> writer) {
-        this.conflictToGlobalTailCache = Caffeine.newBuilder()
+        this.conflictCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
                 .writer(writer)
                 //Performing periodic maintenance using current thread (synchronously)
@@ -62,7 +68,7 @@ public class SequencerServerCache {
      * @param cacheSize cache size
      */
     public SequencerServerCache(long cacheSize) {
-        this.conflictToGlobalTailCache = Caffeine.newBuilder()
+        this.conflictCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
                 //Performing periodic maintenance using current thread (synchronously)
                 .executor(Runnable::run)
@@ -117,7 +123,7 @@ public class SequencerServerCache {
      * @return global address
      */
     public Long getIfPresent(ConflictTxStream conflictKey) {
-        return conflictToGlobalTailCache.getIfPresent(conflictKey);
+        return conflictCache.getIfPresent(conflictKey);
     }
 
     /**
@@ -129,13 +135,13 @@ public class SequencerServerCache {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
 
         long entries = 0;
-        for (ConflictTxStream key : conflictToGlobalTailCache.asMap().keySet()) {
+        for (ConflictTxStream key : conflictCache.asMap().keySet()) {
             Long currTrimMark = getIfPresent(key);
             if (currTrimMark == null || currTrimMark >= trimMark) {
                 continue;
             }
 
-            conflictToGlobalTailCache.invalidate(key);
+            conflictCache.invalidate(key);
             entries++;
         }
         log.info("Evicted entries: {}", entries);
@@ -147,7 +153,7 @@ public class SequencerServerCache {
      * @return cache size
      */
     public long size() {
-        return conflictToGlobalTailCache.estimatedSize();
+        return conflictCache.estimatedSize();
     }
 
     /**
@@ -156,7 +162,7 @@ public class SequencerServerCache {
      * @param newTail global tail
      */
     public void put(ConflictTxStream conflictStream, long newTail) {
-        conflictToGlobalTailCache.put(conflictStream, newTail);
+        conflictCache.put(conflictStream, newTail);
     }
 
     /**
@@ -164,7 +170,7 @@ public class SequencerServerCache {
      */
     public void invalidateAll() {
         log.info("Invalidate sequencer server cache");
-        conflictToGlobalTailCache.invalidateAll();
+        conflictCache.invalidateAll();
     }
 
     /**
@@ -181,7 +187,7 @@ public class SequencerServerCache {
      * Contains the conflict hash code for a stream ID and conflict param.
      */
     @EqualsAndHashCode
-    static class ConflictTxStream {
+    public static class ConflictTxStream {
         private final UUID streamId;
         private final String conflictParam;
 
