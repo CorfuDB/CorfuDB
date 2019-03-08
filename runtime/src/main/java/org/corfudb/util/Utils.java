@@ -5,6 +5,28 @@ import com.google.common.collect.RangeSet;
 
 import io.netty.buffer.ByteBuf;
 
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
+import org.corfudb.protocols.wireprotocol.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.recovery.FastObjectLoader;
+import org.corfudb.recovery.RecoveryUtils;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,28 +44,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.recovery.RecoveryUtils;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
-
 
 /**
  * Created by crossbach on 5/22/15.
@@ -463,6 +463,68 @@ public class Utils {
         }
     }
 
+    /**
+     * Get global log tail.
+     *
+     * @param layout Latest layout to query log tail from Log Unit
+     * @param runtime Runtime
+     *
+     * @return Log global tail
+     */
+    public static Long getLogTail(Layout layout, CorfuRuntime runtime) {
+        Set<Long> luResponses = new HashSet<>();
+
+        Layout.LayoutSegment segment = layout.getLatestSegment();
+
+        // Query the head log unit in every stripe.
+        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+
+                Long tail = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(stripe.getLogServers().get(0))
+                                .getLogTail());
+                luResponses.add(tail);
+            }
+        } else if (segment.getReplicationMode()
+                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
+            throw new UnsupportedOperationException();
+        }
+
+        return Collections.max(luResponses);
+    }
+
+    /**
+     * Fetches the max global log tail and all stream tails from the log unit cluster. This depends on the mode of
+     * replication being used.
+     * CHAIN: Block on fetch of global log tail from the head log unit in every stripe.
+     * QUORUM: Block on fetch of global log tail from a majority in every stripe.
+     *
+     * @param layout  Latest layout to get clients to fetch tails.
+     * @return The max global log tail obtained from the log unit servers.
+     */
+    public static TailsResponse getAllTails(Layout layout, CorfuRuntime runtime) {
+        Set<TailsResponse> luResponses = new HashSet<>();
+
+        Layout.LayoutSegment segment = layout.getLatestSegment();
+
+        // Query the tail of the head log unit in every stripe.
+        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+
+                TailsResponse res = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(stripe.getLogServers().get(0))
+                                .getTails());
+                luResponses.add(res);
+            }
+        } else if (segment.getReplicationMode()
+                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
+            throw new UnsupportedOperationException();
+        }
+
+        return aggregateLogUnitTails(luResponses);
+    }
 
     /**
      * Given a set of request tails, we aggregate them and maintain
@@ -471,7 +533,7 @@ public class Utils {
      * @param responses a set of tail responses
      * @return An max-aggregation of all tails
      */
-    static TailsResponse getTails(Set<TailsResponse> responses) {
+    static TailsResponse aggregateLogUnitTails(Set<TailsResponse> responses) {
         long globalTail = Address.NON_ADDRESS;
         Map<UUID, Long> globalStreamTails = new HashMap<>();
 
@@ -486,18 +548,8 @@ public class Utils {
         return new TailsResponse(globalTail, globalStreamTails);
     }
 
-    /**
-     * Fetches the max global log tail from the log unit cluster. This depends on the mode of
-     * replication being used.
-     * CHAIN: Block on fetch of global log tail from the head log unit in every stripe.
-     * QUORUM: Block on fetch of global log tail from a majority in every stripe.
-     *
-     * @param layout  Latest layout to get clients to fetch tails.
-     * @return The max global log tail obtained from the log unit servers.
-     */
-
-    public static TailsResponse getTails(Layout layout, CorfuRuntime runtime) {
-        Set<TailsResponse> luResponses = new HashSet<>();
+    public static StreamsAddressResponse getStreamsAddressSpace(Layout layout, CorfuRuntime runtime) {
+        Set<StreamsAddressResponse> luResponses = new HashSet<>();
 
         Layout.LayoutSegment segment = layout.getLatestSegment();
 
@@ -505,10 +557,10 @@ public class Utils {
         if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
 
-                TailsResponse res = CFUtils.getUninterruptibly(
+                StreamsAddressResponse res = CFUtils.getUninterruptibly(
                         runtime.getLayoutView().getRuntimeLayout(layout)
                                 .getLogUnitClient(stripe.getLogServers().get(0))
-                                .getTail());
+                                .getStreamsAddressSpace());
                 luResponses.add(res);
             }
         } else if (segment.getReplicationMode()
@@ -516,6 +568,63 @@ public class Utils {
             throw new UnsupportedOperationException();
         }
 
-        return getTails(luResponses);
+        return aggregateStreamAddressSpace(luResponses);
+    }
+
+    static StreamsAddressResponse aggregateStreamAddressSpace(Set<StreamsAddressResponse> responses) {
+        Map<UUID, StreamAddressSpace> globalStreamTails = new HashMap<>();
+
+        for (StreamsAddressResponse res : responses) {
+            globalStreamTails = aggregateStreamAddressMap(res.getStreamsAddressSpaceMap(), globalStreamTails);
+        }
+        return new StreamsAddressResponse(globalStreamTails);
+    }
+
+    static Map<UUID, StreamAddressSpace> aggregateStreamAddressMap(Map<UUID, StreamAddressSpace> streamAddressSpaceMap, Map<UUID, StreamAddressSpace> aggregated) {
+        for (Map.Entry<UUID, StreamAddressSpace> stream : streamAddressSpaceMap.entrySet()) {
+            if (aggregated.containsKey(stream.getKey())) {
+                Long currentTrimMark = aggregated.get(stream.getKey()).getTrimMark();
+                aggregated.get(stream.getKey()).getAddressMap().or(stream.getValue().getAddressMap());
+                aggregated.get(stream.getKey()).setTrimMark(Math.max(currentTrimMark, stream.getValue().getTrimMark()));
+            } else {
+                aggregated.put(stream.getKey(), stream.getValue());
+            }
+        }
+
+        return aggregated;
+    }
+
+    public static LogAddressSpaceResponse getLogAddressSpace(Layout layout, CorfuRuntime runtime) {
+        Set<LogAddressSpaceResponse> luResponses = new HashSet<>();
+
+        Layout.LayoutSegment segment = layout.getLatestSegment();
+
+        // Query the tail of the head log unit in every stripe.
+        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+
+                LogAddressSpaceResponse res = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(stripe.getLogServers().get(0))
+                                .getLogAddressSpace());
+                luResponses.add(res);
+            }
+        } else if (segment.getReplicationMode()
+                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
+            throw new UnsupportedOperationException();
+        }
+
+        return aggregateLogAddressSpace(luResponses);
+    }
+
+    static LogAddressSpaceResponse aggregateLogAddressSpace(Set<LogAddressSpaceResponse> responses) {
+        Map<UUID, StreamAddressSpace> globalStreamTails = new HashMap<>();
+        long logTail = Address.NON_ADDRESS;
+
+        for (LogAddressSpaceResponse res : responses) {
+            logTail = Math.max(logTail, res.getLogTail());
+            globalStreamTails = aggregateStreamAddressMap(res.getStreamsAddressSpace(), globalStreamTails);
+        }
+        return new LogAddressSpaceResponse(logTail, globalStreamTails);
     }
 }

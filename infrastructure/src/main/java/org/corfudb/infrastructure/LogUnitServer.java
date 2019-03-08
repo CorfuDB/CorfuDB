@@ -17,11 +17,13 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -129,10 +131,37 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming request for maximum global address the log unit server has written.
      */
-    @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
-    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.LOG_TAIL_REQUEST)
+    public void handleLogTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Long logTail = batchWriter.queryLogTail(msg.getEpoch());
+        r.sendResponse(ctx, msg, CorfuMsgType.LOG_TAIL_RESPONSE.payloadMsg(logTail));
+    }
+
+    /**
+     * Service an incoming request for all stream tails (also returns log global tail).
+     */
+    @ServerHandler(type = CorfuMsgType.TAILS_REQUEST)
+    public void handleTailsRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         TailsResponse tails = batchWriter.queryTails(msg.getEpoch());
-        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tails));
+        r.sendResponse(ctx, msg, CorfuMsgType.TAILS_RESPONSE.payloadMsg(tails));
+    }
+
+    /**
+     * Service an incoming request for all streams address space.
+     */
+    @ServerHandler(type = CorfuMsgType.ALL_STREAMS_ADDRESS_REQUEST)
+    public void handleStreamsAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        StreamsAddressResponse streamsAddressSpace = batchWriter.queryStreamsAddressSpace(msg.getEpoch());
+        r.sendResponse(ctx, msg, CorfuMsgType.STREAMS_ADDRESS_RESPONSE.payloadMsg(streamsAddressSpace));
+    }
+
+    /**
+     * Service an incoming request for log address space (streams address space + global tail).
+     */
+    @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
+    public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        LogAddressSpaceResponse logAddressSpace = batchWriter.queryLogAddressSpace(msg.getEpoch());
+        r.sendResponse(ctx, msg, CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(logAddressSpace));
     }
 
     /**

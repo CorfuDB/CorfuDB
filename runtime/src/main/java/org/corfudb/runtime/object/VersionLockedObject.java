@@ -11,6 +11,7 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -220,8 +221,8 @@ public class VersionLockedObject<T> {
                 }
                 // Otherwise, it is not on a correct view of the object (the object was
                 // modified) and we should try again by upgrading the lock.
-                log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock",
-                        this);
+                log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock. Exception ",
+                        this, e);
             }
         }
         // Next, we just upgrade to a full write lock if the optimistic
@@ -589,6 +590,8 @@ public class VersionLockedObject<T> {
                 }
             } else {
                 Optional<SMREntry> entry = entries.stream().findFirst();
+                log.trace("rollbackStreamUnsafe: one or more stream entries in address @{} are not undoable. Undoable entries: {}/{}", stream.pos(),
+                        entries.stream().filter(x -> x.isUndoable()).collect(Collectors.toList()).size(), entries.size());
                 throw new NoRollbackException(entry, stream.pos(), rollbackVersion);
             }
 

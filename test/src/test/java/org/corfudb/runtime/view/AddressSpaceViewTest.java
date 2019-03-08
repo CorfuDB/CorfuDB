@@ -107,7 +107,6 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 "payload".getBytes());
 
         // Verify that write to address 0 is cached and that the write to address 1 isn't cached
-
         Cache<Long, ILogData> clientCache = r.getAddressSpaceView().getReadCache();
 
         assertThat(clientCache.getIfPresent(0L)).isNotNull();

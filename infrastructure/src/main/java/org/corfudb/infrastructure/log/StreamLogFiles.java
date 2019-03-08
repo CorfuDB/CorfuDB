@@ -20,7 +20,10 @@ import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -227,13 +230,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public TailsResponse getTails() {
-        Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
+    public StreamsAddressResponse getStreamsAddressSpace() {
+        Map<UUID, StreamAddressSpace> streamsAddressSpace = new HashMap<>(logMetadata.getStreamsAddressSpaceMap());
+        return new StreamsAddressResponse(streamsAddressSpace);
+    }
 
-        for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
-            tails.put(entry.getKey(), entry.getValue());
-        }
+    @Override
+    public LogAddressSpaceResponse getLogAddressSpace() {
+        Map<UUID, StreamAddressSpace> streamsAddressSpace = new HashMap<>(logMetadata.getStreamsAddressSpaceMap());
+        return new LogAddressSpaceResponse(logMetadata.getGlobalTail(), streamsAddressSpace);
+    }
+
+    @Override
+    public TailsResponse getAllTails() {
+        Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public Long getLogTail() {
+        return logMetadata.getGlobalTail();
     }
 
     private void syncTailSegment(long address) {

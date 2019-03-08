@@ -264,6 +264,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         // Clear are interesting because if applied in wrong order the map might end up wrong
         clearAllMaps();
+
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
@@ -337,6 +338,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
         assertThatMapsAreBuilt(rt2);
+
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
@@ -853,8 +855,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("corfuTable"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("corfuTable"), ob);
-        fsmr.loadMaps();
 
+        fsmr.loadMaps();
 
         Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "smrMap", smrMap, SMRMap.class);
         Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "corfuTable", corfuTable, CorfuTable.class);

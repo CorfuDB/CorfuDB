@@ -6,6 +6,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 
 import org.ehcache.sizeof.SizeOf;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
     @Test
+    @Ignore
     public void testRuntimeGC() throws Exception {
 
         CorfuRuntime rt = getDefaultRuntime();

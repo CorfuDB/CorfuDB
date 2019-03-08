@@ -9,11 +9,16 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.JsonUtils;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -75,6 +80,19 @@ public interface ICorfuPayload<T> {
                         x.readerIndex(x.readerIndex() + bytes);
                         return b;
                     })
+                    .put(StreamAddressRange.class, x ->
+                            new StreamAddressRange(new UUID(x.readLong(), x.readLong()), x.readLong(), x.readLong()))
+                    .put(StreamAddressSpace.class, x -> {
+                        long trimMark = x.readLong();
+                        Roaring64NavigableMap map = new Roaring64NavigableMap();
+                        try {
+                            map.deserialize(new ByteBufInputStream(x));
+                        } catch (IOException ioe) {
+                            throw new RuntimeException("Exception when attempting to deserialize stream address space bitmap.");
+                        }
+
+                        return new StreamAddressSpace(trimMark, map);
+                    })
                     .build()
     );
 
@@ -134,7 +152,7 @@ public interface ICorfuPayload<T> {
                 throw new RuntimeException(th);
             }
         } catch (NoSuchMethodException nsme) {
-            throw new RuntimeException("CorfuPayloads must include a ByteBuf constructor!");
+            throw new RuntimeException("CorfuPayloads must include a ByteBuf constructor! for class: " + cls.toString());
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -379,6 +397,25 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntryType) payload).asByte());
+        } else if (payload instanceof StreamAddressSpace) {
+            StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
+            buffer.writeLong(streamAddressSpace.getTrimMark());
+            serialize(buffer, streamAddressSpace.getAddressMap());
+        } else if (payload instanceof StreamAddressRange) {
+            StreamAddressRange streamRange = (StreamAddressRange) payload;
+            buffer.writeLong(streamRange.getStreamID().getMostSignificantBits());
+            buffer.writeLong(streamRange.getStreamID().getLeastSignificantBits());
+            buffer.writeLong(streamRange.getStart());
+            buffer.writeLong(streamRange.getEnd());
+        } else if (payload instanceof Roaring64NavigableMap) {
+            Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;
+            // Improve compression
+            mrb.runOptimize();
+            try {
+                mrb.serialize(new DataOutputStream(new ByteBufOutputStream(buffer)));
+            } catch (IOException ioe) {
+                throw new RuntimeException("Unexpected error while serializing to a byte array");
+            }
         } else {
             throw new RuntimeException("Unknown class " + payload.getClass() + " for serialization");
         }

@@ -1,28 +1,15 @@
 package org.corfudb.infrastructure;
 
+import lombok.Builder;
+import org.corfudb.protocols.wireprotocol.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
+
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenRequest;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
@@ -33,10 +20,29 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenRequest;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TokenType;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Utils;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -89,7 +95,7 @@ public class SequencerServer extends AbstractServer {
      * global log first available position (initially, 0).
      */
     @Getter
-    private final AtomicLong globalLogTail = new AtomicLong(Address.getMinAddress());
+    private long globalLogTail = Address.getMinAddress();
 
     private long trimMark = Address.NON_ADDRESS;
 
@@ -97,7 +103,13 @@ public class SequencerServer extends AbstractServer {
      * - {@link SequencerServer::streamTailToGlobalTailMap}:
      * per streams map to last issued global-log position. used for backpointers.
      */
-    private final ConcurrentMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> streamTailToGlobalTailMap = new HashMap<>();
+
+    /**
+     * Per streams map and their corresponding address space (an address space is defined by the stream's addresses
+     *  and its latest trim mark)
+     */
+    private final Map<UUID, StreamAddressSpace> streamsAddressSpaceMap = new ConcurrentHashMap<>();
 
     /**
      * A map to cache the name of timers to avoid creating timer names on each call.
@@ -134,9 +146,9 @@ public class SequencerServer extends AbstractServer {
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
         if (Address.nonAddress(initialToken)) {
-            globalLogTail.set(0L);
+            globalLogTail = 0L;
         } else {
-            globalLogTail.set(initialToken);
+            globalLogTail = initialToken;
         }
 
         long cacheSize = 250_000;
@@ -282,7 +294,7 @@ public class SequencerServer extends AbstractServer {
         Token token;
         if (req.getStreams().isEmpty()) {
             // Global tail query
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+            token = new Token(sequencerEpoch, globalLogTail - 1);
             streamTails = Collections.emptyList();
         } else if (req.getStreams().size() == 1) {
             // single stream query
@@ -291,7 +303,7 @@ public class SequencerServer extends AbstractServer {
         } else {
             // multiple stream query, the token is populated with the global tail and the tail queries are stored in
             // streamTails
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+            token = new Token(sequencerEpoch, globalLogTail - 1);
             streamTails = new ArrayList<>(streams.size());
             for (UUID stream : streams) {
                 streamTails.add(streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
@@ -314,6 +326,11 @@ public class SequencerServer extends AbstractServer {
             cache.invalidateUpTo(trimMark);
         }
 
+        // Remove trimmed addresses from each address map and set new trim mark
+        for(StreamAddressSpace streamAddressSpace : streamsAddressSpaceMap.values()) {
+            streamAddressSpace.trim(trimMark);
+        }
+
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -321,10 +338,10 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming request to reset the sequencer.
      */
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
-    public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
+    public synchronized void resetServer(CorfuPayloadMsg<SequencerRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
-        final long initialToken = msg.getPayload().getGlobalTail();
-        final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
+        long initialToken = msg.getPayload().getGlobalTail();
+        final Map<UUID, StreamAddressSpace> streamsAddressSpaceMap = msg.getPayload().getStreamsAddressSpaceMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
 
         // Boolean flag to denote whether this bootstrap message is just updating an existing
@@ -367,12 +384,30 @@ public class SequencerServer extends AbstractServer {
         if (!bootstrapWithoutTailsUpdate) {
             // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
             cache.invalidateAll();
-            globalLogTail.set(initialToken);
+            globalLogTail = initialToken;
             cache.updateMaxConflictAddress(initialToken - 1);
 
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap.clear();
-            streamTailToGlobalTailMap.putAll(streamTails);
+
+            // Set tail for every stream
+            // TODO (Anny): assess cost of computation vs. sending stream tails as well on reset
+            for(Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : streamsAddressSpaceMap.entrySet()) {
+                Long streamTail;
+                // If no address is present for this stream, the tail is given by the trim mark (last trimmed address)
+                if(streamAddressSpace.getValue().getAddressCount() == 0) {
+                    streamTail = streamAddressSpace.getValue().getTrimMark();
+                } else {
+                    // The stream tail is the max address present in the stream's address map
+                    streamTail = streamAddressSpace.getValue().getTail();
+                }
+                log.trace("On Sequencer reset, tail for stream {} set to {}", streamAddressSpace.getKey(), streamTail);
+                streamTailToGlobalTailMap.put(streamAddressSpace.getKey(), streamTail);
+            }
+
+            // Reset streams address map
+            this.streamsAddressSpaceMap.clear();
+            this.streamsAddressSpaceMap.putAll(streamsAddressSpaceMap);
         }
 
         // Mark the sequencer as ready after the tails have been populated.
@@ -380,7 +415,7 @@ public class SequencerServer extends AbstractServer {
         serverContext.setSequencerEpoch(bootstrapMsgEpoch);
 
         log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}, sequencerEpoch = {}",
-                globalLogTail.get(), streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
+                globalLogTail, streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -451,7 +486,8 @@ public class SequencerServer extends AbstractServer {
     private void handleRawToken(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
+        Token token = new Token(sequencerEpoch, globalLogTail);
+        globalLogTail += req.getNumTokens();
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(token, Collections.emptyMap())));
     }
 
@@ -501,18 +537,18 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleAllocation(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void handleAllocation(CorfuPayloadMsg<TokenRequest> msg,
+                                  ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
         // extend the tail of the global log by the requested # of tokens
         // currentTail is the first available position in the global log
-        long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
-        long newTail = currentTail + req.getNumTokens();
+        long newTail = globalLogTail + req.getNumTokens();
 
-        // for each streams:
-        //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
-        //   2. record the new global tail as back-pointer for this streams.
-        //   3. extend the tail by the requested # tokens.
+        // for each stream:
+        //   1. obtain the last back-pointer for this stream, if exists; -1L otherwise.
+        //   2. record the new global tail as back-pointer for this stream.
+        //   3. Add the allocated addresses to each stream's address map.
         ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
         for (UUID id : req.getStreams()) {
 
@@ -524,6 +560,22 @@ public class SequencerServer extends AbstractServer {
                 } else {
                     backPointerMap.put(k, v);
                     return newTail - 1;
+                }
+            });
+
+            // step 3. add allocated addresses to each stream's address map (to keep track of all updates to this stream)
+            streamsAddressSpaceMap.compute(id, (k, v) -> {
+                if (v == null) {
+                    final Roaring64NavigableMap addressMap = new Roaring64NavigableMap();
+                    for (long i=globalLogTail; i < newTail; i++) {
+                        addressMap.addLong(i);
+                    }
+                    return new StreamAddressSpace(Address.NON_EXIST, addressMap);
+                } else {
+                    for (long i=globalLogTail; i < newTail; i++) {
+                        v.addAddress(i);
+                    }
+                    return v;
                 }
             });
         }
@@ -539,15 +591,76 @@ public class SequencerServer extends AbstractServer {
                     });
         }
 
-        log.trace("token {} backpointers {}", currentTail, backPointerMap.build());
-        // return the token response with the new global tail
-        // and the streams backpointers
-        Token token = new Token(sequencerEpoch, currentTail);
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(token, backPointerMap.build())));
+        log.trace("token {} backpointers {}", globalLogTail, backPointerMap.build());
+
+        // return the token response with the global tail and the streams backpointers
+        Token token = new Token(sequencerEpoch, globalLogTail);
+        globalLogTail = newTail;
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                new TokenResponse(token, backPointerMap.build())));
+    }
+
+    /**
+     * This method handles the request of streams address maps.
+     * It computes the addresses requested for each stream
+     * and returns this map under a StreamsAddressResponse message.
+     */
+    @ServerHandler(type = CorfuMsgType.STREAMS_ADDRESS_REQUEST)
+    private synchronized void handleStreamsAddressRequest(CorfuPayloadMsg<StreamsAddressRequest> msg,
+                                             ChannelHandlerContext ctx, IServerRouter r) {
+        List<StreamAddressRange> streamsRangesRequested = msg.getPayload().getStreamsRanges();
+        Map<UUID, StreamAddressSpace> streamsAddressSpaceMapToReturn = new HashMap<>();
+
+        Roaring64NavigableMap addressMap;
+
+        for (StreamAddressRange streamAddressRange : streamsRangesRequested) {
+            UUID streamId = streamAddressRange.getStreamID();
+            try {
+                // Get all addresses in the requested range
+                addressMap = streamsAddressSpaceMap.get(streamId).getAddressesInRange(streamAddressRange.start, streamAddressRange.end);
+                Long trimMark = streamsAddressSpaceMap.get(streamId).getTrimMark();
+                streamsAddressSpaceMapToReturn.put(streamId, new StreamAddressSpace(trimMark, addressMap));
+            } catch (NullPointerException ne) {
+                log.warn("handleStreamsAddressRequest: address space map is not present for stream {}. " +
+                        "Verify this is a valid stream.", streamId);
+            }
+        }
+
+        log.trace("handleStreamsAddressRequest: return address space maps for streams [{}]",
+                streamsAddressSpaceMapToReturn.keySet());
+        r.sendResponse(ctx, msg, CorfuMsgType.STREAMS_ADDRESS_RESPONSE.payloadMsg(
+                new StreamsAddressResponse(streamsAddressSpaceMapToReturn)));
     }
 
     @Override
     public void shutdown() {
         super.shutdown();
+    }
+
+    /**
+     * Sequencer server configuration
+     */
+    @Builder
+    @Getter
+    public static class Config {
+        private static final long DEFAULT_CACHE_SIZE = 250_000L;
+
+        private final long initialToken;
+        @Builder.Default
+        private final long cacheSize = DEFAULT_CACHE_SIZE;
+
+        public static Config parse(Map<String, Object> opts) {
+            long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
+            long initialToken = Utils.parseLong(opts.get("--initial-token"));
+
+            if (Address.nonAddress(initialToken)) {
+                initialToken = Address.getMinAddress();
+            }
+
+            return Config.builder()
+                    .initialToken(initialToken)
+                    .cacheSize(cacheSize)
+                    .build();
+        }
     }
 }

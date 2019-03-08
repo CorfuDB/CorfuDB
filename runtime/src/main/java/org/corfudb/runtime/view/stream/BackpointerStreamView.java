@@ -2,7 +2,10 @@ package org.corfudb.runtime.view.stream;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -19,6 +22,8 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -31,6 +36,7 @@ import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.util.Utils;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 
 /** A view of a stream implemented with backpointers.
@@ -198,6 +204,17 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
     }
 
+    @Override
+    protected @Nonnull ILogData readRange(final long address, @Nonnull final List<Long> addresses) {
+        try {
+            return runtime.getAddressSpaceView().predictiveReadRange(address, addresses);
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
+    }
+
+
     /**
      * Reads data from an address in the address space. It will give the writer a chance to complete based on the time
      * when the reads of which this individual read is a step started. If the reads have been going on for longer than
@@ -296,11 +313,155 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         return backpointerCount;
     }
 
+    /**
+     * Retrieve this stream's address map, i.e., a map of all addresses corresponding to this stream between
+     * (stop address, start address] and return a boolean indicating if addresses were found in this range.
+     *
+     * @param streamId stream's ID, it is required because this same method can be used for
+     *                 discovering addresses from the checkpoint stream.
+     * @param queue    queue to insert discovered addresses in the given range
+     * @param startAddress range start address (inclusive)
+     * @param stopAddress  range end address (exclusive and lower than start address)
+     * @param filter       function to filter entries
+     * @param checkpoint   boolean indicating if it is a checkpoint stream
+     * @param maxGlobal    maximum Address until which we want to sync (is not necessarily equal to start address)
+     * @return
+     */
+    protected boolean getStreamAddressMap(final UUID streamId,
+                                          final NavigableSet<Long> queue,
+                                          final long startAddress,
+                                          final long stopAddress,
+                                          final Function<ILogData, BackpointerOp> filter,
+                                          final boolean checkpoint,
+                                          final long maxGlobal) {
+        long readStartTime = System.currentTimeMillis();
+        // Sanity check: startAddress must be a valid address and greater than stopAddress.
+        // The startAddress refers to the max resolution we want to resolve this stream to,
+        // while stopAddress refers to the lower boundary locally resolved.
+        // If startAddress is equal to stopAddress there is nothing to resolve.
+        if (Address.isAddress(startAddress) && (startAddress > stopAddress)) {
+
+            StreamAddressSpace streamAddressSpace = null;
+
+            // If start and stop addresses are consecutive (e.g. 2 and 1) there is no need to search for this stream's
+            // address map, as there are no other addresses within this range.
+            if (startAddress - stopAddress > 1) {
+                log.trace("getStreamAddressMap[{}] from {} to {}", this, startAddress, stopAddress);
+                // This step is an optimization.
+                // Attempt to read the last entry and verify its backpointer,
+                // if this address is already resolved locally do not request the stream map to the sequencer as new
+                // updates are not required to be synced.
+                ILogData d;
+                try {
+                    log.trace("getStreamAddressMap: readAddress[{}]", startAddress);
+                    d = read(startAddress);
+                } catch (TrimmedException e) {
+                    if (options.ignoreTrimmed) {
+                        log.warn("getStreamAddressMap: Ignoring trimmed exception for address[{}]," +
+                                " stream[{}]", startAddress, streamId);
+                        return false;
+                    } else {
+                        throw e;
+                    }
+                }
+
+                boolean fetchStreamAddressMap = true;
+
+                // Verify if backpointer is an address locally resolved
+                if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+                    long previousAddress = d.getBackpointer(streamId);
+                    log.trace("getStreamAddressMap[{}]: backpointer for {} points to {}", streamId, startAddress, previousAddress);
+                    // if backpointer is a valid log address or Address.NON_EXIST (beginning of the stream)
+                    if ((Address.isAddress(previousAddress) && getCurrentContext().resolvedQueue.contains(previousAddress)) || previousAddress == Address.NON_EXIST) {
+                        log.trace("getStreamAddressMap[{}]: backpointer {} is locally present, do not request stream address map.", streamId, previousAddress);
+                        streamAddressSpace = new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+                        fetchStreamAddressMap = false;
+                    }
+                }
+
+                if (fetchStreamAddressMap) {
+                    log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.", streamId, startAddress, stopAddress);
+                    streamAddressSpace = runtime.getSequencerView().getStreamAddressSpace(new StreamAddressRange(streamId, startAddress, stopAddress));
+                }
+            } else {
+                // Start and stop address are consecutive addresses, no need to request the address map for this stream,
+                // only address to include is startAddress (stopAddress is already resolved - not included in the lookup).
+                streamAddressSpace = new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+            }
+
+            if (checkpoint) {
+                List<Long> checkpointAddresses = new ArrayList<>();
+                List<ILogData> checkpointData = new ArrayList<>();
+                streamAddressSpace.getAddressMap().forEach(address -> checkpointAddresses.add(address));
+
+                // Read all checkpoint entries in a batch read
+                try {
+                    checkpointData = readAll(checkpointAddresses);
+                } catch (TrimmedException te) {
+                    if (options.ignoreTrimmed) {
+                        log.warn("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}]," +
+                                " stream[{}]", this, checkpointAddresses, id);
+                    } else {
+                        throw te;
+                    }
+                }
+
+                // Sort in reverse order (based on address) to process
+                Collections.sort(checkpointData, Comparator.comparing(ILogData::getGlobalAddress).reversed());
+
+                for (ILogData data: checkpointData) {
+                    BackpointerOp op = filter.apply(data);
+                    if (op == BackpointerOp.INCLUDE
+                            || op == BackpointerOp.INCLUDE_STOP) {
+                        log.trace("getStreamAddressMap[{}]: Adding checkpoint address[{}] to queue", this, data.getGlobalAddress());
+                        queue.add(data.getGlobalAddress());
+                        // Check if we need to stop
+                        if (op == BackpointerOp.INCLUDE_STOP) {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Transfer discovered address space to queue, these are the addresses that upper layers will
+                // resolve (apply) for the object.
+                // We have to limit to maxGlobal, as startAddress could be ahead of maxGlobal if it reflects the tail
+                // of the stream.
+                streamAddressSpace.copyAddressesToSet(queue, maxGlobal);
+            }
+
+            // Check if we are in the space of trimmed addresses and throw exception if so.
+            if (Address.isAddress(streamAddressSpace.getTrimMark()) &&
+                    ((getCurrentContext().checkpointSuccessId == null
+                            && getCurrentContext().globalPointer < streamAddressSpace.getTrimMark()) ||
+                            (getCurrentContext().checkpointSuccessStartAddr < streamAddressSpace.getTrimMark()
+                                    && getCurrentContext().globalPointer < streamAddressSpace.getTrimMark()  &&
+                                    getCurrentContext().checkpointSuccessId != null))
+                    ) {
+                if (options.ignoreTrimmed) {
+                    log.warn("getStreamAddressMap: Ignoring trimmed exception for address[{}]," +
+                            " stream[{}]", streamAddressSpace.getTrimMark(), id);
+                } else {
+                    log.warn(String.format("Stream %s has been trimmed at address %s and this space is not covered by checkpoint with start address %s.",
+                            streamId, streamAddressSpace.getTrimMark(),  getCurrentContext().checkpointSuccessStartAddr));
+                    throw new TrimmedException(String.format("Stream %s has been trimmed at address %s and this space is not covered by checkpoint with start address %s.",
+                            streamId, streamAddressSpace.getTrimMark(),  getCurrentContext().checkpointSuccessStartAddr));
+                }
+            }
+        }
+
+        // Count of backpointers only kept for unit test purpose, not actually relevant.
+        if (!queue.isEmpty()) {
+            backpointerCount += queue.size();
+        }
+
+        return !queue.isEmpty();
+    }
+
     protected boolean followBackpointers(final UUID streamId,
-                                      final NavigableSet<Long> queue,
-                                      final long startAddress,
-                                      final long stopAddress,
-                                      final Function<ILogData, BackpointerOp> filter) {
+                                         final NavigableSet<Long> queue,
+                                         final long startAddress,
+                                         final long stopAddress,
+                                         final Function<ILogData, BackpointerOp> filter) {
         log.trace("followBackpointers: streamId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
                 "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
         long readStartTime = System.currentTimeMillis();
@@ -441,8 +602,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     protected boolean fillReadQueue(final long maxGlobal,
                                  final QueuedStreamContext context) {
-        log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
+        log.trace("Fill_Read_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
                 maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
+        log.trace("Fill_Read_Queue[{}]: addresses in this stream Resolved queue {} - ReadQueue {} - CP Queue {}", this,
+                context.resolvedQueue, context.readQueue, context.readCpQueue);
+
+        boolean useBackpointers = this.runtime.getParameters().isFollowBackpointersEnabled();
 
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult
@@ -454,19 +619,31 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     .getCheckpointStreamIdFromId(context.id);
             // Find the checkpoint, if present
             try {
-                if (followBackpointers(checkpointId, context.readCpQueue,
-                        runtime.getSequencerView()
-                                .query(checkpointId).getToken().getSequence(),
-                        Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
-                    log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
-                            this, context.readCpQueue.size());
+                if (useBackpointers) {
+                    if (followBackpointers(checkpointId, context.readCpQueue,
+                            runtime.getSequencerView()
+                                    .query(checkpointId).getToken().getSequence(),
+                            Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
+                        log.trace("Fill_Read_Queue[{}] Follow Backpointers using checkpoint with {} entries",
+                                this, context.readCpQueue.size());
 
-                    return true;
+                        return true;
+                    }
+                } else {
+                    if (getStreamAddressMap(checkpointId, context.readCpQueue,
+                            runtime.getSequencerView()
+                                    .query(checkpointId).getToken().getSequence(),
+                            Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal), true, maxGlobal)) {
+                        log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
+                                this, context.readCpQueue.size());
+
+                        return true;
+                    }
                 }
             } catch (TrimmedException te) {
                 // If we reached a trim and didn't hit a checkpoint, this might be okay,
                 // if the stream was created recently and no checkpoint exists yet.
-                log.warn("Read_Fill_Queue[{}] Trim encountered and no checkpoint detected.", this);
+                log.warn("Fill_Read_Queue[{}] Trim encountered and no checkpoint detected.", this);
             }
         }
 
@@ -497,21 +674,27 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // If we don't have a larger token in resolved, or the request was for
         // a linearized read, fetch the token from the sequencer.
         if (latestTokenValue == null || maxGlobal == Address.MAX) {
+            // The stream tail might be ahead of maxGlobal (our max timestamp to resolve up to)
+            // We could limit it to the min between these two (maxGlobal and tail), but that could
+            // lead to reading an address (maxGlobal) that does not belong to our stream and attempt
+            // to deserialize it, or furthermore abort due to a trim on an address that does not even
+            // belong to our stream.
+            // For these reasons, we will keep this as the high boundary and prune
+            // our discovered space of addresses up to maxGlobal.
             latestTokenValue = runtime.getSequencerView().query(context.id)
                     .getToken().getSequence();
-            log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
+            log.trace("Fill_Read_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }
+
         // If there is no information on the tail of the stream, return,
         // there is nothing to do
         if (Address.nonAddress(latestTokenValue)) {
-
             // sanity check:
             // currently, the only possible non-address return value for a token-query
             // is Address.NON_EXIST
             if (latestTokenValue != Address.NON_EXIST) {
                 log.warn("TOKEN[{}] unexpected return value", latestTokenValue);
             }
-
             return false;
         }
 
@@ -522,19 +705,39 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return fillFromResolved(latestTokenValue, context);
         }
 
-        // Now we start traversing backpointers, if they are available. We
-        // start at the latest token and go backward, until we reach the
-        // log pointer -or- the checkpoint snapshot address, because all
-        // values from the beginning of the stream up to the snapshot address
-        // should be reflected. For each address which is less than
-        // maxGlobalAddress, we insert it into the read queue.
+        long stopAddress = Long.max(context.globalPointer, context.checkpointSnapshotAddress);
 
-        followBackpointers(context.id, context.readQueue,
-                latestTokenValue,
-                Long.max(context.getGlobalPointer(), context.checkpointSnapshotAddress),
-                d -> BackpointerOp.INCLUDE);
+        // Optimization: move from resolved queue to read queue available addresses.
+        if(context.globalPointer < context.maxResolution) {
+            if (fillFromResolved(context.maxResolution, context)) {
+                stopAddress = context.maxResolution;
+                log.trace("fillReadQueue[{}]: current pointer: {}, resolved up to: {}, readQueue: {}, " +
+                                "new stop address: {}", this, context.globalPointer,
+                        context.maxResolution, context.readQueue, stopAddress);
+            }
+        }
 
-        return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
+        if (useBackpointers) {
+            // Now we start traversing backpointers, if they are available. We
+            // start at the latest token and go backward, until we reach the
+            // log pointer -or- the checkpoint snapshot address, because all
+            // values from the beginning of the stream up to the snapshot address
+            // should be reflected. For each address which is less than
+            // maxGlobalAddress, we insert it into the read queue.
+            followBackpointers(context.id, context.readQueue,
+                    latestTokenValue,
+                    stopAddress,
+                    d -> BackpointerOp.INCLUDE);
+        } else {
+            // Now we fetch the address map for this stream from the sequencer in a single call, i.e.,
+            // addresses of this stream in the range (stopAddress, startAddress==latestTokenValue]
+            getStreamAddressMap(context.id, context.readQueue,
+                    latestTokenValue,
+                    stopAddress,
+                    d -> BackpointerOp.INCLUDE, false, maxGlobal);
+        }
+
+        return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
     }
 
     @VisibleForTesting

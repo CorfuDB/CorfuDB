@@ -75,7 +75,9 @@ public class Helpers{
         assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
 
         Map<String, String> mapPrime = createMap(streamName, rt2, type);
+
         assertThat(mapPrime.size()).isEqualTo(map.size());
+
         mapPrime.forEach((key, value) -> assertThat(value).isEqualTo(map.get(key)));
     }
 

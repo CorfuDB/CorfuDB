@@ -19,7 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -162,10 +164,55 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         }
     }
 
+    public Long queryLogTail(long epoch) {
+        try {
+            CompletableFuture<Long> cf = new CompletableFuture<>();
+            operationsQueue.add(new BatchWriterOperation(Type.LOG_TAIL_QUERY, null,
+                    null, epoch, null, cf));
+            return cf.get();
+        } catch (Exception e) {
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     public TailsResponse queryTails(long epoch) {
         try {
             CompletableFuture<TailsResponse> cf = new CompletableFuture<>();
             operationsQueue.add(new BatchWriterOperation(Type.TAILS_QUERY, null,
+                    null, epoch, null, cf));
+            return cf.get();
+        } catch (Exception e) {
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public StreamsAddressResponse queryStreamsAddressSpace(long epoch) {
+        try {
+            CompletableFuture<StreamsAddressResponse> cf = new CompletableFuture<>();
+            operationsQueue.add(new BatchWriterOperation(Type.STREAMS_ADDRESS_QUERY, null,
+                    null, epoch, null, cf));
+            return cf.get();
+        } catch (Exception e) {
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public LogAddressSpaceResponse queryLogAddressSpace(long epoch) {
+        try {
+            CompletableFuture<LogAddressSpaceResponse> cf = new CompletableFuture<>();
+            operationsQueue.add(new BatchWriterOperation(Type.LOG_ADDRESS_SPACE_QUERY, null,
                     null, epoch, null, cf));
             return cf.get();
         } catch (Exception e) {
@@ -258,14 +305,28 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 streamLog.reset();
                                 res.add(currOp);
                                 break;
+                            case LOG_TAIL_QUERY:
+                                Long logTail = streamLog.getLogTail();
+                                currOp.getFuture().complete(logTail);
                             case TAILS_QUERY:
-                                TailsResponse tails = streamLog.getTails();
+                                TailsResponse tails = streamLog.getAllTails();
                                 currOp.getFuture().complete(tails);
                                 break;
+                            case STREAMS_ADDRESS_QUERY:
+                                StreamsAddressResponse streamsAddressSpace = streamLog.getStreamsAddressSpace();
+                                currOp.getFuture().complete(streamsAddressSpace);
+                                break;
+                            case LOG_ADDRESS_SPACE_QUERY:
+                                LogAddressSpaceResponse logAddressSpace = streamLog.getLogAddressSpace();
+                                currOp.getFuture().complete(logAddressSpace);
+                                break;
+
                             default:
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
+                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
+                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getAllTails(), e);
                         currOp.setException(e);
                         res.add(currOp);
                     }

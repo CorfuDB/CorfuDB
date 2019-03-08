@@ -538,7 +538,6 @@ public class ServerRestartIT extends AbstractIT {
             boolean updateMaps = rand.nextBoolean();
 
             if (updateMaps) {
-                System.out.println(r + "..do update maps");
                 for (int i = 0; i < mapSize; i++) {
                     mapA.put(Integer.toString(i), i);
                 }
@@ -548,8 +547,6 @@ public class ServerRestartIT extends AbstractIT {
                 mapAStreamTail = globalTail + mapSize;
                 mapBStreamTail = globalTail + 2 * mapSize;
                 globalTail += 2 * mapSize;
-            } else {
-                System.out.println(r + "..no map updates");
             }
 
             // activity (ii): log checkpoint and trim
@@ -632,10 +629,10 @@ public class ServerRestartIT extends AbstractIT {
                 corfuServerProcess = runCorfuServer();
                 corfuRuntime = createDefaultRuntime();
                 System.out.println(r + "..restart with holes");
+
                 // in this scenario, the globalTail is left unchanged from before,
                 // because we restart without ever having writes use the tokens
             } else {
-                System.out.println(r + ".. no holes left");
                 globalTail = tokenResponseB.getSequence();
             }
 
@@ -653,8 +650,6 @@ public class ServerRestartIT extends AbstractIT {
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
             }
-
-            System.out.println(r + "completed..@" + globalTail);
         }
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();

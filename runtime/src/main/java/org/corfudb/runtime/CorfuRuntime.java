@@ -85,6 +85,7 @@ public class CorfuRuntime {
         @Default
         private final long nettyShutdownTimeout = 300;
 
+
         // region Object Layer Parameters
         /**
          * True, if undo logging is disabled.
@@ -175,6 +176,13 @@ public class CorfuRuntime {
 
         // region Stream Parameters
         /**
+         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
+         * False, if strategy to discover the address space of a stream relies on the get stream address map.
+         */
+        @Default
+        boolean followBackpointersEnabled = true;
+
+        /**
          * Whether or not to disable backpointers.
          */
         @Default
@@ -199,6 +207,13 @@ public class CorfuRuntime {
          */
         @Default
         int trimRetry = 2;
+
+        /**
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        @Default
+        int streamBatchSize = 10;
         // endregion
 
         //region        Security parameters
@@ -464,6 +479,7 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+
     /**
      * A view of streamsView in the Corfu server instance.
      */

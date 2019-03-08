@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getTails;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
@@ -11,6 +10,8 @@ import com.google.common.collect.Iterables;
 import io.netty.handler.timeout.TimeoutException;
 
 import java.time.Duration;
+
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -18,6 +19,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
+
+import java.util.HashSet;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -27,7 +30,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
+import org.corfudb.protocols.wireprotocol.LogAddressSpaceResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -43,8 +48,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.Sleep;
-
-import java.util.HashSet;
+import org.corfudb.util.Utils;
 
 
 /**
@@ -70,9 +74,10 @@ public class AddressSpaceView extends AbstractView {
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
-        MetricRegistry metrics = runtime.getMetrics();
+        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+
         final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                                         this.hashCode());
+                this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
@@ -94,7 +99,6 @@ public class AddressSpaceView extends AbstractView {
     public void resetCaches() {
         readCache.invalidateAll();
     }
-
 
     /**
      * Validates the state of a write after an exception occurred during the process
@@ -244,20 +248,35 @@ public class AddressSpaceView extends AbstractView {
             //    by thread A)
             ILogData data = readCache.getIfPresent(address);
             if (data == null) {
-                // Loading a value without the cache loader can result in
-                // redundant loading calls (i.e. multiple threads try to
-                // load the same value), but currently a redundant RPC
-                // is much cheaper than the cost of a NoRollBackException, therefore
-                // this trade-off is reasonable
                 final ILogData loadedVal = fetch(address);
                 data = readCache.asMap().computeIfAbsent(address, (k) -> loadedVal);
-                return data;
-            } else {
-                return data;
             }
-        } else {
-            return fetch(address);
+
+            return data;
         }
+
+        return fetch(address);
+    }
+
+    /**
+     * Read a range of addresses in a predictive way.
+     *
+     * If there is a cache miss, read a range of addresses, otherwise
+     * directly return the requested entry and read is defer.
+     */
+    public @Nonnull ILogData predictiveReadRange(Long address, List<Long> addresses) {
+        if (!runtime.getParameters().isCacheDisabled()) {
+            log.trace("predictiveReadRange: request to read {}", addresses);
+            ILogData data = readCache.getIfPresent(address);
+            if (data == null) {
+                Map<Long, ILogData> mapAddresses = this.read(addresses);
+                data = mapAddresses.get(address);
+            }
+
+            return data;
+        }
+
+        return fetch(address);
     }
 
     /**
@@ -267,8 +286,10 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
+
+        Map<Long, ILogData> result = new HashMap<>();
+
         if (!runtime.getParameters().isCacheDisabled()) {
-            Map<Long, ILogData> result = new HashMap<>();
             Set<Long> addressesToFetch = new HashSet<>();
 
             for (Long address : addresses) {
@@ -330,11 +351,38 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Get the last address in the address space
+     * Get the log's tail, i.e., last address in the address space.
+     */
+    public Long getLogTail() {
+        return layoutHelper(
+                e -> Utils.getLogTail(e.getLayout(), runtime));
+    }
+
+    /**
+     * Get all tails, includes: log tail and stream tails.
      */
     public TailsResponse getAllTails() {
         return layoutHelper(
-                e -> getTails(e.getLayout(), runtime));
+                e -> Utils.getAllTails(e.getLayout(), runtime));
+    }
+
+    /**
+     * Get all streams address space.
+     */
+    public StreamsAddressResponse getStreamsAddressSpace() {
+        return layoutHelper(
+                e -> Utils.getStreamsAddressSpace(e.getLayout(), runtime));
+    }
+
+    /**
+     * Get log address space, which includes:
+     *     1. All streams address space.
+     *     2. Log Tail.
+     * @return
+     */
+    public LogAddressSpaceResponse getLogAddressSpace() {
+        return layoutHelper(
+                e -> Utils.getLogAddressSpace(e.getLayout(), runtime));
     }
 
     /**
@@ -353,6 +401,16 @@ public class AddressSpaceView extends AbstractView {
 
         for (int x = 0; x < numRetries; x++) {
             try {
+                // By changing the order of the trimming operations, i.e., signal the
+                // sequencer about a trim before actually trimming the log unit, we prevent a race condition,
+                // in which a client could attempt to read a trimmed address over and over again, as signal
+                // has not reached the sequencer. The problem with this is that we have a retry limit of 2, so
+                // if the race is present on just one cycle we will abort due to trimmed exception.
+                // In this case we avoid this case, and even if the log unit trim fails,
+                // this data is checkpointed so there is no actual correctness implication.
+                // TODO(Maithem): trimCache should be epoch aware?
+                runtime.getSequencerView().trimCache(address.getSequence());
+
                 layoutHelper(e -> {
                             e.getLayout().getPrefixSegments(address.getSequence()).stream()
                                     .flatMap(seg -> seg.getStripes().stream())
@@ -365,8 +423,6 @@ public class AddressSpaceView extends AbstractView {
                                     });
                             return null;
                 }, true);
-                // TODO(Maithem): trimCache should be epoch aware?
-                runtime.getSequencerView().trimCache(address.getSequence());
                 break;
             } catch (NetworkException | TimeoutException e) {
                 log.warn("prefixTrim: encountered a network error on try {}", x, e);
@@ -440,7 +496,7 @@ public class AddressSpaceView extends AbstractView {
         Map<Long, ILogData> result = new HashMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses,
-            runtime.getParameters().getBulkReadSize());
+                runtime.getParameters().getBulkReadSize());
 
         for (List<Long> batch : batches) {
             try {
@@ -448,11 +504,11 @@ public class AddressSpaceView extends AbstractView {
                 result.putAll(layoutHelper(e -> e.getLayout()
                         .getReplicationMode(batch.iterator().next())
                         .getReplicationProtocol(runtime)
-                        .readAll(e, batch)));
+                        .multiRead(e, new ArrayList<>(batch), true)));
             } catch (Exception e) {
-                log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+                log.error("fetchAll: Couldn't read addresses {}", batch, e);
                 throw new UnrecoverableCorfuError(
-                    "Unexpected error during cacheFetch", e);
+                        "Unexpected error during cacheFetch", e);
             }
         }
 

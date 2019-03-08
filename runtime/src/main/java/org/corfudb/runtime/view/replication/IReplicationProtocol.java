@@ -75,6 +75,14 @@ public interface IReplicationProtocol {
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
     }
 
+    default @Nonnull
+    Map<Long, ILogData> multiRead(RuntimeLayout runtimeLayout, List<Long> globalAddresses, boolean waitForWrite) {
+        return globalAddresses.parallelStream()
+                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
+                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+    }
+
+
     /** Read data from a range.
      *
      * <p>This method functions exactly like a readAll, except

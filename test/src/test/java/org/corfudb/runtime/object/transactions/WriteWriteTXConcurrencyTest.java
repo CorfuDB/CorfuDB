@@ -105,7 +105,7 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
     }
 
     @Test
-    public void testRWConflictWWThreaded() throws Exception {
+    public void testRWConflictWWThreadedtestOptimismThreaded() throws Exception {
         testRWConflictWW(false);
     }
 

@@ -15,7 +15,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -352,13 +351,11 @@ public class StreamViewTest extends AbstractViewTest {
         // causing a hole fill
         r.getAddressSpaceView().read(tr.getToken().getSequence());
 
-
         tr = r.getSequencerView().next(streamA);
 
         // read from an address that hasn't been written to
         // causing a hole fill
         r.getAddressSpaceView().read(tr.getToken().getSequence());
-
 
         sv.append(testPayload2);
 

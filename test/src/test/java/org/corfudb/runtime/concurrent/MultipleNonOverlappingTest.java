@@ -78,7 +78,6 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         String mapName2 = "testMapB";
         Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
 
-
         final int VAL = 1;
 
         // You can fine tune the below parameters. OBJECT_NUM has to be a multiple of THREAD_NUM.

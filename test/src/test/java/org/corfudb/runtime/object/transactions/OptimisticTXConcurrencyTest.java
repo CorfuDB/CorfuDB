@@ -62,7 +62,6 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
                         commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
                         .isTrue();
         }
-
     }
 
     @Test

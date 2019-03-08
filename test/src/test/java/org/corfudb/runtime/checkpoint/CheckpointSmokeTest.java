@@ -580,7 +580,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mcw1.addMap((SMRMap) mA);
         mcw1.addMap((SMRMap) mB);
         Token trimAddress = mcw1.appendCheckpoints(r, author);
-
+        
         r.getAddressSpaceView().prefixTrim(trimAddress);
         r.getAddressSpaceView().gc();
         r.getAddressSpaceView().invalidateServerCaches();
