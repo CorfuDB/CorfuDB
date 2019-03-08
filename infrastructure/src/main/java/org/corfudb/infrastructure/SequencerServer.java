@@ -314,7 +314,7 @@ public class SequencerServer extends AbstractServer {
             trimMark = msg.getPayload();
         }
 
-        cache.invalidate(trimMark);
+        cache.invalidateUpTo(trimMark);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 

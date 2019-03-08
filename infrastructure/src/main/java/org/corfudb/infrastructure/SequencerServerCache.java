@@ -131,7 +131,7 @@ public class SequencerServerCache {
      *
      * @param trimMark trim mark
      */
-    public void invalidate(long trimMark) {
+    public void invalidateUpTo(long trimMark) {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
 
         long entries = 0;
