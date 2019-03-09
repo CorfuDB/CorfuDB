@@ -13,6 +13,7 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Sequencer server cache.
@@ -137,18 +138,18 @@ public class SequencerServerCache {
     public void invalidateUpTo(long trimMark) {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
 
-        long entries = 0;
-        for (ConflictTxStream key : conflictCache.asMap().keySet()) {
-            Long currTrimMark = getIfPresent(key);
-            if (currTrimMark == null || currTrimMark >= trimMark) {
-                continue;
+        AtomicLong entries = new AtomicLong();
+
+        conflictCache.asMap().forEach((key, txVersion) -> {
+            if (txVersion == null || txVersion >= trimMark) {
+                return;
             }
 
             conflictCache.invalidate(key);
-            entries++;
-        }
-        log.info("Evicted entries: {}", entries);
+            entries.incrementAndGet();
+        });
 
+        log.info("Invalidated entries: {}", entries.get());
     }
 
     /**

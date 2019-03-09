@@ -306,15 +306,14 @@ public class SequencerServer extends AbstractServer {
 
 
     @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
-    public synchronized void trimCache(CorfuPayloadMsg<Long> msg,
-                                       ChannelHandlerContext ctx, IServerRouter r) {
+    public synchronized void trimCache(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("trimCache: Starting cache eviction");
         if (trimMark < msg.getPayload()) {
             // Advance the trim mark, if the new trim request has a higher trim mark.
             trimMark = msg.getPayload();
+            cache.invalidateUpTo(trimMark);
         }
 
-        cache.invalidateUpTo(trimMark);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
