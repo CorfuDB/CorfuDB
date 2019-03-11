@@ -152,6 +152,10 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        if (getState() != ServerState.READY){
+            return false;
+        }
+
         if ((sequencerEpoch != serverContext.getServerEpoch())
                 && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))) {
             log.warn("Rejecting msg at sequencer : sequencerStateEpoch:{}, serverEpoch:{}, "
