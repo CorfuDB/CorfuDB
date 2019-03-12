@@ -60,11 +60,15 @@ public abstract class AbstractServer {
         }
     }
 
-    protected void setState(ServerState state){
+    protected void setState(ServerState state) {
+        if (getState() == ServerState.SHUTDOWN && state != ServerState.SHUTDOWN) {
+            throw new IllegalStateException("Server is in SHUTDOWN state. Can't be changed");
+        }
+
         this.state.set(state);
     }
 
-    public ServerState getState(){
+    public ServerState getState() {
         return state.get();
     }
 
