@@ -33,6 +33,11 @@ public interface Fixtures {
      * Common constants used for test
      */
     class TestFixtureConst {
+
+        private TestFixtureConst() {
+            // prevent instantiation of this class
+        }
+
         // Default name of the CorfuTable created by CorfuClient
         public static final String DEFAULT_STREAM_NAME = "stream";
 
@@ -133,6 +138,10 @@ public interface Fixtures {
     }
 
     class FixtureUtil {
+
+        private FixtureUtil() {
+            // prevent instantiation of this class
+        }
 
         static ImmutableList<CorfuServerParams> buildMultipleServers(int numNodes, String clusterName) {
 
