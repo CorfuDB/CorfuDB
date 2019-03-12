@@ -32,6 +32,8 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         assertThat(rt.getGarbageCollector().isStarted()).isTrue();
 
         SizeOf sizeOf = SizeOf.newInstance();
+        final int value = 1;
+        //table.put(String.valueOf(value), String.valueOf(value));
         long sizeAfterCreation = sizeOf.deepSizeOf(table);
         rt.getGarbageCollector().runRuntimeGC();
         assertThat(sizeAfterCreation).isLessThanOrEqualTo(sizeOf.deepSizeOf(table));
@@ -48,14 +50,14 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
         Token trimMark = mcw.appendCheckpoints(rt, "cp1");
-        rt.getAddressSpaceView().prefixTrim(trimMark);
+        rt.getAddressSpaceView().prefixTrim(new Token(trimMark.getEpoch(), trimMark.getSequence() - 1));
         rt.getParameters().setRuntimeGCPeriod(Duration.ofMinutes(0));
         rt.getGarbageCollector().runRuntimeGC();
         long sizeOfTableAfterGc = sizeOf.deepSizeOf(table);
         final int numOfSetsStreamSets = 3;
         assertThat(sizeOfTableAfterGc)
                 .isLessThan(sizeOfTableAfterWrite - (numWrites * Long.BYTES * numOfSetsStreamSets));
-        assertThat(rt.getAddressSpaceView().getReadCache().asMap()).isEmpty();
+        assertThat(rt.getAddressSpaceView().getReadCache().asMap().size()).isOne();
         rt.shutdown();
         assertThat(rt.getGarbageCollector().isStarted()).isFalse();
     }
