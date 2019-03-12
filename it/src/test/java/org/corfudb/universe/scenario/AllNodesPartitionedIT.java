@@ -1,12 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterUp;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
-
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -24,6 +18,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import static org.corfudb.universe.scenario.ScenarioUtils.*;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
+
+@Slf4j
 public class AllNodesPartitionedIT extends GenericIntegrationTest {
 
     /**
@@ -67,15 +67,12 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
                     server.disconnect(otherServers);
                 });
 
-                waitUninterruptibly(Duration.ofSeconds(10));
+                waitUninterruptibly(Duration.ofSeconds(20));
 
-                //corfuCluster.<CorfuServer>nodes().values().forEach(CorfuServer::disconnect);
-
-                // Verify cluster status is UNAVAILABLE with all nodes UP
-                // TODO: There is a bug in NodeState API, waiting for patch and uncomment following lines
+                // Verify cluster and node status
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
-                //
+
                 Map<String, NodeStatus> statusMap = clusterStatusReport.getClusterNodeStatusMap();
                 corfuCluster.<CorfuServer>nodes()
                         .values()
@@ -87,8 +84,6 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
                 corfuCluster.<CorfuServer>nodes().values().forEach(node -> {
                     assertThat(connectivityMap.get(node.getEndpoint())).isEqualTo(ConnectivityStatus.RESPONSIVE);
                 });
-
-                // Wait for failure detector finds cluster is down before recovering
 
                 // Remove partitions and wait for layout's unresponsive servers to change
                 waitUninterruptibly(Duration.ofSeconds(10));
