@@ -178,11 +178,6 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 1 : threadCount;
     }
 
-    int getSequencerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--sequencer-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
     int getLogunitThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
         return threadCount == null ? BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors() : threadCount;
@@ -466,6 +461,15 @@ public class ServerContext implements AutoCloseable {
     public long getSequencerEpoch() {
         Long epoch = dataStore.get(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH);
         return epoch == null ? Layout.INVALID_EPOCH : epoch;
+    }
+
+    /**
+     * Get the sequencer cache size.
+     *
+     * @return Sequencer cache size
+     */
+    public long getSequencerCacheSize() {
+        return Long.parseLong(getServerConfig(String.class, "--sequencer-cache-size"));
     }
 
     /**
