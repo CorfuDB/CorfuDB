@@ -5,6 +5,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.junit.Test;
 
+import java.util.concurrent.RejectedExecutionException;
+
 /**
  * Created by mwei on 12/14/15.
  */
@@ -30,7 +32,7 @@ public class BaseServerTest extends AbstractServerTest {
     @Test
     public void shutdownServerDoesNotRespond() {
         getDefaultServer().shutdown();
-        sendMessage(new CorfuMsg(CorfuMsgType.PING));
-        Assertions.assertThat(getLastMessage()).isNull();
+        Assertions.assertThatThrownBy(() -> sendMessage(new CorfuMsg(CorfuMsgType.PING)))
+                .isInstanceOf(RejectedExecutionException.class);
     }
 }
