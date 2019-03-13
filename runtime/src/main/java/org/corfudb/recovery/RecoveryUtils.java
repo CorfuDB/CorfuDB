@@ -1,13 +1,10 @@
 package org.corfudb.recovery;
 
 import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-
-import java.util.Map;
-import java.util.UUID;
-
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -18,14 +15,22 @@ import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
+import java.util.Map;
+import java.util.UUID;
+
 /**
  * Created by rmichoud on 6/22/17.
  */
 public class RecoveryUtils {
 
+    private RecoveryUtils() {
+        // prevent instantiation of this class
+    }
+
     static ObjectsView.ObjectID getObjectIdFromStreamId(UUID streamId, Class type) {
         return new ObjectsView.ObjectID(streamId, type);
     }
+
     static boolean isCheckPointEntry(ILogData logData) {
         return logData.hasCheckpointMetadata();
     }

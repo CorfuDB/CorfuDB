@@ -5,6 +5,10 @@ package org.corfudb.universe.util;
  */
 public class IpTablesUtil {
 
+    private IpTablesUtil() {
+        // prevent instantiation of this class
+    }
+
     /**
      * Drop input packages for a particular ip address
      *

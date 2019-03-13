@@ -1,12 +1,17 @@
 package org.corfudb.util;
 
 import com.google.common.io.BaseEncoding;
+
+import javax.annotation.Nonnull;
 import java.nio.ByteBuffer;
 import java.util.UUID;
-import javax.annotation.Nonnull;
 
 /** A collection of utilities to manage and manipulate UUIDs. */
 public class UuidUtils {
+
+    private UuidUtils() {
+        // prevent instantiation of this class
+    }
 
     /** Generate a base64 URL-safe string from a given UUID.
      *

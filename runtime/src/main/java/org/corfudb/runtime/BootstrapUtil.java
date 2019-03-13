@@ -1,11 +1,7 @@
 package org.corfudb.runtime;
 
-import java.time.Duration;
-import java.util.concurrent.ExecutionException;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -20,6 +16,9 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
+import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+
 /**
  * Utility to bootstrap a cluster.
  *
@@ -27,6 +26,10 @@ import org.corfudb.util.Sleep;
  */
 @Slf4j
 public class BootstrapUtil {
+
+    private BootstrapUtil() {
+        // prevent instantiation of this class
+    }
 
     /**
      * Bootstraps the given layout.

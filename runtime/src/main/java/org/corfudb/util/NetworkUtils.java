@@ -1,5 +1,8 @@
 package org.corfudb.util;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+
 import java.net.Inet4Address;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
@@ -11,10 +14,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-
 /**
  * Network utility methods.
  *
@@ -23,7 +22,9 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 @Slf4j
 public class NetworkUtils {
 
-
+    private NetworkUtils() {
+        // prevent instantiation of this class
+    }
 
     /**
      * Fetches the IP address given an interface name.
