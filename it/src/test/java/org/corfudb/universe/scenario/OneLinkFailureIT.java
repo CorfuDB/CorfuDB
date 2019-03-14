@@ -58,9 +58,7 @@ public class OneLinkFailureIT extends GenericIntegrationTest {
 
                 // Cluster status should be DEGRADED after one node is marked unresponsive
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                // TODO: uncomment the following line after ClusterStatus API is fixed for partial partition
-                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
-                // TODO: add node status check after we redefine NodeStatus semantics
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
                 // Verify data path working fine
                 ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(10));
