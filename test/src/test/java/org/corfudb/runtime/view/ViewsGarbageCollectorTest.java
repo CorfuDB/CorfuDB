@@ -32,11 +32,14 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         assertThat(rt.getGarbageCollector().isStarted()).isTrue();
 
         SizeOf sizeOf = SizeOf.newInstance();
-        final int value = 1;
-        //table.put(String.valueOf(value), String.valueOf(value));
         long sizeAfterCreation = sizeOf.deepSizeOf(table);
         rt.getGarbageCollector().runRuntimeGC();
-        assertThat(sizeAfterCreation).isLessThanOrEqualTo(sizeOf.deepSizeOf(table));
+
+        final int value = 1;
+        table.put(String.valueOf(value), String.valueOf(value));
+        final long currentSize = sizeOf.deepSizeOf(table);
+
+        assertThat(sizeAfterCreation).isLessThanOrEqualTo(currentSize);
 
         final int numWrites = 100;
 
