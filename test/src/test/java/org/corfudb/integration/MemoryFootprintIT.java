@@ -63,10 +63,10 @@ public class MemoryFootprintIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         // Create CorfuTable
-        CorfuTable testTable = corfuRuntime
+        CorfuTable testTable = runtime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
@@ -113,10 +113,10 @@ public class MemoryFootprintIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create CorfuTable
-        CorfuTable testTable = corfuRuntime
+        CorfuTable testTable = runtime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})

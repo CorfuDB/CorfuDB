@@ -269,13 +269,12 @@ public class Harness {
         final CorfuRuntime runtime = new CorfuRuntime(node.getClusterAddress());
 
         if (tlsEnabled) {
-            runtime
-                    .enableTls(runtimePathToKeyStore,
-                               runtimePathToKeyStorePassword,
-                               runtimePathToTrustStore,
-                               runtimePathToTrustStorePassword);
+            runtime.enableTls(
+                    runtimePathToKeyStore,
+                    runtimePathToKeyStorePassword,
+                    runtimePathToTrustStore,
+                    runtimePathToTrustStorePassword);
         }
-        return runtime
-                .connect();
+        return runtime.connect();
     }
 }

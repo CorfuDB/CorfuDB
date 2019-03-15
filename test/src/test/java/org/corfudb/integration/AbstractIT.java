@@ -54,9 +54,12 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
+    CorfuRuntime runtime;
+
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
@@ -77,6 +80,7 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @Before
     public void setUp() throws Exception {
+        runtime = null;
         forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
@@ -89,6 +93,9 @@ public class AbstractIT extends AbstractCorfuTest {
     @After
     public void cleanUp() throws Exception {
         forceShutdownAllCorfuServers();
+        if (runtime != null) {
+            runtime.shutdown();
+        }
     }
 
     public static String getCorfuServerLogPath(String host, int port) {
