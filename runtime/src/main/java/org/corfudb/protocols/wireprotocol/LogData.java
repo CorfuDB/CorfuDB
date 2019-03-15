@@ -190,11 +190,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      * @param buf The buffer to read from
      */
     public byte[] byteArrayFromBuf(final ByteBuf buf) {
-        ByteBuf readOnlyCopy = buf.asReadOnly();
-        readOnlyCopy.resetReaderIndex();
-        byte[] outArray = new byte[readOnlyCopy.readableBytes()];
-        readOnlyCopy.readBytes(outArray);
-        return outArray;
+        return buf.unwrap().array();
     }
 
     @Override
