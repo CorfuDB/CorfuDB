@@ -84,7 +84,7 @@ public abstract class AbstractServer {
 
     /**
      * The server state.
-     * Represents server in a particular state: READY, NOT_READY, SHUTDOWN etc.
+     * Represents server in a particular state: READY, NOT_READY, SHUTDOWN.
      */
     public enum ServerState {
         READY, NOT_READY, SHUTDOWN
