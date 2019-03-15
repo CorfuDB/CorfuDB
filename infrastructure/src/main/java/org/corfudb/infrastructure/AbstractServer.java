@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
 
 /**
  * Created by mwei on 12/4/15.
@@ -61,17 +62,13 @@ public abstract class AbstractServer {
     }
 
     protected void setState(ServerState newState) {
-        boolean updated = false;
-
-        while(!updated){
-            ServerState currState = getState();
-
+        state.updateAndGet(currState -> {
             if (currState == ServerState.SHUTDOWN && newState != ServerState.SHUTDOWN) {
                 throw new IllegalStateException("Server is in SHUTDOWN state. Can't be changed");
             }
 
-            updated = state.compareAndSet(currState, newState);
-        }
+            return newState;
+        });
     }
 
     public ServerState getState() {
