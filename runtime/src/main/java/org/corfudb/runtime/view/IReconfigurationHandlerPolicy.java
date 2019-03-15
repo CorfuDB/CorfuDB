@@ -1,10 +1,9 @@
 package org.corfudb.runtime.view;
 
-import java.util.Set;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout;
+
+import java.util.Set;
 
 /**
  * Failure Handler Policy modifies the current layout based on the

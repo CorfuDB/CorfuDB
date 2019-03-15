@@ -217,11 +217,6 @@ public class CorfuMsgHandler {
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
         return (msg, ctx, r) -> {
-            if (server.isShutdown()) {
-                log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
-                return;
-            }
-
             if (!server.isServerReadyToHandleMsg(msg)) {
                 r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
                 return;

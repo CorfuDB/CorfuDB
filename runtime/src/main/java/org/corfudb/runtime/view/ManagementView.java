@@ -22,10 +22,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -583,5 +585,31 @@ public class ManagementView extends AbstractView {
         }
 
         return allLayoutServers.stream().distinct().collect(Collectors.toList());
+    }
+
+    /**
+     * Bootstraps the management server if not already bootstrapped.
+     * If already bootstrapped, it completes silently.
+     *
+     * @param endpoint Endpoint ot bootstrap.
+     * @param layout   Layout to bootstrap with.
+     * @return Completable Future which completes with True when the management server is bootstrapped.
+     */
+    CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
+        return runtime.getLayoutView().getRuntimeLayout(layout)
+                .getManagementClient(endpoint)
+                .bootstrapManagement(layout)
+                .exceptionally(throwable -> {
+                    try {
+                        CFUtils.unwrap(throwable, AlreadyBootstrappedException.class);
+                    } catch (AlreadyBootstrappedException e) {
+                        log.info("bootstrapManagementServer: Management Server {} already bootstrapped.", endpoint);
+                    }
+                    return true;
+                })
+                .thenApply(result -> {
+                    log.info("bootstrapManagementServer: Management Server {} bootstrap successful.", endpoint);
+                    return true;
+                });
     }
 }

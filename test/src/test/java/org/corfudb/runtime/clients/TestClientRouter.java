@@ -214,12 +214,10 @@ public class TestClientRouter implements IClientRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Evaluate rules.
-        if (rules.stream()
-                .map(x -> x.evaluate(message, this))
-                .allMatch(x -> x)) {
+        if (rules.stream().allMatch(x -> x.evaluate(message, this))) {
             // Write the message out to the channel
-                log.trace(Thread.currentThread().getId() + ":Sent message: {}", message);
-                routeMessage(message);
+            log.trace(Thread.currentThread().getId() + ":Sent message: {}", message);
+            routeMessage(message);
         }
 
         // Generate a benchmarked future to measure the underlying request
