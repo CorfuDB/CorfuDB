@@ -3,19 +3,9 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import lombok.Getter;
-import lombok.NonNull;
-
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -35,6 +25,12 @@ import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -59,11 +55,6 @@ public class LogUnitClient extends AbstractClient {
 
     @Getter
     MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    public LogUnitClient setMetricRegistry(@NonNull MetricRegistry metricRegistry) {
-        this.metricRegistry = metricRegistry;
-        return this;
-    }
 
     private Timer.Context getTimerContext(String opName) {
         final String timerName = String.format("%s%s:%s-%s",
