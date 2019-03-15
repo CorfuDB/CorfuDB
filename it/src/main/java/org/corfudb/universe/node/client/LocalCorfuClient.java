@@ -109,6 +109,11 @@ public class LocalCorfuClient implements CorfuClient {
     }
 
     @Override
+    public CorfuRuntime getRuntime() {
+        return runtime;
+    }
+
+    @Override
     public Layout getLayout() {
         return runtime.getLayoutView().getLayout();
     }
