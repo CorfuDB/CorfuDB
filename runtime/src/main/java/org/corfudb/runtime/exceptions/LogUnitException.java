@@ -6,7 +6,6 @@ package org.corfudb.runtime.exceptions;
 public class LogUnitException extends RuntimeException {
 
     public LogUnitException() {
-
     }
 
     public LogUnitException(String message) {

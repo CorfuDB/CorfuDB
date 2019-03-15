@@ -61,6 +61,12 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                     );
                 }
 
+                // Reset all nodes so that we do not end up with an OverwriteException.
+                for (CorfuServer candidate : servers) {
+                    corfuClient.getRuntime().getLayoutView().getRuntimeLayout()
+                            .getBaseClient(candidate.getEndpoint()).reset();
+                }
+
                 // Verify layout contains only the node that is not removed
                 corfuClient.invalidateLayout();
                 assertThat(corfuClient.getLayout().getAllServers()).containsExactly(server0.getEndpoint());
