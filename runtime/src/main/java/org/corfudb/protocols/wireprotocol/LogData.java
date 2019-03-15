@@ -203,6 +203,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
     }
 
+
+
     void doSerializeInternal(ByteBuf buf) {
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA) {
