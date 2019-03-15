@@ -9,6 +9,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
@@ -65,6 +66,16 @@ public class AddressSpaceView extends AbstractView {
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
             .build();
+
+    private final Set<String> blackList = ImmutableSet.of(
+            "de0e3cb6-3760-3cea-af92-40766c4fb6df",
+            "1a6ca0d6-4d6b-30e1-a605-1c76a3cd5127",
+            "a4b02c4a-d340-3030-8ddb-17036c8a2944",
+            "2eb1cb1f-dd04-3843-8905-7b8fa6521240",
+            "8d4e54c2-0020-3f67-a691-c04be92c4c52",
+            "5334b45a-ead6-3845-90cb-5635d2e09506",
+            "e9b0fc31-de15-3d82-b3bc-ec918ea369a1"
+    );
 
     /**
      * Constructor for the Address Space View.
@@ -188,7 +199,13 @@ public class AddressSpaceView extends AbstractView {
 
         // Cache the successful write
         if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
-            readCache.put(token.getSequence(), ld);
+
+            Set<String> intersection = new HashSet<>(blackList);
+            intersection.retainAll(ld.getStreams());
+
+            if(intersection.isEmpty()) {
+                readCache.put(token.getSequence(), ld);
+            }
         }
     }
 
