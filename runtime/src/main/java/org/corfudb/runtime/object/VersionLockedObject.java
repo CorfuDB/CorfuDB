@@ -2,18 +2,6 @@ package org.corfudb.runtime.object;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.NoRollbackException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ListIterator;
@@ -26,6 +14,20 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import lombok.extern.slf4j.Slf4j;
 
 //TODO Discard TransactionStream for building maps but not for constructing tails
 
@@ -580,7 +582,7 @@ public class VersionLockedObject<T> {
 
         List<SMREntry> entries = stream.current();
 
-        while (entries != null) {
+        while (entries != null && !entries.isEmpty()) {
             if (entries.stream().allMatch(x -> x.isUndoable())) {
                 // start from the end, process one at a time
                 ListIterator<SMREntry> it =

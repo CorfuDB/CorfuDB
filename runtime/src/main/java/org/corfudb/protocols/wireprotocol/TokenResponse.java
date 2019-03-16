@@ -17,8 +17,8 @@ import lombok.Data;
 @AllArgsConstructor
 public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
-    public static byte[] NO_CONFLICT_KEY = new byte[]{};
-    public static UUID NO_CONFLICT_STREAM = new UUID(0, 0);
+    public static final byte[] NO_CONFLICT_KEY = new byte[]{};
+    public static final UUID NO_CONFLICT_STREAM = new UUID(0, 0);
 
     /**
      * Constructor for TokenResponse.

@@ -7,13 +7,13 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by mwei on 3/13/17.
@@ -66,10 +66,8 @@ public class WriteSetSMRStream implements ISMRStream {
 
     int currentContext = 0;
 
-    // TODO add comment
     long currentContextPos;
 
-    // TODO add comment
     long writePos;
 
     // the specific stream-id for which this SMRstream wraps the write-set
@@ -156,7 +154,7 @@ public class WriteSetSMRStream implements ISMRStream {
                 entryList.add(writeSet.get((int) j));
                 writePos++;
             }
-            if (writeSet.size() > 0) {
+            if (!writeSet.isEmpty()) {
                 currentContext = i;
                 currentContextPos = writeSet.size() - 1;
             }
@@ -167,7 +165,7 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public List<SMREntry> current() {
         if (Address.nonAddress(writePos)) {
-            return null;
+            return Collections.emptyList();
         }
         if (Address.nonAddress(currentContextPos)) {
             currentContextPos = -1;
@@ -184,7 +182,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
         if (writePos <= Address.maxNonAddress()) {
             writePos = Address.maxNonAddress();
-            return null;
+            return Collections.emptyList();
         }
 
         currentContextPos--;

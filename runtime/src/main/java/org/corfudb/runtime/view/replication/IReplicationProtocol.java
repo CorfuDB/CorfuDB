@@ -1,10 +1,11 @@
 package org.corfudb.runtime.view.replication;
 
-import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
 import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -70,9 +71,9 @@ public interface IReplicationProtocol {
      */
     default @Nonnull
             Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout, List<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+        return globalAddresses
+                .parallelStream()
+                .collect(Collectors.toMap(Function.identity(), a -> read(runtimeLayout, a)));
     }
 
     /** Read data from a range.
@@ -91,9 +92,9 @@ public interface IReplicationProtocol {
      */
     default @Nonnull
     Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+        return globalAddresses
+                .parallelStream()
+                .collect(Collectors.toMap(Function.identity(),a -> read(runtimeLayout, a)));
     }
 
     /** Peek data from a given address.
@@ -127,9 +128,9 @@ public interface IReplicationProtocol {
      */
     default @Nonnull Map<Long, ILogData> peekAll(RuntimeLayout runtimeLayout,
                                                  Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, peek(runtimeLayout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+        return globalAddresses
+                .parallelStream()
+                .collect(Collectors.toMap(Function.identity(), a -> peek(runtimeLayout, a)));
     }
 
 }

@@ -1,6 +1,14 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.util.Collections;
 import java.util.UUID;
+
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
@@ -8,14 +16,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStreamReader;
-import java.util.Collections;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests for clojure cmdlets.
@@ -39,7 +39,7 @@ public class CmdletIT extends AbstractIT {
                         0L,
                         -1L,
                         Collections.singletonList(new Layout.LayoutStripe(Collections.singletonList(ENDPOINT))))),
-                Collections.EMPTY_LIST,
+                Collections.emptyList(),
                 0L,
                 UUID.randomUUID());
     }

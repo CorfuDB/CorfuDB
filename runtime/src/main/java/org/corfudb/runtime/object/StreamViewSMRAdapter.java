@@ -7,7 +7,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -55,14 +54,14 @@ public class StreamViewSMRAdapter implements ISMRStream {
             // This is a CHECKPOINT record.  Extract the SMREntries, if any.
             CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
             if (cp.getSmrEntries() != null
-                    && cp.getSmrEntries().getUpdates().size() > 0) {
+                    && !cp.getSmrEntries().getUpdates().isEmpty()) {
                 cp.getSmrEntries().getUpdates().forEach(e -> {
                     e.setRuntime(runtime);
                     e.setEntry(logData);
                 });
                 return cp.getSmrEntries().getUpdates();
             } else {
-                return (List<SMREntry>) Collections.EMPTY_LIST;
+                return Collections.emptyList();
             }
         } else {
             return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
@@ -92,20 +91,18 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     /**
      * Returns the list of SMREntries positioned at the current global log.
-     * It returns null of no data is null.
+     * It returns an empty list if data is null.
      *
      * @return Returns the list of SMREntries positioned at the current global log.
      */
     public List<SMREntry> current() {
         ILogData data = streamView.current();
-        if (data != null) {
-            if (data.getType() == DataType.DATA
-                    && data.getPayload(runtime) instanceof ISMRConsumable) {
-                return ((ISMRConsumable) data.getPayload(runtime))
-                        .getSMRUpdates(streamView.getId());
-            }
+        if (data != null && data.getType() == DataType.DATA
+                && data.getPayload(runtime) instanceof ISMRConsumable) {
+            return ((ISMRConsumable) data.getPayload(runtime))
+                    .getSMRUpdates(streamView.getId());
         }
-        return null;
+        return Collections.emptyList();
     }
 
     /**
@@ -125,7 +122,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
             }
             data = streamView.previous();
         }
-        return null;
+        return Collections.emptyList();
     }
 
     public long pos() {
