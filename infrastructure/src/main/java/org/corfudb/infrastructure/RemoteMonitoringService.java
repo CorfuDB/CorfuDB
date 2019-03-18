@@ -16,6 +16,7 @@ import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -541,8 +542,10 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture<DetectorTask> handleSequencer(Layout layout) {
         log.trace("Handling sequencer failures");
 
-        if (localMonitoringService.getMetrics().join().getSequencerStatus() == SequencerStatus.READY) {
-            log.trace("Primary sequencer is ready. Nothing to do");
+        ClusterState clusterState = clusterContext.getClusterView();
+        Optional<NodeState> primarySequencer = clusterState.getNode(layout.getPrimarySequencer());
+        if (primarySequencer.isPresent() && primarySequencer.get().getSequencerMetrics() == SequencerMetrics.READY) {
+            log.trace("Primary sequencer is already ready at: {} in {}", primarySequencer.get(), clusterState);
             return DETECTOR_TASK_SKIPPED;
         }
 
@@ -564,7 +567,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         // Launch task to bootstrap the primary sequencer.
-        log.info("Attempting to bootstrap the primary sequencer.");
+        log.info("Attempting to bootstrap the primary sequencer. ClusterState {}", clusterState);
         // We do not care about the result of the trigger.
         // If it fails, we detect this again and retry in the next polling cycle.
         return getCorfuRuntime()
