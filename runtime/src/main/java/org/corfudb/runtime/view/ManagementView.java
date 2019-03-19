@@ -23,11 +23,9 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -498,18 +496,8 @@ public class ManagementView extends AbstractView {
 
         // Get layout futures for layout requests from all layout servers.
         for (String server : layoutServers) {
-            try {
-                // Router creation can throw a NetworkException.
-                IClientRouter router = runtime.getRouter(server);
-                layoutFuturesMap.put(server,
-                        new LayoutClient(router, Layout.INVALID_EPOCH).getLayout());
-            } catch (NetworkException e) {
-                log.error("getClusterStatus: Exception encountered connecting to {}. ",
-                        server, e);
-                CompletableFuture<Layout> cf = new CompletableFuture<>();
-                cf.completeExceptionally(e);
-                layoutFuturesMap.put(server, cf);
-            }
+            IClientRouter router = runtime.getRouter(server);
+            layoutFuturesMap.put(server, new LayoutClient(router, Layout.INVALID_EPOCH).getLayout());
         }
 
         return layoutFuturesMap;

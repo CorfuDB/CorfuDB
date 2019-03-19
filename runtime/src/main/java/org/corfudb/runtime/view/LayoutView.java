@@ -203,16 +203,7 @@ public class LayoutView extends AbstractView {
     public Layout propose(long epoch, long rank, Layout layout)
             throws QuorumUnreachableException, OutrankedException {
         CompletableFuture<Boolean>[] proposeList = getLayout().getLayoutServers().stream()
-                .map(x -> {
-                    CompletableFuture<Boolean> cf = new CompletableFuture<>();
-                    try {
-                        // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout);
-                    } catch (NetworkException e) {
-                        cf.completeExceptionally(e);
-                    }
-                    return cf;
-                })
+                .map(x -> getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout))
                 .toArray(CompletableFuture[]::new);
 
         long timeouts = 0L;
