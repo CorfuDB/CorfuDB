@@ -73,14 +73,14 @@ public class CorfuMsgFilterIT extends AbstractIT {
         final CorfuRuntimeParameters corfuRuntimeParameters = parametersBuilder.build();
 
         // Initialize and connect to a corfuRuntime
-        CorfuRuntime corfuRuntime = CorfuRuntime
+        runtime = CorfuRuntime
                 .fromParameters(corfuRuntimeParameters)
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
 
         // Verify
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
-        assertThatThrownBy(() -> corfuRuntime.getLayoutView()
+        assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
+        assertThatThrownBy(() -> runtime.getLayoutView()
                                              .getRuntimeLayout()
                                              .getBaseClient(singleNodeEndpoint)
                                              .ping()
@@ -122,14 +122,14 @@ public class CorfuMsgFilterIT extends AbstractIT {
         final CorfuRuntimeParameters corfuRuntimeParameters = parametersBuilder.build();
 
         // Initialize and connect to a corfuRuntime
-        CorfuRuntime corfuRuntime = CorfuRuntime
+        runtime = CorfuRuntime
                 .fromParameters(corfuRuntimeParameters)
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
 
         // Verify
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
-        assertThat(corfuRuntime.getLayoutView()
+        assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
+        assertThat(runtime.getLayoutView()
                                .getRuntimeLayout()
                                .getBaseClient(singleNodeEndpoint)
                                .getVersionInfo().get())
@@ -162,14 +162,14 @@ public class CorfuMsgFilterIT extends AbstractIT {
         final CorfuRuntimeParameters corfuRuntimeParameters = parametersBuilder.build();
 
         // Initialize and connect to a corfuRuntime
-        CorfuRuntime corfuRuntime = CorfuRuntime
+        runtime = CorfuRuntime
                 .fromParameters(corfuRuntimeParameters)
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
 
         // Verify
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
-        assertThat(corfuRuntime.getLayoutView()
+        assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
+        assertThat(runtime.getLayoutView()
                 .getRuntimeLayout()
                 .getBaseClient(singleNodeEndpoint)
                 .getVersionInfo().get())
@@ -203,14 +203,14 @@ public class CorfuMsgFilterIT extends AbstractIT {
         final CorfuRuntimeParameters corfuRuntimeParameters = parametersBuilder.build();
 
         // Initialize and connect to a corfuRuntime
-        CorfuRuntime corfuRuntime = CorfuRuntime
+        runtime = CorfuRuntime
                 .fromParameters(corfuRuntimeParameters)
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
 
         // Verify
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
-        assertThat(corfuRuntime.getLayoutView()
+        assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
+        assertThat(runtime.getLayoutView()
                 .getRuntimeLayout()
                 .getBaseClient(singleNodeEndpoint)
                 .getVersionInfo().get())

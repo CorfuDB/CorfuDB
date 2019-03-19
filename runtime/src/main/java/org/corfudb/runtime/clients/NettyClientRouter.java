@@ -211,8 +211,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.channel(parameters.getSocketType().getChannelClass());
         parameters.getNettyChannelOptions().forEach(b::option);
         b.handler(getChannelInitializer());
-        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
-                (int) parameters.getConnectionTimeout().toMillis());
+        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect);
 
         // Asynchronously connect, retrying until shut down.
         // Once connected, connectionFuture will be completed.
@@ -335,21 +334,19 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         });
     }
 
-    /** Connect to a remote server asynchronously.
+    /**
+     * Connect to a remote server asynchronously.
      *
-     * @param bootstrap         The channel boostrap to use
-     * @return                  A {@link ChannelFuture} which is c
+     * @param bootstrap The channel bootstrap to use
      */
-    private ChannelFuture connectAsync(@Nonnull Bootstrap bootstrap) {
+    private void connectAsync(@Nonnull Bootstrap bootstrap) {
         // If shutdown, return a ChannelFuture that is exceptionally completed.
         if (shutdown) {
-            return new DefaultChannelPromise(channel, GlobalEventExecutor.INSTANCE)
-                .setFailure(new ShutdownException("Runtime already shutdown!"));
+            return;
         }
         // Use the bootstrap to create a new channel.
         ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
-        return f;
     }
 
     /** Handle when a channel is connected.
