@@ -217,11 +217,6 @@ public class CorfuMsgHandler {
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
         return (msg, ctx, r) -> {
-            if (!server.isServerReadyToHandleMsg(msg)) {
-                r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
-                return;
-            }
-
             try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
                 handler.handle(msg, ctx, r);
             }

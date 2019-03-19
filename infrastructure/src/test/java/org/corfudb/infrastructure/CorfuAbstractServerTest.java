@@ -28,6 +28,11 @@ public class CorfuAbstractServerTest {
             }
 
             @Override
+            public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+                return getState() == ServerState.READY;
+            }
+
+            @Override
             public ExecutorService getExecutor() {
                 return executor;
             }

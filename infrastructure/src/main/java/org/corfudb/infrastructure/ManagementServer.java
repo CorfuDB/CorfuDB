@@ -94,6 +94,11 @@ public class ManagementServer extends AbstractServer {
     private final Lock healingLock = new ReentrantLock();
 
     @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
+    }
+
+    @Override
     public ExecutorService getExecutor() {
         return executor;
     }
