@@ -6,7 +6,6 @@ import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.Universe.UniverseMode;
 import org.junit.Test;
 
@@ -60,6 +59,12 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                             clientFixture.getTimeout(),
                             clientFixture.getPollPeriod()
                     );
+                }
+
+                // Reset all nodes so that we do not end up with an OverwriteException.
+                for (CorfuServer candidate : servers) {
+                    corfuClient.getRuntime().getLayoutView().getRuntimeLayout()
+                            .getBaseClient(candidate.getEndpoint()).reset();
                 }
 
                 // Verify layout contains only the node that is not removed

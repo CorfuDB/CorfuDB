@@ -1,9 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
@@ -15,6 +11,10 @@ import org.corfudb.util.Sleep;
 import java.time.Duration;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
 
 @Slf4j
 public class ScenarioUtils {

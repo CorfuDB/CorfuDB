@@ -1,18 +1,9 @@
 package org.corfudb.universe.group.cluster.vm;
 
-import com.jcraft.jsch.Channel;
-import com.jcraft.jsch.ChannelExec;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.Session;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.optional.ssh.SSHExec;
 import org.apache.tools.ant.taskdefs.optional.ssh.Scp;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.Properties;
 
 
 /**
@@ -80,36 +71,7 @@ public class RemoteOperationHelper {
      * @param password    password
      * @param command     shell command
      */
-    public void executeSudoCommand(String vmIpAddress, String userName, String password, String command)
-            throws JSchException, IOException {
-        Properties config = new Properties();
-        config.put("StrictHostKeyChecking", "no");
-        JSch jsch = new JSch();
-        Session session = null;
-        try {
-            session = jsch.getSession(userName, vmIpAddress, 22);
-            session.setPassword(password);
-            session.setConfig(config);
-            session.connect();
-            Channel channel = session.openChannel("exec");
-            log.info("Executing sudo command: {}, on {}", command, vmIpAddress);
-            ((ChannelExec) channel).setCommand("sudo -S -p '' " + command);
-            try (OutputStream out = channel.getOutputStream()) {
-
-                ((ChannelExec) channel).setPty(true);
-
-                channel.connect();
-                out.write((password + "\n").getBytes());
-                out.flush();
-            }
-        } finally {
-            if (session != null) {
-                try {
-                    session.disconnect();
-                } catch (Exception e) {
-                    //ignore
-                }
-            }
-        }
+    public void executeSudoCommand(String vmIpAddress, String userName, String password, String command) {
+        executeCommand(vmIpAddress, userName, password, String.format("echo %s | sudo -S -p '' %s", password, command));
     }
 }

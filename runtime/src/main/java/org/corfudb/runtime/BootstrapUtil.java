@@ -1,11 +1,7 @@
 package org.corfudb.runtime;
 
-import java.time.Duration;
-import java.util.concurrent.ExecutionException;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -20,6 +16,9 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
+import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+
 /**
  * Utility to bootstrap a cluster.
  *
@@ -27,6 +26,10 @@ import org.corfudb.util.Sleep;
  */
 @Slf4j
 public class BootstrapUtil {
+
+    private BootstrapUtil() {
+        // prevent instantiation of this class
+    }
 
     /**
      * Bootstraps the given layout.
@@ -104,19 +107,18 @@ public class BootstrapUtil {
                                  @NonNull Duration retryTimeout) {
         for (String server : layout.getAllServers()) {
             int retry = retries;
+
+            IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),
+                    corfuRuntimeParameters);
+            router.addClient(new LayoutHandler())
+                    .addClient(new ManagementHandler())
+                    .addClient(new BaseHandler());
+
             while (retry-- > 0) {
                 try {
                     log.info("Attempting to bootstrap node:{} with layout:{}", server, layout);
-                    IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),
-                            corfuRuntimeParameters);
-                    router.addClient(new LayoutHandler())
-                            .addClient(new ManagementHandler())
-                            .addClient(new BaseHandler());
-
                     bootstrapLayoutServer(router, layout);
                     bootstrapManagementServer(router, layout);
-
-                    router.stop();
                     break;
                 } catch (AlreadyBootstrappedException abe) {
                     log.error("Bootstrapping node: {} failed with exception:", server, abe);
@@ -131,7 +133,9 @@ public class BootstrapUtil {
                     Sleep.MILLISECONDS.sleepUninterruptibly(retryTimeout.toMillis());
                 }
             }
+
+            router.stop();
         }
-        log.info("Bootstrapping layout:{} successful.", layout);
+        log.info("Successfully Bootstrapped layout:{} .", layout);
     }
 }

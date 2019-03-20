@@ -211,8 +211,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.channel(parameters.getSocketType().getChannelClass());
         parameters.getNettyChannelOptions().forEach(b::option);
         b.handler(getChannelInitializer());
-        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
-                (int) parameters.getConnectionTimeout().toMillis());
+        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect);
 
         // Asynchronously connect, retrying until shut down.
         // Once connected, connectionFuture will be completed.
@@ -335,21 +334,19 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         });
     }
 
-    /** Connect to a remote server asynchronously.
+    /**
+     * Connect to a remote server asynchronously.
      *
-     * @param bootstrap         The channel boostrap to use
-     * @return                  A {@link ChannelFuture} which is c
+     * @param bootstrap The channel bootstrap to use
      */
-    private ChannelFuture connectAsync(@Nonnull Bootstrap bootstrap) {
+    private void connectAsync(@Nonnull Bootstrap bootstrap) {
         // If shutdown, return a ChannelFuture that is exceptionally completed.
         if (shutdown) {
-            return new DefaultChannelPromise(channel, GlobalEventExecutor.INSTANCE)
-                .setFailure(new ShutdownException("Runtime already shutdown!"));
+            return;
         }
         // Use the bootstrap to create a new channel.
         ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
-        return f;
     }
 
     /** Handle when a channel is connected.
@@ -460,9 +457,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         final CompletableFuture<T> cfTimeout =
             CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
-            outstandingRequests.remove(thisRequest);
-            log.debug("Remove request {} to {} due to timeout! Message:{}",
-                    thisRequest, node, message);
+            // CFUtils.within() can wrap different kinds of exceptions in
+            // CompletionException, just dealing with TimeoutException here since
+            // the router is not aware of it and this::completeExceptionally()
+            // takes care of others. This avoids handling same exception twice.
+            if (e.getCause() instanceof TimeoutException) {
+                outstandingRequests.remove(thisRequest);
+                log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
+                        thisRequest, node, message);
+            }
             return null;
         });
         return cfTimeout;
@@ -508,9 +511,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public <T> void completeRequest(long requestId, T completion) {
         CompletableFuture<T> cf;
-        if ((cf = (CompletableFuture<T>) outstandingRequests.get(requestId)) != null) {
+        if ((cf = (CompletableFuture<T>) outstandingRequests.remove(requestId)) != null) {
             cf.complete(completion);
-            outstandingRequests.remove(requestId);
         } else {
             log.warn("Attempted to complete request {}, but request not outstanding!", requestId);
         }
@@ -522,11 +524,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param requestID The request to complete.
      * @param cause     The cause to give for the exceptional completion.
      */
-    public void completeExceptionally(long requestID, Throwable cause) {
+    public void completeExceptionally(long requestID, @Nonnull Throwable cause) {
         CompletableFuture cf;
-        if ((cf = outstandingRequests.get(requestID)) != null) {
+        if ((cf = outstandingRequests.remove(requestID)) != null) {
             cf.completeExceptionally(cause);
-            outstandingRequests.remove(requestID);
+            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID, node,
+                    cause.getClass().getSimpleName(), cause);
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                 requestID);
@@ -579,17 +582,18 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     /**
-     * Sends a ping to the server so that the pong response will keep
+     * Sends a keep alive message to the server so that the response will keep
      * the channel active in order to avoid a ReadTimeout exception that will
      * close the channel.
      */
     private void keepAlive() {
         if (!channel.isOpen()) {
-            log.warn("keepAlive: channel not open, skipping ping. ");
+            log.warn("keepAlive: channel not open, skipping sending keep alive.");
             return;
         }
-        sendMessageAndGetCompletable(null, new CorfuMsg(CorfuMsgType.PING));
-        log.trace("keepAlive: sending ping to {}", this.channel.remoteAddress());
+        // Send a keep alive message to server which ignores epoch
+        sendMessageAndGetCompletable(null, CorfuMsgType.KEEP_ALIVE.msg());
+        log.trace("keepAlive: sent keep alive to {}", this.channel.remoteAddress());
     }
 
     @Override

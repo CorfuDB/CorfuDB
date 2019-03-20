@@ -30,6 +30,11 @@ public interface CorfuClient extends Node {
     void connect();
 
     /**
+     * See {@link CorfuRuntime()}
+     */
+    CorfuRuntime getRuntime();
+
+    /**
      * See {@link LayoutView#getLayout()}
      */
     Layout getLayout();
