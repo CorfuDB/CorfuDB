@@ -675,7 +675,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
-            updateTrailingLayoutServers(layoutCompletableFutureMap);
+            updateTrailingLayoutServers(layoutCompletableFutureMap, layout);
 
         } catch (QuorumUnreachableException e) {
             log.error("Error in correcting server epochs: {}", e);
@@ -717,12 +717,9 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param layoutCompletableFutureMap Map of layout server endpoints to their layout requests.
      */
-    private void updateTrailingLayoutServers(Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
+    private void updateTrailingLayoutServers(
+            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap, Layout updatedLayout) {
 
-        // We should utilize only the unmodified management layout as it has already been committed to the layout
-        // servers via Paxos round. Committing any other modified layout is extremely dangerous and can cause
-        // inconsistencies. This latestLayout should not be modified.
-        final Layout latestLayout = serverContext.copyManagementLayout();
         // Patch trailing layout servers with latestLayout.
         layoutCompletableFutureMap.keySet().forEach(layoutServer -> {
             Layout layout = null;
@@ -740,7 +737,7 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Do nothing if this layout server is updated with the latestLayout.
-            if (layout != null && layout.equals(latestLayout)) {
+            if (layout != null && layout.equals(updatedLayout)) {
                 return;
             }
             try {
@@ -749,15 +746,15 @@ public class RemoteMonitoringService implements MonitoringService {
                 // that there was a consensus on this layout and has been committed to a quorum.
                 boolean result = getCorfuRuntime()
                         .getLayoutView()
-                        .getRuntimeLayout(latestLayout)
+                        .getRuntimeLayout(updatedLayout)
                         .getLayoutClient(layoutServer)
-                        .committed(latestLayout.getEpoch(), latestLayout)
+                        .committed(updatedLayout.getEpoch(), updatedLayout)
                         .get();
                 if (result) {
                     log.debug("Layout Server: {} successfully patched with latest layout : {}",
-                            layoutServer, latestLayout);
+                            layoutServer, updatedLayout);
                 } else {
-                    log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);
+                    log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, updatedLayout);
                 }
             } catch (ExecutionException ee) {
                 log.error("Updating layout servers failed due to : {}", ee);

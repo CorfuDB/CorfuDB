@@ -169,31 +169,6 @@ public class ServerContext implements AutoCloseable {
         return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
     }
 
-    int getBaseServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
-    int getLayoutServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--layout-server-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
-    int getSequencerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--sequencer-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
-    int getLogunitThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
-        return threadCount == null ? BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors() : threadCount;
-    }
-
-    int getManagementServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
-        return threadCount == null ? 4 : threadCount;
-    }
-
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined

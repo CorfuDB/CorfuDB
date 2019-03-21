@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.serializer.Serializers;
 
 /**
@@ -257,18 +256,5 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Override
     public String toString() {
         return "LogData[" + getGlobalAddress() + "]";
-    }
-
-    /**
-     * Verify that max payload is enforced for the specified limit.
-     *
-     * @param limit Max write limit.
-     */
-    public void checkMaxWriteSize(int limit) {
-        try (ILogData.SerializationHandle sh = this.getSerializedForm()) {
-            if (limit != 0 && getSizeEstimate() > limit) {
-                throw new WriteSizeException(getSizeEstimate(), limit);
-            }
-        }
     }
 }

@@ -81,32 +81,32 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      */
     @Override
     public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout, List<Long> globalAddresses) {
-        Range<Long> range = Range.encloseAll(globalAddresses);
-        return readRange(runtimeLayout, range, true);
+        long startAddress = globalAddresses.iterator().next();
+        int numUnits = runtimeLayout.getLayout().getSegmentLength(startAddress);
+        log.trace("readAll[{}]: chain {}/{}", globalAddresses, numUnits, numUnits);
+
+        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(
+                runtimeLayout
+                        .getLogUnitClient(startAddress, numUnits - 1)
+                        .read(globalAddresses)).getAddresses();
+
+        //in case of a hole, do a normal read and use its hole fill policy
+        Map<Long, ILogData> returnResult = new TreeMap<>();
+        for (Map.Entry<Long, LogData> entry : logResult.entrySet()) {
+            ILogData value = entry.getValue();
+            if (value == null || value.isEmpty()) {
+                value = read(runtimeLayout, entry.getKey());
+            }
+
+            returnResult.put(entry.getKey(), value);
+        }
+
+        return returnResult;
     }
-
-
 
     @Override
     public Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
         Range<Long> range = Range.encloseAll(globalAddresses);
-        return readRange(runtimeLayout, range, true);
-    }
-
-    /**
-     * Reads a range of addresses from the Chain of log unit servers. This method optimizes for the time to wait to
-     * hole fill in case an empty address is encountered.
-     * If the waitForWrite flag is set to true, when an empty address is encountered, it waits for the hole to be
-     * filled. All subsequent empty addresses are hole filled directly and the reader does not wait.
-     * In case the flag is set to false, none of the reads wait for write completion and the empty address is hole
-     * filled right away.
-     *
-     * @param runtimeLayout Runtime layout.
-     * @param range         Range of addresses to read.
-     * @param waitForWrite  Flag whether wait for write is required or hole fill directly.
-     * @return Map of read addresses.
-     */
-    public Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Range<Long> range, boolean waitForWrite) {
         long startAddress = range.lowerEndpoint();
         long endAddress = range.upperEndpoint();
         int numUnits = runtimeLayout.getLayout().getSegmentLength(startAddress);
@@ -117,30 +117,12 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                         .getLogUnitClient(startAddress, numUnits - 1)
                         .read(range)).getAddresses();
 
-        // In case of holes, use the standard backoff policy for hole fill for
-        // the first entry in the list. All subsequent holes in the list can
-        // be hole filled without waiting as we have already waited for the first
-        // hole.
-        boolean wait = !waitForWrite;
+        //in case of a hole, do a normal read and use its hole fill policy
         Map<Long, ILogData> returnResult = new TreeMap<>();
         for (Map.Entry<Long, LogData> entry : logResult.entrySet()) {
-            long address = entry.getKey();
             ILogData value = entry.getValue();
             if (value == null || value.isEmpty()) {
-                if (!wait) {
-                    value = read(runtimeLayout, address);
-                    wait = true;
-                } else {
-                    // try to read the value
-                    value = CFUtils.getUninterruptibly(runtimeLayout
-                            .getLogUnitClient(startAddress, numUnits - 1).read(address))
-                            .getAddresses().get(address);
-                    // if value is null, fill the hole and get the value.
-                    if (value == null) {
-                        holeFill(runtimeLayout, address);
-                        value = peek(runtimeLayout, address);
-                    }
-                }
+                value = read(runtimeLayout, entry.getKey());
             }
 
             returnResult.put(entry.getKey(), value);

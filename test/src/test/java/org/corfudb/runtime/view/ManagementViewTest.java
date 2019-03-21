@@ -8,6 +8,7 @@ import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -16,11 +17,9 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -35,8 +34,6 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -898,37 +895,10 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
     }
 
-    /**
-     * Checks for updates trailing layout servers.
-     * The layout is partially committed with epoch 2 except for ENDPOINT_0.
-     * All commit messages from the cluster are intercepted.
-     * The test checks whether at least one of the 3 management agents patches the layout server with the latest
-     * layout.
-     * If a commit message with any other epoch is sent, the test fails.
-     */
     @Test
     public void updateTrailingLayoutServers() throws Exception {
 
         Layout layout = new Layout(getManagementTestLayout());
-
-        AtomicBoolean commitWithDifferentEpoch = new AtomicBoolean(false);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        TestRule interceptCommit = new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType.LAYOUT_COMMITTED)) {
-                if (((CorfuPayloadMsg<LayoutCommittedRequest>) corfuMsg).getPayload().getLayout().getEpoch() == 2) {
-                    latch.countDown();
-                } else {
-                    commitWithDifferentEpoch.set(true);
-                }
-            }
-            return true;
-        });
-
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), interceptCommit);
-        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(), interceptCommit);
-        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(), interceptCommit);
-
         final long highRank = 10L;
 
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().always().drop());
@@ -947,43 +917,6 @@ public class ManagementViewTest extends AbstractViewTest {
 
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout().getEpoch()).isEqualTo(2L);
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(layout);
-        latch.await();
-        assertThat(commitWithDifferentEpoch.get()).isFalse();
-    }
-
-    /**
-     * Tests a 3 node cluster.
-     * All Prepare messages are first blocked. Then a seal is issued for epoch 2.
-     * The test then ensures that no layout is committed for the epoch 2.
-     * We ensure that no layout is committed other than the Paxos path.
-     */
-    @Test
-    public void blockLayoutUpdateAfterSeal() {
-
-        Layout layout = new Layout(getManagementTestLayout());
-
-        TestRule dropPrepareMsg = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.LAYOUT_PREPARE))
-                .drop();
-
-        // Block Paxos round by blocking all prepare methods.
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), dropPrepareMsg);
-        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(), dropPrepareMsg);
-        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(), dropPrepareMsg);
-
-        // Seal the layout.
-        layout.setEpoch(2L);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
-
-        // Wait for the cluster to move the layout with epoch 2 without the Paxos round.
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
-            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {
-                fail();
-            }
-            corfuRuntime.invalidateLayout();
-        }
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
     }
 
     /**

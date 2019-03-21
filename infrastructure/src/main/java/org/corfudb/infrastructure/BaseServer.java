@@ -13,8 +13,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Created by mwei on 12/8/15.
@@ -24,17 +22,8 @@ public class BaseServer extends AbstractServer {
 
     final ServerContext serverContext;
 
-    private final ExecutorService executor;
-
-    @Override
-    public ExecutorService getExecutor() {
-        return executor;
-    }
-
     public BaseServer(@Nonnull ServerContext context) {
         this.serverContext = context;
-        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),
-                new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
     }
 
     /** Handler for the base server. */

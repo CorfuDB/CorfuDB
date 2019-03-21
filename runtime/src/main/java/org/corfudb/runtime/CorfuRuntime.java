@@ -142,11 +142,6 @@ public class CorfuRuntime {
         @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
 
         /**
-         * Time limit after which the reader gives up and fills the hole.
-         */
-        @Default Duration holeFillTimeout = Duration.ofSeconds(10);
-
-        /**
          * Whether or not to disable the cache.
          */
         @Default

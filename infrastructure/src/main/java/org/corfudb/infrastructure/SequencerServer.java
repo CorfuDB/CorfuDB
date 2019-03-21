@@ -164,7 +164,10 @@ public class SequencerServer extends AbstractServer {
         return true;
     }
 
-    private final ExecutorService executor;
+    private final ThreadFactory threadFactory = new ServerThreadFactory("sequencer-",
+            new ServerThreadFactory.ExceptionHandler());
+
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(threadFactory);
 
     @Override
     public ExecutorService getExecutor() {
@@ -178,8 +181,6 @@ public class SequencerServer extends AbstractServer {
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.opts = serverContext.getServerConfig();
-        this.executor = Executors.newFixedThreadPool(serverContext.getSequencerThreadCount(),
-                new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
         if (Address.nonAddress(initialToken)) {

@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -163,7 +162,6 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getBackpointerCount()).isEqualTo(1L);
     }
 
-    @Ignore
     @Test
     public void testStreamGC() throws Exception {
         CorfuRuntime runtime = getDefaultRuntime();
@@ -186,21 +184,13 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         assertThat(bpsvB.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         TokenResponse tail = runtime.getSequencerView().query();
         runtime.getAddressSpaceView().prefixTrim(tail.getToken());
-        // First Runtime GC
         runtime.getGarbageCollector().runRuntimeGC();
-
-        // Additional append to move the pointer
-        svA.append(String.valueOf(PARAMETERS.NUM_ITERATIONS_LOW).getBytes());
-        bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        assertThat(svA.remaining()).hasSize(1);
-        assertThat(svB.remaining()).hasSize(1);
-
-        // Second Runtime GC
-        runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(bpsvA.getContext().resolvedQueue).hasSize(1);
+        assertThat(bpsvA.getContext().resolvedQueue).isEmpty();
         assertThat(bpsvA.getContext().readQueue).isEmpty();
         assertThat(bpsvA.getContext().readCpQueue).isEmpty();
+        assertThat(bpsvB.getContext().resolvedQueue).isEmpty();
+        assertThat(bpsvB.getContext().readQueue).isEmpty();
+        assertThat(bpsvB.getContext().readCpQueue).isEmpty();
     }
 
 }

@@ -255,23 +255,6 @@ public class AbstractIT extends AbstractCorfuTest {
         return createRuntime(DEFAULT_ENDPOINT);
     }
 
-    public static Process runServer(int port, boolean single) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(port)
-                .setSingle(single)
-                .runServer();
-    }
-
-    public static Process runDefaultServer() throws IOException {
-        return new CorfuServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(DEFAULT_PORT)
-                .setSingle(true)
-                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
-                .runServer();
-    }
-
     public static CorfuRuntime createRuntime(String endpoint) {
         CorfuRuntime rt = new CorfuRuntime(endpoint)
                 .setCacheDisabled(true)
@@ -315,7 +298,6 @@ public class AbstractIT extends AbstractCorfuTest {
                             }
                     );
         }
-
     }
 
     /**

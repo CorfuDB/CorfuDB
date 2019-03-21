@@ -15,7 +15,11 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
@@ -29,11 +33,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 
@@ -97,15 +97,6 @@ public class ManagementServer extends AbstractServer {
      */
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
-    private final ExecutorService executor;
-
-    private final Lock healingLock = new ReentrantLock();
-
-    @Override
-    public ExecutorService getExecutor() {
-        return executor;
-    }
-
     /**
      * Returns new ManagementServer.
      *
@@ -116,9 +107,6 @@ public class ManagementServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
         this.localEndpoint = this.opts.get("--address") + ":" + this.opts.get("<port>");
         this.serverContext = serverContext;
-
-        executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
-                new ServerThreadFactory("management-", new ServerThreadFactory.ExceptionHandler()));
 
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
@@ -333,23 +321,12 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
-        boolean result = false;
-        if (healingLock.tryLock()) {
-            try {
-                log.info("handleHealingDetectedMsg: acquired healing lock. Performing healing for nodes: {}",
-                        unresponsiveHealedNodes);
-                final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);
-                result = ReconfigurationEventHandler.handleHealing(
-                        managementAgent.getCorfuRuntime(),
-                        unresponsiveHealedNodes,
-                        retryWorkflowQueryTimeout);
-            } finally {
-                healingLock.unlock();
-            }
-        } else {
-            log.info("handleHealingDetectedMsg: healing handling already in progress. Skipping.");
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-        }
+
+        final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);
+        boolean result = ReconfigurationEventHandler.handleHealing(
+                managementAgent.getCorfuRuntime(),
+                unresponsiveHealedNodes,
+                retryWorkflowQueryTimeout);
 
         if (result) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
