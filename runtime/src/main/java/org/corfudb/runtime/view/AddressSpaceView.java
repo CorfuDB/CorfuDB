@@ -61,6 +61,7 @@ public class AddressSpaceView extends AbstractView {
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
+            .concurrencyLevel(Runtime.getRuntime().availableProcessors() * 2)
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
                 public ILogData load(Long value) throws Exception {
@@ -169,9 +170,19 @@ public class AddressSpaceView extends AbstractView {
 
             // Do the write
             try {
-                l.getReplicationMode(token.getSequence())
-                        .getReplicationProtocol(runtime)
-                        .write(e, ld);
+                // Cache the successful write
+                if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
+                    readCache.asMap().compute(token.getSequence(), (k, v) -> {
+                        l.getReplicationMode(k)
+                                .getReplicationProtocol(runtime)
+                                .write(e, ld);
+                        return ld;
+                    });
+                } else {
+                    l.getReplicationMode(token.getSequence())
+                            .getReplicationProtocol(runtime)
+                            .write(e, ld);
+                }
             } catch (OverwriteException ex) {
                 if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA){
                     // If we have an overwrite exception with the SAME_DATA cause, it means that the
@@ -192,11 +203,6 @@ public class AddressSpaceView extends AbstractView {
             }
             return null;
         }, true);
-
-        // Cache the successful write
-        if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
-            readCache.put(token.getSequence(), ld);
-        }
     }
 
     /**
