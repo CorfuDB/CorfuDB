@@ -593,6 +593,20 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .containsEntry("k", "v1");
     }
 
+    /**
+     * This test makes sure that nested transactions have same txn type
+     * by checking that if nested transaction has a different type than
+     * the parent transaction, an exception is thrown when the nested
+     * transaction starts.
+     */
+    @Test
+    public void nestedTransactionsHaveSameType() {
+        t(1, this::OptimisticTXBegin);
+        t(1, this::WWTXBegin).assertThrows().isInstanceOf(IllegalArgumentException.class);
+        t(1, this::SnapshotTXBegin).assertThrows().isInstanceOf(IllegalArgumentException.class);
+        t(1, this::TXEnd);
+    }
+
     /** This test makes sure that a single thread can read
      * its own nested transactions after they have committed,
      * and that nested transactions are committed with the
