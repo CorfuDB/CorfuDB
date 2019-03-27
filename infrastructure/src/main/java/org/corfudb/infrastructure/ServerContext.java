@@ -464,15 +464,6 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
-     * Get the sequencer cache size.
-     *
-     * @return Sequencer cache size
-     */
-    public long getSequencerCacheSize() {
-        return Long.parseLong(getServerConfig(String.class, "--sequencer-cache-size"));
-    }
-
-    /**
      * Sets the management layout in the persistent datastore.
      *
      * @param layout Layout to be persisted

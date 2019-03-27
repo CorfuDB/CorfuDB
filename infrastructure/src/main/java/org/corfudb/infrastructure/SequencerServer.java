@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -132,21 +134,16 @@ public class SequencerServer extends AbstractServer {
      */
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        Map<String, Object> opts = serverContext.getServerConfig();
+        Config config = Config.parse(serverContext.getServerConfig());
 
         // Sequencer server is single threaded by current design
         this.executor = Executors.newSingleThreadExecutor(
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
-        long initialToken = Utils.parseLong(opts.get("--initial-token"));
-        if (Address.nonAddress(initialToken)) {
-            globalLogTail = 0L;
-        } else {
-            globalLogTail = initialToken;
-        }
 
-        long cacheSize = serverContext.getSequencerCacheSize();
-        this.cache = new SequencerServerCache(cacheSize);
+        globalLogTail = config.getInitialToken();
+
+        this.cache = new SequencerServerCache(config.getCacheSize());
 
         setUpTimerNameCache();
     }
@@ -581,5 +578,32 @@ public class SequencerServer extends AbstractServer {
     @Override
     public void shutdown() {
         super.shutdown();
+    }
+
+    /**
+     * Sequencer server configuration
+     */
+    @Builder
+    @Getter
+    public static class Config {
+        private static final long DEFAULT_CACHE_SIZE = 250_000L;
+
+        private final long initialToken;
+        @Default
+        private final long cacheSize = DEFAULT_CACHE_SIZE;
+
+        public static Config parse(Map<String, Object> opts) {
+            long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
+            long initialToken = Utils.parseLong(opts.get("--initial-token"));
+
+            if (Address.nonAddress(initialToken)) {
+                initialToken = Address.getMinAddress();
+            }
+
+            return Config.builder()
+                    .initialToken(initialToken)
+                    .cacheSize(cacheSize)
+                    .build();
+        }
     }
 }
