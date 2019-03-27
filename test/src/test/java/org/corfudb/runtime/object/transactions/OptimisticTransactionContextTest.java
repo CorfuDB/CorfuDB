@@ -21,6 +21,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
@@ -780,5 +781,65 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t1(() -> rt.getObjectsView().TXEnd());
         t2(() -> rt.getObjectsView().TXEnd())
                 .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+    /**
+     * This test checks that transactions that span epochs can commit if the primary sequencer
+     * does not change for those epochs (i.e. the sequencer spans a consecutive epochs range
+     * from the transaction snapshot epoch to its current epoch).
+     *
+     * t1 checks the transaction can commit if the sequencer has consecutive epochs.
+     * t2 checks the transaction should abort if the sequencer does not have consecutive epochs.
+     */
+    @Test
+    public void txnSpansEpochsCanCommitIfPrimarySequencerSpansConsecutiveEpochs() throws Exception {
+        t1(this::OptimisticTXBegin);
+        t2(this::OptimisticTXBegin);
+        t1(() -> write("k1", "v1"));
+        t2(() -> write("k2", "v2"));
+
+        // Manually obtain snapshot timestamp before commit since it is evaluated lazily
+        t1(() -> assertThat(TransactionalContext.getCurrentContext().getSnapshotTimestamp().getEpoch()).isEqualTo(0L));
+        t2(() -> assertThat(TransactionalContext.getCurrentContext().getSnapshotTimestamp().getEpoch()).isEqualTo(0L));
+
+        CorfuRuntime rt = getRuntime().connect();
+
+        Layout layout = rt.getLayoutView().getLayout();
+        Layout newLayout1 = new Layout(layout);
+        newLayout1.nextEpoch();
+
+        bootstrapAllServers(layout);
+
+        // Move layout and sequencer epoch to 1 before commit
+        rt.getLayoutView().getRuntimeLayout(newLayout1).sealMinServerSet();
+        rt.getLayoutView().updateLayout(newLayout1, 1L);
+        rt.getLayoutManagementView().reconfigureSequencerServers(layout, newLayout1, false);
+
+        assertThat(getSequencer(SERVERS.PORT_0).getSequencerEpoch()).isEqualTo(newLayout1.getEpoch());
+        assertThat(getSequencer(SERVERS.PORT_0).getEpochRangeLowerBound()).isEqualTo(layout.getEpoch());
+
+        // When t1 wants to commit, the sequencer has consecutive epochs, so it should commit successfully.
+        t1(this::TXEnd).assertDoesNotThrow(TransactionAbortedException.class);
+
+        Layout newLayout2 = new Layout(newLayout1);
+        newLayout2.nextEpoch();
+
+        // Move layout to epoch 3
+        rt.getLayoutView().getRuntimeLayout(newLayout2).sealMinServerSet();
+        rt.getLayoutView().updateLayout(newLayout2, 1L);
+        rt.invalidateLayout();
+
+        newLayout2.nextEpoch();
+        rt.getLayoutView().getRuntimeLayout(newLayout2).sealMinServerSet();
+        rt.getLayoutView().updateLayout(newLayout2, 1L);
+
+        // Move sequencer epoch to 3 so that it does not have consecutive epochs (lost epoch 2)
+        rt.getLayoutManagementView().reconfigureSequencerServers(newLayout1, newLayout2, true);
+
+        assertThat(getSequencer(SERVERS.PORT_0).getSequencerEpoch()).isEqualTo(newLayout2.getEpoch());
+        assertThat(getSequencer(SERVERS.PORT_0).getEpochRangeLowerBound()).isEqualTo(newLayout2.getEpoch());
+
+        // When t2 wants to commit, the sequencer does not have consecutive epochs, so it should abort.
+        t2(this::TXEnd).assertThrows().isInstanceOf(TransactionAbortedException.class);
     }
 }
