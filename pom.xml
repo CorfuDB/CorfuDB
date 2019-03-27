@@ -304,36 +304,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>2.3</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
-                <configuration>
-                    <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar
-                    </outputFile>
-                </configuration>
-            </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>
                 <groupId>com.mycila</groupId>
