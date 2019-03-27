@@ -578,8 +578,8 @@ public class ManagementViewTest extends AbstractViewTest {
         sv.append(testPayload);
         sv.append(testPayload);
 
-        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(beforeFailure);
-        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(0L);
+        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail()).isEqualTo(beforeFailure);
+        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail()).isEqualTo(0L);
 
         induceSequencerFailureAndWait();
 
@@ -1564,8 +1564,8 @@ public class ManagementViewTest extends AbstractViewTest {
         final int expectedServer1Tokens = 12;
         assertThat(server0.getSequencerEpoch()).isEqualTo(layout_1.getEpoch());
         assertThat(server1.getSequencerEpoch()).isEqualTo(layout_2.getEpoch());
-        assertThat(server0.getGlobalLogTail().get()).isEqualTo(expectedServer0Tokens);
-        assertThat(server1.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+        assertThat(server0.getGlobalLogTail()).isEqualTo(expectedServer0Tokens);
+        assertThat(server1.getGlobalLogTail()).isEqualTo(expectedServer1Tokens);
 
         // Trigger reconfiguration to failover back to PORT_0.
         Layout layout_3 = new LayoutBuilder(layout_2)
@@ -1580,8 +1580,8 @@ public class ManagementViewTest extends AbstractViewTest {
         // client on PORT_0.
         assertThat(server0.getSequencerEpoch()).isEqualTo(layout_3.getEpoch());
         assertThat(server1.getSequencerEpoch()).isEqualTo(layout_2.getEpoch());
-        assertThat(server0.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
-        assertThat(server1.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+        assertThat(server0.getGlobalLogTail()).isEqualTo(expectedServer1Tokens);
+        assertThat(server1.getGlobalLogTail()).isEqualTo(expectedServer1Tokens);
 
         // Assert that the streamTailMap has been reset and returns the correct backpointer.
         final long expectedBackpointerStreamA = 11;
