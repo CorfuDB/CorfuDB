@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -32,11 +34,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -89,7 +88,7 @@ public class SequencerServer extends AbstractServer {
      * global log first available position (initially, 0).
      */
     @Getter
-    private final AtomicLong globalLogTail = new AtomicLong(Address.getMinAddress());
+    private long globalLogTail = Address.getMinAddress();
 
     private long trimMark = Address.NON_ADDRESS;
 
@@ -97,7 +96,7 @@ public class SequencerServer extends AbstractServer {
      * - {@link SequencerServer::streamTailToGlobalTailMap}:
      * per streams map to last issued global-log position. used for backpointers.
      */
-    private final ConcurrentMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> streamTailToGlobalTailMap = new HashMap<>();
 
     /**
      * A map to cache the name of timers to avoid creating timer names on each call.
@@ -117,6 +116,15 @@ public class SequencerServer extends AbstractServer {
     @Setter
     private volatile long sequencerEpoch = Layout.INVALID_EPOCH;
 
+    /**
+     * The lower bound of the consecutive epoch range that this sequencer
+     * observes as the primary sequencer. i.e. this sequencer has been the
+     * primary sequencer for all the consecutive epochs from this epoch to
+     * {@link this#sequencerEpoch}
+     */
+    @Getter
+    private long epochRangeLowerBound = Layout.INVALID_EPOCH;
+
     private final ExecutorService executor;
 
     /**
@@ -126,26 +134,16 @@ public class SequencerServer extends AbstractServer {
      */
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        Map<String, Object> opts = serverContext.getServerConfig();
-        this.executor = Executors.newFixedThreadPool(
-                serverContext.getSequencerThreadCount(),
-                new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler())
-        );
+        Config config = Config.parse(serverContext.getServerConfig());
 
-        long initialToken = Utils.parseLong(opts.get("--initial-token"));
-        if (Address.nonAddress(initialToken)) {
-            globalLogTail.set(0L);
-        } else {
-            globalLogTail.set(initialToken);
-        }
+        // Sequencer server is single threaded by current design
+        this.executor = Executors.newSingleThreadExecutor(
+                new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
-        long cacheSize = 250_000;
-        if (opts.get("--sequencer-cache-size") != null) {
-            cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
 
-        }
+        globalLogTail = config.getInitialToken();
 
-        this.cache = new SequencerServerCache(cacheSize);
+        this.cache = new SequencerServerCache(config.getCacheSize());
 
         setUpTimerNameCache();
     }
@@ -171,13 +169,27 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
-     * Initialized the hashmap with the name of timers for different types of requests
+     * Initialized the HashMap with the name of timers for different types of requests
      */
     private void setUpTimerNameCache() {
         timerNameCache.put(TokenRequest.TK_QUERY, CorfuComponent.INFRA_SEQUENCER + "query-token");
         timerNameCache.put(TokenRequest.TK_RAW, CorfuComponent.INFRA_SEQUENCER + "raw-token");
         timerNameCache.put(TokenRequest.TK_MULTI_STREAM, CorfuComponent.INFRA_SEQUENCER + "multi-stream-token");
         timerNameCache.put(TokenRequest.TK_TX, CorfuComponent.INFRA_SEQUENCER + "tx-token");
+    }
+
+    /**
+     * Checks if an epoch is within a consecutive closed range
+     * [{@link this#epochRangeLowerBound}, {@link this#sequencerEpoch}].
+     *
+     * This sequencer serves as the primary sequencer for all the
+     * consecutive epochs in this range.
+     *
+     * @param epoch epoch to verify
+     * @return true if this epoch is in the range, false otherwise
+     */
+    private boolean isEpochInRange(long epoch) {
+        return epoch >= epochRangeLowerBound && epoch <= sequencerEpoch;
     }
 
     /**
@@ -197,9 +209,12 @@ public class SequencerServer extends AbstractServer {
 
         // A transaction can start with a timestamp issued from a previous
         // epoch, so we need to reject transactions that have a snapshot
-        // timestamp with a different epoch than the this sequencer's epoch.
-        if (txSnapshotTimestamp.getEpoch() != sequencerEpoch) {
-            log.debug("ABORT[{}] snapshot-ts[{}] current epoch[{}]", txInfo, txSnapshotTimestamp, sequencerEpoch);
+        // timestamp's epoch less than the epochRangeLowerBound since we are
+        // sure this sequencer is always the primary sequencer after this epoch.
+        long txSnapshotEpoch = txSnapshotTimestamp.getEpoch();
+        if (!isEpochInRange(txSnapshotEpoch)) {
+            log.debug("ABORT[{}] snapshot-ts[{}] current epoch[{}] lower bound[{}]",
+                    txInfo, txSnapshotTimestamp, sequencerEpoch, epochRangeLowerBound);
             return new TxResolutionResponse(TokenType.TX_ABORT_NEWSEQ);
         }
 
@@ -286,7 +301,7 @@ public class SequencerServer extends AbstractServer {
         Token token;
         if (req.getStreams().isEmpty()) {
             // Global tail query
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+            token = new Token(sequencerEpoch, globalLogTail - 1);
             streamTails = Collections.emptyList();
         } else if (req.getStreams().size() == 1) {
             // single stream query
@@ -295,7 +310,7 @@ public class SequencerServer extends AbstractServer {
         } else {
             // multiple stream query, the token is populated with the global tail and the tail queries are stored in
             // streamTails
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+            token = new Token(sequencerEpoch, globalLogTail - 1);
             streamTails = new ArrayList<>(streams.size());
             for (UUID stream : streams) {
                 streamTails.add(streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
@@ -308,9 +323,8 @@ public class SequencerServer extends AbstractServer {
 
     }
 
-
     @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
-    public synchronized void trimCache(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    public void trimCache(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("trimCache: Starting cache eviction");
         if (trimMark < msg.getPayload()) {
             // Advance the trim mark, if the new trim request has a higher trim mark.
@@ -325,7 +339,7 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming request to reset the sequencer.
      */
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
-    public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
+    public void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
         final long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
@@ -371,7 +385,7 @@ public class SequencerServer extends AbstractServer {
         if (!bootstrapWithoutTailsUpdate) {
             // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
             cache.invalidateAll();
-            globalLogTail.set(initialToken);
+            globalLogTail = initialToken;
             cache.updateMaxConflictAddress(initialToken - 1);
 
             // Clear the existing map as it could have been populated by an earlier reset.
@@ -379,12 +393,17 @@ public class SequencerServer extends AbstractServer {
             streamTailToGlobalTailMap.putAll(streamTails);
         }
 
+        // Update epochRangeLowerBound if the bootstrap epoch is not consecutive.
+        if (epochRangeLowerBound == Layout.INVALID_EPOCH || bootstrapMsgEpoch != sequencerEpoch + 1) {
+            epochRangeLowerBound = bootstrapMsgEpoch;
+        }
+
         // Mark the sequencer as ready after the tails have been populated.
         sequencerEpoch = bootstrapMsgEpoch;
         serverContext.setSequencerEpoch(bootstrapMsgEpoch);
 
         log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}, sequencerEpoch = {}",
-                globalLogTail.get(), streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
+                globalLogTail, streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -403,7 +422,7 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming token request.
      */
     @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
-    public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
+    public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Token request. Msg: {}", msg);
 
@@ -455,8 +474,12 @@ public class SequencerServer extends AbstractServer {
     private void handleRawToken(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(token, Collections.emptyMap())));
+        // The global tail points to an open slot, not the last written slot,
+        // so return the new token with current global tail and then update it.
+        Token token = new Token(sequencerEpoch, globalLogTail);
+        globalLogTail += req.getNumTokens();
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                new TokenResponse(token, Collections.emptyMap())));
     }
 
     /**
@@ -510,8 +533,7 @@ public class SequencerServer extends AbstractServer {
 
         // extend the tail of the global log by the requested # of tokens
         // currentTail is the first available position in the global log
-        long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
-        long newTail = currentTail + req.getNumTokens();
+        long newTail = globalLogTail + req.getNumTokens();
 
         // for each streams:
         //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
@@ -537,21 +559,51 @@ public class SequencerServer extends AbstractServer {
             req.getTxnResolution()
                     .getWriteConflictParams()
                     .forEach((key, value) -> {
-                        // insert an entry with the new timestamp using the hash code based on the param
-                        // and the stream id.
-                        value.forEach(conflictParam -> cache.put(new ConflictTxStream(key, conflictParam), newTail - 1));
+                        // insert an entry with the new timestamp using the
+                        // hash code based on the param and the stream id.
+                        value.forEach(conflictParam ->
+                                cache.put(new ConflictTxStream(key, conflictParam), newTail - 1));
                     });
         }
 
-        log.trace("token {} backpointers {}", currentTail, backPointerMap.build());
-        // return the token response with the new global tail
-        // and the streams backpointers
-        Token token = new Token(sequencerEpoch, currentTail);
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(token, backPointerMap.build())));
+        log.trace("token {} backpointers {}", globalLogTail, backPointerMap.build());
+
+        // return the token response with the global tail and the streams backpointers
+        Token token = new Token(sequencerEpoch, globalLogTail);
+        globalLogTail = newTail;
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                new TokenResponse(token, backPointerMap.build())));
     }
 
     @Override
     public void shutdown() {
         super.shutdown();
+    }
+
+    /**
+     * Sequencer server configuration
+     */
+    @Builder
+    @Getter
+    public static class Config {
+        private static final long DEFAULT_CACHE_SIZE = 250_000L;
+
+        private final long initialToken;
+        @Default
+        private final long cacheSize = DEFAULT_CACHE_SIZE;
+
+        public static Config parse(Map<String, Object> opts) {
+            long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
+            long initialToken = Utils.parseLong(opts.get("--initial-token"));
+
+            if (Address.nonAddress(initialToken)) {
+                initialToken = Address.getMinAddress();
+            }
+
+            return Config.builder()
+                    .initialToken(initialToken)
+                    .cacheSize(cacheSize)
+                    .build();
+        }
     }
 }

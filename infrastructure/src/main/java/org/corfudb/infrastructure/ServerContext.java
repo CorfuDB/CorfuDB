@@ -178,11 +178,6 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 1 : threadCount;
     }
 
-    int getSequencerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--sequencer-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
     int getLogunitThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
         return threadCount == null ? BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors() : threadCount;
