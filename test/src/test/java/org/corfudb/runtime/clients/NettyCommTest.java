@@ -507,7 +507,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             throw ex;
         } finally {
             try {
-                if (ncr != null) {ncr.stop(true);}
+                if (ncr != null) {ncr.stop();}
             } catch (Exception ex) {
                 log.warn("Error shutting down client...", ex);
             }

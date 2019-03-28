@@ -864,7 +864,9 @@ public class CorfuRuntime {
                         .contains(NodeLocator.getLegacyEndpoint(endpoint)))
                 .forEach(endpoint -> {
                     try {
-                        nodeRouterPool.getNodeRouters().get(endpoint).stop();
+                        // Simply remove the router from the pool and let finalize() method close
+                        // the channel when being GC'ed in order to prevent race conditions where
+                        // someone may still holding this router and planing to send messages.
                         nodeRouterPool.getNodeRouters().remove(endpoint);
                     } catch (Exception e) {
                         log.warn("fetchLayout: Exception in stopping and removing "

@@ -11,7 +11,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
@@ -20,7 +19,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.concurrent.GlobalEventExecutor;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -382,6 +380,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         log.debug("stop: Shutting down router for {}", node);
         shutdown = true;
         connectionFuture.completeExceptionally(new ShutdownException());
+        if (channel != null && channel.isOpen()) {
+            channel.close().syncUninterruptibly();
+        }
     }
 
     /** {@inheritDoc}
@@ -392,6 +393,18 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Deprecated
     public void stop(boolean shutdown) {
         stop();
+    }
+
+    /**
+     * {@inheritDoc
+     */
+    @Override
+    protected void finalize() throws Throwable {
+        if (!shutdown) {
+            log.debug("finalize: garbage collecting router for node {}.", node);
+            stop();
+        }
+        super.finalize();
     }
 
     /**
