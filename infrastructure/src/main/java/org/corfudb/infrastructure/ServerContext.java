@@ -160,7 +160,7 @@ public class ServerContext implements AutoCloseable {
 
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
-        localEndpoint = NodeLocator.getLegacyEndpoint(nodeLocator);
+        localEndpoint = nodeLocator.toEndpointUrl();
 
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
