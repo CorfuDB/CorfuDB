@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.ILogData.SerializationHandle;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -24,6 +25,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
+import org.corfudb.runtime.view.QuorumFuturesFactory.CompositeFuture;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Holder;
@@ -87,15 +89,18 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                                 futures);
                 readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
             } catch (QuorumUnreachableException e) {
-                log.debug("peek: Quorum unreachable: {}", e);
+//                log.debug("peek: Quorum unreachable: {}", e);
+                log.info("peek: Quorum unreachable: {}", e);
                 return null;
             }
             if (readResponse != null) {
                 LogData result = readResponse.getAddresses().get(address);
                 if (result != null && !isEmptyType(result.getType())) {
+                    log.info("peek: result : {}", result);
                     return result;
                 }
             }
+            log.info("Could not find data.");
             return null;
         } catch (RuntimeException e) {
             throw e;
@@ -188,9 +193,10 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         }
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
-                QuorumFuturesFactory.CompositeFuture<Boolean> future = null;
+                CompositeFuture<Boolean> future = null;
                 try {
-                    log.debug("Recovery write loop for {}", log);
+//                    log.debug("Recovery write loop for {}", log);
+                    log.info("Recovery write loop for {}", address);
                     // increment the rank
                     dh.getRef().releaseBuffer();
                     dh.getRef().setRank(dh.getRef().getRank().buildHigherRank());
@@ -201,7 +207,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                                     .peekUntilHoleFillRequired(address,
                                             a -> peek(runtimeLayout, a));
                         } catch (HoleFillRequiredException e) {
-                            log.debug(e.getMessage(), e);
+                            log.error(e.getMessage(), e);
                             // continuing
                         }
                     }
@@ -231,7 +237,8 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                     future = getWriteFuture(runtimeLayout, dh.getRef());
                     CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                             OverwriteException.class, DataOutrankedException.class);
-                    log.trace("Write done[{}]: {}", address);
+//                    log.trace("Write done[{}]: {}", address);
+                    log.info("Write done[{}]: {}", address);
                     return dh.getRef();
                 } catch (QuorumUnreachableException | DataOutrankedException e) {
                     throw new RetryNeededException();

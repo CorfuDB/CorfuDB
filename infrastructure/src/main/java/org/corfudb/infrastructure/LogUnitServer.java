@@ -203,13 +203,14 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log write: global: {}, streams: {}", msg.getPayload().getToken(),
-                msg.getPayload().getData().getBackpointerMap());
+        log.info("log write: global: {}, streams: {} at node:{}", msg.getPayload().getToken(),
+                msg.getPayload().getData().getBackpointerMap(), serverContext.getLocalEndpoint());
         LogData logData = (LogData) msg.getPayload().getData();
 
         batchWriter.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
+                    log.info("Write Completed at: {} address: {}", serverContext.getLocalEndpoint(), msg.getPayload().getGlobalAddress());
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 }, executor).exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);

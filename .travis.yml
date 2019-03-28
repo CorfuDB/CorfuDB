@@ -32,7 +32,7 @@ jobs:
   - stage: test
     name: Unit Tests
     script:
-    - ./mvnw -pl :test clean test -T 1C -Dtest.travisBuild=true
+    - ./mvnw -pl :test clean test -T 1C -Dtest.travisBuild=true -Dtest=QuorumReplicationProtocolTest#readOnlyCommitted -Dcheckstyle.skip
   - script:
     - ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests
