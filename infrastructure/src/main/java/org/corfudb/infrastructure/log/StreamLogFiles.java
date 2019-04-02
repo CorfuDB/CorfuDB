@@ -867,6 +867,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             logMetadata.update(entry);
         }
 
+        log.trace("Record saved, address: {}, streams: {}", address, entry.getBackpointerMap());
+
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }
 
@@ -940,7 +942,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         List<LogData> entries = preprocess(range);
 
         if (entries.isEmpty()) {
-            log.info("No entries to write.");
+            log.trace("No entries to write.");
             return;
         }
 

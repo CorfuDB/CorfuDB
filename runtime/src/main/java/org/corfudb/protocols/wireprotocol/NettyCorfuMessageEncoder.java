@@ -24,13 +24,13 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<CorfuMsg> {
                           ByteBuf byteBuf) throws Exception {
         try {
             corfuMsg.serialize(byteBuf);
-            if(log.isDebugEnabled()) {
+            if(log.isTraceEnabled()) {
                 long prev = maxValue.get();
                 maxValue.accumulate(byteBuf.readableBytes());
                 long curr = maxValue.get();
                 // The max value has been updated.
                 if (prev < curr) {
-                    log.debug("encode: New max write buffer found {}", curr);
+                    log.trace("encode: New max write buffer found {}", curr);
                 }
             }
 

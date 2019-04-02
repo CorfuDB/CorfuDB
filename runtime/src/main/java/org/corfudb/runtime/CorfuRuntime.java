@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -819,8 +820,12 @@ public class CorfuRuntime {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout(latestLayout == null
-                ? bootstrapLayoutServers : latestLayout.getLayoutServers());
+
+        List<String> servers = Optional.ofNullable(latestLayout)
+                .map(Layout::getLayoutServers)
+                .orElse(bootstrapLayoutServers);
+
+        layout = fetchLayout(servers);
     }
 
     /**
@@ -885,82 +890,94 @@ public class CorfuRuntime {
      * @return A completable future containing a layout.
      */
     private CompletableFuture<Layout> fetchLayout(List<String> servers) {
+        return CompletableFuture.supplyAsync(() -> fetchLayoutSync(servers), runtimeExecutor);
+    }
 
-        return CompletableFuture.supplyAsync(() -> {
+    private Layout fetchLayoutSync(List<String> servers) {
 
-            List<String> layoutServersCopy = new ArrayList<>(servers);
-            parameters.getBeforeRpcHandler().run();
-            int systemDownTriggerCounter = 0;
+        List<String> layoutServersCopy = new ArrayList<>(servers);
+        parameters.getBeforeRpcHandler().run();
+        int systemDownTriggerCounter = 0;
 
-            while (true) {
+        while (true) {
 
-                Collections.shuffle(layoutServersCopy);
-                // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
-                    try {
-                        IClientRouter router = getRouter(s);
-                        // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture =
-                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
-                        // Wait for layout
-                        Layout l = layoutFuture.get();
-
-                        // If the layout we got has a smaller epoch than the latestLayout epoch,
-                        // we discard it.
-                        if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than latestLayout epoch {}, "
-                                            + "discarded.",
-                                    l.getEpoch(), router.getHost(), router.getPort(),
-                                    latestLayout.getEpoch());
-                            continue;
-                        }
-
-                        checkClusterId(l);
-
-                        // Update/refresh list of layout servers
-                        this.layoutServers = l.getLayoutServers();
-
-                        layout = layoutFuture;
-                        latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
-
-                        // Prune away removed node routers from the nodeRouterPool.
-                        pruneRemovedRouters(l);
-
-                        return l;
-                    } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuInterruptedError(
-                                "Interrupted during layout fetch", ie);
-                    } catch (ExecutionException ee){
-                        if (ee.getCause() instanceof TimeoutException) {
-                            log.warn("Tried to get layout from {} but failed by timeout", s);
-                        } else {
-                            log.warn("Tried to get layout from {} but failed with exception:", s, ee);
-                        }
-                    }
-                    catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
-                    }
-                }
-
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
-                                + "Retried {} times, systemDownHandlerTriggerLimit = {}",
-                        parameters.connectionRetryRate, systemDownTriggerCounter,
-                        parameters.getSystemDownHandlerTriggerLimit());
-
-                if (++systemDownTriggerCounter >= parameters.getSystemDownHandlerTriggerLimit()) {
-                    log.info("fetchLayout: Invoking the systemDownHandler.");
-                    parameters.getSystemDownHandler().run();
-                }
-
-                Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
-                if (isShutdown) {
-                    return null;
+            Collections.shuffle(layoutServersCopy);
+            // Iterate through the layout servers, attempting to connect to one
+            for (String server : layoutServersCopy) {
+                Optional<Layout> maybeLayout = fetLayoutServer(server);
+                if (maybeLayout.isPresent()){
+                    return maybeLayout.get();
                 }
             }
-        }, runtimeExecutor);
+
+            log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
+                            + "Retried {} times, systemDownHandlerTriggerLimit = {}",
+                    parameters.connectionRetryRate, systemDownTriggerCounter,
+                    parameters.getSystemDownHandlerTriggerLimit());
+
+            if (++systemDownTriggerCounter >= parameters.getSystemDownHandlerTriggerLimit()) {
+                log.info("fetchLayout: Invoking the systemDownHandler.");
+                parameters.getSystemDownHandler().run();
+            }
+
+            Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
+            if (isShutdown) {
+                return null;
+            }
+        }
+    }
+
+    private Optional<Layout> fetLayoutServer(String server) {
+        log.trace("Trying connection to layout server {}", server);
+
+        try {
+            IClientRouter router = getRouter(server);
+            // Try to get a layout.
+            CompletableFuture<Layout> layoutFuture =
+                    new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
+            // Wait for layout
+            Layout serverLayout = layoutFuture.get();
+
+            // If the layout we got has a smaller epoch than the latestLayout epoch,
+            // we discard it.
+            if (latestLayout != null && latestLayout.getEpoch() > serverLayout.getEpoch()) {
+                log.warn(
+                        "fetchLayout: Received a layout with epoch {} from server {}:{} " +
+                                "smaller than latestLayout epoch {}, discarded.",
+                        serverLayout.getEpoch(), router.getHost(), router.getPort(),
+                        latestLayout.getEpoch()
+                );
+                return Optional.empty();
+            }
+
+            checkClusterId(serverLayout);
+
+            // Update/refresh list of layout servers
+            this.layoutServers = serverLayout.getLayoutServers();
+
+            layout = layoutFuture;
+            latestLayout = serverLayout;
+            log.trace("Layout server {} responded with layout {}", server, serverLayout);
+
+            // Prune away removed node routers from the nodeRouterPool.
+            pruneRemovedRouters(serverLayout);
+
+            return Optional.of(serverLayout);
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError("Interrupted during layout fetch", ie);
+        } catch (ExecutionException ee) {
+            if (ee.getCause() instanceof TimeoutException) {
+                log.warn("Tried to get layout from {} but failed by timeout", server);
+            } else if (ee.getCause() instanceof NetworkException) {
+                log.warn("Tried to get layout but failed with: {}", ee.getCause().getMessage());
+            } else {
+                log.warn("Tried to get layout from {} but failed with exception:", server, ee);
+            }
+        } catch (Exception e) {
+            log.warn("Tried to get layout from {} but failed with exception:", server, e);
+        }
+
+        return Optional.empty();
     }
 
     @SuppressWarnings("unchecked")

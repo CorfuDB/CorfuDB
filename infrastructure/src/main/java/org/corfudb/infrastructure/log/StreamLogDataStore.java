@@ -65,7 +65,8 @@ public class StreamLogDataStore {
      */
     public void updateTailSegment(long newTailSegment) {
         if (tailSegment.get() >= newTailSegment) {
-            log.debug("New tail segment less than or equals to the old one: {}. Ignore", newTailSegment);
+            log.trace("New tail segment less than or equals to the old one: {}. Ignore",
+                    newTailSegment);
             return;
         }
 

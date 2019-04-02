@@ -145,7 +145,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *  to the remote node.
      */
     @Getter
-    volatile CompletableFuture<Void> connectionFuture;
+    private volatile CompletableFuture<Void> connectionFuture;
 
     private SslContext sslContext;
     private final Map<CorfuMsgType, String> timerNameCache;
@@ -308,19 +308,20 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param channel       The channel to use
      * @param bootstrap     The channel bootstrap to use
      */
-    private void addReconnectionOnCloseFuture(@Nonnull Channel channel,
-            @Nonnull Bootstrap bootstrap) {
-        channel.closeFuture().addListener((r) -> {
+    private void addReconnectionOnCloseFuture(
+            @Nonnull Channel channel, @Nonnull Bootstrap bootstrap) {
+
+        channel.closeFuture().addListener(r -> {
             log.debug("addReconnectionOnCloseFuture[{}]: disconnected", node);
             // Remove the current completion future, forcing clients to wait for reconnection.
             connectionFuture = new CompletableFuture<>();
             // Exceptionally complete all requests that were waiting for a completion.
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
-                reqCompletableFuture.completeExceptionally(
-                        new NetworkException("Disconnected", node));
-            // And also remove them.
-            outstandingRequests.remove(reqId);
+                reqCompletableFuture.completeExceptionally(NetworkException.buildDisconnected(node));
+                // And also remove them.
+                outstandingRequests.remove(reqId);
             });
+
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
@@ -528,8 +529,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         CompletableFuture cf;
         if ((cf = outstandingRequests.remove(requestID)) != null) {
             cf.completeExceptionally(cause);
-            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID, node,
-                    cause.getClass().getSimpleName(), cause);
+            log.debug("completeExceptionally: Remove request {} to {} due to {}. Message: {}",
+                    requestID, node,
+                    cause.getClass().getSimpleName(), cause.getMessage()
+            );
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                 requestID);

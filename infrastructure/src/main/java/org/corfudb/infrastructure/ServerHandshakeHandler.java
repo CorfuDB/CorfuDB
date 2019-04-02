@@ -107,7 +107,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
         if (serverId.equals(UUID.fromString("00000000-0000-0000-0000-000000000000"))) {
-            log.info("channelRead: node id matching is not requested by client.");
+            log.trace("channelRead: node id matching is not requested by client.");
         } else if (!serverId.equals(this.nodeId)) {
             log.error("channelRead: Invalid handshake: this is {} and client is trying to connect to {}",
                     this.nodeId, serverId);
@@ -118,7 +118,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // Store clientID as a channel attribute.
         ctx.channel().attr(clientIdAttrKey).set(clientId);
         log.info("channelRead: Handshake validated by Server.");
-        log.debug("channelRead: Sending handshake response: Node Id: {} Corfu Version: {}",
+        log.trace("channelRead: Sending handshake response: Node Id: {} Corfu Version: {}",
                 this.nodeId, this.corfuVersion);
 
         CorfuMsg handshakeResponse = CorfuMsgType.HANDSHAKE_RESPONSE
@@ -126,13 +126,13 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         ctx.writeAndFlush(handshakeResponse);
 
         // Flush messages in queue
-        log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
+        log.trace("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
         while (!messages.isEmpty()) {
             ctx.writeAndFlush(messages.poll());
         }
 
         // Remove this handler from the pipeline; handshake is completed.
-        log.info("channelRead: Removing handshake handler from pipeline.");
+        log.trace("channelRead: Removing handshake handler from pipeline.");
         ctx.pipeline().remove(this);
         this.fireHandshakeSucceeded();
     }
@@ -159,7 +159,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        log.debug("channelInactive: Channel closed.");
+        log.trace("channelInactive: Channel closed.");
         if (!this.state.completed()) {
             this.fireHandshakeFailed(ctx);
         }
@@ -180,7 +180,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         if (cause instanceof ReadTimeoutException) {
             // Read timeout: no inbound traffic detected in a period of time.
             if (this.state.failed()) {
-                log.debug("exceptionCaught: Handshake timeout checker: already failed.");
+                log.trace("exceptionCaught: Handshake timeout checker: already failed.");
                 return;
             }
 
@@ -188,8 +188,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
                 log.error("exceptionCaught: Handshake timeout checker: timed out. Close Connection.");
                 this.state.set(true, false);
             } else {
-                log.debug("exceptionCaught: Handshake timeout " +
-                        "checker: discarded (handshake OK)");
+                log.debug("exceptionCaught: Handshake timeout checker: discarded (handshake OK)");
             }
         } else if (cause instanceof SSLHandshakeException) {
             // If an SslException is thrown by the inbound SslHandler it will be caught by this

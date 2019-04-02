@@ -88,7 +88,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
         try {
             handshakeResponse = (CorfuPayloadMsg<HandshakeResponse>) m;
-            log.info("channelRead: Handshake Response received. Removing {} from pipeline.",
+            log.trace("channelRead: Handshake Response received. Removing {} from pipeline.",
                     READ_TIMEOUT_HANDLER);
             // Remove the handler from the pipeline. Also remove the reference of the context from
             // the handler so that it does not disconnect the channel.
@@ -103,7 +103,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
                 // Otherwise, drop message.
                 try {
                     CorfuMsg msg = (CorfuMsg) m;
-                    log.debug("channelRead: Dropping message: {}", msg.getMsgType().name());
+                    log.trace("channelRead: Dropping message: {}", msg.getMsgType().name());
                 } catch (Exception ex) {
                     log.error("channelRead: Message received is not a valid CorfuMsg type.");
                 }
@@ -117,7 +117,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
         if (this.nodeId.equals(UUID.fromString("00000000-0000-0000-0000-000000000000"))) {
-            log.info("channelRead: node id matching is not requested by client.");
+            log.trace("channelRead: node id matching is not requested by client.");
         } else if (!this.nodeId.equals(serverId)) {
             // Validation failed, client opened a socket to server with id
             // 'nodeId', instead server's id is 'serverId'
@@ -129,14 +129,14 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         }
 
         log.info("channelRead: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
-        log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
+        log.trace("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
         // Flush messages in queue
         while (!messages.isEmpty()) {
             ctx.writeAndFlush(messages.poll());
         }
 
         // Remove this handler from the pipeline; handshake is completed.
-        log.info("channelRead: Removing handshake handler from pipeline.");
+        log.trace("channelRead: Removing handshake handler from pipeline.");
         ctx.pipeline().remove(this);
         this.fireHandshakeSucceeded(ctx);
     }
@@ -156,9 +156,9 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
             .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
 
-        log.debug("channelActive: Initiate handshake. Send handshake message.");
+        log.trace("channelActive: Initiate handshake. Send handshake message.");
         ctx.writeAndFlush(handshake);
-        log.debug("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
+        log.trace("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));
     }
 
@@ -190,7 +190,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         if (cause instanceof ReadTimeoutException) {
             // Handshake has failed or completed. If none is True, handshake timed out.
             if (this.handshakeState.failed()) {
-                log.debug("exceptionCaught: Handshake timeout checker: already failed.");
+                log.trace("exceptionCaught: Handshake timeout checker: already failed.");
                 return;
             }
 
@@ -202,8 +202,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
                 this.handshakeState.set(true, false);
             } else {
                 // Handshake completed successfully,
-                log.debug("exceptionCaught: Handshake timeout checker: discarded " +
-                    "(handshake OK)");
+                log.debug("exceptionCaught: Handshake timeout checker: discarded (handshake OK)");
             }
         }
         if (ctx.channel().isOpen()) {

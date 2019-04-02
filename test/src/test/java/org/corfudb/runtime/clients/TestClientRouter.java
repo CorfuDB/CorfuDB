@@ -195,9 +195,11 @@ public class TestClientRouter implements IClientRouter {
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
-            throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
-                                                                    .host(host)
-                                                                    .port(port).build());
+            NodeLocator node = NodeLocator.builder()
+                    .host(host)
+                    .port(port)
+                    .build();
+            throw NetworkException.buildDisconnected(node);
         }
 
         // Set up the timer and context to measure request
