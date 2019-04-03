@@ -39,26 +39,6 @@ public class FGMapTest extends AbstractViewTest {
                 .isEqualTo("b");
     }
 
-    /*
-    @Test
-    @SuppressWarnings("unchecked")
-    public void createOnlyThrowsException()
-            throws Exception {
-        Map<String,String> testMap = getDefaultRuntime().getObjectsView().build()
-                                                        .setType(FGMap.class)
-                                                        .setStreamName("map")
-                                                        .addOption(ObjectOpenOptions.CREATE_ONLY)
-                                                        .open();
-        assertThatThrownBy(() -> getDefaultRuntime().getObjectsView().build()
-                                                        .setType(FGMap.class)
-                                                        .setStreamName("map")
-                                                        .addOption(ObjectOpenOptions.CREATE_ONLY)
-                                                        .open())
-                .isInstanceOf(ObjectExistsException.class);
-
-    }
-    */
-
     @Test
     @SuppressWarnings("unchecked")
     public void sizeIsCorrect()
