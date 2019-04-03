@@ -14,6 +14,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -29,11 +30,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 
@@ -592,7 +595,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     }
 
     @Test
-    public void doNotFailBecauseTrimIsFirst() throws Exception{
+    public void failWhenTrimHappensWhileFastLoading() throws Exception{
         // 1 tables has 1 entry and 2 tables have 2 entries
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
@@ -607,11 +610,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.setLogHead(0L);
         fsm.setDefaultObjectsType(CorfuTable.class);
-        fsm.loadMaps();
-
-        assertThatMapsAreBuilt(rt2);
-
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
+        assertThatThrownBy(() ->fsm.loadMaps())
+                .isInstanceOf(TrimmedException.class);
     }
 
     @Test
