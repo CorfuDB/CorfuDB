@@ -52,20 +52,37 @@ public abstract class AbstractQueuedStreamView extends
         super(runtime, streamId, QueuedStreamContext::new);
     }
 
+    /**
+     * Update {@code maxResolution} which is the largest address we
+     * have resolved to so next time we can probably fill from the
+     * {@code resolvedQueue} directly.
+     * <p>
+     * The new {@code maxResolution} may be greater than the actual
+     * tail of this stream, but we know that there is nothing left
+     * to resolve up to that address.
+     *
+     * @param context          stream context
+     * @param newMaxResolution new {@code maxResolution} to set
+     */
+    void updateMaxResolution(QueuedStreamContext context, long newMaxResolution) {
+        if (newMaxResolution != Address.MAX && context.maxResolution < newMaxResolution) {
+            context.maxResolution = newMaxResolution;
+            log.trace("updateMaxResolution: maxResolution set to {}", context.maxResolution);
+        }
+    }
+
     /** Add the given address to the resolved queue of the
      * given context.
      * @param context           The context to add the address to
      * @param globalAddress     The resolved global address.
      */
-    protected void addToResolvedQueue(QueuedStreamContext context,
+    private void addToResolvedQueue(QueuedStreamContext context,
                                       long globalAddress,
                                       ILogData ld) {
         context.resolvedQueue.add(globalAddress);
         context.resolvedEstBytes += ld.getSizeEstimate();
 
-        if (context.maxResolution < globalAddress) {
-            context.maxResolution = globalAddress;
-        }
+        updateMaxResolution(context, globalAddress);
     }
 
     /**

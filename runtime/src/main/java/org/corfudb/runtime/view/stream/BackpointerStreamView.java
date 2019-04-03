@@ -439,8 +439,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * {@inheritDoc}
      */
     @Override
-    protected boolean fillReadQueue(final long maxGlobal,
-                                 final QueuedStreamContext context) {
+    protected boolean fillReadQueue(final long maxGlobal, final QueuedStreamContext context) {
         log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
                 maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
 
@@ -450,8 +449,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         if (context.getGlobalPointer() == Address.NEVER_READ &&
                 context.checkpointSuccessId == null) {
             // The checkpoint stream ID is the UUID appended with CP
-            final UUID checkpointId = CorfuRuntime
-                    .getCheckpointStreamIdFromId(context.id);
+            final UUID checkpointId = CorfuRuntime.getCheckpointStreamIdFromId(context.id);
             // Find the checkpoint, if present
             try {
                 if (followBackpointers(checkpointId, context.readCpQueue,
@@ -471,40 +469,27 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         // The maximum address we will fill to.
-        final long maxAddress =
-                Long.min(maxGlobal, context.maxGlobalAddress);
+        final long maxAddress = Long.min(maxGlobal, context.maxGlobalAddress);
 
-        // If we already reached maxAddress ,
-        // we return since there is nothing left to do.
+        // If we already reached maxAddress, we return since there is nothing left to do.
         if (context.getGlobalPointer() >= maxAddress) {
             return false;
         }
 
-        // If everything is available in the resolved
-        // queue, use it
+        // If everything is available in the resolved queue, use it
         if (context.maxResolution >= maxAddress
                 && context.minResolution < context.getGlobalPointer()) {
             return fillFromResolved(maxGlobal, context);
         }
 
-        Long latestTokenValue = null;
+        // Get the stream tail from sequencer.
+        long latestTokenValue = runtime.getSequencerView().query(context.id)
+                .getToken().getSequence();
+        log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
 
-        // If the max has been resolved, use it.
-        if (maxGlobal != Address.MAX) {
-            latestTokenValue = context.resolvedQueue.ceiling(maxGlobal);
-        }
-
-        // If we don't have a larger token in resolved, or the request was for
-        // a linearized read, fetch the token from the sequencer.
-        if (latestTokenValue == null || maxGlobal == Address.MAX) {
-            latestTokenValue = runtime.getSequencerView().query(context.id)
-                    .getToken().getSequence();
-            log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
-        }
         // If there is no information on the tail of the stream, return,
         // there is nothing to do
         if (Address.nonAddress(latestTokenValue)) {
-
             // sanity check:
             // currently, the only possible non-address return value for a token-query
             // is Address.NON_EXIST
@@ -515,10 +500,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return false;
         }
 
-        // If everything is available in the resolved
-        // queue, use it
+        // If everything is available in the resolved queue, use it
         if (context.maxResolution >= latestTokenValue
                 && context.minResolution < context.getGlobalPointer()) {
+            updateMaxResolution(context, maxGlobal);
             return fillFromResolved(latestTokenValue, context);
         }
 
@@ -528,13 +513,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // values from the beginning of the stream up to the snapshot address
         // should be reflected. For each address which is less than
         // maxGlobalAddress, we insert it into the read queue.
-
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
                 Long.max(context.getGlobalPointer(), context.checkpointSnapshotAddress),
                 d -> BackpointerOp.INCLUDE);
 
-        return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
+        updateMaxResolution(context, maxGlobal);
+
+        return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
     }
 
     @VisibleForTesting

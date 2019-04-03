@@ -1,21 +1,25 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +40,7 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Before
     public void setRuntime() throws Exception {
-        r = getDefaultRuntime().connect();
+        r = getDefaultRuntime();
     }
 
     @Test
@@ -463,5 +467,80 @@ public class StreamViewTest extends AbstractViewTest {
         // should throw a TrimmedException
         assertThatThrownBy(() -> sv.previous()).isInstanceOf(TrimmedException.class);
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion.getSequence());
+    }
+
+    /**
+     * Test a transaction no longer need to call sequencer and follow backpointer
+     * if the accessed stream is already resolved up to the snapshot timestamp.
+     */
+    @Test
+    public void testStreamSyncNoExtraSequencerCall() {
+        final long tailA1 = 1L, tailA2 = 6L, tailB = 9L;
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
+
+        CorfuTable<String, String> mapA = rt.getObjectsView()
+                .build()
+                .setStreamName("streamA")
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .open();
+
+        CorfuTable<String, String> mapB = rt.getObjectsView()
+                .build()
+                .setStreamName("streamB")
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .open();
+
+        for (int i = 0; i <= tailA1; i++) {
+            mapA.put(String.valueOf(i), String.valueOf(i));
+        }
+
+        // Start txn1 at snapshot timestamp 1
+        t1(() -> {
+            rt.getObjectsView().TXBegin();
+            assertThat(TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()).isEqualTo(tailA1);
+        });
+
+        for (long i = tailA1 + 1; i <= tailA2; i++) {
+            mapA.put(String.valueOf(i), String.valueOf(i));
+        }
+
+        // Force global tail to be larger than stream tail
+        for (long i = tailA2 + 1; i <= tailB; i++) {
+            mapB.put(String.valueOf(i), String.valueOf(i));
+        }
+
+        // Start txn2 at snapshot timestamp 9, notice this timestamp is larger than steam tail 7
+        t2(() -> {
+            rt.getObjectsView().TXBegin();
+            assertThat(TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()).isEqualTo(tailB);
+            // The first stream sync will result in a sequencer call
+            assertThat(mapA.get("0")).isEqualTo("0");
+        });
+
+        // After first stream sync, it should not call sequencer or follow backpointer
+        // because the stream is already resolved. This rely on maxResolution set correctly.
+        addClientRule(rt, new TestRule().matches(corfuMsg -> {
+            if (corfuMsg.getMsgType() == CorfuMsgType.TOKEN_REQ) {
+                Assert.fail();
+            }
+            return true;
+        }));
+
+        for (int i = 1; i <= tailA2; i++) {
+            final int x = i;
+
+            // Use an interleaving txn to force txn2 do a sync
+            t1(() -> {
+                assertThat(mapA.get(String.valueOf(1))).isEqualTo("1");
+            });
+
+            // This stream sync shouldn't call sequencer at all!
+            t2(() -> {
+                assertThat(mapA.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+            });
+        }
+
+        clearClientRules(rt);
+        rt.shutdown();
     }
 }
