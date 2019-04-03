@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
@@ -111,14 +113,23 @@ public class SecurityIT extends AbstractIT {
         // Run a corfu server
         Process corfuServer = runSinglePersistentServerTls();
 
+        AddressSpaceView.Config addrSpaceCfg = AddressSpaceView.Config.builder()
+                .cacheDisabled(true)
+                .build();
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder()
+                .addressSpaceConfig(addrSpaceCfg)
+                .layoutServers(CorfuRuntime.parseConnectionStringToNodeLocators(singleNodeEndpoint))
+                .build();
+
         // Start a Corfu runtime
-        runtime = new CorfuRuntime(singleNodeEndpoint)
-                                    .enableTls(runtimePathToKeyStore,
-                                               runtimePathToKeyStorePassword,
-                                               runtimePathToTrustStore,
-                                               runtimePathToTrustStorePassword)
-                                    .setCacheDisabled(true)
-                                    .connect();
+        runtime = CorfuRuntime.fromParameters(params)
+                .enableTls(
+                        runtimePathToKeyStore,
+                        runtimePathToKeyStorePassword,
+                        runtimePathToTrustStore,
+                        runtimePathToTrustStorePassword
+                )
+                .connect();
 
         // Create CorfuTable
         CorfuTable testTable = runtime
@@ -151,7 +162,7 @@ public class SecurityIT extends AbstractIT {
     /**
      * This test creates Corfu runtime and a single Corfu server according to the configuration
      * provided in CorfuDB.properties. Corfu runtime configures TLS related parameters using
-     * {@link org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters} and then asserts that
+     * {@link CorfuRuntimeParameters} and then asserts that
      * operations on a CorfuTable is executed as Expected.
      *
      * @throws Exception
@@ -162,7 +173,7 @@ public class SecurityIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServerTls();
 
         // Create Runtime parameters for enabling TLS
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
+        final CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
                 .builder()
                 .layoutServer(NodeLocator.parseString(singleNodeEndpoint))
                 .tlsEnabled(tlsEnabled)
@@ -217,7 +228,7 @@ public class SecurityIT extends AbstractIT {
         runSinglePersistentServerTls();
 
         // Start a Corfu runtime with incorrect truststore
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
+        final CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
                 .builder()
                 .layoutServer(NodeLocator.parseString(singleNodeEndpoint))
                 .tlsEnabled(tlsEnabled)

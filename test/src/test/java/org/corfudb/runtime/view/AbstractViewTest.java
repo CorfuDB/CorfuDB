@@ -103,9 +103,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     }
 
     public CorfuRuntime getNewRuntime(@Nonnull NodeLocator node) {
-        CorfuRuntime runtime = getNewRuntime(CorfuRuntimeParameters
-            .builder()
-            .build());
+        return getNewRuntime(node, false);
+    }
+
+    public CorfuRuntime getNewRuntime(@Nonnull NodeLocator node, boolean cacheDisabled) {
+        AddressSpaceView.Config addrSpace = AddressSpaceView.Config.builder()
+                .cacheDisabled(cacheDisabled)
+                .build();
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder()
+                .addressSpaceConfig(addrSpace)
+                .build();
+        CorfuRuntime runtime = getNewRuntime(params);
         runtime.parseConfigurationString(node.getHost() + ":" + node.getPort());
         return runtime;
     }

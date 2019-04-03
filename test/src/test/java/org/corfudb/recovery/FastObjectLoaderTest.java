@@ -161,9 +161,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadWithCacheDisable() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
-                .setCacheDisabled(true)
-                .connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode(), true).connect();
 
         FastObjectLoader fol = new FastObjectLoader(rt2)
                 .setDefaultObjectsType(CorfuTable.class);

@@ -9,10 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
@@ -34,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Integration tests.
@@ -292,10 +296,21 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     public static CorfuRuntime createRuntime(String endpoint) {
-        CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(true)
-                .connect();
-        return rt;
+        AddressSpaceView.Config addrSpaceConfig = AddressSpaceView.Config.builder()
+                .cacheDisabled(true)
+                .build();
+
+        List<NodeLocator> servers = CorfuRuntime.parseConnectionString(endpoint)
+                .stream()
+                .map(NodeLocator::parseString)
+                .collect(Collectors.toList());
+
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder()
+                .addressSpaceConfig(addrSpaceConfig)
+                .layoutServers(servers)
+                .build();
+
+        return CorfuRuntime.fromParameters(params).connect();
     }
 
     public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {

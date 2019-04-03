@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
@@ -37,9 +36,9 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
@@ -679,10 +678,14 @@ public class ClusterReconfigIT extends AbstractIT {
         final Semaphore semaphore = new Semaphore(1);
         semaphore.acquire();
 
+        AddressSpaceView.Config addrSpaceCfg = AddressSpaceView.Config.builder()
+                .cacheDisabled(true)
+                .build();
+
         // Create map and set up daemon writer thread.
         CorfuRuntimeParameters corfuRuntimeParameters = CorfuRuntimeParameters.builder()
                 .layoutServer(NodeLocator.parseString("localhost:9000"))
-                .cacheDisabled(true)
+                .addressSpaceConfig(addrSpaceCfg)
                 .systemDownHandlerTriggerLimit(1)
                 // Register the system down handler to throw a RuntimeException.
                 .systemDownHandler(() ->

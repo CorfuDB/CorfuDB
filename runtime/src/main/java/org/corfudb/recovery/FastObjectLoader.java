@@ -212,7 +212,7 @@ public class FastObjectLoader {
 
     public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
-        loadInCache = !corfuRuntime.getParameters().isCacheDisabled();
+        loadInCache = !corfuRuntime.getParameters().getAddressSpaceConfig().isCacheDisabled();
         streamsMetaData = new HashMap<>();
     }
 

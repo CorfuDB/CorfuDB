@@ -28,6 +28,7 @@ import java.util.concurrent.TimeoutException;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -38,6 +39,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.util.CFUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -718,11 +720,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(c1a.size()).isEqualTo(c2.size());
         assertThat(c1a.containsAll(c2)).isTrue();
 
-        // Start a new client with cache disabled and fast object loading disabled.
-        CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
-                .setLoadSmrMapsAtConnect(false)
-                .setCacheDisabled(true)
-                .connect();
+        CorfuRuntime runtime3 = buildRuntime(DEFAULT_ENDPOINT, true, false);
         CorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringIndexer());
         Collection<Map.Entry<String, String>> c3 =
                 corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9");
@@ -735,6 +733,23 @@ public class ServerRestartIT extends AbstractIT {
         runtime1.shutdown();
         runtime2.shutdown();
         runtime3.shutdown();
+    }
+
+    private CorfuRuntime buildRuntime(
+            String endpoint,  boolean cacheDisabled, boolean useFastLoader) {
+
+        AddressSpaceView.Config addrSpaceCfg = AddressSpaceView.Config.builder()
+                .cacheDisabled(cacheDisabled)
+                .build();
+
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder()
+                .addressSpaceConfig(addrSpaceCfg)
+                .useFastLoader(useFastLoader)
+                .layoutServers(CorfuRuntime.parseConnectionStringToNodeLocators(endpoint))
+                .build();
+
+        // Start a new client with cache disabled and fast object loading disabled.
+        return CorfuRuntime.fromParameters(params).connect();
     }
 
     /**
@@ -793,10 +808,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(resultAfterRestart.containsAll(resultInitial)).isTrue();
 
         // Start a new client with cache and fast object loading disabled and verify multi index.
-        CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
-                .setLoadSmrMapsAtConnect(false)
-                .setCacheDisabled(true)
-                .connect();
+        CorfuRuntime runtime3 = buildRuntime(DEFAULT_ENDPOINT, true, false);
         CorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringMultiIndexer());
         Collection<Map.Entry<String, String>> resultDisabledCacheAndFasLoader =
                 corfuTable3.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");

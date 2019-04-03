@@ -21,8 +21,10 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
@@ -75,10 +77,13 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
         layout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
 
-        corfuRuntime = new CorfuRuntime();
-        corfuRuntime.setCacheDisabled(true);
-        layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
+        AddressSpaceView.Config addrSpaceCfg =
+                AddressSpaceView.Config.builder().cacheDisabled(true).build();
+        CorfuRuntimeParameters params =
+                CorfuRuntimeParameters.builder().addressSpaceConfig(addrSpaceCfg).build();
 
+        corfuRuntime = CorfuRuntime.fromParameters(params);
+        layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
 
         layout.getAllServers().forEach(serverEndpoint -> {
             corfuRuntime.getRouter(serverEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());

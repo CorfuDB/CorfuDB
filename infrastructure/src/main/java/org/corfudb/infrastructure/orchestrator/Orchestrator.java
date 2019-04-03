@@ -222,7 +222,7 @@ public class Orchestrator {
             // the default authentication config parameters as the ManagementServer's
             // runtime
             CorfuRuntimeParameters params = serverContext.getDefaultRuntimeParameters();
-            params.setCacheDisabled(true);
+            params.getAddressSpaceConfig().setCacheDisabled(true);
             params.setUseFastLoader(false);
             params.setLayoutServers(servers);
 

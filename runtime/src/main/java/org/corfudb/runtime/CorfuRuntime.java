@@ -143,11 +143,10 @@ public class CorfuRuntime {
          */
         @Default Duration holeFillTimeout = Duration.ofSeconds(10);
 
-        /**
-         * Whether or not to disable the cache.
-         */
         @Default
-        boolean cacheDisabled = false;
+        private final AddressSpaceView.Config addressSpaceConfig = AddressSpaceView.Config
+                .builder()
+                .build();
 
         /**
          * The maximum size of the cache, in bytes.
@@ -779,12 +778,22 @@ public class CorfuRuntime {
      */
     public CorfuRuntime parseConfigurationString(String configurationString) {
         // Parse comma sep. list.
-        bootstrapLayoutServers = Pattern.compile(",")
+        bootstrapLayoutServers = parseConnectionString(configurationString);
+        layoutServers = new ArrayList<>(bootstrapLayoutServers);
+        return this;
+    }
+
+    public static List<NodeLocator> parseConnectionStringToNodeLocators(String connString) {
+        return parseConnectionString(connString).stream()
+                .map(NodeLocator::parseString)
+                .collect(Collectors.toList());
+    }
+
+    public static List<String> parseConnectionString(String configurationString) {
+        return Pattern.compile(",")
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
-        layoutServers = new ArrayList<>(bootstrapLayoutServers);
-        return this;
     }
 
     /**
@@ -1111,7 +1120,7 @@ public class CorfuRuntime {
     @Deprecated
     public CorfuRuntime setCacheDisabled(boolean disable) {
         log.warn("setCacheDisabled: Deprecated, please set parameters instead");
-        parameters.setCacheDisabled(disable);
+        parameters.getAddressSpaceConfig().setCacheDisabled(disable);
         return this;
     }
 
