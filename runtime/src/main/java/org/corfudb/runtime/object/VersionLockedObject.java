@@ -9,6 +9,7 @@ import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -325,7 +326,8 @@ public class VersionLockedObject<T> {
                     try {
                         rollbackObjectUnsafe(timestamp);
                     } catch (NoRollbackException nre) {
-                        log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
+                        log.warn("SyncObjectUnsafe[{}] to {} failed {}, cause {}", this, timestamp, nre,
+                                AddressSpaceView.removalCauseCache.getIfPresent(nre.getUndoableEntryVersion()));
                         resetUnsafe();
                     }
                 }
@@ -354,7 +356,9 @@ public class VersionLockedObject<T> {
                         return;
                     }
                 } catch (NoRollbackException nre) {
-                    log.warn("Rollback[{}] to {} failed {}", this, timestamp, nre);
+                    log.warn("Rollback[{}] to {} failed {}, cause {}", this, timestamp, nre,
+                            AddressSpaceView.removalCauseCache.getIfPresent(nre.getUndoableEntryVersion()));
+
                     resetUnsafe();
                 }
             }
