@@ -18,7 +18,6 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.Conne
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
@@ -126,13 +125,9 @@ public class FailureDetector implements IDetector {
         // Set up arrays for routers to the endpoints.
         routerMap = new HashMap<>();
         allServers.forEach(s -> {
-            try {
-                IClientRouter router = corfuRuntime.getRouter(s);
-                router.setTimeoutResponse(period);
-                routerMap.put(s, router);
-            } catch (NetworkException ne) {
-                log.error("Error creating router for {}", s);
-            }
+            IClientRouter router = corfuRuntime.getRouter(s);
+            router.setTimeoutResponse(period);
+            routerMap.put(s, router);
         });
         // Perform polling of all responsive servers.
         return pollRound(layout.getEpoch(), allServers, routerMap, sequencerMetrics, layout);

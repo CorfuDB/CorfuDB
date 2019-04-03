@@ -27,6 +27,11 @@ public class BaseServer extends AbstractServer {
     private final ExecutorService executor;
 
     @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
+    }
+
+    @Override
     public ExecutorService getExecutor() {
         return executor;
     }

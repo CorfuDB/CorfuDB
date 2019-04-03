@@ -296,6 +296,11 @@ public class LogUnitServer extends AbstractServer {
         log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);
     }
 
+    @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
+    }
+
     /**
      * Resets the log unit server via the BatchWriter.
      * Warning: Clears all data.

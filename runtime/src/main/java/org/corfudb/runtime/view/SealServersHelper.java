@@ -11,7 +11,6 @@ import java.util.function.Predicate;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
@@ -38,14 +37,8 @@ public class SealServersHelper {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal all servers
         layout.getAllServers().forEach(server -> {
-            CompletableFuture<Boolean> cf = new CompletableFuture<>();
-            try {
-                // Creating router can cause NetworkException which should be handled.
-                cf = runtimeLayout.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
-            } catch (NetworkException ne) {
-                cf.completeExceptionally(ne);
-                log.error("Remote seal SET_EPOCH failed for server {} with {}", server, ne);
-            }
+            CompletableFuture<Boolean> cf =
+                    runtimeLayout.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
             resultMap.put(server, cf);
         });
 

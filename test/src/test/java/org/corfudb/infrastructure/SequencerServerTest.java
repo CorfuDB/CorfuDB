@@ -259,7 +259,7 @@ public class SequencerServerTest extends AbstractServerTest {
             sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                     new TokenRequest(1L, Collections.singletonList(streamA))));
         }
-        assertThat(server.getGlobalLogTail().get()).isEqualTo(num);
+        assertThat(server.getGlobalLogTail()).isEqualTo(num);
 
         // Sequencer accepts a delta bootstrap message only if the new epoch is consecutive.
         long newEpoch = serverContext.getServerEpoch() + 1;
