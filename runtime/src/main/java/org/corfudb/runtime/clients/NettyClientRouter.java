@@ -314,7 +314,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private void addReconnectionOnCloseFuture(@Nonnull Channel channel,
             @Nonnull Bootstrap bootstrap) {
         channel.closeFuture().addListener((r) -> {
-            log.info("addReconnectionOnCloseFuture[{}]: disconnected", node);
+            log.debug("addReconnectionOnCloseFuture[{}]: disconnected", node);
             // Remove the current completion future, forcing clients to wait for reconnection.
             connectionFuture = new CompletableFuture<>();
             // Exceptionally complete all requests that were waiting for a completion.
@@ -327,7 +327,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                log.info("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
+                log.debug("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
                 // Asynchronously connect again.
                 connectAsync(bootstrap);
             }
@@ -359,13 +359,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
-            log.info("connectAsync[{}]: Channel connected.", node);
+            log.debug("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
             if (!shutdown) {
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
+                log.debug("connectAsync[{}]: Channel connection failed, reconnecting...", node);
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
                 // context of the handler future.
