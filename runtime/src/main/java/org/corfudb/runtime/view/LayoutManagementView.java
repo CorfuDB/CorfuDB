@@ -427,8 +427,10 @@ public class LayoutManagementView extends AbstractView {
                         || !originalLayout.getPrimarySequencer()
                         .equals(newLayout.getPrimarySequencer())) {
 
-                    //TODO(Maithem) why isn't this getting the tails
-                    // from utils?
+                    // Freeze the addressSpace by sealing the log unit head in all segments for this epoch.
+                    // The log units cannot accept any messages from the previous epoch.
+                    runtime.getLayoutView().getRuntimeLayout(newLayout).freezeSegmentsForEpoch();
+
                     TailsResponse tails = runtime.getAddressSpaceView().getAllTails();
 
                     maxTokenRequested = tails.getLogTail();

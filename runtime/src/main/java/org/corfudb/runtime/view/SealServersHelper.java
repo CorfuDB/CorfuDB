@@ -8,11 +8,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.CFUtils;
 
 /**
@@ -21,7 +23,27 @@ import org.corfudb.util.CFUtils;
  * <p>Created by zlokhandwala on 3/10/17.</p>
  */
 @Slf4j
-public class SealServersHelper {
+class SealServersHelper {
+
+    private SealServersHelper() {
+        //ignore
+    }
+
+    /**
+     * Freezes the address space in the chain by sealing the head of the chain in each stripe of each segment.
+     *
+     * @param layoutSegment        Layout segment to seal.
+     * @param completableFutureMap Map of endpoints and completable futures which complete when the seal to that
+     *                             endpoint completes.
+     */
+    static void freezeChainSegment(LayoutSegment layoutSegment,
+                                   Map<String, CompletableFuture<Boolean>> completableFutureMap) {
+        // Wait for seal to all heads in every stripe in the segment.
+        layoutSegment.getStripes().stream()
+                .map(layoutStripe -> layoutStripe.getLogServers().get(0))
+                .collect(Collectors.toSet())
+                .forEach(server -> CFUtils.getUninterruptibly(completableFutureMap.get(server)));
+    }
 
     /**
      * Asynchronously seal all servers in layout by setting remote epochs.
@@ -31,8 +53,7 @@ public class SealServersHelper {
      * @param runtimeLayout RuntimeLayout stamped with the layout to be sealed.
      * @return A map of completableFutures for every remoteSetEpoch call.
      */
-    public static Map<String, CompletableFuture<Boolean>> asyncSealServers(
-            RuntimeLayout runtimeLayout) {
+    static Map<String, CompletableFuture<Boolean>> asyncSealServers(RuntimeLayout runtimeLayout) {
         Layout layout = runtimeLayout.getLayout();
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal all servers
@@ -53,7 +74,7 @@ public class SealServersHelper {
      * @throws QuorumUnreachableException Thrown if responses not received from a majority of
      *                                    layout servers.
      */
-    public static void waitForLayoutSeal(List<String> layoutServers, Map<String,
+    static void waitForLayoutSeal(List<String> layoutServers, Map<String,
             CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         CompletableFuture<Boolean>[] completableFutures =
@@ -69,8 +90,8 @@ public class SealServersHelper {
      * @throws QuorumUnreachableException Thrown if responses not received from all the
      *                                    log unit servers.
      */
-    public static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String,
-            CompletableFuture<Boolean>> completableFutureMap)
+    static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment,
+                                        Map<String, CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =
@@ -87,8 +108,8 @@ public class SealServersHelper {
             }
 
             if (success) {
-                log.debug("waitForChainSegmentSeal: Successfully waited at least one " +
-                        "log unit server in every strip");
+                log.debug("waitForChainSegmentSeal: Successfully waited at least one "
+                        + "log unit server in every strip");
                 continue;
             }
 
@@ -108,8 +129,8 @@ public class SealServersHelper {
      * @throws QuorumUnreachableException Thrown if responses not received from all the
      *                                    log unit servers.
      */
-    public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String,
-            CompletableFuture<Boolean>> completableFutureMap)
+    public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment,
+                                                Map<String, CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =

@@ -78,6 +78,22 @@ public class RuntimeLayout {
         log.debug("Layout has been sealed successfully.");
     }
 
+    /**
+     * Attempts to freeze the address space so that all in flight messages are completed. This is executed before
+     * the election of a new sequencer. This is different from the seal protocol as this makes a decision of
+     * completion of the reign of the previous sequencer by freezing and ending all it's in-flight tokens and
+     * preparing the logunits for the new sequencer.
+     */
+    public void freezeSegmentsForEpoch() {
+        log.info("Requested to freeze segments for previous epochs. Current layout: {}", layout);
+
+        Map<String, CompletableFuture<Boolean>> resultMap = SealServersHelper.asyncSealServers(this);
+        for (LayoutSegment layoutSegment : layout.getSegments()) {
+            layoutSegment.getReplicationMode().validateAddressSpaceSeal(layoutSegment, resultMap);
+        }
+        log.info("Freeze segments for layout successful : {}", layout);
+    }
+
 
     /**
      * Sender Client Map.

@@ -366,6 +366,12 @@ public class Layout {
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override
+            public void validateAddressSpaceSeal(LayoutSegment layoutSegment,
+                                                 Map<String, CompletableFuture<Boolean>> completableFutureMap) {
+                SealServersHelper.freezeChainSegment(layoutSegment, completableFutureMap);
+            }
+
+            @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map<String, CompletableFuture<Boolean>>
                                                     completableFutureMap)
@@ -407,6 +413,12 @@ public class Layout {
             }
         },
         QUORUM_REPLICATION {
+            @Override
+            public void validateAddressSpaceSeal(LayoutSegment layoutSegment,
+                                                 Map<String, CompletableFuture<Boolean>> completableFutureMap) {
+                throw new UnsupportedOperationException("unsupported operation");
+            }
+
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map<String, CompletableFuture<Boolean>>
@@ -470,6 +482,12 @@ public class Layout {
 
         }, NO_REPLICATION {
             @Override
+            public void validateAddressSpaceSeal(LayoutSegment layoutSegment,
+                                                 Map<String, CompletableFuture<Boolean>> completableFutureMap) {
+                throw new UnsupportedOperationException("unsupported operation");
+            }
+
+            @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map<String, CompletableFuture<Boolean>>
                                                     completableFutureMap)
@@ -502,11 +520,16 @@ public class Layout {
         };
 
         /**
+         * Waits for the particular address space in the segment to be sealed.
+         */
+        public abstract void validateAddressSpaceSeal(LayoutSegment layoutSegment,
+                                                      Map<String, CompletableFuture<Boolean>> completableFutureMap);
+
+        /**
          * Seals the layout segment.
          */
         public abstract void validateSegmentSeal(LayoutSegment layoutSegment,
-                                                 Map<String, CompletableFuture<Boolean>>
-                                                         completableFutureMap)
+                                                 Map<String, CompletableFuture<Boolean>> completableFutureMap)
                 throws QuorumUnreachableException;
 
         /**
