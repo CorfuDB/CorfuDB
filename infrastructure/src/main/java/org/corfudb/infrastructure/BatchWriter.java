@@ -106,13 +106,14 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     /**
      * Trim addresses from log up to a prefix.
      *
-     * @param address prefix address to trim to (inclusive)
+     * @param address  prefix address to trim to (inclusive).
+     * @param msgEpoch Message epoch.
      */
-    public void prefixTrim(@Nonnull Token address) {
+    public void prefixTrim(long address, long msgEpoch) {
         try {
-            CompletableFuture<Void> cf = new CompletableFuture();
+            CompletableFuture<Void> cf = new CompletableFuture<>();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address.getSequence(), null, address.getEpoch(), null, cf));
+                    address, null, msgEpoch, null, cf));
             cf.get();
         } catch (Exception e) {
             if (e.getCause() instanceof RuntimeException) {

@@ -471,7 +471,7 @@ public class Utils {
      * @param responses a set of tail responses
      * @return An max-aggregation of all tails
      */
-    static TailsResponse getTails(Set<TailsResponse> responses) {
+    static TailsResponse getTails(Set<TailsResponse> responses, long epoch) {
         long globalTail = Address.NON_ADDRESS;
         Map<UUID, Long> globalStreamTails = new HashMap<>();
 
@@ -483,7 +483,8 @@ public class Utils {
                 globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));
             }
         }
-        return new TailsResponse(globalTail, globalStreamTails);
+        // All epochs should be equal as all the tails are queried using a single runtime layout.
+        return new TailsResponse(epoch, globalTail, globalStreamTails);
     }
 
     /**
@@ -516,6 +517,6 @@ public class Utils {
             throw new UnsupportedOperationException();
         }
 
-        return getTails(luResponses);
+        return getTails(luResponses, layout.getEpoch());
     }
 }

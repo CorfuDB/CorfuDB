@@ -368,19 +368,11 @@ public class AddressSpaceView extends AbstractView {
                 Sleep.sleepUninterruptibly(retryRate);
             } catch (WrongEpochException wee) {
                 long serverEpoch = wee.getCorrectEpoch();
-                // Retry if wrongEpochException corresponds to message epoch (only)
-                if (address.getEpoch() == serverEpoch) {
-                    long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                    log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, " +
-                            "while server is in epoch {}. Invalidate layout for this client " +
-                            "and retry, attempt: {}/{}", address, runtimeEpoch, serverEpoch, x+1, numRetries);
-                    runtime.invalidateLayout();
-                } else {
-                    // wrongEpochException corresponds to a stale trim address (prefix trim token on the wrong epoch)
-                    log.error("prefixTrim[{}]: stale prefix trim. Prefix trim on wrong epoch {}, " +
-                            "while server on epoch {}", address, address.getEpoch(), serverEpoch);
-                    throw wee;
-                }
+                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
+                log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, while server is in epoch {}. "
+                                + "Invalidate layout for this client and retry, attempt: {}/{}",
+                        address, runtimeEpoch, serverEpoch, x + 1, numRetries);
+                runtime.invalidateLayout();
             }
         }
     }

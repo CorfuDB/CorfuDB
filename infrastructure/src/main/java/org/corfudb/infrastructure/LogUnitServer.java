@@ -229,12 +229,19 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    /**
+     * Perform a prefix trim.
+     * Here the token is not used to perform the trim as the epoch at which the checkpoint was completed
+     * might be old. Hence, we use the msg epoch to perform the trim. This should be safe provided that the
+     * trim is performed only on the token provided by the CheckpointWriter which ensures that the checkpoint
+     * was persisted. Using any other address to perform a trim can cause data loss.
+     */
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
         try {
             TrimRequest req = msg.getPayload();
-            batchWriter.prefixTrim(req.getAddress());
+            batchWriter.prefixTrim(req.getAddress().getSequence(), msg.getEpoch());
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (TrimmedException ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
