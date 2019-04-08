@@ -81,7 +81,7 @@ public class StateTransfer {
             long ts1 = System.currentTimeMillis();
 
             Map<Long, ILogData> dataMap = runtime.getAddressSpaceView()
-                    .cacheFetch(ContiguousSet.create(
+                    .fetchRange(ContiguousSet.create(
                             Range.closed(chunkStart, chunkEnd),
                             DiscreteDomain.longs()));
 
