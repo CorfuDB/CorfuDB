@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.CorfuComponent;
@@ -126,8 +127,18 @@ public class CheckpointWriter<T extends Map> {
      */
     public Token appendCheckpoint() {
         long start = System.currentTimeMillis();
+
+        // Queries the sequencer for the global log tail. We then read the global log tail to
+        // persist the entry on the logunit in turn preventing from a new sequencer from
+        // regressing tokens.
+        Token markerToken = rt.getSequencerView().query().getToken();
+        if (Address.nonAddress(markerToken.getSequence())) {
+            return markerToken;
+        }
+        rt.getAddressSpaceView().read(markerToken.getSequence());
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
+                .snapshot(markerToken)
                 .build()
                 .begin();
         try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
