@@ -14,15 +14,19 @@ import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import com.github.benmanes.caffeine.cache.Cache;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.ehcache.sizeof.SizeOf;
-import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.PooledByteBufAllocator;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
+
+import org.ehcache.sizeof.SizeOf;
+import org.slf4j.LoggerFactory;
+
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class MetricsUtils {
@@ -216,6 +220,8 @@ public class MetricsUtils {
             metrics.register("jvm.memory", metricsJVMMem);
             metrics.register("jvm.thread", metricsJVMThread);
             metrics.register("jvm.file-descriptors-used", metricsJVMFdGauge);
+            metrics.register("corfu.netty.mem.pooled-byte-buf.direct", getNettyPooledDirectMemGauge());
+            metrics.register("corfu.netty.mem.pooled-byte-buf.heap", getNettyPooledHeapMemGauge());
         } catch (IllegalArgumentException e) {
             // Re-registering metrics during test runs, not a problem
         }
@@ -239,6 +245,30 @@ public class MetricsUtils {
         if (enabled) {
             counter.inc(amount);
         }
+    }
+
+    /**
+     * return a gauge on direct memory used by netty's PooledByteBufAllocator
+     */
+    private static Gauge<Long> getNettyPooledDirectMemGauge() {
+        return new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                return PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory();
+            }
+        };
+    }
+
+    /**
+     * return a gauge on heap memory used by netty's PooledByteBufAllocator
+     */
+    private static Gauge<Long> getNettyPooledHeapMemGauge() {
+        return new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                return PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory();
+            }
+        };
     }
 
     /**
