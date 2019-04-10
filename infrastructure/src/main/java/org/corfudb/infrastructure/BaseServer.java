@@ -100,7 +100,8 @@ public class BaseServer extends AbstractServer {
                                                    @NonNull IServerRouter r) {
         try {
             long epoch = msg.getPayload();
-            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}", epoch);
+            log.info("handleMessageSetEpoch: Received SET_EPOCH from {}, moving to new epoch {}",
+                    msg.getClientID(), epoch);
             serverContext.setServerEpoch(epoch, r);
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (WrongEpochException e) {
