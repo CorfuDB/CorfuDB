@@ -169,9 +169,12 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     @After
     public void cleanupBuffers() {
-        testServerMap.values().forEach(x -> {
-            x.getLogUnitServer().shutdown();
-            x.getManagementServer().shutdown();
+        testServerMap.values().forEach(server -> {
+            server.getLogUnitServer().shutdown();
+            server.getManagementServer().shutdown();
+            server.getLayoutServer().shutdown();
+            server.getSequencerServer().shutdown();
+            server.getBaseServer().shutdown();
         });
         // Abort any active transactions...
         while (runtime.getObjectsView().TXActive()) {
