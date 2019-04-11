@@ -1,0 +1,103 @@
+package org.corfudb.infrastructure.management;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
+
+import com.google.common.collect.ImmutableMap;
+import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+public class ClusterStateCollectorTest {
+
+    @Test
+    public void testAggregatedState(){
+        final String localEndpoint = "a";
+
+        ClusterState predefinedCluster = ClusterState.buildClusterState(
+                localEndpoint,
+                nodeState("a", OK, OK, FAILED),
+                nodeState("b", OK, OK, FAILED),
+                NodeState.getUnavailableNodeState("c")
+        );
+
+        Map<String, CompletableFuture<NodeState>> clusterConnectivity = new HashMap<>();
+
+        CompletableFuture<NodeState> nodeAStateCf = CompletableFuture.completedFuture(
+                predefinedCluster.getNode("a").get()
+        );
+
+        CompletableFuture<NodeState> nodeBStateCf = CompletableFuture.completedFuture(
+                predefinedCluster.getNode("b").get()
+        );
+
+        final int newEpoch = 10;
+        CompletableFuture<NodeState> wrongEpochCf = new CompletableFuture<>();
+        wrongEpochCf.completeExceptionally(new WrongEpochException(newEpoch));
+
+        clusterConnectivity.put("a", nodeAStateCf);
+        clusterConnectivity.put("b", nodeBStateCf);
+        clusterConnectivity.put("c", wrongEpochCf);
+
+        ClusterStateCollector collector = ClusterStateCollector.builder()
+                .localEndpoint(localEndpoint)
+                .heartbeatCounter(new HeartbeatCounter())
+                .clusterState(clusterConnectivity)
+                .build();
+
+        ClusterState clusterState = collector.collectClusterState(1, SequencerMetrics.UNKNOWN);
+
+        NodeState localNodeState = clusterState.getNode(localEndpoint).get();
+        NodeConnectivity localNodeConnectivity = localNodeState.getConnectivity();
+        assertThat(localNodeState.isConnected()).isTrue();
+        assertThat(localNodeConnectivity.getConnectedNodes()).containsExactly("a", "b" ,"c");
+        assertThat(localNodeConnectivity.getFailedNodes()).isEmpty();
+
+        NodeState nodeBState = clusterState.getNode("b").get();
+        NodeConnectivity nodeBConnectivity = nodeBState.getConnectivity();
+        assertThat(nodeBConnectivity.getConnectedNodes()).containsExactly("a", "b");
+
+        NodeState nodeCState = clusterState.getNode("c").get();
+        assertThat(nodeCState.isConnected()).isFalse();
+    }
+
+    @Test
+    public void testWrongEpochs(){
+        final String localEndpoint = "a";
+        final int timeout = 10;
+
+        Map<String, CompletableFuture<NodeState>> clusterConnectivity = new HashMap<>();
+
+        final int newEpoch = 10;
+        CompletableFuture<NodeState> wrongEpochCf = new CompletableFuture<>();
+        wrongEpochCf.completeExceptionally(new WrongEpochException(newEpoch));
+
+        CompletableFuture<NodeState> nodeAState = CompletableFuture.completedFuture(
+                NodeState.builder().build()
+        );
+
+        clusterConnectivity.put("", nodeAState);
+        clusterConnectivity.put("c", wrongEpochCf);
+
+        ClusterStateCollector collector = ClusterStateCollector.builder()
+                .localEndpoint(localEndpoint)
+                .heartbeatCounter(new HeartbeatCounter())
+                .clusterState(clusterConnectivity)
+                .build();
+
+        ImmutableMap<String, Long> wrongEpochs = collector.collectWrongEpochs();
+        assertThat(wrongEpochs.size()).isOne();
+        assertThat(wrongEpochs.get("c")).isEqualTo(newEpoch);
+    }
+
+}

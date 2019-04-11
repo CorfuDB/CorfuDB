@@ -122,6 +122,7 @@ public class ManagementServer extends AbstractServer {
 
         // Creating a management agent.
         ClusterState defaultView = ClusterState.builder()
+                .localEndpoint(serverContext.getLocalEndpoint())
                 .nodes(ImmutableMap.of())
                 .build();
         clusterContext =  ClusterStateContext.builder()

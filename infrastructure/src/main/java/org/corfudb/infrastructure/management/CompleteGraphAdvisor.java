@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -23,7 +24,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
     private final String localEndpoint;
 
-    public CompleteGraphAdvisor(String localEndpoint) {
+    public CompleteGraphAdvisor(@NonNull String localEndpoint) {
         this.localEndpoint = localEndpoint;
     }
 
