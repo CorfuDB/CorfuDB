@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -192,15 +193,49 @@ public class FailureDetector implements IDetector {
 
         tunePollReportTimeouts(router, failedNodesAggregated, allConnectedNodes);
 
-        PollReport latestReport = reports.get(reports.size() - 1);
-
         return PollReport.builder()
                 .pollEpoch(epoch)
                 .connectedNodes(ImmutableSet.copyOf(connectedNodesAggregated))
                 .failedNodes(ImmutableSet.copyOf(failedNodesAggregated))
                 .wrongEpochs(ImmutableMap.copyOf(wrongEpochsAggregated))
                 .currentLayoutSlotUnFilled(isCurrentLayoutSlotUnFilled(layout, wrongEpochsAggregated.keySet()))
-                .clusterState(latestReport.getClusterState())
+                .clusterState(getAggregatedState(reports))
+                .build();
+    }
+
+    /**
+     * Aggregating pollRound reports and provide aggregated view of the cluster.
+     *
+     * @param reports pollRound reports
+     * @return cluster state
+     */
+    private ClusterState getAggregatedState(List<PollReport> reports) {
+        Map<String, NodeState> stateMap = new HashMap<>();
+
+        reports.forEach(report -> {
+            ClusterState currState = report.getClusterState();
+            for (NodeState nodeState : currState.getNodes().values()) {
+                String endpoint = nodeState.getConnectivity().getEndpoint();
+                NodeConnectivityType connType = nodeState.getConnectivity().getType();
+
+                if (!stateMap.containsKey(endpoint)) {
+                    stateMap.put(endpoint, nodeState);
+                    continue;
+                }
+
+                //Don't replace by a new state if the new state is not CONNECTED
+                if (stateMap.get(endpoint).getConnectivity().getType() == NodeConnectivityType.CONNECTED
+                        && connType != NodeConnectivityType.CONNECTED) {
+                    continue;
+                }
+
+                //Replace current state by a new one
+                stateMap.put(endpoint, nodeState);
+            }
+        });
+
+        return ClusterState.builder()
+                .nodes(stateMap)
                 .build();
     }
 

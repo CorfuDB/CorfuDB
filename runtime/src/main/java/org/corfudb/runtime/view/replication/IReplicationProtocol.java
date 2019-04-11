@@ -89,7 +89,13 @@ public interface IReplicationProtocol {
      * @return                      A map of addresses to committed
      *                              addresses, hole filling if necessary.
      */
-    Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses);
+    default @Nonnull
+    Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
+        return globalAddresses.parallelStream()
+                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
+                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+    }
+
     /** Peek data from a given address.
      *
      * <p>This function -may- return null if there was no entry

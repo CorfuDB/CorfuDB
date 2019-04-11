@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.cache.Cache;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
@@ -108,7 +107,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         // Verify that write to address 0 is cached and that the write to address 1 isn't cached
 
-        Cache<Long, ILogData> clientCache = r.getAddressSpaceView().getReadCache();
+        LoadingCache<Long, ILogData> clientCache = r.getAddressSpaceView().getReadCache();
 
         assertThat(clientCache.getIfPresent(0L)).isNotNull();
         assertThat(clientCache.getIfPresent(1L)).isNull();
