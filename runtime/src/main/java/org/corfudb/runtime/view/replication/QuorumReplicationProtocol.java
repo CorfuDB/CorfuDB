@@ -7,17 +7,13 @@
 package org.corfudb.runtime.view.replication;
 
 import java.time.Duration;
-import java.util.AbstractMap;
 import java.util.Comparator;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
-import com.google.common.collect.Range;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -43,8 +39,6 @@ import org.corfudb.util.Holder;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
-
-import javax.annotation.Nonnull;
 
 /**
  * Created by kspirov on 4/23/17.
@@ -102,12 +96,6 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         } catch (RuntimeException e) {
             throw e;
         }
-    }
-
-    @Override
-    public Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .collect(Collectors.toMap(addr -> addr, addr -> read(runtimeLayout, addr)));
     }
 
     /**

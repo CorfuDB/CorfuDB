@@ -136,7 +136,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                             .getLogUnitClient(startAddress, numUnits - 1).read(address))
                             .getAddresses().get(address);
                     // if value is null, fill the hole and get the value.
-                    if (value == null || value.isEmpty()) {
+                    if (value == null) {
                         holeFill(runtimeLayout, address);
                         value = peek(runtimeLayout, address);
                     }
@@ -145,6 +145,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
             returnResult.put(entry.getKey(), value);
         }
+
         return returnResult;
     }
 
