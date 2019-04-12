@@ -58,8 +58,10 @@ public class BaseClient implements IClient {
      * @return Completable future which returns true on successful epoch set.
      */
     public CompletableFuture<Boolean> setRemoteEpoch(long newEpoch) {
-        return router.sendMessageAndGetCompletable(
-                new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch).setEpoch(epoch));
+        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch).setEpoch(epoch);
+        log.info("setRemoteEpoch: send SET_EPOCH from me(clientId={}) to new epoch {}",
+                msg.getClientID(), epoch);
+        return router.sendMessageAndGetCompletable(msg);
     }
 
     public CompletableFuture<VersionInfo> getVersionInfo() {
