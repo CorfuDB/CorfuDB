@@ -6,12 +6,11 @@ import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.junit.Test;
-
-import java.util.Arrays;
 
 public class PollReportTest {
 
@@ -25,7 +24,7 @@ public class PollReportTest {
 
         final long epoch = 1;
         PollReport pollReport = PollReport.builder()
-                .responsiveServers(Arrays.asList("a"))
+                .responsiveServers(ImmutableList.of("a"))
                 .wrongEpochs(ImmutableMap.of("a", epoch))
                 .clusterState(clusterState)
                 .build();
@@ -47,7 +46,7 @@ public class PollReportTest {
 
         final long epoch = 1;
         PollReport pollReport = PollReport.builder()
-                .responsiveServers(Arrays.asList("a", "b", "c"))
+                .responsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
                 .clusterState(clusterState)
                 .build();
@@ -74,7 +73,7 @@ public class PollReportTest {
 
         final long epoch = 1;
         PollReport pollReport = PollReport.builder()
-                .responsiveServers(Arrays.asList("a", "b", "c"))
+                .responsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
                 .clusterState(clusterState)
                 .build();
@@ -98,7 +97,7 @@ public class PollReportTest {
         final long epoch = 1;
 
         PollReport pollReport = PollReport.builder()
-                .responsiveServers(Arrays.asList("a", "b"))
+                .responsiveServers(ImmutableList.of("a", "b"))
                 .wrongEpochs(ImmutableMap.of("a", epoch, "b", epoch, "c", epoch))
                 .clusterState(clusterState)
                 .build();

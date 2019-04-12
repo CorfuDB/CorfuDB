@@ -21,7 +21,7 @@ import java.util.concurrent.CompletableFuture;
  * Provides list of servers in the cluster with higher epochs.
  * Builds the {@link ClusterState} and local {@link NodeState}.
  *
- * The collectors navigates via list of requests represented as CompletableFuture-s
+ * The collector navigates via list of requests represented as CompletableFuture-s
  * and collecting information about cluster.
  */
 @Builder
@@ -54,7 +54,7 @@ public class ClusterStateCollector {
     }
 
     /**
-     * Provides list of servers contains different epochs to this server.
+     * Provides list of servers containing different epochs to this server.
      *
      * @return map of endpoint:epoch entries
      */

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
@@ -12,7 +13,6 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -45,7 +45,7 @@ public class PollReport {
      * List of responsive servers in a current layout
      */
     @NonNull
-    private final List<String> responsiveServers;
+    private final ImmutableList<String> responsiveServers;
 
     /**
      * Returns all connected nodes to the current node including nodes with higher epoch.

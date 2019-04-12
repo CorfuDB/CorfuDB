@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
 
@@ -20,8 +21,19 @@ import java.util.concurrent.CompletableFuture;
 
 public class ClusterStateCollectorTest {
 
+    /**
+     * Checks the aggregated cluster state.
+     * Cluster state is:
+     * - node A is a local node
+     * - node A connected to node B,
+     * - node C - replied with wrong epoch exception
+     * The test contains following scenarios:
+     * - node A: check that node A is connected to all other nodes
+     * - node B: connected to A
+     * - node C: the node state is {@link NodeConnectivityType.UNAVAILABLE}
+     */
     @Test
-    public void testAggregatedState(){
+    public void testAggregatedState() {
         final String localEndpoint = "a";
 
         ClusterState predefinedCluster = ClusterState.buildClusterState(
@@ -60,7 +72,7 @@ public class ClusterStateCollectorTest {
         NodeState localNodeState = clusterState.getNode(localEndpoint).get();
         NodeConnectivity localNodeConnectivity = localNodeState.getConnectivity();
         assertThat(localNodeState.isConnected()).isTrue();
-        assertThat(localNodeConnectivity.getConnectedNodes()).containsExactly("a", "b" ,"c");
+        assertThat(localNodeConnectivity.getConnectedNodes()).containsExactly("a", "b", "c");
         assertThat(localNodeConnectivity.getFailedNodes()).isEmpty();
 
         NodeState nodeBState = clusterState.getNode("b").get();
@@ -71,10 +83,12 @@ public class ClusterStateCollectorTest {
         assertThat(nodeCState.isConnected()).isFalse();
     }
 
+    /**
+     * Check that the collector can collect wrong epochs from the cluster info classes.
+     */
     @Test
-    public void testWrongEpochs(){
+    public void testWrongEpochs() {
         final String localEndpoint = "a";
-        final int timeout = 10;
 
         Map<String, CompletableFuture<NodeState>> clusterConnectivity = new HashMap<>();
 
@@ -86,7 +100,7 @@ public class ClusterStateCollectorTest {
                 NodeState.builder().build()
         );
 
-        clusterConnectivity.put("", nodeAState);
+        clusterConnectivity.put("a", nodeAState);
         clusterConnectivity.put("c", wrongEpochCf);
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
