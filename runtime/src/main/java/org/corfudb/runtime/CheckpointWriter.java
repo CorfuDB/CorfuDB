@@ -141,8 +141,8 @@ public class CheckpointWriter<T extends Map> {
             startCheckpoint(snapshot, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
-            log.info("appendCheckpoint: completed checkpoint for {} at snapshot {} in {} ms", streamId, snapshot,
-                    System.currentTimeMillis() - start);
+            log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
+                    streamId, entries.size(), snapshot, System.currentTimeMillis() - start);
             return snapshot;
         } finally {
             rt.getObjectsView().TXEnd();
