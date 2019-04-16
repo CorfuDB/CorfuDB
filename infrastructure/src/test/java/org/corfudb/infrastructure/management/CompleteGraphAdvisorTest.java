@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.management;
 
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
+import static org.corfudb.protocols.wireprotocol.ClusterState.buildClusterState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.Assert.assertEquals;
@@ -28,16 +30,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class CompleteGraphAdvisorTest {
-    private static final List<String> NODE_NAMES = Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k");
 
     @Test
     public void testFailedServer_disconnected_c() {
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor("a");
+        final String localEndpoint = "a";
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
+                localEndpoint,
                 nodeState("a", OK, OK, FAILED),
                 nodeState("b", OK, OK, FAILED),
-                unavailable("c")
+                NodeState.getUnavailableNodeState("c")
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
@@ -48,9 +51,11 @@ public class CompleteGraphAdvisorTest {
 
     @Test
     public void testFailedServer_asymmetricFailureBetween_b_c() {
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor("a");
+        final String localEndpoint = "a";
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
+                localEndpoint,
                 nodeState("a", OK, OK, OK),
                 nodeState("b", OK, OK, FAILED),
                 nodeState("c", OK, FAILED, OK)
@@ -68,12 +73,14 @@ public class CompleteGraphAdvisorTest {
      */
     @Test
     public void testFailedServer_allDisconnected_from_b_perspective() {
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor("b");
+        final String localEndpoint = "b";
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
-                unavailable("a"),
+                localEndpoint,
+                NodeState.getUnavailableNodeState("a"),
                 nodeState("b", OK, OK, OK),
-                unavailable("c")
+                NodeState.getUnavailableNodeState("c")
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
@@ -95,19 +102,22 @@ public class CompleteGraphAdvisorTest {
         CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor("c");
 
         ClusterState nodeAClusterState = buildClusterState(
+                "a",
                 nodeState("a", OK, OK, OK),
                 nodeState("b", OK, OK, FAILED),
                 nodeState("c", OK, FAILED, OK)
         );
 
         ClusterState nodeBClusterState = buildClusterState(
+                "b",
                 nodeState("a", OK, OK, OK),
                 nodeState("b", OK, OK, FAILED),
-                unavailable("c")
+                NodeState.getUnavailableNodeState("c")
         );
         ClusterState nodeCClusterState = buildClusterState(
+                "c",
                 nodeState("a", OK, OK, OK),
-                unavailable("b"),
+                NodeState.getUnavailableNodeState("b"),
                 nodeState("c", OK, FAILED, OK)
         );
 
@@ -129,61 +139,21 @@ public class CompleteGraphAdvisorTest {
 
     @Test
     public void testHealedServer() {
-        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor("c");
+        final String localEndpoint = "c";
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
 
         ClusterState clusterState = buildClusterState(
+                localEndpoint,
                 nodeState("a", OK, FAILED, OK),
                 nodeState("b", FAILED, OK, OK),
                 nodeState("c", OK, OK, OK)
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
-        unresponsiveServers.add("c");
+        unresponsiveServers.add(localEndpoint);
 
         Optional<NodeRank> healedServer = advisor.healedServer(clusterState, unresponsiveServers);
         assertTrue(healedServer.isPresent());
-        assertEquals(new NodeRank("c", clusterState.size()), healedServer.get());
-    }
-
-    private NodeState nodeState(String endpoint, ConnectionStatus... connectionStates) {
-        Map<String, ConnectionStatus> connectivity = new HashMap<>();
-        for (int i = 0; i < connectionStates.length; i++) {
-            connectivity.put(NODE_NAMES.get(i), connectionStates[i]);
-        }
-
-        NodeConnectivity nodeConnectivity = NodeConnectivity.builder()
-                .endpoint(endpoint)
-                .type(NodeConnectivityType.CONNECTED)
-                .connectivity(ImmutableMap.copyOf(connectivity))
-                .build();
-
-        return NodeState.builder()
-                .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new HeartbeatTimestamp(0, 0))
-                .connectivity(nodeConnectivity)
-                .build();
-    }
-
-    private ClusterState buildClusterState(NodeState... states) {
-        Map<String, NodeState> graph = Arrays.stream(states)
-                .collect(Collectors.toMap(state -> state.getConnectivity().getEndpoint(), Function.identity()));
-
-        return ClusterState.builder()
-                .nodes(ImmutableMap.copyOf(graph))
-                .build();
-    }
-
-    private NodeState unavailable(String endpoint) {
-        NodeConnectivity connectivity = NodeConnectivity.builder()
-                .endpoint(endpoint)
-                .type(NodeConnectivityType.UNAVAILABLE)
-                .connectivity(ImmutableMap.of())
-                .build();
-
-        return new NodeState(
-                connectivity,
-                new HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
-                SequencerMetrics.UNKNOWN
-        );
+        assertEquals(new NodeRank(localEndpoint, clusterState.size()), healedServer.get());
     }
 }
