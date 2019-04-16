@@ -1007,8 +1007,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == l.getEpoch())
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == l.getEpoch()) {
                 break;
+            }
             corfuRuntime.invalidateLayout();
         }
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
