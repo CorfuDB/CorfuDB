@@ -7,8 +7,11 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Timer;
+import com.codahale.metrics.jvm.BufferPoolMetricSet;
+import com.codahale.metrics.jvm.ClassLoadingGaugeSet;
 import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
@@ -18,6 +21,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import io.netty.buffer.PooledByteBufAllocator;
 
 import java.io.File;
+import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
 
@@ -35,8 +39,12 @@ public class MetricsUtils {
         // Preventing instantiation of this utility class
     }
 
-    private static final FileDescriptorRatioGauge metricsJVMFdGauge =
-            new FileDescriptorRatioGauge();
+    private static final Gauge<Long> metricsJVMUptime =
+            () -> ManagementFactory.getRuntimeMXBean().getUptime();
+    private static final RatioGauge metricsJVMFdGauge = new FileDescriptorRatioGauge();
+    private static final MetricSet metricsBuffPooled =
+            new BufferPoolMetricSet(ManagementFactory.getPlatformMBeanServer());
+    private static final MetricSet metricsClassLoadingGauge = new ClassLoadingGaugeSet();
     private static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
     private static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
     private static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
@@ -211,15 +219,19 @@ public class MetricsUtils {
     }
 
     // If enabled, setup reporting of JVM metrics including garbage collection,
-    // memory, and thread statistics.
+    // memory, thread statistics, buffer, uptime, class loading, netty's direct and heap
+    // allocations.
     private static void setupJvmMetrics(@NonNull MetricRegistry metrics) {
         if (!metricsJvmCollectionEnabled) return;
 
         try {
+            metrics.register("jvm.buffers", metricsBuffPooled);
+            metrics.register("jvm.class-loading", metricsClassLoadingGauge);
+            metrics.register("jvm.file-descriptors-used", metricsJVMFdGauge);
             metrics.register("jvm.gc", metricsJVMGC);
             metrics.register("jvm.memory", metricsJVMMem);
             metrics.register("jvm.thread", metricsJVMThread);
-            metrics.register("jvm.file-descriptors-used", metricsJVMFdGauge);
+            metrics.register("jvm.uptime", metricsJVMUptime);
             metrics.register("corfu.netty.mem.pooled-byte-buf.direct", getNettyPooledDirectMemGauge());
             metrics.register("corfu.netty.mem.pooled-byte-buf.heap", getNettyPooledHeapMemGauge());
         } catch (IllegalArgumentException e) {
