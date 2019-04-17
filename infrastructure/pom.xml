@@ -11,6 +11,10 @@
 
     <artifactId>infrastructure</artifactId>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
     <build>
         <plugins>
             <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
@@ -39,9 +43,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <outputFile>
-                        ${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar
-                    </outputFile>
+                    <shadedArtifactAttached>true</shadedArtifactAttached>
+                    <shadedClassifierName>shaded</shadedClassifierName>
                 </configuration>
             </plugin>
         </plugins>
