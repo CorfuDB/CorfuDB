@@ -2,15 +2,10 @@ package org.corfudb.runtime.view;
 
 import static org.corfudb.util.Utils.getTails;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Iterables;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -30,13 +25,13 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.metrics.Gauge;
+import org.corfudb.util.metrics.StatsLogger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -44,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 
@@ -71,14 +65,13 @@ public class AddressSpaceView extends AbstractView {
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
-        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                                         this.hashCode());
-        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
-        metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
-        metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
-        metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
-        metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
+        StatsLogger statsLogger = runtime.getMetricsProvider().getLogger(getClass().getName());
+
+        statsLogger.registerGauge( "cache-size", (Gauge<Long>) readCache::size);
+        statsLogger.registerGauge("evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
+        statsLogger.registerGauge("hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
+        statsLogger.registerGauge("hits", (Gauge<Long>) () -> readCache.stats().hitCount());
+        statsLogger.registerGauge("misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
 

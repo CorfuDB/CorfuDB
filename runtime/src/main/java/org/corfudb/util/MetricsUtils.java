@@ -239,26 +239,6 @@ public class MetricsUtils {
         }
     }
 
-    public static Timer.Context getConditionalContext(@NonNull Timer t) {
-        return getConditionalContext(metricsCollectionEnabled, t);
-    }
-
-    public static Timer.Context getConditionalContext(boolean enabled, @NonNull Timer t) {
-        return enabled ? t.time() : null;
-    }
-
-    public static void stopConditionalContext(Timer.Context context) {
-        if (context != null) {
-            context.stop();
-        }
-    }
-
-    public static void incConditionalCounter(boolean enabled, @NonNull Counter counter, long amount) {
-        if (enabled) {
-            counter.inc(amount);
-        }
-    }
-
     /**
      * return a gauge on direct memory used by netty's PooledByteBufAllocator
      */
@@ -331,36 +311,5 @@ public class MetricsUtils {
                         0L;
             }
         };
-    }
-
-    /**
-     * This method adds different properties of provided instance of {@link Cache} to the
-     * indicated metrics registry. The added properties of cache are:
-     *
-     * cache.object-counts: estimated size of cache.
-     * cache.evictions : number of cache evictions
-     * cache.hit-rate : hit rate of cache.
-     * cache.hits :
-     * cache.misses :
-     *
-     *
-     * @param metrics
-     * @param cache
-     */
-    public static void addCacheMeasurerFor(@NonNull MetricRegistry metrics, Cache cache) {
-        try {
-            metrics.register("cache.object-counts." + cache.toString(),
-                             (Gauge<Long>) cache::estimatedSize);
-            metrics.register("cache.evictions." + cache.toString(),
-                             (Gauge<Long>) cache.stats()::evictionCount);
-            metrics.register("cache.hit-rate." + cache.toString(),
-                             (Gauge<Double>) cache.stats()::hitRate);
-            metrics.register("cache.hits." + cache.toString(),
-                             (Gauge<Long>) cache.stats()::hitCount);
-            metrics.register("cache.misses." + cache.toString(),
-                             (Gauge<Long>) cache.stats()::missCount);
-        } catch (IllegalArgumentException e) {
-            // Re-registering metrics during test runs, not a problem
-        }
     }
 }

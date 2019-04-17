@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.util.metrics.StatsLogger;
 
 /**
  * Abstract clients stamped with an epoch to send messages stamped with the required epoch.

@@ -1,7 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.Timer;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.bootstrap.Bootstrap;
@@ -11,7 +9,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
@@ -20,7 +17,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.concurrent.GlobalEventExecutor;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -49,7 +45,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.InboundMsgFilterHandler;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
@@ -63,6 +58,8 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 
 
 /**
@@ -122,11 +119,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     private volatile Channel channel = null;
 
-    /** Whether to shutdown the {@code eventLoopGroup} or not. Only applies when
-     *  a deprecated constructor (which generates its own {@link EventLoopGroup} is used.
-     */
-    private boolean shutdownEventLoop = false;
-
     /**
      * Whether or not this router is shutdown.
      */
@@ -151,7 +143,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     volatile CompletableFuture<Void> connectionFuture;
 
     private SslContext sslContext;
-    private final Map<CorfuMsgType, String> timerNameCache;
+
+    StatsLogger statsLogger;
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the
@@ -165,17 +158,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public NettyClientRouter(@Nonnull NodeLocator node,
         @Nonnull EventLoopGroup eventLoopGroup,
         @Nonnull CorfuRuntimeParameters parameters) {
+
+        this.statsLogger = parameters.getMetricsProvider().getLogger(getClass().getName());
+
         this.node = node;
         this.parameters = parameters;
-
-        // Set timer mapping
-        ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
-        for (CorfuMsgType type : CorfuMsgType.values()) {
-            mapBuilder.put(type,
-                    CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase());
-        }
-
-        timerNameCache = mapBuilder.build();
 
         timeoutConnect = parameters.getConnectionTimeout().toMillis();
         timeoutResponse = parameters.getRequestTimeout().toMillis();
@@ -421,11 +408,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
 
         // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(message.getMsgType()));
+        final Timer roundTripMsgTimer = statsLogger.getTimer(CorfuComponent.CLIENT_ROUTER.toString()
+                + message.getMsgType().name());
 
-        final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(isEnabled, roundTripMsgTimer);
+
+        final Timer.Context roundTripMsgContext = roundTripMsgTimer.getContext();
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -448,7 +435,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         // Generate a benchmarked future to measure the underlying request
         final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(roundTripMsgContext);
+            roundTripMsgContext.stop();
             return x;
         });
 
@@ -679,7 +666,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     .setDaemon(true)
                     .setNameFormat(parameters.getNettyEventLoopThreadFormat())
                     .build()), parameters);
-        shutdownEventLoop = true;
     }
 
     @Deprecated

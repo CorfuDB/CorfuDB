@@ -32,6 +32,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.Utils;
+import org.corfudb.util.metrics.StatsLogger;
 
 import java.lang.invoke.MethodHandles;
 import java.util.List;
@@ -123,7 +124,10 @@ public class LogUnitServer extends AbstractServer {
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
 
-        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        StatsLogger statsLogger = serverContext.getMetricsProvider().getLogger(getClass().getName());
+
+        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES,
+                ServerContext.SHUTDOWN_TIMER, statsLogger);
     }
 
     /**

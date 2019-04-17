@@ -2,9 +2,6 @@ package org.corfudb.runtime.object;
 
 import static java.lang.Long.min;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -24,6 +21,10 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
+import org.corfudb.util.metrics.Counter;
+import org.corfudb.util.metrics.MetricsProvider;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 import org.corfudb.util.serializer.ISerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,17 +100,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     final Object[] args;
 
-    private final MetricRegistry metrics;
     /**
      * Metrics: meter (counter), histogram.
      */
-    private final String mpObj;
     private final Timer timerAccess;
     private final Timer timerLogWrite;
     private final Timer timerTxn;
     private final Timer timerUpcall;
-    private final Counter counterAccessOptimistic;
-    private final Counter counterAccessLocked;
     private final Counter counterTxnRetry1;
     private final Counter counterTxnRetryN;
 
@@ -138,7 +135,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
-                             Set<String> resetSet
+                             Set<String> resetSet,
+                             MetricsProvider metricsProvider
     ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -151,18 +149,16 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 upcallTargetMap, undoRecordTargetMap,
-                undoTargetMap, resetSet);
+                undoTargetMap, resetSet, rt.getMetricsProvider().getLogger(getClass().getName()));
 
-        metrics = CorfuRuntime.getDefaultMetrics();
-        mpObj = CorfuComponent.OBJECT.toString();
-        timerAccess = metrics.timer(mpObj + "access");
-        timerLogWrite = metrics.timer(mpObj + "log-write");
-        timerTxn = metrics.timer(mpObj + "txn");
-        timerUpcall = metrics.timer(mpObj + "upcall");
-        counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
-        counterAccessLocked = metrics.counter(mpObj + "access-locked");
-        counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
-        counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+        StatsLogger statsLogger = metricsProvider.getLogger(getClass().getName());
+
+        timerAccess = statsLogger.getTimer("access");
+        timerLogWrite = statsLogger.getTimer("log-write");
+        timerTxn = statsLogger.getTimer("txn");
+        timerUpcall = statsLogger.getTimer("upcall");
+        counterTxnRetry1 = statsLogger.getCounter("txn-first-retry");
+        counterTxnRetryN = statsLogger.getCounter("txn-extra-retries");
     }
 
     /**
@@ -172,7 +168,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {
+        try (Timer.Context context = timerAccess.getContext()) {
             return accessInner(accessMethod, conflictObject, isEnabled);
         }
     }
@@ -221,7 +217,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
+        try (Timer.Context context = timerLogWrite.getContext()) {
             return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
         }
     }
@@ -257,7 +253,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
+        try (Timer.Context context = timerUpcall.getContext()) {
             return getUpcallResultInner(timestamp, conflictObject);
         }
     }
@@ -345,7 +341,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
+        try (Timer.Context context = timerTxn.getContext()) {
             return TXExecuteInner(txFunction, isEnabled);
         }
     }
@@ -386,10 +382,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 }
 
                 if (retries == 1) {
-                    MetricsUtils
-                            .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
+                    counterTxnRetry1.inc();
                 }
-                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
+                counterTxnRetryN.inc();
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
                 Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);

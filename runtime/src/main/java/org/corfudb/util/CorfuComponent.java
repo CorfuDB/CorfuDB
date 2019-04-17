@@ -6,6 +6,7 @@ package org.corfudb.util;
  *
  * Created by Sam Behnam on 5/8/18.
  */
+//TODO(Maithem): remove this class
 public enum CorfuComponent {
     // Runtime components
     ADDRESS_SPACE_VIEW("corfu.runtime.as-view."),

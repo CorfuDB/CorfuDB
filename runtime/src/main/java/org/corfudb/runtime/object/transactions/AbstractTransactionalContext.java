@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -21,6 +19,8 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -141,14 +141,8 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
 
-    /**
-     * Metrics related fields for registry and the context marking the beginning of a transaction.
-     */
-    @Getter
-    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +
-            "txn-op-duration";
-    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);
+    private final Timer txDurationTimer;
+
     @Getter
     private final Timer.Context txOpDurationContext;
 
@@ -157,8 +151,10 @@ public abstract class AbstractTransactionalContext implements
         this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
-
-        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);
+        StatsLogger statsLogger = transaction.getRuntime().getMetricsProvider().getLogger(getClass().getName());
+        txDurationTimer = statsLogger.getTimer(CorfuComponent.OBJECT.toString() +
+                "txn-op-duration");
+        txOpDurationContext = txDurationTimer.getContext();
 
         parentContext = TransactionalContext.getCurrentContext();
 

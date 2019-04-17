@@ -19,6 +19,7 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.util.metrics.StatsLogger;
 
 
 /**

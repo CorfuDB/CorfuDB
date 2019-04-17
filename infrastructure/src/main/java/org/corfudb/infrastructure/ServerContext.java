@@ -1,8 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
-
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -19,9 +16,10 @@ import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
+import org.corfudb.util.metrics.MetricsProvider;
+import org.corfudb.util.metrics.NullMetricsProvider;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -126,11 +124,11 @@ public class ServerContext implements AutoCloseable {
     private final String localEndpoint;
 
     @Getter
-    private static final MetricRegistry metrics = new MetricRegistry();
-
-    @Getter
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PREFIX_PHASE_1, PREFIX_PHASE_2, PREFIX_LAYOUTS);
+
+    @Getter
+    private final MetricsProvider metricsProvider = new NullMetricsProvider();
 
     /**
      * Returns a new ServerContext.
@@ -161,11 +159,6 @@ public class ServerContext implements AutoCloseable {
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
         localEndpoint = NodeLocator.getLegacyEndpoint(nodeLocator);
-
-        // Metrics setup & reporting configuration
-        if (!isMetricsReportingSetUp(metrics)) {
-            MetricsUtils.metricsReportingSetup(metrics);
-        }
     }
 
     int getBaseServerThreadCount() {

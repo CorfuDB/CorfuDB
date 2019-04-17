@@ -1,14 +1,13 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.collect.Lists;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,31 +28,19 @@ public class SequencerView extends AbstractView {
     private Timer sequencerDeprecatedNextOneStream;
     private Timer sequencerDeprecatedNextMultipleStream;
     private Timer sequencerTrimCache;
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
 
-        // Setup timers
-        setupTimers();
-    }
-
-    /**
-     * Set up timers for different sequencer request from the client perspective
-     */
-    private void setupTimers() {
-        sequencerQuery = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "query");
-        sequencerTrimCache = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "trim-cache");
-        sequencerNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "particular-next");
-        sequencerNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "multiple-next");
-        sequencerDeprecatedNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "deprecated-particular-next");
-        sequencerDeprecatedNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "deprecated-multiple-next");
+        StatsLogger statsLogger = runtime.getMetricsProvider().getLogger(getClass().getName());
+        sequencerQuery = statsLogger.getTimer(CorfuComponent.CLIENT_SEQUENCER + "query");
+        sequencerTrimCache = statsLogger.getTimer(CorfuComponent.CLIENT_SEQUENCER + "trim-cache");
+        sequencerNextOneStream = statsLogger.getTimer(CorfuComponent.CLIENT_SEQUENCER + "particular-next");
+        sequencerNextMultipleStream = statsLogger.getTimer(CorfuComponent.CLIENT_SEQUENCER + "multiple-next");
+        sequencerDeprecatedNextOneStream = statsLogger.getTimer(CorfuComponent.CLIENT_SEQUENCER
+                + "deprecated-particular-next");
+        sequencerDeprecatedNextMultipleStream = statsLogger.getTimer(CorfuComponent.CLIENT_SEQUENCER
+                + "deprecated-multiple-next");
     }
 
     /**
@@ -64,7 +51,7 @@ public class SequencerView extends AbstractView {
      * @return the global tail or a list of tails
      */
     public TokenResponse query(UUID... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)){
+        try (Timer.Context context = sequencerQuery.getContext()){
             if (streamIds.length == 0) {
                 return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Collections.emptyList(), 0)));
@@ -82,7 +69,7 @@ public class SequencerView extends AbstractView {
      * @return The first token retrieved.
      */
     public TokenResponse next(UUID ... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)){
+        try (Timer.Context context = sequencerNextOneStream.getContext()){
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Arrays.asList(streamIds), 1)));
         }
@@ -97,7 +84,7 @@ public class SequencerView extends AbstractView {
      * @return First token to be written for the streams if there are no conflicts
      */
     public TokenResponse next(TxResolutionInfo conflictInfo, UUID ... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextMultipleStream)) {
+        try (Timer.Context context = sequencerNextMultipleStream.getContext()) {
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));
         }
@@ -116,7 +103,7 @@ public class SequencerView extends AbstractView {
      */
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerDeprecatedNextOneStream)){
+        try (Timer.Context context = sequencerDeprecatedNextOneStream.getContext()){
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Lists.newArrayList(streamIDs), numTokens)));
         }
@@ -125,14 +112,14 @@ public class SequencerView extends AbstractView {
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens,
                                    TxResolutionInfo conflictInfo) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerDeprecatedNextMultipleStream)){
+        try (Timer.Context context = sequencerDeprecatedNextMultipleStream.getContext()){
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
         }
     }
 
     public void trimCache(long address) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerTrimCache)){
+        try (Timer.Context context = sequencerTrimCache.getContext()){
             runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
         }
     }

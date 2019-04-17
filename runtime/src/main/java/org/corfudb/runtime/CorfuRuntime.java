@@ -39,11 +39,12 @@ import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+import org.corfudb.util.metrics.MetricsProvider;
+import org.corfudb.util.metrics.NullMetricsProvider;
 
 import javax.annotation.Nonnull;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -431,6 +432,9 @@ public class CorfuRuntime {
         volatile Runnable beforeRpcHandler = () -> {
         };
         //endregion
+
+        @Default
+        MetricsProvider metricsProvider = NullMetricsProvider.INSTANCE;
     }
 
     /**
@@ -481,6 +485,11 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
+
+    @Getter
+    //TODO(Maithem): make final
+    // dont pass this in a class field vairable
+    private MetricsProvider metricsProvider = NullMetricsProvider.INSTANCE;
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -536,17 +545,6 @@ public class CorfuRuntime {
      * Latest layout seen by the runtime.
      */
     private volatile Layout latestLayout = null;
-
-    @Getter
-    private static final MetricRegistry defaultMetrics = new MetricRegistry();
-
-    /** Initialize a default static registry which through that different metrics
-     * can be registered and reported */
-    static {
-        synchronized (defaultMetrics) {
-            MetricsUtils.metricsReportingSetup(defaultMetrics);
-        }
-    }
 
     /**
      * Register SystemDownHandler.

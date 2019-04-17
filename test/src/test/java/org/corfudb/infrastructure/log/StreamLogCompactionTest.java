@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
-import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.metrics.Counter;
+import org.corfudb.util.metrics.NullStatsLogger;
+import org.corfudb.util.metrics.StatsLogger;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -17,14 +19,12 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class StreamLogCompactionTest extends AbstractCorfuTest {
 
-    private static MetricRegistry metricRegistry;
+    StatsLogger statsLogger;
+
+    Counter streamCompactTimer = statsLogger.getCounter(CorfuComponent.INFRA_STREAM_OPS + "compaction");
 
     @BeforeClass
     public static void setUpMetrics() {
-        metricRegistry = ServerContext.getMetrics();
-        if (!MetricsUtils.isMetricsCollectionEnabled()) {
-            MetricsUtils.metricsReportingSetup(metricRegistry);
-        }
     }
 
     /**
@@ -50,7 +50,8 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
                                                                  initialDelay,
                                                                  period,
                                                                  TimeUnit.MILLISECONDS,
-                                                                 PARAMETERS.TIMEOUT_VERY_SHORT);
+                                                                 PARAMETERS.TIMEOUT_VERY_SHORT,
+                                                                 NullStatsLogger.INSTANCE);
 
         // If metrics are enabled, set an expectation of two compactions more than current
         // compaction count
@@ -67,8 +68,6 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
     }
 
     private long getCompactionCounter() {
-        return metricRegistry
-                .timer(StreamLogCompaction.STREAM_COMPACT_METRIC)
-                .getCount();
+        return streamCompactTimer.getCount();
     }
 }

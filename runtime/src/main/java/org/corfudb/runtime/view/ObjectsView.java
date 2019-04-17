@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.Timer;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,7 +21,8 @@ import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -36,8 +36,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    private static final String TXN_COMMIT_TIMER_NAME =
-            CorfuComponent.OBJECT.toString() + "txn-commit-duration";
     /**
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
@@ -48,12 +46,17 @@ public class ObjectsView extends AbstractView {
     @Setter
     boolean transactionLogging = false;
 
-
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
+    Timer txCommitDurationTimer;
+
+
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
+        txCommitDurationTimer = runtime.getMetricsProvider()
+                .getLogger(getClass().getName())
+                .getTimer(CorfuComponent.OBJECT.toString() + "txn-commit-duration");
     }
 
     /**
@@ -154,10 +157,7 @@ public class ObjectsView extends AbstractView {
             context.getTxOpDurationContext().stop();
         }
 
-        // Create a timer to measure the transaction commit duration
-        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);
-        try (Timer.Context txCommitDuration =
-                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){
+        try (Timer.Context txCommitDuration = txCommitDurationTimer.getContext()){
             return TransactionalContext.getCurrentContext().commitTransaction();
         } catch (TransactionAbortedException e) {
             log.warn("TXEnd[{}] Aborted Exception {}", context, e);

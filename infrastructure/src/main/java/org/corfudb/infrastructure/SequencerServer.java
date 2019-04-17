@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
@@ -22,9 +21,8 @@ import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
+import org.corfudb.util.metrics.StatsLogger;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
@@ -99,11 +97,6 @@ public class SequencerServer extends AbstractServer {
     private final Map<UUID, Long> streamTailToGlobalTailMap = new HashMap<>();
 
     /**
-     * A map to cache the name of timers to avoid creating timer names on each call.
-     */
-    private final Map<Byte, String> timerNameCache = new HashMap<>();
-
-    /**
      * Handler for this server.
      */
     @Getter
@@ -115,6 +108,8 @@ public class SequencerServer extends AbstractServer {
     @Getter
     @Setter
     private volatile long sequencerEpoch = Layout.INVALID_EPOCH;
+
+    StatsLogger statsLogger;
 
     /**
      * The lower bound of the consecutive epoch range that this sequencer
@@ -144,8 +139,6 @@ public class SequencerServer extends AbstractServer {
         globalLogTail = config.getInitialToken();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
-
-        setUpTimerNameCache();
     }
 
     @Override
@@ -166,16 +159,6 @@ public class SequencerServer extends AbstractServer {
     @Override
     public ExecutorService getExecutor() {
         return executor;
-    }
-
-    /**
-     * Initialized the HashMap with the name of timers for different types of requests
-     */
-    private void setUpTimerNameCache() {
-        timerNameCache.put(TokenRequest.TK_QUERY, CorfuComponent.INFRA_SEQUENCER + "query-token");
-        timerNameCache.put(TokenRequest.TK_RAW, CorfuComponent.INFRA_SEQUENCER + "raw-token");
-        timerNameCache.put(TokenRequest.TK_MULTI_STREAM, CorfuComponent.INFRA_SEQUENCER + "multi-stream-token");
-        timerNameCache.put(TokenRequest.TK_TX, CorfuComponent.INFRA_SEQUENCER + "tx-token");
     }
 
     /**
@@ -423,44 +406,30 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
     public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r) {
+                             ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Token request. Msg: {}", msg);
 
         TokenRequest req = msg.getPayload();
-        final Timer timer = getTimer(req.getReqType());
 
         // dispatch request handler according to request type while collecting the timer metrics
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-            switch (req.getReqType()) {
-                case TokenRequest.TK_QUERY:
-                    handleTokenQuery(msg, ctx, r);
-                    return;
+        switch (req.getReqType()) {
+            case TokenRequest.TK_QUERY:
+                handleTokenQuery(msg, ctx, r);
+                return;
 
-                case TokenRequest.TK_RAW:
-                    handleRawToken(msg, ctx, r);
-                    return;
+            case TokenRequest.TK_RAW:
+                handleRawToken(msg, ctx, r);
+                return;
 
-                case TokenRequest.TK_TX:
-                    handleTxToken(msg, ctx, r);
-                    return;
+            case TokenRequest.TK_TX:
+                handleTxToken(msg, ctx, r);
+                return;
 
-                default:
-                    handleAllocation(msg, ctx, r);
-                    return;
-            }
+            default:
+                handleAllocation(msg, ctx, r);
+                return;
         }
-    }
 
-    /**
-     * Return a timer based on the type of request. It will take the name from the cache
-     * initialized at construction of the sequencer server to avoid String concatenation.
-     *
-     * @param reqType type of a {@link TokenRequest} instance
-     * @return an instance {@link Timer} corresponding to the provided {@param reqType}
-     */
-    private Timer getTimer(byte reqType) {
-        final String timerName = timerNameCache.getOrDefault(reqType, CorfuComponent.INFRA_SEQUENCER + "unknown");
-        return ServerContext.getMetrics().timer(timerName);
     }
 
     /**

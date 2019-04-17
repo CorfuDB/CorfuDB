@@ -1,17 +1,15 @@
 package org.corfudb.runtime.object;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,6 +115,17 @@ public class VersionLockedObject<T> {
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
+    private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +
+            "vlo.optimistic-read";
+    private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +
+            "vlo.updated-object-read";
+    private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + "vlo.update";
+    private static final String VLO_GC = CorfuComponent.OBJECT.toString() + "vlo.gc";
+
+    Timer optimisticReadTimer;
+    Timer updatedObjectReadTimer;
+    Timer vloUpdateTimer;
+    Timer vloGcTimer;
 
     /**
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
@@ -134,7 +143,8 @@ public class VersionLockedObject<T> {
                                Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
                                Map<String, IUndoRecordFunction<T>> undoRecordTargets,
                                Map<String, IUndoFunction<T>> undoTargets,
-                               Set<String> resetSet) {
+                               Set<String> resetSet,
+                               StatsLogger statsLogger) {
         this.smrStream = smrStream;
 
         this.upcallTargetMap = upcallTargets;
@@ -148,6 +158,12 @@ public class VersionLockedObject<T> {
         this.upcallResults = new ConcurrentHashMap<>();
 
         lock = new StampedLock();
+
+        //TODO(Maithem): make this specific to the stream id
+        optimisticReadTimer = statsLogger.getTimer(VLO_OPTIMISTIC_READ);
+        updatedObjectReadTimer = statsLogger.getTimer(VLO_UPDATED_OBJECT_READ);
+        vloUpdateTimer = statsLogger.getTimer(VLO_UPDATE);
+        vloGcTimer = statsLogger.getTimer(VLO_GC);
     }
 
     /**
@@ -157,7 +173,7 @@ public class VersionLockedObject<T> {
     public void gc(long trimMark) {
         long ts = 0;
 
-        try (Timer.Context vloGcDuration = VloMetricsHelper.getVloGcContext()) {
+        try (Timer.Context vloGcDuration = vloGcTimer.getContext()) {
             ts = lock.writeLock();
             pendingUpcalls.removeIf(e -> e < trimMark);
             upcallResults.entrySet().removeIf(e -> e.getKey() < trimMark);
@@ -201,7 +217,7 @@ public class VersionLockedObject<T> {
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
-            try (Timer.Context optimistReadDuration = VloMetricsHelper.getOptimisticReadContext()) {
+            try (Timer.Context optimistReadDuration = optimisticReadTimer.getContext()) {
                 if (directAccessCheckFunction.apply(this)) {
                     log.trace("Access [{}] Direct (optimistic-read) access at {}",
                             this, getVersionUnsafe());
@@ -229,7 +245,7 @@ public class VersionLockedObject<T> {
         // Next, we just upgrade to a full write lock if the optimistic
         // read fails, since it means that the state of the object was
         // updated.
-        try (Timer.Context updateObjectReadDuration = VloMetricsHelper.getUpdatedObjectReadContext()) {
+        try (Timer.Context updateObjectReadDuration = updatedObjectReadTimer.getContext()) {
             // Attempt an upgrade
             ts = lock.tryConvertToWriteLock(ts);
             // Upgrade failed, try conversion again
@@ -268,7 +284,7 @@ public class VersionLockedObject<T> {
     public <R> R update(Function<VersionLockedObject<T>, R> updateFunction) {
         long ts = 0;
 
-        try (Timer.Context updateDuration = VloMetricsHelper.getVloUpdateContext()) {
+        try (Timer.Context updateDuration = vloUpdateTimer.getContext()) {
             ts = lock.writeLock();
             log.trace("Update[{}] (writelock)", this);
             return updateFunction.apply(this);
@@ -667,35 +683,5 @@ public class VersionLockedObject<T> {
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry);
         seek(globalAddress + 1);
-    }
-
-    /**
-     * This class includes the metrics registry and the timer names used within VersionLockedObject
-     * methods
-     */
-    private static class VloMetricsHelper {
-        private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +
-                "vlo.optimistic-read";
-        private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +
-                "vlo.updated-object-read";
-        private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + "vlo.update";
-        private static final String VLO_GC = CorfuComponent.OBJECT.toString() + "vlo.gc";
-
-        private static Timer.Context getOptimisticReadContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));
-        }
-
-        private  static Timer.Context getUpdatedObjectReadContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATED_OBJECT_READ));
-        }
-
-        private  static Timer.Context getVloUpdateContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATE));
-        }
-
-        private  static Timer.Context getVloGcContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_GC));
-        }
     }
 }

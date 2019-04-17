@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.metrics.StatsLogger;
 
 /**
  * A client to the layout server.

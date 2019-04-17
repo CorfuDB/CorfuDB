@@ -1,12 +1,11 @@
 package org.corfudb.infrastructure.log;
 
-import com.codahale.metrics.Timer;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -22,7 +21,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class StreamLogCompaction {
-    static final String STREAM_COMPACT_METRIC = CorfuComponent.INFRA_STREAM_OPS + "compaction";
 
     private final ThreadFactory threadFactory = new ThreadFactoryBuilder()
             .setDaemon(true)
@@ -32,7 +30,7 @@ public class StreamLogCompaction {
     /**
      * A timer that collect metrics about log compaction
      */
-    private final Timer compactionTimer = ServerContext.getMetrics().timer(STREAM_COMPACT_METRIC);
+    private final Timer compactionTimer;
 
     /**
      * A scheduler, which is used to schedule periodic stream log compaction for garbage collection.
@@ -42,11 +40,15 @@ public class StreamLogCompaction {
     private final Duration shutdownTimer;
 
     public StreamLogCompaction(StreamLog streamLog, long initialDelay, long period, TimeUnit timeUnit,
-                               Duration shutdownTimer) {
+                               Duration shutdownTimer, StatsLogger statsLogger) {
         this.shutdownTimer = shutdownTimer;
+
+        compactionTimer = statsLogger.scope(getClass().getName())
+                .getTimer(CorfuComponent.INFRA_STREAM_OPS + "compaction");
+
         Runnable task = () -> {
             log.debug("Start log compaction.");
-            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)){
+            try (Timer.Context context = compactionTimer.getContext()){
                 streamLog.compact();
             } catch (Exception ex) {
                 log.error("Can't compact stream log.", ex);

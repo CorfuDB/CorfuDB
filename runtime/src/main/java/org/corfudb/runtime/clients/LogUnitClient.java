@@ -1,11 +1,8 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Getter;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -22,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
 
@@ -53,19 +49,6 @@ public class LogUnitClient extends AbstractClient {
         return getRouter().getPort();
     }
 
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    private Timer.Context getTimerContext(String opName) {
-        final String timerName = String.format("%s%s:%s-%s",
-                CorfuComponent.LOG_UNIT_CLIENT.toString(),
-                getHost(),
-                getPort().toString(),
-                opName);
-        Timer t = getMetricRegistry().timer(timerName);
-        return t.time();
-    }
-
     /**
      * Asynchronously write to the logging unit.
      *
@@ -81,18 +64,13 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams,
                                             IMetadata.DataRank rank, Object writeObject,
                                             Map<UUID, Long> backpointerMap) {
-        Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
     /**
@@ -118,18 +96,13 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<Boolean> writeEmptyData(long address, DataType type, Set<UUID> streams,
                                                      IMetadata.DataRank rank) {
-        Timer.Context context = getTimerContext("writeObject");
         LogEntry entry = new LogEntry(LogEntry.LogEntryType.NOP);
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(entry, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type, null, payload);
         wr.setRank(rank);
         wr.setGlobalAddress(address);
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
     /**
@@ -140,14 +113,7 @@ public class LogUnitClient extends AbstractClient {
      * completes.
      */
     public CompletableFuture<ReadResponse> read(long address) {
-        Timer.Context context = getTimerContext("read");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
-
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
     }
 
     /**
@@ -157,13 +123,7 @@ public class LogUnitClient extends AbstractClient {
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(Range<Long> range) {
-        Timer.Context context = getTimerContext("readRange");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(range)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(range)));
     }
 
     /**
@@ -173,13 +133,7 @@ public class LogUnitClient extends AbstractClient {
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(List<Long> list) {
-        Timer.Context context = getTimerContext("readList");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(list)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(list)));
     }
 
     /**
@@ -231,13 +185,7 @@ public class LogUnitClient extends AbstractClient {
      * @param address The address to fill a hole at.
      */
     public CompletableFuture<Boolean> fillHole(Token address) {
-        Timer.Context context = getTimerContext("fillHole");
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(
-                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(address)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(address)));
     }
 
     /**

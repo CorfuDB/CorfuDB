@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -9,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.metrics.Timer;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
@@ -211,24 +211,9 @@ public class CorfuMsgHandler {
     private Handler<CorfuMsg> generateConditionalHandler(@Nonnull final AbstractServer server,
             @Nonnull final CorfuMsgType type,
             @Nonnull final Handler<CorfuMsg> handler) {
-        // Generate a timer based on the Corfu message type
-        final Timer timer = getTimer(type);
-
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
-        return (msg, ctx, r) -> {
-            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-                handler.handle(msg, ctx, r);
-            }
-        };
-    }
+        return handler::handle;
 
-    // Create a timer using cached timer name for the corresponding type
-    private Timer getTimer(@Nonnull CorfuMsgType type) {
-        timerNameCache.computeIfAbsent(type,
-                                       aType -> (CorfuComponent.INFRA_MSG_HANDLER +
-                                                 aType.name().toLowerCase()));
-
-        return ServerContext.getMetrics().timer(timerNameCache.get(type));
     }
 }

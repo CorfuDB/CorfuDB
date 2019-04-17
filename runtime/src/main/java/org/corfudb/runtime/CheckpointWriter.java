@@ -1,7 +1,5 @@
 package org.corfudb.runtime;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import lombok.Getter;
@@ -17,7 +15,9 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.metrics.MetricsProvider;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -50,12 +50,6 @@ public class CheckpointWriter<T extends Map> {
     private long endAddress;
     private long numEntries = 0;
     private long numBytes = 0;
-
-    // Registry and Timer used for measuring append checkpoint
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-    private static final String CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
-            "append-checkpoint";
-    private Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
 
     @SuppressWarnings("checkstyle:abbreviation")
     final UUID checkpointStreamID;
@@ -105,6 +99,8 @@ public class CheckpointWriter<T extends Map> {
     @Setter
     ISerializer serializer = Serializers.JSON;
 
+    private Timer appendCheckpointTimer;
+
     /** Constructor for Checkpoint Writer for Corfu Maps.
      * @param rt object's runtime
      * @param streamId unique identifier of stream to checkpoint
@@ -119,6 +115,11 @@ public class CheckpointWriter<T extends Map> {
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
+
+        StatsLogger statsLogger = rt.getMetricsProvider().getLogger(getClass().getName());
+
+        appendCheckpointTimer = statsLogger.getTimer(CorfuComponent.GARBAGE_COLLECTION +
+                "append-checkpoint");
     }
 
     /**
@@ -130,7 +131,7 @@ public class CheckpointWriter<T extends Map> {
                 .type(TransactionType.SNAPSHOT)
                 .build()
                 .begin();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
+        try (Timer.Context context = appendCheckpointTimer.getContext()) {
             Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
