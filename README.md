@@ -186,60 +186,64 @@ The utility should print back "hello world".
 
 Now that you have a working Corfu deployment, you'll probably want to make it distributed.
 
-Let's start by adding a layout server. To do that, start a non-provisioned Corfu server instance in addition to the previous one. We'll start it on port 9001.
+Let's start by adding 2 non-provisioned Corfu server instances. We'll start these on ports 9000 and 9001 respectively.
 ```
-$ ./CorfuDB/bin/corfu_server -m -M localhost:9000 9001
-```
-
-Now let's add that layout server to the previous deployment:
-```
-$ ./CorfuDB/bin/corfu_layouts -c localhost:9000 edit
+$ ./CorfuDB/bin/corfu_server -m 9000 &
+$ ./CorfuDB/bin/corfu_server -m 9001 &
 ```
 
-This should bring up your editor. If you modify the layoutServers line to read:
+Now let's bootstrap these ```corfu_server``` instances into a cluster.
+To do that edit the json obtained from the layouts query above in a file called, say layout.json and add in the second server:
 ```json
+{
   "layoutServers": [
-    "localhost:9000", "localhost:9001"
+    "localhost:9000",
+    "localhost:9001"
   ],
+  "sequencers": [
+    "localhost:9000",
+    "localhost:9001"
+  ],
+  "segments": [
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 0,
+      "end": -1,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9000",
+            "localhost:9001"
+          ]
+        }
+      ]
+    }
+  ],
+  "epoch": 0
+}
 ```
-This will install that server as a new layout server.
+Note that we are adding the second server in port 9001 as a layoutServer, a sequencer and a logServer all in one.
+Once you have edited the file layout.json add it to the cluster using the following command:
+```
+$ ./CorfuDB/bin/corfu_bootstrap_cluster -l layout.json
+```
 
 If you check the current layout using the query command:
 ```
 $ ./CorfuDB/bin/corfu_layouts query -c localhost:9000,localhost:9001
 ```
-You will see that you now have two servers in the layout.
+You will see that you now have two servers in the layout. Recall that ```corfu_server``` is a monolithic binary
+containing all servers. The above layout.json provisions the second server as another replica so the cluster can tolerate
+a single failure.
 
-How about adding an additional replica so we can tolerate a 
-single log server failure? We can use the same ```corfu_server``` 
-on port 9001. Recall that ```corfu_server``` is a monolithic binary 
-containing all servers. Since we have not yet pointed to the log server 
-on 9001, that server has started but is not in use.
-
-To add a replica, we edit the layout again:
-```
-$ ./CorfuDB/bin/corfu_layouts edit -c localhost:9000,localhost:9001
-```
-
-You'll want to add localhost:9001 as a new logunit to the existing segment:
-```json
-      "logServers": [
-        "localhost:9000",
-        "localhost:9001"
-      ]
-```
-This adds the log unit at localhost:9001 to the only segment in the system.
-to learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
+To learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
 
 To scale Corfu, we add additional ``stripes''. To add an additional stripe, first 
 start a new ```corfu_server``` on port 9002:
 ```
-./CorfuDB/bin/corfu_server -m -M localhost:9000 9002
+./CorfuDB/bin/corfu_server -m 9002
 ```
-Add this layout server to the previous deployment by editing the layout:
-```
-$ ./CorfuDB/bin/corfu_layouts edit -c localhost:9000,localhost:9001
-```
+Redeploy this cluster with the following additions to layout.json:
 The layoutServers line should read:
 ```json
   "layoutServers": [

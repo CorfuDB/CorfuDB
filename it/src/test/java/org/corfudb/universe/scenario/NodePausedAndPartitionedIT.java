@@ -7,14 +7,17 @@ import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.junit.Ignore;
 import org.junit.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
+import java.time.Duration;
+import java.util.Arrays;
 
-public class NodesPausedAndPartitionedIT extends GenericIntegrationTest {
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.*;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+
+public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
 
     /**
      * Test cluster behavior after one paused and another node partitioned
@@ -33,8 +36,7 @@ public class NodesPausedAndPartitionedIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable<String, String> table =
-                    corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
@@ -46,27 +48,25 @@ public class NodesPausedAndPartitionedIT extends GenericIntegrationTest {
 
                 // Pause one node and partition another one
                 server1.pause();
-                server2.disconnect();
+                server2.disconnect(Arrays.asList(server0, server1));
 
-                // TODO: There is a bug in NodeStatus API, waiting for patch and uncomment following lines
-                // Verify cluster status is UNAVAILABLE with two nodes up and one node down
+                waitUninterruptibly(Duration.ofSeconds(20));
+
+                // Verify cluster status
                 corfuClient.invalidateLayout();
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
-                //
-                // Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
-                // assertThat(statusMap.get(server0.getParams().getEndpoint())).isEqualTo(NodeStatus.UP);
-                // assertThat(statusMap.get(server1.getParams().getEndpoint())).isEqualTo(NodeStatus.DOWN);
-                // assertThat(statusMap.get(server2.getParams().getEndpoint())).isEqualTo(NodeStatus.UP);
-                //
-                // // Wait for failure detector finds cluster is down before recovering
-                // waitForClusterDown(table);
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+
+                // Wait for failure detector finds cluster is down before recovering
+                waitForClusterDown(table);
 
                 // Recover cluster by resuming the paused node, removing
                 // partition and wait for layout's unresponsive servers to change
                 server1.resume();
-                server2.reconnect();
+                server2.reconnect(Arrays.asList(server0, server1));
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
+
+                waitUninterruptibly(Duration.ofSeconds(20));
 
                 // Verify cluster status is STABLE
                 corfuClient.invalidateLayout();

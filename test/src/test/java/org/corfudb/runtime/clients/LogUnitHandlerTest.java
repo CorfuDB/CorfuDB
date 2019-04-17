@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
+import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
@@ -151,6 +152,11 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         }
 
         client.writeRange(entries).get();
+
+        // Ensure that the overwrite detection mechanism is working as expected.
+        Assertions.assertThatExceptionOfType(ExecutionException.class).isThrownBy(
+                () -> client.writeRange(entries).get())
+                .withCauseInstanceOf(OverwriteException.class);
 
         // "Restart the logging unit
         LogUnitServer server2 = new LogUnitServer(serverContext);

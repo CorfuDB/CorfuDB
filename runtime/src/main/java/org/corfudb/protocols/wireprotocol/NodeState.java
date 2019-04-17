@@ -1,6 +1,5 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -67,6 +66,10 @@ public class NodeState implements ICorfuPayload<NodeState> {
                 new HeartbeatTimestamp(epoch, counter),
                 SequencerMetrics.UNKNOWN
         );
+    }
+
+    public boolean isConnected() {
+        return connectivity.getType() == NodeConnectivityType.CONNECTED;
     }
 
     /**

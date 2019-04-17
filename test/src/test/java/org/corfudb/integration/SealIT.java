@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by rmichoud on 2/12/17.
  */
 public class SealIT extends AbstractIT {
+
     static String corfuSingleNodeHost;
     static int corfuSingleNodePort;
 
@@ -31,7 +32,7 @@ public class SealIT extends AbstractIT {
         CorfuRuntime cr1 = createDefaultRuntime();
         CorfuRuntime cr2 = createDefaultRuntime();
 
-        Long beforeAddress = cr2.getSequencerView().next().getToken().getSequence();
+        long beforeAddress = cr2.getSequencerView().next().getToken().getSequence();
 
         /* We will trigger a Paxos round, this is what will happen:
          *   1. Set our layout (same than before) with a new Epoch
@@ -72,5 +73,8 @@ public class SealIT extends AbstractIT {
         assertThat(afterAddress).isEqualTo(beforeAddress+1);
 
         assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+
+        cr1.shutdown();
+        cr2.shutdown();
     }
 }

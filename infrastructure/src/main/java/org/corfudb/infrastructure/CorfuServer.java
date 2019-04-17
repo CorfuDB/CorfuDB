@@ -76,8 +76,10 @@ public class CorfuServer {
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] "
-                    + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w "
-                    + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
+                    + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
+                    + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
+                    + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
+                    + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
@@ -176,6 +178,18 @@ public class CorfuServer {
                     + "              Comma separated list of TLS protocols to use.\n"
                     + "                                                                          "
                     + "              [default: TLSv1.1,TLSv1.2].\n"
+                    + " --base-server-threads=<base_server_threads>                              "
+                    + "              Number of threads dedicated for the base server.\n          "
+                    + "                                                                          "
+                    + " --layout-server-threads=<layout_server_threads>                          "
+                    + "              Number of threads dedicated for the layout server.\n        "
+                    + "                                                                          "
+                    + " --management-server-threads=<management_server_threads>                  "
+                    + "              Number of threads dedicated for the management server.\n"
+                    + "                                                                          "
+                    + " --logunit-threads=<logunit_threads>                  "
+                    + "              Number of threads dedicated for the logunit server.\n"
+                    + "                                                                          "
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
@@ -304,7 +318,7 @@ public class CorfuServer {
                     router,
                     (String) opts.get("--address"),
                     port).channel().closeFuture().syncUninterruptibly();
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("CorfuServer: Server exiting due to unrecoverable error: ", e);
             System.exit(EXIT_ERROR_CODE);
         }

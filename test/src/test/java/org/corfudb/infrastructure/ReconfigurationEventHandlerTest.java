@@ -1,17 +1,17 @@
 package org.corfudb.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.PurgeFailurePolicy;
 import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the failure handling : Sealing and updating layout
@@ -58,7 +58,7 @@ public class ReconfigurationEventHandlerTest extends AbstractViewTest {
         failedServers.add(getEndpoint(SERVERS.PORT_2));
 
         ReconfigurationEventHandler reconfigurationEventHandler = new ReconfigurationEventHandler();
-        IReconfigurationHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
+        IReconfigurationHandlerPolicy failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
         reconfigurationEventHandler.handleFailure(failureHandlerPolicy,
                         originalLayout,
                         corfuRuntime,
@@ -68,8 +68,11 @@ public class ReconfigurationEventHandlerTest extends AbstractViewTest {
                 .setEpoch(2L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
                 .addSequencer(SERVERS.PORT_0)
                 .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .addUnresponsiveServer(SERVERS.PORT_2)
                 .buildSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)

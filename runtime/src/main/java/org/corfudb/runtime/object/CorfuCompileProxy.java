@@ -1,19 +1,12 @@
 package org.corfudb.runtime.object;
 
 import static java.lang.Long.min;
+
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-
-import java.lang.reflect.Constructor;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.Supplier;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -34,6 +27,12 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.Constructor;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * In the Corfu runtime, on top of a stream,
@@ -154,7 +153,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
 
-        metrics = rt.getMetrics() != null ? rt.getMetrics() : CorfuRuntime.getDefaultMetrics();
+        metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();
         timerAccess = metrics.timer(mpObj + "access");
         timerLogWrite = metrics.timer(mpObj + "log-write");

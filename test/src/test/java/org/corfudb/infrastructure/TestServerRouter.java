@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -113,7 +114,14 @@ public class TestServerRouter implements IServerRouter {
         AbstractServer as = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, null)) {
             if (as != null) {
-                as.handleMessage(msg, null, this);
+                try {
+                    as.getExecutor().submit(() -> as.handleMessage(msg, null, this)).get();
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                } catch (ExecutionException ee) {
+                    throw (RuntimeException) ee.getCause();
+                }
             } else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
             }
@@ -126,7 +134,14 @@ public class TestServerRouter implements IServerRouter {
         AbstractServer as = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, ctx)) {
             if (as != null) {
-                as.handleMessage(msg, ctx, this);
+                try {
+                    as.getExecutor().submit(() -> as.handleMessage(msg, ctx, this)).get();
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                } catch (ExecutionException ee) {
+                    throw (RuntimeException) ee.getCause();
+                }
             }
             else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());

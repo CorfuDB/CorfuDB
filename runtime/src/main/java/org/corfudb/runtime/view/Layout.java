@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.Data;
@@ -275,11 +276,32 @@ public class Layout {
     }
 
     /**
+     * Get the first segment.
+     * @return Returns the segment at index 0.
+     */
+    public LayoutSegment getFirstSegment() {
+        return this.getSegments().get(0);
+    }
+
+    /**
      * Return latest segment.
-     *
+     * @return the latest segment.
      */
     public LayoutSegment getLatestSegment() {
         return this.getSegments().get(this.getSegments().size() - 1);
+    }
+
+    /**
+     * Get the last node in the last segment.
+     *
+     * @return Returns the last node in the last segment.
+     */
+    public String getLastAddedNodeInLastSegment() {
+
+        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
+        // Returning the last node in the first stripe for determinism.
+        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
+        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
     }
 
     /**
@@ -335,11 +357,11 @@ public class Layout {
         epoch += 1;
     }
 
-    public List<String> getActiveLayoutServers() {
+    public ImmutableList<String> getActiveLayoutServers() {
         return layoutServers.stream()
                 // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
                 .filter(s -> !unresponsiveServers.contains(s))
-                .collect(Collectors.toList());
+                .collect(ImmutableList.toImmutableList());
     }
 
     public enum ReplicationMode {
@@ -373,7 +395,7 @@ public class Layout {
                     return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new ChainReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
                                     r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
@@ -416,7 +438,7 @@ public class Layout {
                     return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new QuorumReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
                                     r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
@@ -563,6 +585,15 @@ public class Layout {
 
         public int getNumberOfStripes() {
             return stripes.size();
+        }
+
+        /**
+         * Gets the first stripe.
+         *
+         * @return Returns the stripe at index 0.
+         */
+        public LayoutStripe getFirstStripe() {
+            return stripes.get(0);
         }
 
         /**

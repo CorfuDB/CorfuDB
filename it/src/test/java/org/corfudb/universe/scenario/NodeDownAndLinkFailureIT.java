@@ -1,16 +1,10 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -20,7 +14,14 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Collections;
-import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
 @Slf4j
 public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
@@ -31,13 +32,13 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
      * 1) Deploy and bootstrap a three nodes cluster
      * 2) Stop one node
      * 3) Create a link failure between two nodes which
-     * results in a partial partition
+     *    results in a partial partition
      * 4) Restart the stopped node
      * 5) Verify layout, cluster status and data path
      * 6) Remove the link failure
      * 7) Verify layout, cluster status and data path again
      */
-    @Test(timeout = 600000)
+    @Test(timeout = 300000)
     public void nodeDownAndLinkFailureTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
@@ -75,16 +76,12 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                         "the one with larger endpoint be marked as unresponsive.");
                 server2.start();
 
-                waitForLayoutChange(layout -> {
-                    List<String> expected = Collections.singletonList(server1.getEndpoint());
-                    return layout.getUnresponsiveServers().equals(expected);
-                }, corfuClient);
+                waitForLayoutChange(layout -> layout.getUnresponsiveServers()
+                        .equals(Collections.singletonList(server1.getEndpoint())), corfuClient);
 
                 // Cluster status should be DEGRADED after one node is marked unresponsive
-                //ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                // TODO: uncomment the following line after ClusterStatus API is fixed for partial partition
-                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
-                // TODO: add node status check after we redefine NodeStatus semantics
+                ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
                 log.info("Repair the partition between server0 and server1");
                 server0.reconnect(Collections.singletonList(server1));
@@ -93,13 +90,12 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
 
                 Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
-                ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
                     clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                     Sleep.sleepUninterruptibly(sleepDuration);
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
-
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

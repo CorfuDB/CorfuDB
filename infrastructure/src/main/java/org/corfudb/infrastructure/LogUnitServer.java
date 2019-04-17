@@ -36,6 +36,8 @@ import org.corfudb.util.Utils;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 
@@ -83,6 +85,13 @@ public class LogUnitServer extends AbstractServer {
     private final StreamLogCompaction logCleaner;
     private final BatchWriter<Long, ILogData> batchWriter;
 
+    private final ExecutorService executor;
+
+    @Override
+    public ExecutorService getExecutor() {
+        return executor;
+    }
+
     /**
      * Returns a new LogUnitServer.
      * @param serverContext context object providing settings and objects
@@ -90,6 +99,8 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
+        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
+                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
@@ -146,6 +157,26 @@ public class LogUnitServer extends AbstractServer {
             dataCache.put(msg.getPayload().getGlobalAddress(), logData);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
+        } catch (OverwriteException ex) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
+        } catch (DataOutrankedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
+        } catch (ValueAdoptedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
+                    .getReadResponse()));
+        }
+    }
+
+    /**
+     * Services incoming range write calls.
+     */
+    @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
+    public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
+                            ChannelHandlerContext ctx, IServerRouter r) {
+        try {
+            List<LogData> entries = msg.getPayload().getEntries();
+            batchWriter.bulkWrite(entries, msg.getEpoch());
+            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
         } catch (OverwriteException ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
         } catch (DataOutrankedException e) {
@@ -252,18 +283,6 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-
-    /**
-     * Services incoming range write calls.
-     */
-    @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
-    private void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
-                                  ChannelHandlerContext ctx, IServerRouter r) {
-        List<LogData> entries = msg.getPayload().getEntries();
-        batchWriter.bulkWrite(entries, msg.getEpoch());
-        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-    }
-
     /**
      * Seal the server with the epoch.
      *
@@ -275,6 +294,11 @@ public class LogUnitServer extends AbstractServer {
     public void sealServerWithEpoch(long epoch) {
         batchWriter.waitForSealComplete(epoch);
         log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);
+    }
+
+    @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
     }
 
     /**
@@ -322,7 +346,6 @@ public class LogUnitServer extends AbstractServer {
 
     private void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-        streamLog.release(address, (LogData) entry);
     }
 
     /**

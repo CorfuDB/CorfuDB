@@ -1,6 +1,7 @@
 package org.corfudb.util;
 
 import com.google.common.collect.ImmutableMap;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -47,13 +48,15 @@ import java.util.function.ToLongBiFunction;
 import java.util.function.ToLongFunction;
 import java.util.function.UnaryOperator;
 
-import lombok.extern.slf4j.Slf4j;
-
 /**
  * Created by mwei on 3/24/16.
  */
 @Slf4j
 public class LambdaUtils {
+
+    private LambdaUtils() {
+        // prevent instantiation of this class
+    }
 
     private static final Map<Class<Object>,
             LambdaResolver<Object>> dispatchMap = generateDispatchMap();

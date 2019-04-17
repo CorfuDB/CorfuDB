@@ -6,10 +6,21 @@ package org.corfudb.runtime.exceptions;
 public class LogUnitException extends RuntimeException {
 
     public LogUnitException() {
-
     }
 
     public LogUnitException(String message) {
         super(message);
+    }
+
+    public LogUnitException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public LogUnitException(Throwable cause) {
+        super(cause);
+    }
+
+    public LogUnitException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

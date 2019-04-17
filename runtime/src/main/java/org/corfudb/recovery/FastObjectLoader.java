@@ -7,34 +7,14 @@ import static org.corfudb.recovery.RecoveryUtils.getLogData;
 import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
 import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
 import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
-
-import javax.annotation.Nonnull;
-
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -46,6 +26,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
@@ -54,6 +35,23 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+
+import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 
 /** The FastObjectLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -507,15 +505,19 @@ public class FastObjectLoader {
         resetAddressProcessed();
     }
 
+    /**
+     * Clean up all client caches and reset counters then continue loading process from the trim mark
+     */
     private void cleanUpForRetry() {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
         runtime.getStreamsView().getStreamCache().clear();
+
+        // Re ask for the Head, if it changes while we were trying.
+        findAndSetLogHead();
+
         nextRead = logHead;
         resetAddressProcessed();
-
-        // Re ask for the Head, if it changes while we were trying
-        findAndSetLogHead();
     }
     /**
      * Increment the retry iteration.
@@ -529,9 +531,8 @@ public class FastObjectLoader {
             log.error("processLogData[]: retried {} number of times and failed", retryIteration);
             throw new RuntimeException("FastObjectLoader failed after too many retry (" + retryIteration + ")");
         }
-        else {
-            cleanUpForRetry();
-        }
+
+        cleanUpForRetry();
     }
 
     /**
@@ -736,34 +737,35 @@ public class FastObjectLoader {
         summonNecromancer();
         nextRead = logHead;
         while (nextRead <= logTail) {
-            final long start = nextRead;
-            final long stopNotIncluded = Math.min(start + batchReadSize, logTail + 1);
-            nextRead = stopNotIncluded;
-            final Map<Long, ILogData> range = getLogData(runtime, start, stopNotIncluded);
+            try {
+                final long start = nextRead;
+                final long stopNotIncluded = Math.min(start + batchReadSize, logTail + 1);
+                nextRead = stopNotIncluded;
+                final Map<Long, ILogData> range = getLogData(runtime, start, stopNotIncluded);
 
-            // Sanity
-            boolean canProcessRange = true;
-            for(Map.Entry<Long, ILogData> entry : range.entrySet()) {
-                long address = entry.getKey();
-                ILogData logData = entry.getValue();
-                if (address != addressProcessed + 1) {
-                    throw new IllegalStateException("We missed an entry. It can lead to correctness issues.");
-                }
-                addressProcessed++;
+                // Sanity
+                for (Map.Entry<Long, ILogData> entry : range.entrySet()) {
+                    long address = entry.getKey();
+                    ILogData logData = entry.getValue();
+                    if (address != addressProcessed + 1) {
+                        throw new IllegalStateException("We missed an entry. It can lead to correctness issues.");
+                    }
+                    addressProcessed++;
 
-                if (logData.getType() == DataType.TRIMMED) {
-                    log.warn("applyForEachAddress[{}, start={}] address is trimmed", address, logHead);
-                    handleRetry();
-                    canProcessRange = false;
-                    break;
+                    if (logData.getType() == DataType.TRIMMED) {
+                        throw new IllegalStateException("Unexpected TRIMMED data");
+                    }
+
+                    if (address % STATUS_UPDATE_PACE == 0) {
+                        log.info("applyForEachAddress: read up to {}", address);
+                    }
                 }
 
-                if(address % STATUS_UPDATE_PACE == 0) {
-                    log.info("applyForEachAddress: read up to {}", address);
-                }
-            }
-            if (canProcessRange) {
                 invokeNecromancer(range, logDataProcessor);
+
+            } catch (TrimmedException ex){
+                log.warn("Error loading data", ex);
+                handleRetry();
             }
         }
         killNecromancer();

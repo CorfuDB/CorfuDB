@@ -93,6 +93,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
                     null, null, epoch, entries, cf));
+            cf.get();
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
             if (e.getCause() instanceof RuntimeException) {
@@ -266,6 +267,9 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
+                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
+                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getTails(), e
+                        );
                         currOp.setException(e);
                         res.add(currOp);
                     }

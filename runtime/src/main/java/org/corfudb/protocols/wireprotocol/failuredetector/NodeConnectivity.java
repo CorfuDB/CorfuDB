@@ -12,6 +12,8 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Represents a degree of a node (the number of connections it has to other nodes)
@@ -61,6 +63,29 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
         connectivity.forEach((node, state) -> connectivityStrings.put(node, state.name()));
 
         ICorfuPayload.serialize(buf, connectivityStrings);
+    }
+
+    /**
+     * Contains list of servers successfully connected with current node.
+     */
+    public Set<String> getConnectedNodes() {
+        return connectivity
+                .keySet()
+                .stream()
+                .filter(adjacent -> connectivity.get(adjacent) == ConnectionStatus.OK)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Contains list of servers disconnected from this node.
+     * If the node A can't ping node B then node B will be added to failedNodes list.
+     */
+    public Set<String> getFailedNodes() {
+        return connectivity
+                .keySet()
+                .stream()
+                .filter(adjacent -> connectivity.get(adjacent) == ConnectionStatus.FAILED)
+                .collect(Collectors.toSet());
     }
 
     /**

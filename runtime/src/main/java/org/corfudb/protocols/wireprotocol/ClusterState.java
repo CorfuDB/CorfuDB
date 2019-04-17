@@ -5,11 +5,17 @@ import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NonNull;
 import lombok.Singular;
 import lombok.ToString;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 
+import java.util.Arrays;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Records the cluster state of the system.
@@ -33,13 +39,18 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
     @Singular
     private final ImmutableMap<String, NodeState> nodes;
 
+    @NonNull
+    private final String localEndpoint;
+
     public ClusterState(ByteBuf buf) {
         nodes = ImmutableMap.copyOf(ICorfuPayload.mapFromBuffer(buf, String.class, NodeState.class));
+        localEndpoint = ICorfuPayload.fromBuffer(buf, String.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, nodes);
+        ICorfuPayload.serialize(buf, localEndpoint);
     }
 
     public int size() {
@@ -53,20 +64,38 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
     /**
      * See if cluster is ready. If cluster contains at least one node with state NOT_READY the cluster is not ready and
      * cluster state can't be used to find failures.
+     *
      * @return cluster status
      */
-    public boolean isReady(){
-        if (nodes.isEmpty()){
+    public boolean isReady() {
+        if (nodes.isEmpty()) {
             return false;
         }
 
         //if at least one node is not ready then entire cluster is not ready to provide correct information
         for (NodeState nodeState : nodes.values()) {
-            if (nodeState.getConnectivity().getType() == NodeConnectivityType.NOT_READY){
+            if (nodeState.getConnectivity().getType() == NodeConnectivityType.NOT_READY) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    public NodeConnectivity getLocalNodeConnectivity() {
+        NodeState nodeState = getNode(localEndpoint)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + localEndpoint));
+
+        return nodeState.getConnectivity();
+    }
+
+    public static ClusterState buildClusterState(String localEndpoint, NodeState... states) {
+        Map<String, NodeState> graph = Arrays.stream(states)
+                .collect(Collectors.toMap(state -> state.getConnectivity().getEndpoint(), Function.identity()));
+
+        return ClusterState.builder()
+                .localEndpoint(localEndpoint)
+                .nodes(ImmutableMap.copyOf(graph))
+                .build();
     }
 }

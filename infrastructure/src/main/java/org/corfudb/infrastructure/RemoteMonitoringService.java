@@ -13,8 +13,10 @@ import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -109,11 +111,23 @@ public class RemoteMonitoringService implements MonitoringService {
     private final AtomicLong counter = new AtomicLong(1);
 
     /**
-     * Number of workers for failure detector. Two workers used by dafult:
+     * Number of workers for failure detector. Three workers used by default:
      * - failure/healing detection
      * - bootstrap sequencer
+     * - merge segments
      */
-    private final int detectionWorkersCount = 2;
+    private final int detectionWorkersCount = 3;
+
+    /**
+     * Future which is reset every time a new task to mergeSegments is launched.
+     * This is to avoid multiple mergeSegments requests.
+     */
+    private volatile CompletableFuture<Boolean> mergeSegmentsTask = CompletableFuture.completedFuture(true);
+
+    /**
+     * Duration in which the restore redundancy and merge segments workflow status is queried.
+     */
+    private static final Duration MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT = Duration.ofSeconds(1);
 
     /**
      * This tuple maintains, in an epoch, how many heartbeats the primary sequencer has responded
@@ -306,6 +320,7 @@ public class RemoteMonitoringService implements MonitoringService {
      *  - check if current layout slot is unfilled then update layout to latest one.
      *  - handle healed nodes.
      *  - Looking for link failures in the cluster, handle failure if found.
+     *  - Restore redundancy and merge segments if present in the layout.
      *  - bootstrap sequencer if needed
      * </pre>
      *
@@ -360,10 +375,41 @@ public class RemoteMonitoringService implements MonitoringService {
                 return DetectorTask.COMPLETED;
             }
 
+            // Restores redundancy and merges multiple segments if present.
+            restoreRedundancyAndMergeSegments();
+
             handleSequencer(serverContext.copyManagementLayout());
 
             return DetectorTask.COMPLETED;
         }, failureDetectorWorker);
+    }
+
+    /**
+     * Spawns a new asynchronous task to restore redundancy and merge segments.
+     * A new task is not spawned if a task is already in progress.
+     * This method does not wait on the completion of the restore redundancy and merge segments task.
+     *
+     * @return Detector task.
+     */
+    private DetectorTask restoreRedundancyAndMergeSegments() {
+        Layout layout = serverContext.copyManagementLayout();
+        int segmentsCount = layout.getSegments().size();
+
+        if (segmentsCount == 1) {
+            log.debug("No segments to merge. Skipping step.");
+            return DetectorTask.SKIPPED;
+        } else if (!mergeSegmentsTask.isDone()) {
+            log.debug("Merge segments task already in progress. Skipping spawning another task.");
+            return DetectorTask.SKIPPED;
+        }
+
+        log.debug("Number of segments present: {}. Spawning task to merge segments.", segmentsCount);
+        mergeSegmentsTask = CompletableFuture.supplyAsync(() ->
+                        ReconfigurationEventHandler
+                                .handleMergeSegments(getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT),
+                failureDetectorWorker);
+
+        return DetectorTask.COMPLETED;
     }
 
     /**
@@ -383,7 +429,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 layout.getUnresponsiveServers()
         );
 
-        //Tranform Optional value to a Set
+        //Transform Optional value to a Set
         Set<String> healedNodes = healed
                 .map(NodeRank::getEndpoint)
                 .map(ImmutableSet::of)
@@ -496,8 +542,10 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture<DetectorTask> handleSequencer(Layout layout) {
         log.trace("Handling sequencer failures");
 
-        if (localMonitoringService.getMetrics().join().getSequencerStatus() == SequencerStatus.READY) {
-            log.trace("Primary sequencer is ready. Nothing to do");
+        ClusterState clusterState = clusterContext.getClusterView();
+        Optional<NodeState> primarySequencer = clusterState.getNode(layout.getPrimarySequencer());
+        if (primarySequencer.isPresent() && primarySequencer.get().getSequencerMetrics() == SequencerMetrics.READY) {
+            log.trace("Primary sequencer is already ready at: {} in {}", primarySequencer.get(), clusterState);
             return DETECTOR_TASK_SKIPPED;
         }
 
@@ -519,7 +567,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         // Launch task to bootstrap the primary sequencer.
-        log.info("Attempting to bootstrap the primary sequencer.");
+        log.info("Attempting to bootstrap the primary sequencer. ClusterState {}", clusterState);
         // We do not care about the result of the trigger.
         // If it fails, we detect this again and retry in the next polling cycle.
         return getCorfuRuntime()
@@ -630,7 +678,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
-            updateTrailingLayoutServers(layoutCompletableFutureMap, layout);
+            updateTrailingLayoutServers(layoutCompletableFutureMap);
 
         } catch (QuorumUnreachableException e) {
             log.error("Error in correcting server epochs: {}", e);
@@ -672,9 +720,12 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param layoutCompletableFutureMap Map of layout server endpoints to their layout requests.
      */
-    private void updateTrailingLayoutServers(
-            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap, Layout updatedLayout) {
+    private void updateTrailingLayoutServers(Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
 
+        // We should utilize only the unmodified management layout as it has already been committed to the layout
+        // servers via Paxos round. Committing any other modified layout is extremely dangerous and can cause
+        // inconsistencies. This latestLayout should not be modified.
+        final Layout latestLayout = serverContext.copyManagementLayout();
         // Patch trailing layout servers with latestLayout.
         layoutCompletableFutureMap.keySet().forEach(layoutServer -> {
             Layout layout = null;
@@ -692,7 +743,7 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Do nothing if this layout server is updated with the latestLayout.
-            if (layout != null && layout.equals(updatedLayout)) {
+            if (layout != null && layout.equals(latestLayout)) {
                 return;
             }
             try {
@@ -701,15 +752,15 @@ public class RemoteMonitoringService implements MonitoringService {
                 // that there was a consensus on this layout and has been committed to a quorum.
                 boolean result = getCorfuRuntime()
                         .getLayoutView()
-                        .getRuntimeLayout(updatedLayout)
+                        .getRuntimeLayout(latestLayout)
                         .getLayoutClient(layoutServer)
-                        .committed(updatedLayout.getEpoch(), updatedLayout)
+                        .committed(latestLayout.getEpoch(), latestLayout)
                         .get();
                 if (result) {
                     log.debug("Layout Server: {} successfully patched with latest layout : {}",
-                            layoutServer, updatedLayout);
+                            layoutServer, latestLayout);
                 } else {
-                    log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, updatedLayout);
+                    log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);
                 }
             } catch (ExecutionException ee) {
                 log.error("Updating layout servers failed due to : {}", ee);

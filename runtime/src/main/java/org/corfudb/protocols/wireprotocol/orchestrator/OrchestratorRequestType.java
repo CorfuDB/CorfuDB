@@ -39,7 +39,12 @@ public enum OrchestratorRequestType {
     /**
      * Force remove a node from the cluster
      */
-    FORCE_REMOVE_NODE(4, ForceRemoveNodeRequest::new);
+    FORCE_REMOVE_NODE(4, ForceRemoveNodeRequest::new),
+
+    /**
+     * Restore redundancy and merge segments in the layout.
+     */
+    RESTORE_REDUNDANCY_MERGE_SEGMENTS(5, RestoreRedundancyMergeSegmentsRequest::new);
 
 
     @Getter

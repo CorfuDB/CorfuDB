@@ -18,16 +18,19 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
+import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -200,11 +203,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write the same range twice
         log.append(entries);
         log.sync(true);
-        long logSize = FileUtils.sizeOfDirectory(file);
-        log.append(entries);
-        log.sync(true);
-        long logSize2 = FileUtils.sizeOfDirectory(file);
-        assertThat(logSize2).isEqualTo(logSize);
+
+        Assertions.assertThatExceptionOfType(OverwriteException.class)
+                .isThrownBy(() -> log.append(entries));
     }
 
     @Test
@@ -660,8 +661,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int serializedEntrySize = 100;
         byte[] entryBytes = new byte[serializedEntrySize];
         Metadata metadata = Metadata.newBuilder()
-                .setPayloadChecksum(StreamLogFiles.getChecksum(serializedEntrySize))
-                .setLengthChecksum(StreamLogFiles.getChecksum(entryBytes.length))
+                .setPayloadChecksum(Checksum.getChecksum(serializedEntrySize))
+                .setLengthChecksum(Checksum.getChecksum(entryBytes.length))
                 .setLength(entryBytes.length)
                 .build();
 

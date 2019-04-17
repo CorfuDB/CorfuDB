@@ -39,7 +39,6 @@ import org.corfudb.test.concurrent.TestThreadGroups;
 import org.corfudb.test.logging.TestLogger;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.concurrent.SingletonResource;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -71,18 +70,17 @@ public class AbstractCorfuTest {
 
     public static final int LOG_ELEMENTS = 25;
 
-    public static final SingletonResource<TestLogger> LOGGER =
-        SingletonResource.withInitial(() -> new TestLogger(LOG_ELEMENTS));
+    private static final TestLogger LOGGER = new TestLogger(LOG_ELEMENTS);
 
     @Before
     public void initLogging() {
-        LOGGER.get().reset(); // Get a logger instance and reset it
+        LOGGER.reset(); // Get a logger instance and reset it
     }
 
     @AfterClass
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();
-        LOGGER.cleanup(TestLogger::reset);
+        LOGGER.reset();
     }
 
     /** A watcher which prints whether tests have failed or not, for a useful
@@ -225,7 +223,7 @@ public class AbstractCorfuTest {
             System.out.println(ansi().fgCyan().bold().a("Last ").a(LOG_ELEMENTS)
                 .a(" Logs Until Failure")
                 .reset());
-            Iterable<byte[]> logEvents = LOGGER.get().getEventsAndReset();
+            Iterable<byte[]> logEvents = LOGGER.getEventsAndReset();
             logEvents.forEach(e -> {
                 try {
                     System.out.write(e);

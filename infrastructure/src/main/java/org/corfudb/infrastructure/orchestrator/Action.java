@@ -43,9 +43,10 @@ public abstract class Action {
                 changeStatus(ActionStatus.COMPLETED);
                 return;
             } catch (Exception e) {
-                log.error("execute: error executing action {} on retry {}",
+                log.error("execute: Error executing action {} on retry {}. Invalidating layout.",
                         getName(), x, e);
                 changeStatus(ActionStatus.ERROR);
+                runtime.invalidateLayout();
             }
         }
     }

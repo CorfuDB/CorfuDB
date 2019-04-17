@@ -54,22 +54,32 @@ public class Transaction {
     }
 
     /**
-     * Verifies that this transaction  has a valid snapshot and context.
+     * Verifies that this transaction has a valid snapshot and context.
      */
     private void verify() {
         final AbstractTransactionalContext parentCtx = TransactionalContext.getCurrentContext();
         if (parentCtx != null) {
+            // In a nested transaction, the runtime should be the same as the parent's
             if (parentCtx.getTransaction().getRuntime() != this.runtime) {
-                throw new IllegalStateException("Attempting to nest transactions from different clients!");
+                throw new IllegalStateException(
+                        "Attempting to nest transactions from different clients!");
             }
-            // If we're in a nested transaction, the first read timestamp
-            // needs to come from the root.
+
+            // In a nested transaction, the transaction type should be the same as the parent's
+            if (type != parentCtx.getTransaction().getType()) {
+                String msg = String.format("Attempting to nest transactions with a " +
+                                "different transaction type, parent type=%s, nested type=%s",
+                        parentCtx.getTransaction().getType(), this.getType());
+                throw new IllegalArgumentException(msg);
+            }
+
+            // In a nested transaction, the first read timestamp needs to come from the root.
             Token parentTimestamp = parentCtx.getSnapshotTimestamp();
             if (!this.snapshot.equals(Token.UNINITIALIZED)
                     && !this.snapshot.equals(parentTimestamp)) {
                 String msg = String.format("Attempting to nest transactions with" +
-                                " different timestamps, parent ts=%s, user defined ts=%s", parentCtx.getSnapshotTimestamp(),
-                        this.snapshot);
+                                " different timestamps, parent ts=%s, user defined ts=%s",
+                        parentCtx.getSnapshotTimestamp(), this.snapshot);
                 throw new IllegalArgumentException(msg);
             }
         }
