@@ -11,6 +11,10 @@
 
     <artifactId>cmdlets</artifactId>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -126,9 +130,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <outputFile>
-                        ${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar
-                    </outputFile>
+                    <shadedArtifactAttached>true</shadedArtifactAttached>
+                    <shadedClassifierName>shaded</shadedClassifierName>
                 </configuration>
             </plugin>
             <plugin>

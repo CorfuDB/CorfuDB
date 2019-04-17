@@ -11,6 +11,10 @@
 
     <artifactId>annotations</artifactId>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
     <build>
         <plugins>
             <plugin>
