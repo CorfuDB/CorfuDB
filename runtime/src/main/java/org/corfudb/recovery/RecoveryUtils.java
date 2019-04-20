@@ -95,7 +95,7 @@ public class RecoveryUtils {
      */
     static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
         return runtime.getAddressSpaceView().
-                cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
+                fetchRange(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
     }
 
     /** Deserialize a logData by getting the logEntry

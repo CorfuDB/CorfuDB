@@ -12,6 +12,10 @@
     <artifactId>universe</artifactId>
     <packaging>jar</packaging>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -97,56 +101,6 @@
                             </systemProperties>
                             <workingDirectory>${project.build.directory}/fork_${surefire.forkNumber}</workingDirectory>
                         </configuration>
-                    </plugin>
-                    <plugin>
-                        <artifactId>maven-resources-plugin</artifactId>
-                        <version>2.5</version>
-                        <executions>
-                            <execution>
-                                <phase>pre-integration-test</phase>
-                                <goals>
-                                    <goal>copy-resources</goal>
-                                </goals>
-                                <configuration>
-                                    <outputDirectory>${project.build.directory}/corfu/</outputDirectory>
-                                    <resources>
-                                        <resource>
-                                            <directory>../infrastructure/target/</directory>
-                                            <includes>
-                                                <include>infrastructure-${project.version}-shaded.jar</include>
-                                            </includes>
-                                        </resource>
-                                    </resources>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
-                        <version>1.6.0</version>
-                        <executions>
-                            <execution>
-                                <id>Docker build</id>
-                                <phase>pre-integration-test</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                                <configuration>
-                                    <executable>docker</executable>
-                                    <arguments>
-                                        <argument>build</argument>
-                                        <argument>--network=host</argument>
-                                        <argument>--build-arg</argument>
-                                        <argument>CORFU_JAR=infrastructure-${project.version}-shaded.jar</argument>
-                                        <argument>-t</argument>
-                                        <argument>corfu-server:${project.version}</argument>
-                                        <argument>.</argument>
-                                    </arguments>
-                                </configuration>
-                            </execution>
-                        </executions>
                     </plugin>
                 </plugins>
             </build>

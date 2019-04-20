@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
@@ -13,6 +14,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -100,7 +102,14 @@ public class BaseServer extends AbstractServer {
                                                    @NonNull IServerRouter r) {
         try {
             long epoch = msg.getPayload();
-            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}", epoch);
+            String remoteHostAddress;
+            try {
+                remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();
+            } catch (NullPointerException e) {
+                remoteHostAddress = "unavailable";
+            }
+            log.info("handleMessageSetEpoch: Received SET_EPOCH from (clientId={}:{}), moving to new epoch {}",
+                    msg.getClientID(), remoteHostAddress, epoch);
             serverContext.setServerEpoch(epoch, r);
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (WrongEpochException e) {

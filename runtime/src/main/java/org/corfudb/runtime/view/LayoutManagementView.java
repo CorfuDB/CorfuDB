@@ -22,7 +22,9 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -427,9 +429,11 @@ public class LayoutManagementView extends AbstractView {
                         || !originalLayout.getPrimarySequencer()
                         .equals(newLayout.getPrimarySequencer())) {
 
-                    //TODO(Maithem) why isn't this getting the tails
-                    // from utils?
-                    TailsResponse tails = runtime.getAddressSpaceView().getAllTails();
+                    // The tails query and the sequencer recovery must be performed on the same
+                    // epoch. If they are not, we lose the atomicity of bootstrapping the sequencer
+                    // which can lead to data operations across epochs leaking into the
+                    // Address space causing inconsistencies and data loss.
+                    TailsResponse tails = Utils.getTails(newLayout, runtime);
 
                     maxTokenRequested = tails.getLogTail();
                     streamTails = tails.getStreamTails();

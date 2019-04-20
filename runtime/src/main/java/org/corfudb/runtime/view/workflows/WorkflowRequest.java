@@ -112,7 +112,7 @@ public abstract class WorkflowRequest {
                 return;
             }
             Sleep.sleepUninterruptibly(pollPeriod);
-            log.info("waitForWorkflow: waiting for {} on attempt {}", workflow, x);
+            log.debug("waitForWorkflow: waiting for {} on attempt {}", workflow, x);
         }
         throw new TimeoutException();
     }

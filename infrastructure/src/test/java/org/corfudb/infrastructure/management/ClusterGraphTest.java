@@ -43,6 +43,7 @@ public class ClusterGraphTest {
 
         ImmutableMap<String, NodeState> nodes = ImmutableMap.of("a", a, "b", b, "c", c);
         ClusterState clusterState = ClusterState.builder()
+                .localEndpoint("a")
                 .nodes(nodes)
                 .build();
 
