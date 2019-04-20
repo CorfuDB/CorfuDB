@@ -3,7 +3,6 @@ package org.corfudb.runtime;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.exceptions.GarbageCollectorException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 
@@ -58,7 +57,7 @@ public class ViewsGarbageCollector {
     }
 
     /**
-     * Over time garbage is created on the global log and clients clients sync
+     * Over time garbage is created on the global log and clients sync
      * parts of the log therefore clients can accumulate garbage overtime. This
      * method runs a garbage collection process on the different client views,
      * which discards data before the trim mark (i.e. the point that demarcates
@@ -66,15 +65,18 @@ public class ViewsGarbageCollector {
      */
     public void runRuntimeGC() {
         try {
+            // Trim mark reflects the first untrimmed address, therefore, GC is performed up until trim mark (not included).
             long currTrimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
-            if (trimMark == currTrimMark) {
-                log.info("runRuntimeGC: TrimMark({}) hasn't changed, skipping.");
-                return;
-            }
-
-            log.info("runRuntimeGC: starting gc cycle, removing {} to {}", trimMark,
+            log.info("runRuntimeGC: starting gc cycle, attempting to remove {} to {}", trimMark,
                     currTrimMark);
             long startTs = System.currentTimeMillis();
+
+            // Note: the stream layer will defer GC on this trimMark for the next cycle.
+            // This is done to avoid data loss whenever the current context is at a version in the trim area. If we GC
+            // right away we would need to abort transactions in the trim range and additionally reset the stream
+            // so transactions at versions over the trim mark can recover their state.
+            // To avoid this, a flag will be set so we start aborting ongoing transactions in this trimmed area and
+            // let the next GC cycle discard the data.
             runtime.getObjectsView().gc(currTrimMark);
             runtime.getStreamsView().gc(currTrimMark);
             runtime.getAddressSpaceView().gc(currTrimMark);

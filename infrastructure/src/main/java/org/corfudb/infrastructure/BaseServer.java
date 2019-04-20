@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
@@ -13,6 +14,9 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.net.InetSocketAddress;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Created by mwei on 12/8/15.
@@ -22,8 +26,22 @@ public class BaseServer extends AbstractServer {
 
     final ServerContext serverContext;
 
+    private final ExecutorService executor;
+
+    @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
+    }
+
+    @Override
+    public ExecutorService getExecutor() {
+        return executor;
+    }
+
     public BaseServer(@Nonnull ServerContext context) {
         this.serverContext = context;
+        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),
+                new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
     }
 
     /** Handler for the base server. */
@@ -39,8 +57,21 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @ServerHandler(type = CorfuMsgType.PING)
-    private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
+    }
+
+    /**
+     * Respond to a keep alive message.
+     * Note: this message ignores epoch.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.KEEP_ALIVE)
+    private void keepAlive(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     /**
@@ -71,9 +102,16 @@ public class BaseServer extends AbstractServer {
                                                    @NonNull IServerRouter r) {
         try {
             long epoch = msg.getPayload();
-            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}", epoch);
+            String remoteHostAddress;
+            try {
+                remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();
+            } catch (NullPointerException e) {
+                remoteHostAddress = "unavailable";
+            }
+            log.info("handleMessageSetEpoch: Received SET_EPOCH from (clientId={}:{}), moving to new epoch {}",
+                    msg.getClientID(), remoteHostAddress, epoch);
             serverContext.setServerEpoch(epoch, r);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (WrongEpochException e) {
             log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
                     e.getCorrectEpoch(), msg.getPayload());

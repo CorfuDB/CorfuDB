@@ -1,5 +1,9 @@
 package org.corfudb.security.tls;
 
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+
+import javax.net.ssl.SSLException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -9,9 +13,6 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
-import javax.net.ssl.SSLException;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 
 /**
  * Utilities for common options parsing and session configuration for
@@ -19,6 +20,11 @@ import org.apache.commons.io.IOUtils;
  */
 @Slf4j
 public class TlsUtils {
+
+    private TlsUtils() {
+        // prevent instantiation of this class
+    }
+
     /**
      * Open up a key store. Wraps all the exceptions.
      *

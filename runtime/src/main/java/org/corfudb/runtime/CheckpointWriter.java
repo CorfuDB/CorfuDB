@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.CorfuComponent;
@@ -122,12 +123,22 @@ public class CheckpointWriter<T extends Map> {
     }
 
     /**
-     * @return List of global addresses of all entries for this checkpoint.
+     * @return Token at which the snapshot for this checkpoint was taken.
      */
     public Token appendCheckpoint() {
         long start = System.currentTimeMillis();
+
+        // Queries the sequencer for the global log tail. We then read the global log tail to
+        // persist the entry on the logunit in turn preventing from a new sequencer from
+        // regressing tokens.
+        Token markerToken = rt.getSequencerView().query().getToken();
+        if (Address.nonAddress(markerToken.getSequence())) {
+            return markerToken;
+        }
+        rt.getAddressSpaceView().read(markerToken.getSequence());
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
+                .snapshot(markerToken)
                 .build()
                 .begin();
         try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
@@ -141,8 +152,8 @@ public class CheckpointWriter<T extends Map> {
             startCheckpoint(snapshot, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
-            log.info("appendCheckpoint: completed checkpoint for {} at snapshot {} in {} ms", streamId, snapshot,
-                    System.currentTimeMillis() - start);
+            log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
+                    streamId, entries.size(), snapshot, System.currentTimeMillis() - start);
             return snapshot;
         } finally {
             rt.getObjectsView().TXEnd();

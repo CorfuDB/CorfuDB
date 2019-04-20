@@ -1,18 +1,8 @@
 package org.corfudb.runtime.view;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-
-import javax.annotation.Nonnull;
-
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClient;
@@ -25,6 +15,14 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
+
+import javax.annotation.Nonnull;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This is a wrapper over the layout to provide the clients required to communicate with the nodes.
@@ -143,10 +141,7 @@ public class RuntimeLayout {
     }
 
     public LogUnitClient getLogUnitClient(String endpoint) {
-        return ((LogUnitClient) getClient(LogUnitClient.class, endpoint))
-                .setMetricRegistry(getRuntime().getMetrics() != null
-                        ? getRuntime().getMetrics() : CorfuRuntime.getDefaultMetrics())
-                .setMaxWrite(getRuntime().getParameters().getMaxWriteSize());
+        return ((LogUnitClient) getClient(LogUnitClient.class, endpoint));
     }
 
     public ManagementClient getManagementClient(String endpoint) {

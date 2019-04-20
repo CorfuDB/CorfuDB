@@ -5,11 +5,15 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20190416191935.6583</version>
+        <version>0.2.3.20190420162857.3580</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>runtime</artifactId>
+
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <build>
         <plugins>

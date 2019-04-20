@@ -2,8 +2,24 @@ package org.corfudb.util;
 
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
-
 import io.netty.buffer.ByteBuf;
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.recovery.RecoveryUtils;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -23,37 +39,21 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.recovery.RecoveryUtils;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
-
 
 /**
  * Created by crossbach on 5/22/15.
  */
 @Slf4j
 public class Utils {
+
+    private Utils() {
+        // prevent instantiation of this class
+    }
+
     private static Printer printer = new Textifier();
     private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
 
-    private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 
     /** Convert a byte array to a hex string.
      * Source:
@@ -95,7 +95,7 @@ public class Utils {
                 (byte) ((in >> 8) & 0xFF),
                 (byte) (in & 0xFF)};
     }
-  
+
     /**
      * Print byte code.
      * @param bytes Byte array that represents the byte code
@@ -283,8 +283,7 @@ public class Utils {
             //todo: make serialization less clunky!
             ByteArrayInputStream bais = new ByteArrayInputStream(b.array());
             ObjectInputStream ois = new ObjectInputStream(bais);
-            Object obj = ois.readObject();
-            return obj;
+            return ois.readObject();
         } catch (IOException e) {
             throw new RuntimeException(e);
         } catch (ClassNotFoundException ce) {
@@ -441,7 +440,6 @@ public class Utils {
      * @param logData Data entry to print
      */
     public static void printLogAnatomy(CorfuRuntime runtime, ILogData logData) {
-        FastObjectLoader fastLoader = new FastObjectLoader(runtime);
         try {
             LogEntry le = RecoveryUtils.deserializeLogData(runtime, logData);
             if (le.getType() == LogEntry.LogEntryType.SMR) {
@@ -471,7 +469,7 @@ public class Utils {
      * @param responses a set of tail responses
      * @return An max-aggregation of all tails
      */
-    static TailsResponse getTails(Set<TailsResponse> responses) {
+    static TailsResponse getTails(Set<TailsResponse> responses, long epoch) {
         long globalTail = Address.NON_ADDRESS;
         Map<UUID, Long> globalStreamTails = new HashMap<>();
 
@@ -483,7 +481,8 @@ public class Utils {
                 globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));
             }
         }
-        return new TailsResponse(globalTail, globalStreamTails);
+        // All epochs should be equal as all the tails are queried using a single runtime layout.
+        return new TailsResponse(epoch, globalTail, globalStreamTails);
     }
 
     /**
@@ -516,6 +515,6 @@ public class Utils {
             throw new UnsupportedOperationException();
         }
 
-        return getTails(luResponses);
+        return getTails(luResponses, layout.getEpoch());
     }
 }

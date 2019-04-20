@@ -67,7 +67,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
         final int objSize = 100;
         long a1 = sv.append(new byte[objSize]);
-        final long cpEndAddress = 2L;
+        final long cpEndAddress = 0L;
         // Verify that the start/end records have been written for empty maps
         assertThat(a1).isEqualTo(cpEndAddress);
     }
@@ -300,6 +300,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *  destroyed (logically, not physically) by the CP, so we have
      *  to use a different position 'history' for our assertion
      *  check.
+     *
+     * +-----------------------------------------------------------------+
+     * | 0  | 1  | 2  | 3 | 4 | 5  | 6 | 7  | 8 | 9  | 10 | 11 | 12 | 13 |
+     * +-----------------------------------------------------------------+
+     * | F0 | F1 | F2 | S | C | M0 | C | M1 | C | M2 | E  | L0 | L1 | L2 |
+     * +-----------------------------------------------------------------+
+     * F : First batch of entries.
+     * S : Start of checkpoint.
+     * C : Continuation of checkpoints
+     * M : Middle batch of entries.
+     * E : End of checkpoints
+     * L : Last batch of entries.
+     *
      */
     @Test
     public void checkpointWriterInterleavedTest() throws Exception {

@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, UniverseParams> {
-    private static final String IMAGE_NAME = "corfu-server:" + getAppVersion();
+    private static final String IMAGE_NAME = "corfudb/corfu-server:" + getAppVersion();
     private static final String ALL_NETWORK_INTERFACES = "0.0.0.0";
 
     @NonNull

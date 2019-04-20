@@ -5,32 +5,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
@@ -66,6 +44,25 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+
+import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -140,6 +137,11 @@ public class CorfuRuntime {
 
         /** Time to wait between read requests reattempts before hole filling. */
         @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+
+        /**
+         * Time limit after which the reader gives up and fills the hole.
+         */
+        @Default Duration holeFillTimeout = Duration.ofSeconds(10);
 
         /**
          * Whether or not to disable the cache.
@@ -368,7 +370,6 @@ public class CorfuRuntime {
         static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
                 ImmutableMap.<ChannelOption, Object>builder()
                         .put(ChannelOption.TCP_NODELAY, true)
-                        .put(ChannelOption.SO_KEEPALIVE, true)
                         .put(ChannelOption.SO_REUSEADDR, true)
                         .build();
 
@@ -538,9 +539,6 @@ public class CorfuRuntime {
 
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
-    @Getter
-    @Setter
-    private MetricRegistry metrics = new MetricRegistry();
 
     /** Initialize a default static registry which through that different metrics
      * can be registered and reported */
@@ -648,9 +646,6 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        synchronized (metrics) {
-            MetricsUtils.metricsReportingSetup(metrics);
-        }
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 

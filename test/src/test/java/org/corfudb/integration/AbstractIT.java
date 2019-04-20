@@ -33,6 +33,7 @@ import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Integration tests.
@@ -53,9 +54,12 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
+    CorfuRuntime runtime;
+
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
@@ -76,6 +80,7 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @Before
     public void setUp() throws Exception {
+        runtime = null;
         forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
@@ -88,6 +93,9 @@ public class AbstractIT extends AbstractCorfuTest {
     @After
     public void cleanUp() throws Exception {
         forceShutdownAllCorfuServers();
+        if (runtime != null) {
+            runtime.shutdown();
+        }
     }
 
     public static String getCorfuServerLogPath(String host, int port) {
@@ -193,6 +201,17 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     /**
+     * Wait for the Supplier (some condition) to return true.
+     *
+     * @param supplier Supplier to test condition
+     */
+    public static void waitFor(Supplier<Boolean> supplier) {
+        while (!supplier.get()) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+    }
+
+    /**
      * Get list of children (descendant) process identifiers (recursive)
      *
      * @param pid parent process identifier
@@ -255,6 +274,23 @@ public class AbstractIT extends AbstractCorfuTest {
         return createRuntime(DEFAULT_ENDPOINT);
     }
 
+    public static Process runServer(int port, boolean single) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setSingle(single)
+                .runServer();
+    }
+
+    public static Process runDefaultServer() throws IOException {
+        return new CorfuServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(DEFAULT_PORT)
+                .setSingle(true)
+                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
+                .runServer();
+    }
+
     public static CorfuRuntime createRuntime(String endpoint) {
         CorfuRuntime rt = new CorfuRuntime(endpoint)
                 .setCacheDisabled(true)
@@ -298,6 +334,7 @@ public class AbstractIT extends AbstractCorfuTest {
                             }
                     );
         }
+
     }
 
     /**

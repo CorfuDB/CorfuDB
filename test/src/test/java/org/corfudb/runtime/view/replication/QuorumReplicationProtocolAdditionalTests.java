@@ -121,7 +121,6 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(u1, CorfuMsgType.WRITE.payloadMsg(m));
         sendMessage(u2, CorfuMsgType.WRITE.payloadMsg(m));
-        u2.setShutdown(true);
         u2.shutdown();
 
         LogUnitServerAssertions.assertThat(u0)

@@ -1,5 +1,20 @@
 package org.corfudb.runtime.object;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -12,34 +27,21 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.exceptions.NoRollbackException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 //TODO Discard TransactionStream for building maps but not for constructing tails
 
 /**
- * The VersionLockedObject maintains a versioned object which is
- * backed by an ISMRStream, and is optionally backed by an additional
- * optimistic update stream.
+ * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream, and is
+ * optionally backed by an additional optimistic update stream.
  *
- * <p>Users of the VersionLockedObject cannot access the versioned object
- * directly, rather they use the access() and update() methods to
- * read and manipulate the object.
+ * <p>Users of the VersionLockedObject cannot access the versioned object directly, rather they
+ * use the access() and update() methods to read and manipulate the object.
  *
- * <p>access() and update() allow the user to provide functions to execute
- * under locks. These functions execute various "unsafe" methods provided
- * by this object which inspect and manipulate the object state.
+ * <p>access() and update() allow the user to provide functions to execute under locks. These
+ * functions execute various "unsafe" methods provided by this object which inspect and
+ * manipulate the object state.
  *
- * <p>syncObjectUnsafe() enables the user to bring the object to a given version,
- * and the VersionLockedObject manages any sync or rollback of updates
- * necessary.
+ * <p>syncObjectUnsafe() enables the user to bring the object to a given version, and the
+ * VersionLockedObject manages any sync or rollback of updates necessary.
  *
  * <p>Created by mwei on 11/13/16.
  */
@@ -52,8 +54,8 @@ public class VersionLockedObject<T> {
     T object;
 
     /**
-     * A list of upcalls pending in the system. The proxy keeps this
-     * set so it can remember to save the upcalls for pending requests.
+     * A list of upcalls pending in the system. The proxy keeps this set so it can remember to
+     * save the upcalls for pending requests.
      */
     final Set<Long> pendingUpcalls;
 
@@ -64,16 +66,14 @@ public class VersionLockedObject<T> {
     }
 
     /**
-     * A list of upcall results, keyed by the address they were
-     * requested.
+     * A list of upcall results, keyed by the address they were requested.
      */
     final Map<Long, Object> upcallResults;
 
 
     /**
-     * A lock, which controls access to modifications to
-     * the object. Any access to unsafe methods should
-     * obtain the lock.
+     * A lock, which controls access to modifications to the object. Any access to unsafe
+     * methods should obtain the lock.
      */
     private final StampedLock lock;
 
@@ -117,6 +117,7 @@ public class VersionLockedObject<T> {
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
+
     /**
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
@@ -150,13 +151,14 @@ public class VersionLockedObject<T> {
     }
 
     /**
-     * Run gc on this object. Since the stream that backs
-     * this object is not thread-safe: synchronization between
-     * gc and external object access is needed.
+     * Run gc on this object. Since the stream that backs this object is not thread-safe:
+     * synchronization between gc and external object access is needed.
      */
     public void gc(long trimMark) {
-        long ts = lock.writeLock();
-        try {
+        long ts = 0;
+
+        try (Timer.Context vloGcDuration = VloMetricsHelper.getVloGcContext()) {
+            ts = lock.writeLock();
             pendingUpcalls.removeIf(e -> e < trimMark);
             upcallResults.entrySet().removeIf(e -> e.getKey() < trimMark);
             smrStream.gc(trimMark);
@@ -199,10 +201,10 @@ public class VersionLockedObject<T> {
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
-            try {
-            if (directAccessCheckFunction.apply(this)) {
-                log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                        this, getVersionUnsafe());
+            try (Timer.Context optimistReadDuration = VloMetricsHelper.getOptimisticReadContext()) {
+                if (directAccessCheckFunction.apply(this)) {
+                    log.trace("Access [{}] Direct (optimistic-read) access at {}",
+                            this, getVersionUnsafe());
                     R ret = accessFunction.apply(object);
 
                     long versionForCorrectness = getVersionUnsafe();
@@ -227,7 +229,7 @@ public class VersionLockedObject<T> {
         // Next, we just upgrade to a full write lock if the optimistic
         // read fails, since it means that the state of the object was
         // updated.
-        try {
+        try (Timer.Context updateObjectReadDuration = VloMetricsHelper.getUpdatedObjectReadContext()) {
             // Attempt an upgrade
             ts = lock.tryConvertToWriteLock(ts);
             // Upgrade failed, try conversion again
@@ -265,7 +267,8 @@ public class VersionLockedObject<T> {
      */
     public <R> R update(Function<VersionLockedObject<T>, R> updateFunction) {
         long ts = 0;
-        try {
+
+        try (Timer.Context updateDuration = VloMetricsHelper.getVloUpdateContext()) {
             ts = lock.writeLock();
             log.trace("Update[{}] (writelock)", this);
             return updateFunction.apply(this);
@@ -404,9 +407,8 @@ public class VersionLockedObject<T> {
      * @return True, if the object was modified by this thread. False otherwise.
      */
     public boolean optimisticallyOwnedByThreadUnsafe() {
-        WriteSetSMRStream optimisticStream = this.optimisticStream;
-
-        return optimisticStream == null ? false : optimisticStream.isStreamForThisThread();
+        return optimisticStream != null &&
+               optimisticStream.isStreamForThisThread();
     }
 
     /**
@@ -556,8 +558,7 @@ public class VersionLockedObject<T> {
         }
 
         // now invoke the upcall
-        Object ret = target.upcall(object, entry.getSMRArguments());
-        return ret;
+        return target.upcall(object, entry.getSMRArguments());
     }
 
     /**
@@ -668,4 +669,33 @@ public class VersionLockedObject<T> {
         seek(globalAddress + 1);
     }
 
+    /**
+     * This class includes the metrics registry and the timer names used within VersionLockedObject
+     * methods
+     */
+    private static class VloMetricsHelper {
+        private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+        private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +
+                "vlo.optimistic-read";
+        private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +
+                "vlo.updated-object-read";
+        private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + "vlo.update";
+        private static final String VLO_GC = CorfuComponent.OBJECT.toString() + "vlo.gc";
+
+        private static Timer.Context getOptimisticReadContext() {
+            return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));
+        }
+
+        private  static Timer.Context getUpdatedObjectReadContext() {
+            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATED_OBJECT_READ));
+        }
+
+        private  static Timer.Context getVloUpdateContext() {
+            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATE));
+        }
+
+        private  static Timer.Context getVloGcContext() {
+            return MetricsUtils.getConditionalContext(metrics.timer(VLO_GC));
+        }
+    }
 }

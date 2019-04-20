@@ -93,6 +93,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
                     null, null, epoch, entries, cf));
+            cf.get();
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
             if (e.getCause() instanceof RuntimeException) {
@@ -106,13 +107,14 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     /**
      * Trim addresses from log up to a prefix.
      *
-     * @param address prefix address to trim to (inclusive)
+     * @param address  prefix address to trim to (inclusive).
+     * @param msgEpoch Message epoch.
      */
-    public void prefixTrim(@Nonnull Token address) {
+    public void prefixTrim(long address, long msgEpoch) {
         try {
-            CompletableFuture<Void> cf = new CompletableFuture();
+            CompletableFuture<Void> cf = new CompletableFuture<>();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address.getSequence(), null, address.getEpoch(), null, cf));
+                    address, null, msgEpoch, null, cf));
             cf.get();
         } catch (Exception e) {
             if (e.getCause() instanceof RuntimeException) {
@@ -266,6 +268,9 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
+                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
+                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getTails(), e
+                        );
                         currOp.setException(e);
                         res.add(currOp);
                     }

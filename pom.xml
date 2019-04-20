@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.2.2.20190416191935.6583</version>
+    <version>0.2.3.20190420162857.3580</version>
 
     <modules>
         <module>infrastructure</module>
@@ -17,8 +17,7 @@
         <module>samples</module>
         <module>debian</module>
         <module>generator</module>
-        <module>migration</module>
-
+        <module>it</module>
     </modules>
 
 
@@ -27,20 +26,14 @@
     <url>http://www.corfudb.org</url>
     <description>A cloud scale-consistency platform</description>
 
-    <distributionManagement>
-        <repository>
-            <id>internal.repo</id>
-            <name>Temporary Staging Repository</name>
-            <url>file://${project.build.directory}/mvn-repo</url>
-        </repository>
-    </distributionManagement>
-
     <organization>
         <name>CorfuDB</name>
         <url>http://www.corfudb.org</url>
     </organization>
 
     <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>
@@ -152,7 +145,7 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.27.Final</version>
+            <version>4.1.33.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -181,6 +174,14 @@
 	         <scope>provided</scope>
         </dependency>
     </dependencies>
+
+    <distributionManagement>
+        <repository>
+            <id>bintray-corfudb-maven</id>
+            <name>CorfuDB repository</name>
+            <url>https://api.bintray.com/maven/corfudb/maven/org.corfudb/;publish=1</url>
+        </repository>
+    </distributionManagement>
 
     <profiles>
         <profile>
@@ -243,6 +244,11 @@
 
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.0.0-M1</version>
+            </plugin>
+            <plugin>
                 <groupId>org.sonarsource.scanner.maven</groupId>
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>3.3.0.603</version>
@@ -303,36 +309,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>2.3</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
-                <configuration>
-                    <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar
-                    </outputFile>
-                </configuration>
-            </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>
                 <groupId>com.mycila</groupId>
@@ -341,14 +317,6 @@
                 <configuration>
                     <header>LICENSE.txt</header>
                     <strictCheck>true</strictCheck>
-                </configuration>
-            </plugin>
-            <plugin>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>2.8.1</version>
-                <configuration>
-                    <altDeploymentRepository>internal.repo::default::file://${project.build.directory}/mvn-repo
-                    </altDeploymentRepository>
                 </configuration>
             </plugin>
             <plugin>

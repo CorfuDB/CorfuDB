@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.Data;
@@ -356,11 +357,11 @@ public class Layout {
         epoch += 1;
     }
 
-    public List<String> getActiveLayoutServers() {
+    public ImmutableList<String> getActiveLayoutServers() {
         return layoutServers.stream()
                 // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
                 .filter(s -> !unresponsiveServers.contains(s))
-                .collect(Collectors.toList());
+                .collect(ImmutableList.toImmutableList());
     }
 
     public enum ReplicationMode {
@@ -394,7 +395,7 @@ public class Layout {
                     return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new ChainReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
                                     r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
@@ -437,7 +438,7 @@ public class Layout {
                     return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new QuorumReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
                                     r.getParameters().getHoleFillRetryThreshold()));
                 }
             }

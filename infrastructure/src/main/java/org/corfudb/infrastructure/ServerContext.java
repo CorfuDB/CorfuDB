@@ -6,6 +6,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +19,8 @@ import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 
 import javax.annotation.Nonnull;
@@ -54,6 +55,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 public class ServerContext implements AutoCloseable {
+
     // Layout Server
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
@@ -66,10 +68,6 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
-    private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
-    private static final String KEY_TAIL_SEGMENT = "CURRENT";
-    private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
-    private static final String KEY_STARTING_ADDRESS = "CURRENT";
     private static final String KEY_SEQUENCER = "SEQUENCER";
     private static final String PREFIX_SEQUENCER_EPOCH = "EPOCH";
 
@@ -109,10 +107,6 @@ public class ServerContext implements AutoCloseable {
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
-    @Setter
-    private IReconfigurationHandlerPolicy healingHandlerPolicy;
-
-    @Getter
     private final EventLoopGroup clientGroup;
 
     @Getter
@@ -124,6 +118,12 @@ public class ServerContext implements AutoCloseable {
     @Getter
     @Setter
     private boolean bindToAllInterfaces = false;
+
+    @Getter (AccessLevel.PACKAGE)
+    private final NodeLocator nodeLocator;
+
+    @Getter (AccessLevel.PACKAGE)
+    private final String localEndpoint;
 
     @Getter
     private static final MetricRegistry metrics = new MetricRegistry();
@@ -142,7 +142,6 @@ public class ServerContext implements AutoCloseable {
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
         generateNodeId();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
-        this.healingHandlerPolicy = new SequencerHealingPolicy();
 
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
@@ -159,14 +158,34 @@ public class ServerContext implements AutoCloseable {
             bossGroup = getNewBossGroup();
         }
 
+        nodeLocator = NodeLocator
+                .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
+        localEndpoint = NodeLocator.getLegacyEndpoint(nodeLocator);
+
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
     }
 
-    String getLocalEndpoint() {
-        return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
+    int getBaseServerThreadCount() {
+        Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
+        return threadCount == null ? 1 : threadCount;
+    }
+
+    int getLayoutServerThreadCount() {
+        Integer threadCount = getServerConfig(Integer.class, "--layout-server-threads");
+        return threadCount == null ? 1 : threadCount;
+    }
+
+    int getLogunitThreadCount() {
+        Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
+        return threadCount == null ? BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors() : threadCount;
+    }
+
+    int getManagementServerThreadCount() {
+        Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
+        return threadCount == null ? 4 : threadCount;
     }
 
     /**
@@ -240,7 +259,7 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
-                .bulkReadSize(Integer.valueOf((String) serverConfig.get("--batch-size")))
+                .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
                 .build();
     }
 
@@ -422,30 +441,6 @@ public class ServerContext implements AutoCloseable {
 
     public void setLayoutInHistory(Layout layout) {
         dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
-    }
-
-    public long getTailSegment() {
-        Long tailSegment = dataStore.get(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT);
-        return tailSegment == null ? 0 : tailSegment;
-    }
-
-    public void setTailSegment(long tailSegment) {
-        dataStore.put(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT, tailSegment);
-    }
-
-    /**
-     * Returns the dataStore starting address.
-     *
-     * @return the starting address
-     */
-    public long getStartingAddress() {
-        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
-                KEY_STARTING_ADDRESS);
-        return startingAddress == null ? 0 : startingAddress;
-    }
-
-    public void setStartingAddress(long startingAddress) {
-        dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
     }
 
     /**
