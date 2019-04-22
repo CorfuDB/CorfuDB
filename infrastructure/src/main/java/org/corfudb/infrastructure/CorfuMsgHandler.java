@@ -6,9 +6,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.metrics.Timer;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;

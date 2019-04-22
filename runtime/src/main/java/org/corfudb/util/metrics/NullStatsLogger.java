@@ -1,7 +1,5 @@
 package org.corfudb.util.metrics;
 
-import java.io.Closeable;
-
 public class NullStatsLogger implements StatsLogger {
 
     public static NullStatsLogger INSTANCE = new NullStatsLogger();

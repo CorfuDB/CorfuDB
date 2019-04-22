@@ -17,8 +17,6 @@ import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 import org.corfudb.util.metrics.Counter;
@@ -167,14 +165,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = timerAccess.getContext()) {
-            return accessInner(accessMethod, conflictObject, isEnabled);
+            return accessInner(accessMethod, conflictObject);
         }
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
-                              Object[] conflictObject, boolean isMetricsEnabled) {
+                              Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             try {
                 return TransactionalContext.getCurrentContext()
@@ -340,15 +337,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = timerTxn.getContext()) {
-            return TXExecuteInner(txFunction, isEnabled);
+            return TXExecuteInner(txFunction);
         }
     }
 
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
-    private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
+    private <R> R TXExecuteInner(Supplier<R> txFunction) {
         // Don't nest transactions if we are already running in a transaction
         if (TransactionalContext.isInTransaction()) {
             try {
