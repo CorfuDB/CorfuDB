@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
@@ -44,7 +43,7 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 import org.corfudb.util.metrics.MetricsProvider;
-import org.corfudb.util.metrics.NullMetricsProvider;
+import org.corfudb.util.metrics.Providers.NullMetricsProvider;
 
 import javax.annotation.Nonnull;
 import java.lang.Thread.UncaughtExceptionHandler;

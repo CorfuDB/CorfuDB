@@ -6,5 +6,6 @@ package org.corfudb.util.metrics;
 public interface MetricsProvider {
 
     StatsLogger getLogger(String name);
-
+    void start();
+    void stop();
 }

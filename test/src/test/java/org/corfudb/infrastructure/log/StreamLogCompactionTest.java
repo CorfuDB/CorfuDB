@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.metrics.Counter;
-import org.corfudb.util.metrics.NullStatsLogger;
+import org.corfudb.util.metrics.loggers.NullStatsLogger;
 import org.corfudb.util.metrics.StatsLogger;
 import org.junit.BeforeClass;
 import org.junit.Test;

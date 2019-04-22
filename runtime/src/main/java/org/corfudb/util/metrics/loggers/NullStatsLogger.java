@@ -1,4 +1,9 @@
-package org.corfudb.util.metrics;
+package org.corfudb.util.metrics.loggers;
+
+import org.corfudb.util.metrics.Counter;
+import org.corfudb.util.metrics.Gauge;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.Timer;
 
 public class NullStatsLogger implements StatsLogger {
 

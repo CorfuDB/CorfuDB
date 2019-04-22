@@ -19,7 +19,7 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.metrics.MetricsProvider;
-import org.corfudb.util.metrics.NullMetricsProvider;
+import org.corfudb.util.metrics.Providers.NullMetricsProvider;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -128,7 +128,8 @@ public class ServerContext implements AutoCloseable {
             Sets.newHashSet(PREFIX_PHASE_1, PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
     @Getter
-    private final MetricsProvider metricsProvider = new NullMetricsProvider();
+    @Setter
+    MetricsProvider metricsProvider = new NullMetricsProvider();
 
     /**
      * Returns a new ServerContext.

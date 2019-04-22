@@ -10,6 +10,7 @@ import static org.fusesource.jansi.Ansi.ansi;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableList;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -33,6 +34,9 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
+import org.corfudb.util.metrics.Providers.PrometheusProvider;
+import org.corfudb.util.metrics.StatsLogger;
+import org.corfudb.util.metrics.loggers.CodeHaleLogger;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
@@ -294,6 +298,13 @@ public class CorfuServer {
 
         // Create a common Server Context for all servers to access.
         try (ServerContext serverContext = new ServerContext(opts)) {
+
+            MetricRegistry registry = new MetricRegistry();
+            StatsLogger statsLogger = new CodeHaleLogger("root", registry);
+            PrometheusProvider prometheusProvider = new PrometheusProvider(9999, statsLogger);
+            serverContext.setMetricsProvider(prometheusProvider);
+            prometheusProvider.start();
+
             List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
                     .add(new BaseServer(serverContext))
                     .add(new SequencerServer(serverContext))
@@ -310,6 +321,7 @@ public class CorfuServer {
             shutdownThread = new Thread(() -> cleanShutdown(servers));
             shutdownThread.setName("ShutdownThread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
+
 
             startAndListen(serverContext.getBossGroup(),
                     serverContext.getWorkerGroup(),

@@ -126,6 +126,8 @@ public class LogUnitServer extends AbstractServer {
 
         StatsLogger statsLogger = serverContext.getMetricsProvider().getLogger(getClass().getName());
 
+        statsLogger.getCounter("c1").inc();
+
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES,
                 ServerContext.SHUTDOWN_TIMER, statsLogger);
     }

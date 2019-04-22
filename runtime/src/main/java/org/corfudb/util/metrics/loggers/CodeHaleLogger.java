@@ -1,6 +1,7 @@
 package org.corfudb.util.metrics.loggers;
 
 import com.codahale.metrics.MetricRegistry;
+import lombok.Getter;
 import org.corfudb.util.metrics.Counter;
 import org.corfudb.util.metrics.Gauge;
 import org.corfudb.util.metrics.StatsLogger;
@@ -10,6 +11,7 @@ import static com.codahale.metrics.MetricRegistry.name;
 
 public class CodeHaleLogger implements StatsLogger {
 
+    @Getter
     final private MetricRegistry registry;
     final private String name;
 
