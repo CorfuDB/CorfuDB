@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.fusesource.jansi.Ansi.ansi;
 
 import java.io.File;
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,7 +35,6 @@ import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
 import org.corfudb.test.concurrent.TestThreadGroups;
-import org.corfudb.test.logging.TestLogger;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 import org.fusesource.jansi.Ansi;
@@ -68,19 +66,9 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
-    public static final int LOG_ELEMENTS = 25;
-
-    private static final TestLogger LOGGER = new TestLogger(LOG_ELEMENTS);
-
-    @Before
-    public void initLogging() {
-        LOGGER.reset(); // Get a logger instance and reset it
-    }
-
     @AfterClass
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();
-        LOGGER.reset();
     }
 
     /** A watcher which prints whether tests have failed or not, for a useful
@@ -216,23 +204,6 @@ public class AbstractCorfuTest {
             });
         }
 
-        /** Print the latest logs, up to the number of log entries defined in LOG_ELEMENTS.
-         *
-         */
-        protected void printLogs() {
-            System.out.println(ansi().fgCyan().bold().a("Last ").a(LOG_ELEMENTS)
-                .a(" Logs Until Failure")
-                .reset());
-            Iterable<byte[]> logEvents = LOGGER.getEventsAndReset();
-            logEvents.forEach(e -> {
-                try {
-                    System.out.write(e);
-                } catch (IOException ie) {
-                    System.out.println("Exception printing log: " + ie.getMessage());
-                }
-            });
-        }
-
         /** Run when the test fails, prints the name of the exception
          * with the line number the exception was caused on.
          * @param e             The exception which caused the error.
@@ -248,7 +219,6 @@ public class AbstractCorfuTest {
                     .a(lineOut)
                     .a("]").newline());
             printThreads();
-            printLogs();
             System.out.flush();
         }
 
@@ -261,7 +231,6 @@ public class AbstractCorfuTest {
                 .a("TIMED OUT").reset()
                 .a("]").newline());
             printThreads();
-            printLogs();
             System.out.flush();
         }
 
