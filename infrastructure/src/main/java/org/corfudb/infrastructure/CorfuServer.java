@@ -34,6 +34,8 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
+import org.corfudb.util.metrics.MetricsProvider;
+import org.corfudb.util.metrics.Providers.NullMetricsProvider;
 import org.corfudb.util.metrics.Providers.PrometheusProvider;
 import org.corfudb.util.metrics.StatsLogger;
 import org.corfudb.util.metrics.loggers.CodeHaleLogger;
@@ -286,6 +288,19 @@ public class CorfuServer {
         root.setLevel(level);
     }
 
+    static void setupMetrics(ServerContext serverContext) {
+        MetricsProvider provider = NullMetricsProvider.INSTANCE;
+        int metricsPort = 9999;
+        if (serverContext.reportMetrics()) {
+            MetricRegistry registry = new MetricRegistry();
+            CodeHaleLogger statsLogger = new CodeHaleLogger("root", registry);
+            provider = new PrometheusProvider(metricsPort, statsLogger);
+            log.info("setupMetrics: reporting metrics on port {}");
+        }
+
+        serverContext.setMetricsProvider(provider);
+    }
+
     /**
      * Creates all the components of the Corfu Server.
      * Starts the Server Router.
@@ -298,6 +313,8 @@ public class CorfuServer {
 
         // Create a common Server Context for all servers to access.
         try (ServerContext serverContext = new ServerContext(opts)) {
+
+            setupMetrics(serverContext);
 
             MetricRegistry registry = new MetricRegistry();
             StatsLogger statsLogger = new CodeHaleLogger("root", registry);

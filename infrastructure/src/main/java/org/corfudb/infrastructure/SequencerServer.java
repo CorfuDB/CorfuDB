@@ -22,6 +22,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Utils;
+import org.corfudb.util.metrics.Counter;
 import org.corfudb.util.metrics.StatsLogger;
 
 import java.lang.invoke.MethodHandles;
@@ -122,6 +123,8 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+    final Counter tokenReqCounter;
+
     /**
      * Returns a new SequencerServer.
      *
@@ -130,12 +133,13 @@ public class SequencerServer extends AbstractServer {
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         Config config = Config.parse(serverContext.getServerConfig());
-
+        statsLogger = this.serverContext.getMetricsProvider().getLogger(getClass().getName());
         // Sequencer server is single threaded by current design
         this.executor = Executors.newSingleThreadExecutor(
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
 
+        tokenReqCounter = statsLogger.getCounter("token-request");
         globalLogTail = config.getInitialToken();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
@@ -411,6 +415,7 @@ public class SequencerServer extends AbstractServer {
 
         TokenRequest req = msg.getPayload();
 
+        tokenReqCounter.inc();
         // dispatch request handler according to request type while collecting the timer metrics
         switch (req.getReqType()) {
             case TokenRequest.TK_QUERY:

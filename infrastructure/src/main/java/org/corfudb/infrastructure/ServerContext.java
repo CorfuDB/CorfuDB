@@ -162,6 +162,10 @@ public class ServerContext implements AutoCloseable {
         localEndpoint = NodeLocator.getLegacyEndpoint(nodeLocator);
     }
 
+    boolean reportMetrics() {
+        return true;
+    }
+
     int getBaseServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
         return threadCount == null ? 1 : threadCount;

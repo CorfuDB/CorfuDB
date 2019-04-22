@@ -486,9 +486,7 @@ public class CorfuRuntime {
     private final ManagementView managementView = new ManagementView(this);
 
     @Getter
-    //TODO(Maithem): make final
-    // dont pass this in a class field vairable
-    private MetricsProvider metricsProvider = NullMetricsProvider.INSTANCE;
+    private final MetricsProvider metricsProvider;
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -643,6 +641,10 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
+        // Initialize the and start the metrics provider
+        this.metricsProvider = parameters.getMetricsProvider();
+        this.metricsProvider.start();
+
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 
@@ -690,6 +692,7 @@ public class CorfuRuntime {
     public void shutdown() {
         // Stopping async task from fetching layout.
         isShutdown = true;
+        metricsProvider.stop();
         garbageCollector.stop();
         runtimeExecutor.shutdownNow();
         if (layout != null) {
