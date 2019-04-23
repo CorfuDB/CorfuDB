@@ -38,6 +38,7 @@ import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.protocols.logprotocol.ISMREntryLocator;
 import org.corfudb.util.ImmuableListSetWrapper;
 
 /** The CorfuTable implements a simple key-value store.
@@ -273,6 +274,9 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
 
     @Getter
+    private final SMRLocationInfo<K> sMRLocationInfo = new SMRLocationInfo<>();
+
+    @Getter
     boolean indexGenerationFailed = false;
 
     /** Generate a table with the given set of indexes. */
@@ -399,7 +403,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
     /** {@inheritDoc} */
     @Override
-    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
+    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord",
+            garbageFunction = "identifyPutGarbage")
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
@@ -419,6 +424,14 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     protected void undoPut(CorfuTable<K, V> table, V undoRecord, K key, V value) {
         // Same as undoRemove (restore previous value)
         undoRemove(table, undoRecord, key);
+    }
+
+    @DontInstrument
+    protected List<Object> identifyPutGarbage(CorfuTable<K,V> table, ISMREntryLocator locator, K key,
+                                              V value) {
+        List<Object> garbage = new ArrayList<>();
+        table.getSMRLocationInfo().addUnsafe(key, locator).ifPresent(garbage::add);
+        return garbage;
     }
 
     @DontInstrument
@@ -471,6 +484,13 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
         );
     }
 
+    @DontInstrument
+    List<Object> identifyPutAllGarbage(CorfuTable<K, V> table, ISMREntryLocator locator,
+                                       Map<? extends K, ? extends V> m) {
+        return m.entrySet().stream().map(entry -> identifyPutGarbage(table, locator, entry.getKey(), entry.getValue()))
+                .flatMap(locatorList -> locatorList.stream()).collect(Collectors.toList());
+    }
+
     /** {@inheritDoc} */
     @Override
     @Mutator(name = "put", noUpcall = true)
@@ -510,8 +530,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
     /** {@inheritDoc} */
     @Override
-    @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
-                                undoRecordFunction = "undoRemoveRecord")
+    @MutatorAccessor(name = "remove", undoFunction = "undoRemove", undoRecordFunction = "undoRemoveRecord",
+            garbageFunction = "identifyRemoveGarbage")
     @SuppressWarnings("unchecked")
     public V remove(@ConflictParameter Object key) {
         V previous =  mainMap.remove(key);
@@ -538,6 +558,13 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
         }
     }
 
+    @DontInstrument
+    protected List<Object> identifyRemoveGarbage(CorfuTable<K, V> table, ISMREntryLocator locator, K key) {
+        List<java.lang.Object> garbage = new ArrayList<>();
+        table.getSMRLocationInfo().removeUnsafe(key, locator).ifPresent(garbage::add);
+        return garbage;
+    }
+
     /** {@inheritDoc} */
     @Override
     @Mutator(name = "remove", noUpcall = true)
@@ -551,7 +578,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Mutator(name = "putAll",
             undoFunction = "undoPutAll",
             undoRecordFunction = "undoPutAllRecord",
-            conflictParameterFunction = "putAllConflictFunction")
+            conflictParameterFunction = "putAllConflictFunction",
+            garbageFunction = "identifyPutAllGarbage")
     public void putAll(@Nonnull Map<? extends K, ? extends V> m) {
         // If we have no index functions, then just directly put all
         if (secondaryIndexes.isEmpty()) {

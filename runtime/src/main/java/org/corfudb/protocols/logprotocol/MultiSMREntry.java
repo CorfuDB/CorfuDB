@@ -1,18 +1,24 @@
 package org.corfudb.protocols.logprotocol;
 
+import com.codepoetics.protonpack.StreamUtils;
 import io.netty.buffer.ByteBuf;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.SMREntryWithLocator;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 
 
@@ -26,7 +32,38 @@ import org.corfudb.util.serializer.Serializers;
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @ToString
 @Slf4j
-public class MultiSMREntry extends LogEntry implements ISMRConsumable {
+public class MultiSMREntry extends LogEntry implements ISMRWithLocatorConsumable {
+
+    public static class MultiSMREntryLocator implements ISMREntryLocator{
+        /**
+         * The globalAddress that the SMREntry is from in the global log.
+         */
+        @Getter
+        private final long globalAddress;
+
+        /**
+         * Local position of one SMREntry inside one MultiSMREntry. The position starts from 0.
+         */
+        @Getter
+        private final int pos;
+
+        public MultiSMREntryLocator(long globalAddress, int pos) {
+            this.globalAddress = globalAddress;
+            this.pos = pos;
+        }
+
+        @Override
+        public int compareTo(ISMREntryLocator other) {
+            long otherAddress = other.getGlobalAddress();
+            if (otherAddress == globalAddress) {
+                if (other instanceof MultiSMREntry) {
+                    return Integer.compare(pos, ((MultiSMREntryLocator) other).getPos());
+                }
+                throw new RuntimeException("SMREntries of the same global address have different SMREntry type");
+            }
+            return Long.compare(globalAddress, otherAddress);
+        }
+    }
 
     @Getter
     List<SMREntry> updates = Collections.synchronizedList(new ArrayList<>());
@@ -82,5 +119,13 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
         return updates;
+    }
+
+    @Override
+    public List<SMREntryWithLocator> getSMRWithLocatorUpdates(long globalAddress, UUID id) {
+        return StreamUtils.zipWithIndex(updates.stream()).map(i -> {
+            MultiSMREntryLocator locator = new MultiSMREntryLocator(globalAddress, (int) i.getIndex());
+            return new SMREntryWithLocator(i.getValue(), locator);
+        }).collect(Collectors.toList());
     }
 }

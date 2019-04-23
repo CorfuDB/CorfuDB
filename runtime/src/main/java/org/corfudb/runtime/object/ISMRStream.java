@@ -22,14 +22,14 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
  */
 @Deprecated // TODO: Add replacement method that conforms to style
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-public interface ISMRStream {
+public interface ISMRStream <T extends SMREntry>{
 
 
-    List<SMREntry> remainingUpTo(long maxGlobal);
+    List<T> remainingUpTo(long maxGlobal);
 
-    List<SMREntry> current();
+    List<T> current();
 
-    List<SMREntry> previous();
+    List<T> previous();
 
     long pos();
 
@@ -39,9 +39,9 @@ public interface ISMRStream {
 
     void gc(long trimMark);
 
-    Stream<SMREntry> stream();
+    Stream<T> stream();
 
-    Stream<SMREntry> streamUpTo(long maxGlobal);
+    Stream<T> streamUpTo(long maxGlobal);
 
     /**
      * Append a SMREntry to the stream, returning the global address

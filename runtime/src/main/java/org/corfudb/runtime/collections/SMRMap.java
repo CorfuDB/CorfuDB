@@ -30,6 +30,13 @@ import org.corfudb.annotations.TransactionalMethod;
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
+    private final SMRLocationInfo<K> smrLocationInfo = new SMRLocationInfo<>();
+
+    @Override
+    public SMRLocationInfo<K> getSMRLocationInfo() {
+        return smrLocationInfo;
+    }
+
     /**
      * Returns a {@link Set} view of the keys contained in this map.
      * The set is backed by the map, so changes to the map are

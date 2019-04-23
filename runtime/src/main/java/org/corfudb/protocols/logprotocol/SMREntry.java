@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.SMREntryWithLocator;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -22,7 +23,33 @@ import org.corfudb.util.serializer.Serializers;
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @ToString(callSuper = true)
 @NoArgsConstructor
-public class SMREntry extends LogEntry implements ISMRConsumable {
+public class SMREntry extends LogEntry implements ISMRWithLocatorConsumable {
+
+    public static class SMREntryLocator implements ISMREntryLocator {
+        /**
+         * The globalAddress that the SMREntry is from in the global log.
+         */
+        @Getter
+        private final long globalAddress;
+
+        public SMREntryLocator(long globalAddress) {
+            this.globalAddress = globalAddress;
+        }
+
+        @Override
+        public int compareTo(ISMREntryLocator other) {
+            long otherAddress = other.getGlobalAddress();
+            if (otherAddress == globalAddress) {
+                if (other instanceof  SMREntryLocator) {
+                    return 0;
+                } else {
+                    throw new RuntimeException("SMREntries of the same global address have different SMREntry type");
+                }
+            } else {
+                return Long.compare(globalAddress, otherAddress);
+            }
+        }
+    }
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -30,7 +57,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
     @Getter
-    private String SMRMethod;
+    protected String SMRMethod;
 
     /**
      * The arguments to the SMR method, which could be 0.
@@ -38,13 +65,13 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
     @Getter
-    private Object[] SMRArguments;
+    protected Object[] SMRArguments;
 
     /**
      * The serializer used to serialize the SMR arguments.
      */
     @Getter
-    private ISerializer serializerType;
+    protected ISerializer serializerType;
 
     /** An undo record, which can be used to undo this method.
      *
@@ -93,6 +120,17 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         this.serializerType = serializer;
     }
 
+    public SMREntry(@NonNull SMREntry smrEntry) {
+        super(smrEntry);
+        this.SMRMethod = smrEntry.getSMRMethod();
+        this.SMRArguments = smrEntry.getSMRArguments();
+        this.serializerType = smrEntry.getSerializerType();
+        this.undoRecord = smrEntry.undoRecord;
+        this.undoable = smrEntry.undoable;
+        this.upcallResult = smrEntry.upcallResult;
+        this.haveUpcallResult = smrEntry.haveUpcallResult;
+    }
+
     /**
      * This function provides the remaining buffer. Child entries
      * should initialize their contents based on the buffer.
@@ -139,8 +177,15 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
 
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
+        return Collections.singletonList(this);
+    }
+
+    @Override
+    public List<SMREntryWithLocator> getSMRWithLocatorUpdates(long globalAddress, UUID id) {
         // TODO: we should check that the id matches the id of this entry,
         // but replex erases this information.
-        return Collections.singletonList(this);
+        SMREntryLocator locator = new SMREntryLocator(globalAddress);
+        SMREntryWithLocator smrEntryWithLocator = new SMREntryWithLocator(this, locator);
+        return Collections.singletonList(smrEntryWithLocator);
     }
 }

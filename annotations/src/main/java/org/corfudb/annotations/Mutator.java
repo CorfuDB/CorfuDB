@@ -38,6 +38,12 @@ public @interface Mutator {
      */
     String conflictParameterFunction() default "";
 
+    /** The name of the function which will be called when syncing up to the smr
+     * stream backed by the log to identify garbage.
+     * @return  The name of a garbage identification function.
+     */
+    String garbageFunction() default "";
+
     /** Whether this mutator resets the state of this object. Typically used
      * for methods like clear().
      * @return True, if the mutator resets the object.

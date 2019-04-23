@@ -129,6 +129,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @param upcallTargetMap     upCallTargetMap
      * @param undoTargetMap       undoTargetMap
      * @param undoRecordTargetMap undoRecordTargetMap
+     * @param garbageFunctionMap  garbageFunctionMap
      * @param resetSet            resetSet
      */
     @Deprecated // TODO: Add replacement method that conforms to style
@@ -138,6 +139,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
+                             Map<String, IGarbageFunction<T>> garbageFunctionMap,
                              Set<String> resetSet
     ) {
         this.rt = rt;
@@ -150,8 +152,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                upcallTargetMap, undoRecordTargetMap,
-                undoTargetMap, resetSet);
+                upcallTargetMap, undoRecordTargetMap, undoTargetMap,
+                garbageFunctionMap, resetSet);
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();

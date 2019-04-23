@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.ISMREntryLocator;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
@@ -80,7 +81,7 @@ public class VersionLockedObject<T> {
     /**
      * The stream view this object is backed by.
      */
-    private final ISMRStream smrStream;
+    private final ISMRStream<SMREntryWithLocator> smrStream;
 
     /**
      * The optimistic SMR stream on this object, if any.
@@ -101,6 +102,11 @@ public class VersionLockedObject<T> {
      * The undo target map for this object.
      */
     private final Map<String, IUndoFunction<T>> undoFunctionMap;
+
+    /**
+     * The garbage identification function map for this object.
+     */
+    private final Map<String, IGarbageFunction<T>> garbageFunctionMap;
 
     /**
      * The reset set for this object.
@@ -126,6 +132,7 @@ public class VersionLockedObject<T> {
      * @param smrStream         Stream View backing this object.
      * @param upcallTargets     UpCall map for this object.
      * @param undoRecordTargets Undo record function map for this object.
+     * @param garbageTargets    Garbage identification function map for this object.
      * @param undoTargets       Undo functions map.
      * @param resetSet          Reset set for this object.
      */
@@ -134,12 +141,14 @@ public class VersionLockedObject<T> {
                                Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
                                Map<String, IUndoRecordFunction<T>> undoRecordTargets,
                                Map<String, IUndoFunction<T>> undoTargets,
+                               Map<String, IGarbageFunction<T>> garbageTargets,
                                Set<String> resetSet) {
         this.smrStream = smrStream;
 
         this.upcallTargetMap = upcallTargets;
         this.undoRecordFunctionMap = undoRecordTargets;
         this.undoFunctionMap = undoTargets;
+        this.garbageFunctionMap = garbageTargets;
         this.resetSet = resetSet;
 
         this.newObjectFn = newObjectFn;
@@ -519,6 +528,7 @@ public class VersionLockedObject<T> {
      *
      * @param entry The entry to apply.
      */
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     public Object applyUpdateUnsafe(SMREntry entry) {
         log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
                 entry.getEntry() != null ? entry.getEntry().getGlobalAddress() : "OPT",
@@ -554,6 +564,18 @@ public class VersionLockedObject<T> {
                 entry.setUndoRecord(object);
                 object = newObjectFn.get();
                 log.trace("Apply[{}] Undo->RESET", this);
+            }
+
+            if (entry instanceof SMREntryWithLocator) {
+                IGarbageFunction<T> garbageFunction = garbageFunctionMap.get(entry.getSMRMethod());
+                if (garbageFunction == null) {
+                    throw new RuntimeException("Unknown garbage identification for " + entry.getSMRMethod());
+                }
+
+                List<Object> garbage = garbageFunction.identifyGarbage(object,
+                        ((SMREntryWithLocator) entry).getLocator(),
+                        entry.getSMRArguments());
+                
             }
         }
 
@@ -618,7 +640,7 @@ public class VersionLockedObject<T> {
      * @param stream    The stream to sync forward
      * @param timestamp The timestamp to sync up to.
      */
-    protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
+    protected void syncStreamUnsafe(ISMRStream<? extends SMREntry> stream, long timestamp) {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;

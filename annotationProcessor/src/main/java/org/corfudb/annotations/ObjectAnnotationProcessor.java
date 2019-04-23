@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -43,11 +46,7 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
-import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
-import org.corfudb.runtime.object.IUndoFunction;
-import org.corfudb.runtime.object.IUndoRecordFunction;
+import org.corfudb.runtime.object.*;
 
 /** <p>The annotation processor, which takes annotated Corfu objects and
  * generates a class which can be used by the runtime instead of requiring
@@ -571,6 +570,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         addUndoRecordMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addResetSet(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addGarbageMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
@@ -918,6 +918,96 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
                 .build());
 
+    }
+
+    /** Use as stateful filter to deduplicate. */
+    public static <T> Predicate<T> distinctByProperty(Function<? super T, ?> propertyFunction) {
+        Set<Object> seen = ConcurrentHashMap.newKeySet();
+        return t -> seen.add(propertyFunction.apply(t));
+    }
+
+    /** Generate the garbage string and associated map for the type. */
+    private void addGarbageMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                               Set<TypeName> interfacesToAdd, Set<SmrMethodInfo> methodSet) {
+        String garbageString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null
+                        || x.method.getAnnotation(Mutator.class) != null)
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) == null
+                        || !x.method.getAnnotation(MutatorAccessor.class).garbageFunction().equals(""))
+                .filter(x -> x.method.getAnnotation(Mutator.class) == null
+                        || !x.method.getAnnotation(Mutator.class).garbageFunction().equals(""))
+                .filter(distinctByProperty(x -> getSmrFunctionName(x.method)))
+                .map(x -> {
+                    MutatorAccessor mutatorAccessor = x.method.getAnnotation(MutatorAccessor.class);
+                    Mutator mutator = x.method.getAnnotation(Mutator.class);
+                    String garbageFunction = mutator == null ? mutatorAccessor.garbageFunction() :
+                            mutator.garbageFunction();
+
+                    Optional<SmrMethodInfo> mi = methodSet.stream()
+                            .filter(y -> y.method.getSimpleName().toString().equals(garbageFunction))
+                            .findFirst();
+
+                    // Don't generate a record since we don't have a matching method
+                    if (!mi.isPresent()) {
+                        messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING,
+                                "No garbage identification method for " + x.method.getSimpleName()
+                                        + " named " + garbageFunction );
+                        return "";
+                    }
+
+                    // Check that the signature matches what we expect. (2+original)
+                    if (mi.get().method.getParameters().size()
+                            != x.method.getParameters().size() + 2) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, "garbage identification method "
+                                + garbageFunction + " contained the wrong number of parameters");
+                    }
+
+                    // Add the interface, if present.
+                    if (mi.get().interfaceOverride != null) {
+                        interfacesToAdd.add(ParameterizedTypeName
+                                .get(mi.get().interfaceOverride.asType()));
+                    }
+                    String callingConvention = mi.get().interfaceOverride == null ? "this." :
+                            mi.get().interfaceOverride.getSimpleName() + ".super.";
+
+                    return "\n.put(\"" + getSmrFunctionName(x.method) + "\", "
+                            + "(obj, locator, args) -> {return " + callingConvention
+                            + garbageFunction + "(obj, ("
+                            + ParameterizedTypeName.get(mi.get().method.getParameters()
+                            .get(1).asType())
+                            + ") locator, "
+                            + IntStream.range(0, x.method.getParameters().size())
+                            .mapToObj(i ->
+                                    "(" + mi.get().method.getParameters().get(i + 2)
+                                            .asType().toString() + ")"
+                                            + " args[" + i + "]")
+                            .collect(Collectors.joining(", "))
+                            + ");})";
+                })
+                .collect(Collectors.joining());
+
+        FieldSpec garbageMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ParameterizedTypeName.get(ClassName.get(IGarbageFunction.class),
+                        originalName)), "garbageMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ParameterizedTypeName.get(ClassName.get(IGarbageFunction.class),
+                                        originalName)), garbageString)
+                .build();
+
+        typeSpecBuilder.addField(garbageMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuGarbageMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ParameterizedTypeName.get(ClassName.get(IGarbageFunction.class),
+                                originalName)))
+                .addStatement("return $L", "garbageMap" + CORFUSMR_FIELD)
+                .build());
     }
 
     /** Add a conflict field to the method.

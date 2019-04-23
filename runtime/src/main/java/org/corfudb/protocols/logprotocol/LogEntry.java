@@ -8,11 +8,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
@@ -32,6 +28,7 @@ public class LogEntry implements ICorfuSerializable {
     /**
      * The runtime to use.
      */
+    @Getter
     @Setter
     protected CorfuRuntime runtime;
 
@@ -55,6 +52,17 @@ public class LogEntry implements ICorfuSerializable {
      */
     public LogEntry(LogEntryType type) {
         this.type = type;
+    }
+
+    /**
+     * Constructor for generating LogEntries.
+     *
+     * @param logEntry another LogEntry instance.
+     */
+    public LogEntry(@NonNull LogEntry logEntry) {
+        this.runtime = logEntry.getRuntime();
+        this.type = logEntry.getType();
+        this.entry = logEntry.getEntry();
     }
 
     /**

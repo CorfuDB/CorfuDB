@@ -340,7 +340,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // be the same
             List<SMREntry> committedWrites =
                     getWriteSetEntryList(x.getStreamID());
-            List<SMREntry> entryWrites =
+            List<? extends SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
                             .getPayload(this.transaction.getRuntime()))
                     .getSMRUpdates(x.getStreamID());

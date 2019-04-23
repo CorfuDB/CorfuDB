@@ -60,7 +60,7 @@ import org.corfudb.util.Utils;
 @Slf4j
 @Deprecated
 @SuppressWarnings("checkstyle:abbreviationaswordinname")
-public class WriteSetSMRStream implements ISMRStream {
+public class WriteSetSMRStream implements ISMRStream<SMREntry> {
 
     List<AbstractTransactionalContext> contexts;
 

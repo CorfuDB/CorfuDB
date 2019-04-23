@@ -1,13 +1,16 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.protocols.logprotocol.ISMREntryLocator;
+
 
 /**
  * Created by mwei on 1/9/16.
@@ -72,7 +75,8 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
-    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
+    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord",
+            garbageFunction = "identifyPutGarbage")
     @Override
     V put(@ConflictParameter K key, V value);
 
@@ -89,7 +93,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
-    @Mutator(name = "put", noUpcall = true)
+    @Mutator(name = "put", garbageFunction = "identifyPutGarbage", noUpcall = true)
     default void blindPut(@ConflictParameter K key, V value) {
         put(key, value);
     }
@@ -125,6 +129,13 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
         }
     }
 
+    default List<Object> identifyPutGarbage(ISMRMap<K,V> map, ISMREntryLocator locator, K key,
+                                            V value) {
+        List<Object> garbage = new ArrayList<>();
+        map.getSMRLocationInfo().addUnsafe(key, locator).ifPresent(garbage::add);
+        return garbage;
+    }
+
     /**
      * {@jnheritDoc}
      *
@@ -132,7 +143,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * operation on the given key.
      */
     @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
-            undoRecordFunction = "undoRemoveRecord")
+            undoRecordFunction = "undoRemoveRecord", garbageFunction = "identifyRemoveGarbage")
     @Override
     V remove(@ConflictParameter Object key);
 
@@ -162,6 +173,12 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
         }
     }
 
+    default List<Object> identifyRemoveGarbage(ISMRMap<K,V> map, ISMREntryLocator locator, K key) {
+        List<Object> garbage = new ArrayList<>();
+        map.getSMRLocationInfo().removeUnsafe(key, locator).ifPresent(garbage::add);
+        return garbage;
+    }
+
     /**
      * {@inheritDoc}
      *
@@ -169,7 +186,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     @Mutator(name = "putAll", undoFunction = "undoPutAll",
             undoRecordFunction = "undoPutAllRecord",
-            conflictParameterFunction = "putAllConflictFunction")
+            conflictParameterFunction = "putAllConflictFunction", garbageFunction = "identifyPutAllGarbage")
     @Override
     void putAll(Map<? extends K, ? extends V> m);
 
@@ -223,6 +240,12 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
         );
     }
 
+    default List<Object> identifyPutAllGarbage(ISMRMap<K,V> map, ISMREntryLocator locator,
+                                                        Map<? extends K, ? extends V> m) {
+        return m.entrySet().stream().map(entry -> identifyPutGarbage(map, locator, entry.getKey(), entry.getValue()))
+                .flatMap(locatorList -> locatorList.stream()).collect(Collectors.toList());
+    }
+
 
     /**
      * {@inheritDoc}
@@ -273,4 +296,5 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     @Override
     Set<Entry<K, V>> entrySet();
 
+    SMRLocationInfo<K> getSMRLocationInfo();
 }
