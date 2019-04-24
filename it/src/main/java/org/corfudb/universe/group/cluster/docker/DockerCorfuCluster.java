@@ -72,7 +72,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
         Layout layout = getLayout();
         log.info("Bootstrap docker corfu cluster. Cluster: {}. layout: {}", params.getName(), layout.asJSONString());
 
-        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryTimeout());
+        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryDuration());
     }
 
     private Layout getLayout() {
