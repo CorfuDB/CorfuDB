@@ -3,7 +3,7 @@
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %highlight(%-5level) | %20.20thread{20} | %50.50(%logger.%M:%L) | %msg%n%xException
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %20.20thread{20} | %50.50(%logger.%M:%L) | %msg%n%xException
             </pattern>
         </encoder>
     </appender>
@@ -11,7 +11,7 @@
         <file>${user.home}/corfudb.log</file>
         <encoder>
             <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %highlight(%-5level) | %20.20thread{20} | %50.50(%logger.%M:%L) | %msg%n%xException
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %20.20thread{20} | %50.50(%logger.%M:%L) | %msg%n%xException
             </pattern>
         </encoder>
     </appender>
@@ -27,7 +27,7 @@
         </triggeringPolicy>
 
         <encoder>
-            <pattern>%d %highlight(%-5level) - %msg%n %ex{short}</pattern>
+            <pattern>%d %-5level - %msg%n %ex{short}</pattern>
         </encoder>
     </appender>
 
