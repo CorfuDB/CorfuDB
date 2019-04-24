@@ -11,6 +11,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
@@ -38,12 +39,12 @@ public class BootstrapUtil {
      *
      * @param layout       Layout to bootstrap the cluster.
      * @param retries      Number of retries to bootstrap each node before giving up.
-     * @param retryTimeout Duration between retries.
+     * @param retryDuration Duration between retries.
      */
     public static void bootstrap(@NonNull Layout layout,
                                  int retries,
-                                 @NonNull Duration retryTimeout) {
-        bootstrap(layout, CorfuRuntimeParameters.builder().build(), retries, retryTimeout);
+                                 @NonNull Duration retryDuration) {
+        bootstrap(layout, CorfuRuntimeParameters.builder().build(), retries, retryDuration);
     }
 
     /**
@@ -99,12 +100,12 @@ public class BootstrapUtil {
      * @param layout                 Layout to bootstrap the cluster.
      * @param corfuRuntimeParameters CorfuRuntimeParameters can specify security parameters.
      * @param retries                Number of retries to bootstrap each node before giving up.
-     * @param retryTimeout           Duration between retries.
+     * @param retryDuration          Duration between retries.
      */
     public static void bootstrap(@NonNull Layout layout,
                                  @NonNull CorfuRuntimeParameters corfuRuntimeParameters,
                                  int retries,
-                                 @NonNull Duration retryTimeout) {
+                                 @NonNull Duration retryDuration) {
         for (String server : layout.getAllServers()) {
             int retry = retries;
 
@@ -116,7 +117,7 @@ public class BootstrapUtil {
 
             while (retry-- > 0) {
                 try {
-                    log.info("Attempting to bootstrap node:{} with layout:{}", server, layout);
+                    log.info("Attempting to bootstrap node: {} with layout:{}", server, layout);
                     bootstrapLayoutServer(router, layout);
                     bootstrapManagementServer(router, layout);
                     break;
@@ -127,10 +128,10 @@ public class BootstrapUtil {
                 } catch (Exception e) {
                     log.error("Bootstrapping node: {} failed with exception:", server, e);
                     if (retry == 0) {
-                        throw new RuntimeException(e);
+                        throw new RetryExhaustedException("Bootstrapping node: retry exhausted");
                     }
-                    log.warn("Retrying {} times in {}ms.", retry, retryTimeout.toMillis());
-                    Sleep.MILLISECONDS.sleepUninterruptibly(retryTimeout.toMillis());
+                    log.warn("Retrying bootstrap {} times in {}ms.", retry, retryDuration.toMillis());
+                    Sleep.MILLISECONDS.sleepUninterruptibly(retryDuration.toMillis());
                 }
             }
 
