@@ -253,13 +253,8 @@ public class Layout {
      * @param globalAddress The global address.
      */
     public LayoutStripe getStripe(long globalAddress) {
-        for (LayoutSegment ls : segments) {
-            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
-                // TODO: this does not account for shifting segments.
-                return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));
-            }
-        }
-        throw new RuntimeException("Unmapped address!");
+        LayoutSegment ls = getSegment(globalAddress);
+        return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));
     }
 
     /**

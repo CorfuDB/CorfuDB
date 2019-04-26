@@ -65,7 +65,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
@@ -80,7 +79,6 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // repeat: this should throw an exception
         WriteRequest m2 = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m2.setGlobalAddress(ADDRESS_0);
@@ -147,7 +145,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize(s.getBytes(), b);
         WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(addr);
@@ -267,7 +264,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         final Long globalAddress = 0L;
@@ -361,7 +357,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
@@ -380,7 +375,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         b = Unpooled.buffer();
         Serializers.CORFU.serialize("1".getBytes(), b);
         m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
@@ -388,7 +382,6 @@ public class LogUnitServerTest extends AbstractServerTest {
 
 
         WriteRequest m2 = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
 
@@ -438,7 +431,5 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         assertThat(s1).hasCorrectCacheSize(randomCacheRatio);
     }
-
-
 }
 

@@ -1,18 +1,16 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.NavigableSet;
-import java.util.UUID;
-import java.util.function.Function;
-
-import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
+
+import javax.annotation.Nonnull;
+import java.util.NavigableSet;
+import java.util.UUID;
+import java.util.function.Function;
 
 /** A view of a stream implemented with backpointers.
  *
