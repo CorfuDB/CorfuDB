@@ -121,16 +121,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /**
      * Creates a CorfuCompileProxy object on a particular stream.
      *
-     * @param rt                  Connected CorfuRuntime instance.
-     * @param streamID            StreamID of the log.
-     * @param type                Type of underlying object to instantiate a new instance.
-     * @param args                Arguments to create this proxy.
-     * @param serializer          Serializer used by the SMR entries to serialize the arguments.
-     * @param upcallTargetMap     upCallTargetMap
-     * @param undoTargetMap       undoTargetMap
-     * @param undoRecordTargetMap undoRecordTargetMap
-     * @param garbageFunctionMap  garbageFunctionMap
-     * @param resetSet            resetSet
+     * @param rt                        Connected CorfuRuntime instance.
+     * @param streamID                  StreamID of the log.
+     * @param type                      Type of underlying object to instantiate a new instance.
+     * @param args                      Arguments to create this proxy.
+     * @param serializer                Serializer used by the SMR entries to serialize the arguments.
+     * @param upcallTargetMap           upCallTargetMap
+     * @param undoTargetMap             undoTargetMap
+     * @param undoRecordTargetMap       undoRecordTargetMap
+     * @param garbageFunctionMap        garbageFunctionMap
+     * @param garbageCleanFunctionMap   garbageCleanFunctionMap
+     * @param resetSet                  resetSet
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
@@ -140,6 +141,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
                              Map<String, IGarbageFunction<T>> garbageFunctionMap,
+                             Map<String, IGarbageCleanFunction<T>> garbageCleanFunctionMap,
                              Set<String> resetSet
     ) {
         this.rt = rt;
@@ -153,7 +155,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 upcallTargetMap, undoRecordTargetMap, undoTargetMap,
-                garbageFunctionMap, resetSet);
+                garbageFunctionMap, resetSet, garbageCleanFunctionMap, rt);
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();

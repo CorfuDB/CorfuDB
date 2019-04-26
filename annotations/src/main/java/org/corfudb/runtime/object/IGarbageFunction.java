@@ -7,7 +7,7 @@ import java.util.List;
  * Created by Xin on 03/18/19.
  */
 public interface IGarbageFunction<R> {
-    /** Undo the mutation on the object.
+    /** Identify the garbage of an object.
      *
      * @param object        The object identify garbage.
      * @param locator       The location in the global log where the SMR

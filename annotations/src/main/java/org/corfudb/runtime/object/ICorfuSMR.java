@@ -46,6 +46,13 @@ public interface ICorfuSMR<T> {
      */
     Set<String> getCorfuResetSet();
 
+    /**
+     * Get a map from from strings (function names) to garbage cleaning
+     * methods.
+     * @return The garbage cleaning map.
+     */
+    Map<String, IGarbageCleanFunction<T>>  getCorfuGarbageCleanMap();
+
     /** Return the stream ID that this object belongs to.
      * @return The stream ID this object belongs to. */
     default UUID getCorfuStreamID() {

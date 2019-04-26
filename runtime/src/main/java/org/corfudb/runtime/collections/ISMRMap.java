@@ -179,17 +179,6 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
         return garbage;
     }
 
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Conflicts: this operation conflicts on any keys that are in the map given.
-     */
-    @Mutator(name = "putAll", undoFunction = "undoPutAll",
-            undoRecordFunction = "undoPutAllRecord",
-            conflictParameterFunction = "putAllConflictFunction", garbageFunction = "identifyPutAllGarbage")
-    @Override
-    void putAll(Map<? extends K, ? extends V> m);
-
 
     /** Generate the conflict parameters for putAll, given the arguments to the
      * putAll operation.
@@ -253,9 +242,13 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * <p>Conflicts: this operation conflicts with the entire map, since it drops
      * all mappings which are present.
      */
-    @Mutator(name = "clear", reset = true)
+    @Mutator(name = "clear", garbageCleanFunction = "cleanGarbage", reset = true)
     @Override
     void clear();
+
+    default void cleanGarbage(ISMRMap<K,V> map, ISMREntryLocator locator) {
+        map.getSMRLocationInfo().clearUnsafe(locator);
+    }
 
     /**
      * {@inheritDoc}

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import java.lang.reflect.Constructor;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -65,7 +66,9 @@ public class CorfuCompileWrapperBuilder {
                 wrapperObject.getCorfuUndoMap(),
                 wrapperObject.getCorfuUndoRecordMap(),
                 wrapperObject.getCorfuGarbageMap(),
-                wrapperObject.getCorfuResetSet()));
+                wrapperObject.getCorfuGarbageCleanMap(),
+                wrapperObject.getCorfuResetSet())
+                );
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)

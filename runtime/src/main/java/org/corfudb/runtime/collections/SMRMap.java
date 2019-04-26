@@ -730,4 +730,10 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
         }
         return newValue;
     }
+
+    @Override
+    @TransactionalMethod
+    public void putAll(Map<? extends K, ? extends V> m) {
+        m.entrySet().stream().forEach(entry -> put(entry.getKey(), entry.getValue()));
+    }
 }

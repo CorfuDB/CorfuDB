@@ -49,6 +49,14 @@ public @interface MutatorAccessor {
      */
     boolean reset() default false;
 
+    /**
+     * The name of the function which will be called when resets the state of
+     * the garbage information. Typically used for methods like clear(). This
+     * function could be called only when reset() returns true;
+     * @return The name of a garbage cleaning function.
+     */
+    String garbageCleanFunction() default "";
+
     /** Whether or not we should generate an upcall for this mutator. If set to
      * true, no upcall will be generated - this is typically used when
      * providing a mutator-only version of a mutatorAccessor

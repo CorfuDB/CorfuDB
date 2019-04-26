@@ -575,26 +575,11 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
     /** {@inheritDoc} */
     @Override
-    @Mutator(name = "putAll",
-            undoFunction = "undoPutAll",
-            undoRecordFunction = "undoPutAllRecord",
-            conflictParameterFunction = "putAllConflictFunction",
-            garbageFunction = "identifyPutAllGarbage")
+    @TransactionalMethod
     public void putAll(@Nonnull Map<? extends K, ? extends V> m) {
-        // If we have no index functions, then just directly put all
-        if (secondaryIndexes.isEmpty()) {
-            mainMap.putAll(m);
-        } else {
-            // Otherwise we must update all secondary indexes
-            // TODO: Do this in parallel (need to acquire update locks, potentially)
-            m.entrySet().stream()
-                    .forEach(e -> {
-                        V previous = mainMap.put(e.getKey(), e.getValue());
-                        unmapSecondaryIndexes(e.getKey(), previous);
-                        mapSecondaryIndexes(e.getKey(), e.getValue());
-                    });
-        }
+        m.entrySet().stream().forEach(entry -> put(entry.getKey(), entry.getValue()));
     }
+
 
     /** {@inheritDoc} */
     @Override

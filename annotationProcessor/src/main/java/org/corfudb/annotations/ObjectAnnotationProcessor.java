@@ -26,6 +26,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
@@ -571,6 +572,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addResetSet(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addGarbageMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addGarbageCleanMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
@@ -1007,6 +1009,91 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         ParameterizedTypeName.get(ClassName.get(IGarbageFunction.class),
                                 originalName)))
                 .addStatement("return $L", "garbageMap" + CORFUSMR_FIELD)
+                .build());
+    }
+
+    /** Generate the garbage clean string and associated map for the type. */
+    private void addGarbageCleanMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                               Set<TypeName> interfacesToAdd, Set<SmrMethodInfo> methodSet) {
+        String garbageCleanString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null
+                        || x.method.getAnnotation(Mutator.class) != null)
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) == null
+                        || !x.method.getAnnotation(MutatorAccessor.class).garbageCleanFunction().equals(""))
+                .filter(x -> x.method.getAnnotation(Mutator.class) == null
+                        || !x.method.getAnnotation(Mutator.class).garbageCleanFunction().equals(""))
+                .filter(distinctByProperty(x -> getSmrFunctionName(x.method)))
+                .map(x -> {
+                    MutatorAccessor mutatorAccessor = x.method.getAnnotation(MutatorAccessor.class);
+                    Mutator mutator = x.method.getAnnotation(Mutator.class);
+                    String garbageCleanFunction = mutator == null ? mutatorAccessor.garbageCleanFunction() :
+                            mutator.garbageCleanFunction();
+
+                    Optional<SmrMethodInfo> mi = methodSet.stream()
+                            .filter(y -> y.method.getSimpleName().toString().equals(garbageCleanFunction))
+                            .findFirst();
+
+                    // Don't generate a record since we don't have a matching method
+                    if (!mi.isPresent()) {
+                        messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING,
+                                "No garbage cleaning method for " + x.method.getSimpleName()
+                                        + " named " + garbageCleanFunction );
+                        return "";
+                    }
+
+                    // Check that the signature matches what we expect. (2+original)
+                    if (mi.get().method.getParameters().size()
+                            != x.method.getParameters().size() + 2) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, "garbage cleaning method "
+                                + garbageCleanFunction + " contained the wrong number of parameters");
+                    }
+
+                    // Add the interface, if present.
+                    if (mi.get().interfaceOverride != null) {
+                        interfacesToAdd.add(ParameterizedTypeName
+                                .get(mi.get().interfaceOverride.asType()));
+                    }
+                    String callingConvention = mi.get().interfaceOverride == null ? "this." :
+                            mi.get().interfaceOverride.getSimpleName() + ".super.";
+
+                    return "\n.put(\"" + getSmrFunctionName(x.method) + "\", "
+                            + "(obj, locator, args) -> { " + callingConvention
+                            + garbageCleanFunction + "( "
+                            + Stream.of(
+                                    "obj",
+                                    "(" + ParameterizedTypeName.get(mi.get().method.getParameters().get(1).asType())
+                                        + ") locator",
+                                    IntStream.range(0, x.method.getParameters().size())
+                                        .mapToObj(i ->
+                                                "(" + mi.get().method.getParameters().get(i + 2).asType().toString()
+                                                        + ") args[" + i + "]")
+                                        .collect(Collectors.joining(", "))
+                            ).filter(s -> s!= null && !s.isEmpty()).collect(Collectors.joining(", "))
+                            + ");})";
+                })
+                .collect(Collectors.joining());
+
+        FieldSpec garbageCleanMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ParameterizedTypeName.get(ClassName.get(IGarbageCleanFunction.class),
+                        originalName)), "garbageCleanMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ParameterizedTypeName.get(ClassName.get(IGarbageCleanFunction.class),
+                                        originalName)), garbageCleanString)
+                .build();
+
+        typeSpecBuilder.addField(garbageCleanMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuGarbageCleanMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ParameterizedTypeName.get(ClassName.get(IGarbageCleanFunction.class),
+                                originalName)))
+                .addStatement("return $L", "garbageCleanMap" + CORFUSMR_FIELD)
                 .build());
     }
 

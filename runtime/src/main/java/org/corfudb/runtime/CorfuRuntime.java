@@ -515,6 +515,9 @@ public class CorfuRuntime {
     @Getter
     final ViewsGarbageCollector garbageCollector = new ViewsGarbageCollector(this);
 
+    @Getter
+    final GarbageInformer garbageInformer = new GarbageInformer(this);
+
     /**
      * Notifies that the runtime is no longer used
      * and async retries to fetch the layout can be stopped.
