@@ -5,6 +5,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
@@ -61,6 +64,7 @@ public class AddressSpaceView extends AbstractView {
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+            .removalListener(this::handleEviction)
             .recordStats()
             .build();
 
@@ -79,6 +83,11 @@ public class AddressSpaceView extends AbstractView {
         metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
+    public void handleEviction(RemovalNotification<Long, ILogData> notification) {
+        if (log.isTraceEnabled()) {
+            log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+        }
+    }
 
     /**
      * Remove all log entries that are less than the trim mark
