@@ -354,23 +354,6 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
-     * Handles the heartbeat request.
-     * It accumulates the metrics required to build
-     * and send the response.
-     * The response comprises of the local nodeMetrics and
-     * this node's view of the cluster (ClusterView).
-     *
-     * @param msg corfu message containing HEARTBEAT_REQUEST
-     * @param ctx netty ChannelHandlerContext
-     * @param r   server router
-     */
-    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
-    public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        r.sendResponse(ctx, msg, CorfuMsgType.HEARTBEAT_RESPONSE
-                .payloadMsg(clusterContext.getClusterView()));
-    }
-
-    /**
      * Returns current {@link NodeState} provided by failure detector.
      * The detector periodically collects current cluster state and saves it in {@link ClusterStateContext}.
      * Servers periodically inspect cluster and ask each other of the connectivity/node state
