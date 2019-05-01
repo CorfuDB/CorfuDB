@@ -64,11 +64,6 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     }
 
     @SuppressWarnings("unchecked")
-    public <T extends CorfuMsg> T getLastMessageAs(Class<T> type) {
-        return (T) getLastMessage();
-    }
-
-    @SuppressWarnings("unchecked")
     public <T> T getLastPayloadMessageAs(Class<T> type) {
         Assertions.assertThat(getLastMessage())
                 .isInstanceOf(CorfuPayloadMsg.class);

@@ -448,7 +448,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         LogData ld = getLogDataWithoutId(address);
 
         ld.setId(clientId1);
-        client.write(ld);
+        client.write(ld).join();
 
         LogData ldPrime = client.read(address).get().getAddresses().get(address);
 
@@ -473,7 +473,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         // Set clientId from another thread
         t1(() -> ldOtherThread.setId(clientId1));
-        client.write(ldOtherThread);
+        client.write(ldOtherThread).join();
 
         LogData ldPrime = client.read(address).get().getAddresses().get(address);
         assertThat(ldThisThread).isNotEqualTo(ldPrime);
@@ -495,7 +495,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         ldOne.setId(clientId1);
         ldTwo.setId(clientId2);
 
-        client.write(ldOne);
+        client.write(ldOne).join();
 
         LogData ldRead = client.read(address).get().getAddresses().get(address);
         assertThat(ldRead).isEqualTo(ldOne);
