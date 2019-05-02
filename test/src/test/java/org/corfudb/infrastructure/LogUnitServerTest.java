@@ -122,6 +122,8 @@ public class LogUnitServerTest extends AbstractServerTest {
         //and 10000000
         rawWrite(HIGH_ADDRESS, high_payload, streamName);
 
+        waitForLogUnit(s1);
+
         s1.shutdown();
 
         LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
@@ -276,6 +278,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         uuidLongMap.put(uuid, address);
         m.setBackpointerMap(uuidLongMap);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+        waitForLogUnit(s1);
 
         s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)

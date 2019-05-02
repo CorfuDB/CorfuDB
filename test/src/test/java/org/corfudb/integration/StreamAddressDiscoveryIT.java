@@ -173,10 +173,10 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         // Writer runtime (follow backpointers)
-        CorfuRuntime rt1w = createDefaultRuntime();
+        CorfuRuntime rt1w = createDefaultRuntimeUsingFollowBackpointers();
 
         // Writer runtime (retrieve stream address map)
-        CorfuRuntime rt2w = createDefaultRuntime();
+        CorfuRuntime rt2w = createDefaultRuntimeUsingAddressMaps();
 
         // Fixed Thread Pool
         final int numThreads = 10;
@@ -274,7 +274,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         final int numKeys = PARAMETERS.NUM_ITERATIONS_LARGE;
 
         for (int i = 0; i < numClients; i++) {
-            CorfuRuntime rt = createDefaultRuntime().setCacheDisabled(false);
+            CorfuRuntime rt = createDefaultRuntimeUsingFollowBackpointers().setCacheDisabled(false);
             CorfuTable<Integer, String> table = rt.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                     })
@@ -390,7 +390,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         CorfuRuntime rt1 = createDefaultRuntime();
 
         // Reader Runtime (following backpointers)
-        CorfuRuntime rt2 = createDefaultRuntime();
+        CorfuRuntime rt2 = createDefaultRuntimeUsingFollowBackpointers();
 
         // Reader Runtime (stream address maps)
         CorfuRuntime rt3 = createDefaultRuntimeUsingAddressMaps();
