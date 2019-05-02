@@ -573,6 +573,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         addResetSet(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addGarbageMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addGarbageCleanMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addLocationFunctions(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
@@ -1094,6 +1095,37 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         ParameterizedTypeName.get(ClassName.get(IGarbageCleanFunction.class),
                                 originalName)))
                 .addStatement("return $L", "garbageCleanMap" + CORFUSMR_FIELD)
+                .build());
+    }
+
+    /** Generate the garbage clean string and associated map for the type. */
+    private void addLocationFunctions(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                                    Set<TypeName> interfacesToAdd, Set<SmrMethodInfo> methodSet) {
+
+        String locationGetterString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(LocationGetter.class) != null)
+                .map(x -> getSmrFunctionName(x.method))
+                .findAny().orElse(null);
+
+        String getterStatement = locationGetterString == null ? "return null" :
+                "return obj -> obj." + locationGetterString + "()";
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuLocationGetter")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(ILocationGetFunction.class), originalName))
+                .addStatement(getterStatement)
+                .build());
+
+        String locationSetterString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(LocationSetter.class) != null)
+                .map(x -> getSmrFunctionName(x.method))
+                .findAny().orElse(null);
+
+        String setterStatement = locationSetterString == null ? "return null" :
+                "return (obj, locationInfo) -> obj." + locationSetterString + "(locationInfo)";
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuLocationSetter")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(ILocationSetFunction.class), originalName))
+                .addStatement(setterStatement)
                 .build());
     }
 

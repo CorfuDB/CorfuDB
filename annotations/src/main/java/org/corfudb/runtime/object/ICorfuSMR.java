@@ -53,6 +53,18 @@ public interface ICorfuSMR<T> {
      */
     Map<String, IGarbageCleanFunction<T>>  getCorfuGarbageCleanMap();
 
+    /**
+     * Get a function to extract location information from an object.
+     * @return The location getter function.
+     */
+    ILocationGetFunction<T> getCorfuLocationGetter();
+
+    /**
+     * Get a function to install location information to an object.
+     * @return The location setter function.
+     */
+    ILocationSetFunction<T> getCorfuLocationSetter();
+
     /** Return the stream ID that this object belongs to.
      * @return The stream ID this object belongs to. */
     default UUID getCorfuStreamID() {

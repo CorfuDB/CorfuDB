@@ -10,11 +10,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.zip.CRC32;
 import lombok.Getter;
-import org.corfudb.annotations.ConstructorType;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.ObjectType;
-import org.corfudb.annotations.PassThrough;
-import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.annotations.*;
 import org.corfudb.runtime.object.AbstractCorfuWrapper;
 import sun.misc.CRC16;
 
@@ -36,6 +32,20 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
 
     public FGMap() {
         this.numBuckets = 10;
+    }
+
+    private SMRLocationInfo<K> sMRLocationInfo = new SMRLocationInfo<>();
+
+    @LocationGetter
+    @DontInstrument
+    public Object getSMRLocationInfo() {
+        return sMRLocationInfo;
+    }
+
+    @LocationSetter
+    @DontInstrument
+    public void setSMRLocationInfo(Object locationInfo) {
+        this.sMRLocationInfo = (SMRLocationInfo<K>) locationInfo;
     }
 
     @PassThrough

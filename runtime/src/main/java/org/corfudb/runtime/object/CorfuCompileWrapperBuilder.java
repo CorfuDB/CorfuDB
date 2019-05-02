@@ -60,15 +60,18 @@ public class CorfuCompileWrapperBuilder {
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
+        ICorfuSMRProxy<T> proxy = new CorfuCompileProxy<>(rt, streamID,
                 type, args, serializer,
                 wrapperObject.getCorfuSMRUpcallMap(),
                 wrapperObject.getCorfuUndoMap(),
                 wrapperObject.getCorfuUndoRecordMap(),
                 wrapperObject.getCorfuGarbageMap(),
                 wrapperObject.getCorfuGarbageCleanMap(),
-                wrapperObject.getCorfuResetSet())
-                );
+                wrapperObject.getCorfuLocationGetter(),
+                wrapperObject.getCorfuLocationSetter(),
+                wrapperObject.getCorfuResetSet());
+
+        wrapperObject.setCorfuSMRProxy(proxy);
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)

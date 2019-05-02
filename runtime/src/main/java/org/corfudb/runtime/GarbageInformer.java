@@ -1,27 +1,26 @@
 package org.corfudb.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMREntryLocator;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @NotThreadSafe
 public class GarbageInformer {
 
-    static final int BATCH_SIZE = 50;
+    private volatile boolean paused = false;
 
+    @Getter
     private BlockingQueue<GarbageMark> garbageMarkQueue = new LinkedBlockingQueue<>();
 
-    private Map<UUID, ISMREntryLocator> streamToPrefixTrimMark = new HashMap<>();
-
-    final ExecutorService informerService = Executors
+    final ExecutorService garbageInformerService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()
                     .setDaemon(false)
                     .setNameFormat("GarbageInformation-Processor-%d")
@@ -31,7 +30,40 @@ public class GarbageInformer {
 
     public GarbageInformer(@NonNull CorfuRuntime runtime) {
         this.runtime = runtime;
-        informerService.submit(this::garbageInformationProcessor);
+    }
+
+    public void start() {
+        paused = false;
+        garbageInformerService.submit(this::garbageInformationProcessor);
+    }
+
+    /**
+     * Gracefully shutdown the service.
+     */
+    @VisibleForTesting
+    public void stop() throws InterruptedException {
+        if (paused) {
+            log.warn("Try to shutdown garbage informer service when it is paused.");
+        }
+
+        garbageMarkQueue.add(GarbageMark.SHUTDOWN);
+        garbageInformerService.shutdown();
+        garbageInformerService.awaitTermination(runtime.getParameters().GC_SHUTDOWN_TIMER.toMillis(),
+                TimeUnit.MILLISECONDS);
+    }
+
+    public void pause() {
+        if (paused) {
+            log.warn("Try to pause garbage informer service when it is paused.");
+        }
+        paused = true;
+    }
+
+    public void resume() {
+        if (!paused) {
+            log.warn("Try to resume garbage informer service when it is not paused.");
+        }
+        paused = false;
     }
 
     public void prefixTrim(UUID streamId, ISMREntryLocator locator) {
@@ -57,7 +89,7 @@ public class GarbageInformer {
 
     public void sparseTrim(UUID streamId, ISMREntryLocator locator) {
         try {
-            CompletableFuture<Void> cf = sparseTrimFuture(streamId, locator);
+            CompletableFuture cf = sparseTrimFuture(streamId, locator);
             cf.get();
         } catch (Exception ex) {
             log.trace("Garbage SparseTrim Exception: {}", ex);
@@ -76,7 +108,22 @@ public class GarbageInformer {
         return cf;
     }
 
+    //TODO(Xin): Current the asynchronous processor is no-op
     private void garbageInformationProcessor() {
+        try {
+            while (true) {
+                if(!paused) {
+                    GarbageMark garbageMark = garbageMarkQueue.take();
 
+                    if (garbageMark.getType().equals(GarbageMark.GarbageMarkType.SHUTDOWN)) {
+                        break;
+                    } else {
+                        garbageMark.getCf().complete(null);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Caught exception in the write processor ", e);
+        }
     }
 }

@@ -13,19 +13,18 @@ import java.util.concurrent.CompletableFuture;
 public class GarbageMark {
     @AllArgsConstructor
     static public enum GarbageMarkType {
-        PREFIXTRIM(0),
-        SPARSETRIM(1);
+        SHUTDOWN(0),
+        PREFIXTRIM(1),
+        SPARSETRIM(2);
 
         @Getter
         private final int type;
-
-        public byte asByte() {
-            return (byte) type;
-        }
     }
 
-    GarbageMarkType type;
-    UUID streamId;
-    ISMREntryLocator locator;
-    CompletableFuture<Void> cf;
+    private final GarbageMarkType type;
+    private final UUID streamId;
+    private final ISMREntryLocator locator;
+    private final CompletableFuture<Void> cf;
+
+    public static GarbageMark SHUTDOWN = new GarbageMark(GarbageMarkType.SHUTDOWN, null, null, null);
 }

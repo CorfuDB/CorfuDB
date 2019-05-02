@@ -1,6 +1,6 @@
 package org.corfudb.protocols.logprotocol;
 
-import com.codepoetics.protonpack.StreamUtils;
+import com.google.common.collect.Streams;
 import io.netty.buffer.ByteBuf;
 
 import java.util.Collections;
@@ -43,11 +43,11 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRWithLocatorCons
          * The position of the SMREntry inside one MultiSMREntry. The position starts from 0.
          */
         @Getter
-        private final int pos;
+        private final long index;
 
-        public MultiObjectSMREntryLocator(long globalAddress, int pos) {
+        public MultiObjectSMREntryLocator(long globalAddress, long index) {
             this.globalAddress = globalAddress;
-            this.pos = pos;
+            this.index = index;
         }
 
         @Override
@@ -56,9 +56,10 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRWithLocatorCons
             if (otherAddress == globalAddress) {
                 if (other instanceof MultiObjectSMREntryLocator) {
                     MultiObjectSMREntryLocator otherMultiObjectSMREntryLocator = (MultiObjectSMREntryLocator) other;
-                    return Integer.compare(pos, otherMultiObjectSMREntryLocator.getPos());
+                    return Long.compare(index, otherMultiObjectSMREntryLocator.getIndex());
                 } else {
-                    throw new RuntimeException("SMREntries of the same global address have different SMREntry type");
+                    throw new RuntimeException("SMREntries of the same global address have different SMREntry type " +
+                            "at " + globalAddress);
                 }
             }
             return Long.compare(globalAddress, otherAddress);
@@ -160,11 +161,14 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRWithLocatorCons
         MultiSMREntry entry = entryMap.get(id);
         List<SMREntry> smrEntries = entryMap.get(id) == null ? Collections.emptyList() :
                 entry.getUpdates();
-        return StreamUtils.zipWithIndex(smrEntries.stream()).map(i -> {
-            MultiObjectSMREntryLocator locator =
-                    new MultiObjectSMREntryLocator(globalAddress, (int) i.getIndex());
-            return new SMREntryWithLocator(i.getValue(), locator);
-        }).collect(Collectors.toList());
+
+        return Streams.mapWithIndex(smrEntries.stream(),
+                (smrEntry, index) -> {
+                    MultiObjectSMREntryLocator locator =
+                            new MultiObjectSMREntryLocator(globalAddress, index);
+                    return new SMREntryWithLocator(smrEntry, locator);
+                })
+                .collect(Collectors.toList());
     }
 
     /**
