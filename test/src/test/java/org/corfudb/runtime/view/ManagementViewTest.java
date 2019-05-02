@@ -43,6 +43,7 @@ import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -334,7 +335,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * @throws Exception
      */
     @Test
-    public void checkHeartbeat()
+    public void checkNodeState()
             throws Exception {
         addServer(SERVERS.PORT_0);
 
@@ -357,26 +358,23 @@ public class ManagementViewTest extends AbstractViewTest {
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
 
-        ClusterState clusterState = null;
+        NodeState nodeState= null;
 
         // Send heartbeat requests and wait until we get a valid response.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
 
-            clusterState = corfuRuntime.getLayoutView().getRuntimeLayout()
-                    .getManagementClient(SERVERS.ENDPOINT_0).sendHeartbeatRequest().get();
+            nodeState = corfuRuntime.getLayoutView().getRuntimeLayout()
+                    .getManagementClient(SERVERS.ENDPOINT_0).sendNodeStateRequest().get();
 
-            if (!clusterState.getNodes().isEmpty()) {
+            if (nodeState.getConnectivity().getType() == NodeConnectivityType.CONNECTED
+                    && !nodeState.getConnectivity().getConnectedNodes().isEmpty()) {
                 break;
             }
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
         }
-        assertThat(clusterState).isNotNull();
-        assertThat(clusterState.getNodes()).isNotNull();
-        assertThat(clusterState.getNodes().get(SERVERS.ENDPOINT_0)).isNotNull();
-
-        NodeState nodeState = clusterState.getNodes().get(SERVERS.ENDPOINT_0);
-        assertThat(nodeState.getConnectivity().getEndpoint())
-                .isEqualTo(SERVERS.ENDPOINT_0);
+        assertThat(nodeState).isNotNull();
+        assertThat(nodeState.getConnectivity()).isNotNull();
+        assertThat(nodeState.getConnectivity().getConnectedNodes()).contains(SERVERS.ENDPOINT_0);
     }
 
     /**

@@ -94,8 +94,6 @@ public enum CorfuMsgType {
     MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_HEALING_DETECTED(73, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
     MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
-    HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class)),
-    HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<ClusterState>>(){}, true),
     ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true),
     ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true),
     MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true),
