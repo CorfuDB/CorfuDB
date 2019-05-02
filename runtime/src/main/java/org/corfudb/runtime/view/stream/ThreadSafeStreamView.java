@@ -19,17 +19,25 @@ import java.util.function.Function;
 
 public class ThreadSafeStreamView implements IStreamView {
 
-    private final BackpointerStreamView stream;
+    private final IStreamView stream;
 
     public ThreadSafeStreamView(final CorfuRuntime runtime,
                                  final UUID streamId,
                                  @Nonnull final StreamOptions options) {
-        stream = new BackpointerStreamView(runtime, streamId, options);
+        if (runtime.getParameters().isFollowBackpointersEnabled()) {
+            stream = new BackpointerStreamView(runtime, streamId, options);
+        } else {
+            stream = new AddressMapStreamView(runtime, streamId, options);
+        }
     }
 
     public ThreadSafeStreamView(final CorfuRuntime runtime,
                                  final UUID streamId) {
-        stream = new BackpointerStreamView(runtime, streamId, StreamOptions.DEFAULT);
+        if (runtime.getParameters().isFollowBackpointersEnabled()) {
+            stream = new BackpointerStreamView(runtime, streamId, StreamOptions.DEFAULT);
+        } else {
+            stream = new AddressMapStreamView(runtime, streamId, StreamOptions.DEFAULT);
+        }
     }
 
     @Override
@@ -99,8 +107,13 @@ public class ThreadSafeStreamView implements IStreamView {
         return stream.getCurrentGlobalPosition();
     }
 
+    @Override
+    public long getTotalUpdates() {
+        return stream.getTotalUpdates();
+    }
+
     @VisibleForTesting
-    BackpointerStreamView getUnderlyingStream() {
+    IStreamView getUnderlyingStream() {
         return stream;
     }
 }

@@ -196,6 +196,12 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
         return msg.getPayload();
     }
 
+    @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
+    private static Object handleStreamsAddressResponse(CorfuPayloadMsg<TailsResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
     /**
      * Handle a HEAD_RESPONSE message
      * @param msg   Incoming Message
