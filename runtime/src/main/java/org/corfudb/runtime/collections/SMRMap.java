@@ -18,9 +18,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.TransactionalMethod;
+import lombok.Getter;
+import lombok.Setter;
+import org.corfudb.annotations.*;
 
 /**
  * Created by mwei on 1/7/16.
@@ -30,11 +30,20 @@ import org.corfudb.annotations.TransactionalMethod;
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
-    private final SMRLocationInfo<K> smrLocationInfo = new SMRLocationInfo<>();
+    private SMRLocationInfo<K> sMRLocationInfo = new SMRLocationInfo<>();
 
     @Override
-    public SMRLocationInfo<K> getSMRLocationInfo() {
-        return smrLocationInfo;
+    @LocationGetter
+    @DontInstrument
+    public Object getSMRLocationInfo() {
+        return sMRLocationInfo;
+    }
+
+    @Override
+    @LocationSetter
+    @DontInstrument
+    public void setSMRLocationInfo(Object locationInfo) {
+        this.sMRLocationInfo = (SMRLocationInfo<K>) locationInfo;
     }
 
     /**

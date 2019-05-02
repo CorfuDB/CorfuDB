@@ -430,6 +430,14 @@ public class CorfuRuntime {
         volatile Runnable beforeRpcHandler = () -> {
         };
         //endregion
+
+        // region Garbage Collection Parameters
+        /**
+         * Garbage Informer Service shutdown timer.
+         */
+        @Default
+        Duration GC_SHUTDOWN_TIMER = Duration.ofSeconds(5);
+        // endregion
     }
 
     /**

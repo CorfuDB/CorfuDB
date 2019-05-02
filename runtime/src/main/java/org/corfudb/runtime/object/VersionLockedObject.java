@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.ISMREntryLocator;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
@@ -118,6 +119,16 @@ public class VersionLockedObject<T> {
     private final Map<String, IGarbageCleanFunction<T>> garbageCleanFunctionMap;
 
     /**
+     * The function to extract location information of this object.
+     */
+    private final ILocationGetFunction<T> locationGetFunction;
+
+    /**
+     * The function to install location information of this object.
+     */
+    private final ILocationSetFunction<T> locationSetFunction;
+
+    /**
      * A function that generates a new instance of this object.
      */
     private final Supplier<T> newObjectFn;
@@ -145,6 +156,8 @@ public class VersionLockedObject<T> {
      * @param undoTargets                Undo functions map.
      * @param garbageCleanTarges         Garbage cleaning function map for this object.
      * @param resetSet                   Reset set for this object.
+     * @param locationGetFunction        Extract location information from object.
+     * @param locationSetFunction        Install location information inside object.
      * @param rt                         Associated CorfuRuntime.
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
@@ -155,6 +168,8 @@ public class VersionLockedObject<T> {
                                Map<String, IGarbageFunction<T>> garbageTargets,
                                Set<String> resetSet,
                                Map<String, IGarbageCleanFunction<T>> garbageCleanTarges,
+                               ILocationGetFunction<T> locationGetFunction,
+                               ILocationSetFunction<T> locationSetFunction,
                                CorfuRuntime rt) {
         this.smrStream = smrStream;
 
@@ -164,6 +179,8 @@ public class VersionLockedObject<T> {
         this.garbageFunctionMap = garbageTargets;
         this.resetSet = resetSet;
         this.garbageCleanFunctionMap = garbageCleanTarges;
+        this.locationGetFunction = locationGetFunction;
+        this.locationSetFunction = locationSetFunction;
 
         this.newObjectFn = newObjectFn;
         this.object = newObjectFn.get();
@@ -471,7 +488,18 @@ public class VersionLockedObject<T> {
      */
     public void resetUnsafe() {
         log.debug("Reset[{}]", this);
+        Object locationInfo = null;
+
+        if (locationGetFunction != null && locationSetFunction != null) {
+            locationInfo = locationGetFunction.getLocationInfo(object);
+        }
+
         object = newObjectFn.get();
+
+        if (locationGetFunction != null && locationSetFunction != null) {
+            locationSetFunction.setLocationInfo(object, locationInfo);
+        }
+
         smrStream.reset();
         optimisticStream = null;
     }
@@ -581,33 +609,31 @@ public class VersionLockedObject<T> {
                 object = newObjectFn.get();
                 log.trace("Apply[{}] Undo->RESET", this);
             }
+        }
 
-            if (entry instanceof SMREntryWithLocator) {
-                if (resetSet.contains(entry.getSMRMethod())) {
-                    IGarbageCleanFunction<T> garbageCleanFunction = garbageCleanFunctionMap.get(entry.getSMRMethod());
-                    if (garbageCleanFunction == null) {
-                        throw new RuntimeException("Unknown garbage cleaning method for " + entry.getSMRMethod());
-                    }
+        if (entry instanceof SMREntryWithLocator) {
+            if (resetSet.contains(entry.getSMRMethod())) {
+                IGarbageCleanFunction<T> garbageCleanFunction = garbageCleanFunctionMap.get(entry.getSMRMethod());
+                if (garbageCleanFunction == null) {
+                    throw new RuntimeException("Unknown garbage cleaning method for " + entry.getSMRMethod());
+                }
 
-                    SMREntryWithLocator sMREntryWithLocator = (SMREntryWithLocator) entry;
-                    garbageCleanFunction.cleanGarbageInformation(object, ((SMREntryWithLocator) entry).getLocator(),
-                            entry.getSMRArguments());
-                    rt.getGarbageInformer().prefixTrimFuture(smrStream.getID(),
-                            sMREntryWithLocator.getLocator());
-                } else {
-                    IGarbageFunction<T> garbageFunction = garbageFunctionMap.get(entry.getSMRMethod());
-                    if (garbageFunction == null) {
-                        throw new RuntimeException("Unknown garbage identification for " + entry.getSMRMethod());
-                    }
+                SMREntryWithLocator sMREntryWithLocator = (SMREntryWithLocator) entry;
+                garbageCleanFunction.cleanGarbageInformation(object, ((SMREntryWithLocator) entry).getLocator(),
+                        entry.getSMRArguments());
+                rt.getGarbageInformer().prefixTrimFuture(smrStream.getID(), sMREntryWithLocator.getLocator());
+            } else {
+                IGarbageFunction<T> garbageFunction = garbageFunctionMap.get(entry.getSMRMethod());
+                if (garbageFunction != null) {
 
                     List<Object> garbage = garbageFunction.identifyGarbage(object,
-                            ((SMREntryWithLocator) entry).getLocator(),
-                            entry.getSMRArguments());
+                            ((SMREntryWithLocator) entry).getLocator(), entry.getSMRArguments());
 
                     garbage.stream().forEach(o -> {
-                        SMREntry.SMREntryLocator locator = (SMREntry.SMREntryLocator) o;
+                        ISMREntryLocator locator = (ISMREntryLocator) o;
                         rt.getGarbageInformer().sparseTrimFuture(smrStream.getID(), locator);
                     });
+
                 }
             }
         }

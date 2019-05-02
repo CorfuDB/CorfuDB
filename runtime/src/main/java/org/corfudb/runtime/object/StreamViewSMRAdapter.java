@@ -45,16 +45,11 @@ public class StreamViewSMRAdapter implements ISMRStream<SMREntryWithLocator> {
      */
     final CorfuRuntime runtime;
 
-    /**
-     * The position of last SMREntry that is streamed to.
-     */
-    long smrEntryPosition;
 
     public StreamViewSMRAdapter(CorfuRuntime runtime,
                                 IStreamView streamView) {
         this.runtime = runtime;
         this.streamView = streamView;
-        this.smrEntryPosition = Address.NEVER_READ;
     }
 
     private List<SMREntryWithLocator> dataAndCheckpointMapper(ILogData logData) {

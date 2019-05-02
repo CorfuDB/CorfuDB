@@ -5,10 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.ConflictParameter;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.*;
 import org.corfudb.protocols.logprotocol.ISMREntryLocator;
 
 
@@ -132,7 +129,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     default List<Object> identifyPutGarbage(ISMRMap<K,V> map, ISMREntryLocator locator, K key,
                                             V value) {
         List<Object> garbage = new ArrayList<>();
-        map.getSMRLocationInfo().addUnsafe(key, locator).ifPresent(garbage::add);
+        ((SMRLocationInfo<K>)map.getSMRLocationInfo()).addUnsafe(key, locator).ifPresent(garbage::add);
         return garbage;
     }
 
@@ -175,7 +172,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
 
     default List<Object> identifyRemoveGarbage(ISMRMap<K,V> map, ISMREntryLocator locator, K key) {
         List<Object> garbage = new ArrayList<>();
-        map.getSMRLocationInfo().removeUnsafe(key, locator).ifPresent(garbage::add);
+        ((SMRLocationInfo<K>) map.getSMRLocationInfo()).removeUnsafe(key, locator).ifPresent(garbage::add);
         return garbage;
     }
 
@@ -247,7 +244,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     void clear();
 
     default void cleanGarbage(ISMRMap<K,V> map, ISMREntryLocator locator) {
-        map.getSMRLocationInfo().clearUnsafe(locator);
+        ((SMRLocationInfo<K>) map.getSMRLocationInfo()).clearUnsafe(locator);
     }
 
     /**
@@ -289,5 +286,12 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     @Override
     Set<Entry<K, V>> entrySet();
 
-    SMRLocationInfo<K> getSMRLocationInfo();
+    @LocationGetter
+    @DontInstrument
+    Object getSMRLocationInfo();
+
+    @LocationSetter
+    @DontInstrument
+    void setSMRLocationInfo(Object locationInfo);
+
 }

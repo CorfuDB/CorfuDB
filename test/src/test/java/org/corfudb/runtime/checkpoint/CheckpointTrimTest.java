@@ -161,6 +161,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // try to get a snapshot inside the gap
         Token snapshot = new Token(0L, checkpointAddress.getSequence() - 1);
+
         getRuntime().getObjectsView()
                 .TXBuild()
                 .type(TransactionType.SNAPSHOT)
@@ -168,9 +169,12 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .build()
                 .begin();
 
+
         // Reading an entry from scratch should be ok
-        assertThat(newTestMap.get("a"))
+        String result = newTestMap.get("a");
+        assertThat(result)
                 .isEqualTo("a" + (nCheckpoints - 1));
+
     }
 
 

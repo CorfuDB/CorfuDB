@@ -31,13 +31,7 @@ import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.ConflictParameter;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.DontInstrument;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.annotations.*;
 import org.corfudb.protocols.logprotocol.ISMREntryLocator;
 import org.corfudb.util.ImmuableListSetWrapper;
 
@@ -273,8 +267,19 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     private Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
 
-    @Getter
-    private final SMRLocationInfo<K> sMRLocationInfo = new SMRLocationInfo<>();
+    private SMRLocationInfo<K> sMRLocationInfo = new SMRLocationInfo<>();
+
+    @LocationGetter
+    @DontInstrument
+    public Object getSMRLocationInfo() {
+        return sMRLocationInfo;
+    }
+
+    @LocationSetter
+    @DontInstrument
+    public void setSMRLocationInfo(Object locationInfo) {
+        this.sMRLocationInfo = (SMRLocationInfo<K>) locationInfo;
+    }
 
     @Getter
     boolean indexGenerationFailed = false;
@@ -430,7 +435,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     protected List<Object> identifyPutGarbage(CorfuTable<K,V> table, ISMREntryLocator locator, K key,
                                               V value) {
         List<Object> garbage = new ArrayList<>();
-        table.getSMRLocationInfo().addUnsafe(key, locator).ifPresent(garbage::add);
+        ((SMRLocationInfo<K>) table.getSMRLocationInfo()).addUnsafe(key, locator).ifPresent(garbage::add);
         return garbage;
     }
 
@@ -561,7 +566,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @DontInstrument
     protected List<Object> identifyRemoveGarbage(CorfuTable<K, V> table, ISMREntryLocator locator, K key) {
         List<java.lang.Object> garbage = new ArrayList<>();
-        table.getSMRLocationInfo().removeUnsafe(key, locator).ifPresent(garbage::add);
+        ((SMRLocationInfo<K>) table.getSMRLocationInfo()).removeUnsafe(key, locator).ifPresent(garbage::add);
         return garbage;
     }
 
@@ -583,10 +588,15 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
     /** {@inheritDoc} */
     @Override
-    @Mutator(name = "clear", reset = true)
+    @Mutator(name = "clear", garbageCleanFunction = "cleanGarbage", reset = true)
     public void clear() {
         mainMap.clear();
         secondaryIndexes.values().forEach(Map::clear);
+    }
+
+    @DontInstrument
+    protected void cleanGarbage(CorfuTable<K, V> table, ISMREntryLocator locator) {
+        ((SMRLocationInfo<K>) table.getSMRLocationInfo()).clearUnsafe(locator);
     }
 
     /** {@inheritDoc} */

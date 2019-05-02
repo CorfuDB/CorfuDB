@@ -2,17 +2,12 @@ package org.corfudb.runtime.collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.collections.CorfuTable.getMapType;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
-import java.util.AbstractMap;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -24,10 +19,13 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageMark;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
@@ -182,6 +180,7 @@ public class CorfuMapTest extends AbstractViewTest {
                 .open();
         testMap.clear();
         testMap.put("z", "e");
+
         Map<String, Map<String, String>> testMap2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 2")
@@ -782,6 +781,109 @@ public class CorfuMapTest extends AbstractViewTest {
         final int MILLISECONDS_TO_MICROSECONDS = 1000;
         testStatus += "Time to sync whole stream=" + String.format("%d us",
                 (endTime - startTime) / MILLISECONDS_TO_MICROSECONDS);
+    }
+
+    /**
+     * +----------------------------------+
+     * | 0  | 1  | 2  | 3  | 4  | 5  | 6  |
+     * +----------------------------------+
+     * | a=0| a=1| a=2| C  | a=4| a=5| a=6|
+     * +----------------------------------+
+     *    ^
+     * SNAPSHOT
+     */
+    @Test
+    public void garbageIdentify()
+            throws Exception{
+        UUID stream = UUID.randomUUID();
+        int garbageOpsCount = 0;
+
+        Map<String, String> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamID(stream)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                })
+                .open();
+
+        // no garbage is formed for a new key.
+        testMap.put("a", "0");
+        List<GarbageMark> garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps).isEmpty();
+
+
+        // garbage identified for existing key.
+        String value = testMap.put("a", "1");
+        garbageOpsCount++;
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.get(garbageOpsCount - 1).getLocator().getGlobalAddress()).isEqualTo(Long.parseLong(value));
+
+
+
+
+        // no garbage is formed for already identified garbage.
+        // rewind the position to global address 0
+        Token timestamp = new Token(0L, 0);
+        getRuntime().getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(timestamp)
+                .build()
+                .begin();
+
+        testMap.get("a");
+
+        getRuntime().getObjectsView().TXEnd();
+
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(1); // no duplicated garbage is identified
+
+        value = testMap.put("a", "2");
+        garbageOpsCount++;
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(garbageOpsCount);
+        assertThat(garbageOps.get(garbageOpsCount - 1).getLocator().getGlobalAddress()).isEqualTo(Long.parseLong(value));
+
+
+
+        // prefix trim
+        testMap.clear();
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(garbageOpsCount); // clear() is only a mutator
+
+        testMap.put("a", "4");
+        garbageOpsCount++; // Just from clear. Put does not produce garbage.
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(garbageOpsCount); // clear() add one operation but put() does not
+        assertThat(garbageOps.get(garbageOpsCount - 1).getType()).isEqualTo(GarbageMark.GarbageMarkType.PREFIXTRIM);
+
+        value = testMap.put("a", "5");
+        garbageOpsCount++;
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(garbageOpsCount); // new garbage is identified after clean
+        assertThat(garbageOps.get(garbageOpsCount - 1).getLocator().getGlobalAddress()).isEqualTo(Long.parseLong(value));
+
+
+        // Test for NO_CACHE map
+        Map<String, String> testMap2 = getRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                })
+                .setStreamID(stream)
+                .addOption(ObjectOpenOptions.NO_CACHE)
+                .open();
+
+        testMap2.get("a");
+        garbageOpsCount *= 2; // duplicated garbage is identified.
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(garbageOpsCount);
+        assertThat(garbageOps.get(garbageOpsCount - 1).getLocator().getGlobalAddress()).isEqualTo(Long.parseLong(value));
+
+        value = testMap2.put("a", "6");
+
+        garbageOpsCount++;
+        garbageOps = new ArrayList<>(getRuntime().getGarbageInformer().getGarbageMarkQueue());
+        assertThat(garbageOps.size()).isEqualTo(garbageOpsCount);
+        assertThat(garbageOps.get(garbageOpsCount - 1).getLocator().getGlobalAddress()).isEqualTo(Long.parseLong(value));
+
     }
 
     @Data

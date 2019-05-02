@@ -32,6 +32,9 @@ public class SMREntry extends LogEntry implements ISMRWithLocatorConsumable {
         @Getter
         private final long globalAddress;
 
+        @Getter
+        private final long index = 0L;
+
         public SMREntryLocator(long globalAddress) {
             this.globalAddress = globalAddress;
         }
@@ -43,7 +46,8 @@ public class SMREntry extends LogEntry implements ISMRWithLocatorConsumable {
                 if (other instanceof  SMREntryLocator) {
                     return 0;
                 } else {
-                    throw new RuntimeException("SMREntries of the same global address have different SMREntry type");
+                    throw new RuntimeException("SMREntries of the same global address have different SMREntry type at" +
+                            " " + globalAddress);
                 }
             } else {
                 return Long.compare(globalAddress, otherAddress);

@@ -45,11 +45,11 @@ public class MultiSMREntry extends LogEntry implements ISMRWithLocatorConsumable
          * Local position of one SMREntry inside one MultiSMREntry. The position starts from 0.
          */
         @Getter
-        private final int pos;
+        private final long index;
 
-        public MultiSMREntryLocator(long globalAddress, int pos) {
+        public MultiSMREntryLocator(long globalAddress, long index) {
             this.globalAddress = globalAddress;
-            this.pos = pos;
+            this.index = index;
         }
 
         @Override
@@ -57,9 +57,10 @@ public class MultiSMREntry extends LogEntry implements ISMRWithLocatorConsumable
             long otherAddress = other.getGlobalAddress();
             if (otherAddress == globalAddress) {
                 if (other instanceof MultiSMREntry) {
-                    return Integer.compare(pos, ((MultiSMREntryLocator) other).getPos());
+                    return Long.compare(index, ((MultiSMREntryLocator) other).getIndex());
                 }
-                throw new RuntimeException("SMREntries of the same global address have different SMREntry type");
+                throw new RuntimeException("SMREntries of the same global address have different SMREntry type at "
+                        + globalAddress);
             }
             return Long.compare(globalAddress, otherAddress);
         }
