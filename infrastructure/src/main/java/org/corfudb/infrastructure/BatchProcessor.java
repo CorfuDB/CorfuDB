@@ -21,6 +21,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -160,15 +161,35 @@ public class BatchProcessor implements AutoCloseable {
                                 streamLog.reset();
                                 break;
                             case TAILS_QUERY:
-                                TailsResponse tails = streamLog.getTails();
+                                TailsRequest tailsRequest = (TailsRequest)currOp.getMsg().getPayload();
+                                TailsResponse tails;
+
+                                switch (tailsRequest.getReqType()) {
+                                    case TailsRequest.LOG_TAIL:
+                                        tails = new TailsResponse(streamLog.getLogTail());
+                                        break;
+
+                                    case TailsRequest.STREAMS_TAILS:
+                                        tails = streamLog.getTails(tailsRequest.getStreams());
+                                        break;
+
+                                    default:
+                                        tails = streamLog.getAllTails();
+                                        break;
+                                }
+
                                 currOp.setResultValue(tails);
+                                break;
+                            case LOG_ADDRESS_SPACE_QUERY:
+                                // Retrieve the address space for every stream in the log.
+                                currOp.setResultValue(streamLog.getStreamsAddressSpace());
                                 break;
                             default:
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
                         log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
-                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getTails(), e
+                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getAllTails(), e
                         );
                         currOp.getFutureResult().completeExceptionally(e);
                     }

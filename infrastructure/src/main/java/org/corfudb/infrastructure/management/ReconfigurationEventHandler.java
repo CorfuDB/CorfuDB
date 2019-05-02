@@ -71,8 +71,8 @@ public class ReconfigurationEventHandler {
 
         // Try to estimate a reasonable timeout to rebuild the logging unit
         Token trimMark = runtime.getAddressSpaceView().getTrimMark();
-        // TODO: Consider requesting just the global tail from sequencer than fetching all the stream tails.
-        long tail = runtime.getAddressSpaceView().getAllTails().getLogTail();
+
+        long tail = runtime.getAddressSpaceView().getLogTail();
 
         long rangeToReplicate = tail - trimMark.getSequence();
         // Since the orchestrator client and the fault detector client use

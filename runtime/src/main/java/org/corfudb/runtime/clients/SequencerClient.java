@@ -7,11 +7,14 @@ import java.util.concurrent.CompletableFuture;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-
 
 /**
  * A sequencer client.
@@ -46,6 +49,17 @@ public class SequencerClient extends AbstractClient {
     }
 
     /**
+     * Retrieves from the sequencer the address space for the specified streams in the given ranges.
+     *
+     * @param streamsAddressesRange requested streams and ranges.
+     * @return streams address maps in the given range.
+     */
+    public CompletableFuture<StreamsAddressResponse> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
+        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(
+                new StreamsAddressRequest(streamsAddressesRange)));
+    }
+
+    /**
      * Fetches the next available token from the sequencer.
      *
      * @param streamIDs    Set of streamIDs to be assigned ot the token.
@@ -67,18 +81,18 @@ public class SequencerClient extends AbstractClient {
      * Resets the sequencer with the specified initialToken
      *
      * @param initialToken                Token Number which the sequencer starts distributing.
-     * @param sequencerTails              Sequencer tails map.
+     * @param streamAddressSpaceMap       Per stream map of address space.
      * @param readyStateEpoch             Epoch at which the sequencer is ready and to stamp tokens.
      * @param bootstrapWithoutTailsUpdate True, if this is a delta message and just updates an
      *                                    existing primary sequencer with the new epoch.
      *                                    False otherwise.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
-    public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, Long> sequencerTails,
+    public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
         return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                new SequencerTailsRecoveryMsg(initialToken, sequencerTails, readyStateEpoch,
+                new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
                         bootstrapWithoutTailsUpdate)));
     }
 
@@ -86,14 +100,14 @@ public class SequencerClient extends AbstractClient {
      * Resets the sequencer with the specified initialToken.
      * BootstrapWithoutTailsUpdate defaulted to false.
      *
-     * @param initialToken    Token Number which the sequencer starts distributing.
-     * @param sequencerTails  Sequencer tails map.
-     * @param readyStateEpoch Epoch at which the sequencer is ready and to stamp tokens.
+     * @param initialToken          Token Number which the sequencer starts distributing.
+     * @param streamAddressSpaceMap Per stream map of address space.
+     * @param readyStateEpoch       Epoch at which the sequencer is ready and to stamp tokens.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
     public CompletableFuture<Boolean> bootstrap(Long initialToken,
-                                                Map<UUID, Long> sequencerTails,
+                                                Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
                                                 Long readyStateEpoch) {
-        return bootstrap(initialToken, sequencerTails, readyStateEpoch, false);
+        return bootstrap(initialToken, streamAddressSpaceMap, readyStateEpoch, false);
     }
 }

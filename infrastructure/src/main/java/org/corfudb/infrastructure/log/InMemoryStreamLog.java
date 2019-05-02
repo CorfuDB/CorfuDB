@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -32,7 +33,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
      * Returns an object that stores a stream log in memory.
      */
     public InMemoryStreamLog() {
-        logCache = new ConcurrentHashMap();
+        logCache = new ConcurrentHashMap<>();
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
         logMetadata = new LogMetadata();
@@ -77,12 +78,31 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public synchronized TailsResponse getTails() {
+    public synchronized TailsResponse getTails(List<UUID> streams) {
+        Map<UUID, Long> tails = new HashMap<>(streams.size());
+        for(UUID stream: streams) {
+            tails.put(stream, logMetadata.getStreamTails().get(stream));
+        }
+        return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public synchronized long getLogTail() {
+        return logMetadata.getGlobalTail();
+    }
+
+    @Override
+    public synchronized TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
         for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
             tails.put(entry.getKey(), entry.getValue());
         }
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public synchronized StreamsAddressResponse getStreamsAddressSpace() {
+        return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
     }
 
     @Override
@@ -117,7 +137,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public void close() {
-        logCache = new HashMap();
+        logCache = new HashMap<>();
     }
 
     @Override

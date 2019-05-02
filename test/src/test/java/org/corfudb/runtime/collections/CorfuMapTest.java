@@ -32,6 +32,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
