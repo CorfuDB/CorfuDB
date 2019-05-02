@@ -6,6 +6,10 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseHandler;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -29,6 +33,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     private static final double minHeapRatio = 0.1;
     private static final double maxHeapRatio = 0.9;
+    private static String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
     @Override
     public AbstractServer getDefaultServer() {
@@ -439,6 +444,62 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(s1).hasCorrectCacheSize(randomCacheRatio);
     }
 
+    @Test
+    public void readingTrimmedAddress() throws Exception {
+        LogUnitServer server1 = getLogUnitServer();
+        LogUnitServer server2 = null;
+        LogUnitClient client = getLogUnitClient(new TestClientRouter(router));
 
+        try {
+            byte[] testString = "hello world".getBytes();
+            final long address0 = 0;
+            final long address1 = 1;
+            client.write(address0, Collections.emptySet(), null, testString, Collections.emptyMap()).get();
+            client.write(address1, Collections.emptySet(), null, testString, Collections.emptyMap()).get();
+            LogData r = client.read(address0).get().getAddresses().get(0L);
+            assertThat(r.getType())
+                    .isEqualTo(DataType.DATA);
+            r = client.read(address1).get().getAddresses().get(1L);
+            assertThat(r.getType())
+                    .isEqualTo(DataType.DATA);
+
+            client.prefixTrim(new Token(0L, address0));
+            waitForLogUnit(server1);
+            client.compact();
+
+            // For log unit cache flush
+            server2 = getLogUnitServer();
+
+            LogData trimmedAddress = client.read(address0).get().getAddresses().get(0L);
+
+            assertThat(trimmedAddress.isTrimmed()).isTrue();
+            assertThat(trimmedAddress.getGlobalAddress()).isEqualTo(address0);
+        } finally {
+            server1.shutdown();
+            if (server2 != null) {
+                server2.shutdown();
+            }
+        }
+    }
+
+    private LogUnitClient getLogUnitClient(TestClientRouter clientRouter) {
+        LogUnitClient client = new LogUnitClient(clientRouter, 0L);
+
+        clientRouter.addClient(new BaseHandler());
+        clientRouter.addClient(new LogUnitHandler());
+
+        return client;
+    }
+
+    private LogUnitServer getLogUnitServer(){
+        LogUnitServer server = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+        router.reset();
+        router.addServer(server);
+
+        return server;
+    }
 }
 

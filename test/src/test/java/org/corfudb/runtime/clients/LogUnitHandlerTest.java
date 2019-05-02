@@ -180,35 +180,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
-    public void readingTrimmedAddress() throws Exception {
-        byte[] testString = "hello world".getBytes();
-        final long address0 = 0;
-        final long address1 = 1;
-        client.write(address0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.write(address1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        LogData r = client.read(address0).get().getAddresses().get(0L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-        r = client.read(address1).get().getAddresses().get(1L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-
-        client.prefixTrim(new Token(0L, address0));
-        client.compact();
-
-        // For logunit cache flush
-        LogUnitServer server2 = new LogUnitServer(serverContext);
-        serverRouter.reset();
-        serverRouter.addServer(server2);
-
-        LogData trimmedAddress = client.read(address0).get().getAddresses().get(0L);
-
-        assertThat(trimmedAddress.isTrimmed()).isTrue();
-        assertThat(trimmedAddress.getGlobalAddress()).isEqualTo(address0);
-    }
-
-    @Test
-    public void flushLogUnitCache() throws Exception {
+    public void flushLogunitCache() throws Exception {
         LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
         serverRouter.addServer(server2);
