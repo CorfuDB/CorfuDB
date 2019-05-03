@@ -47,8 +47,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         if (!queue.isEmpty()) {
             final long thisRead = queue.pollFirst();
             ILogData ld = read(thisRead);
-            if (queue == getCurrentContext().readQueue) {
-                addToResolvedQueue(getCurrentContext(), thisRead, ld);
+            if (queue == queueAddressManager.readQueue) {
+                queueAddressManager.addToResolvedQueue(thisRead);
             }
             return ld;
         }
@@ -56,21 +56,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         return null;
     }
 
-    private long backpointerCount = 0L;
-
     @Override
-    public long getTotalUpdates() {
-        return backpointerCount;
-    }
-
     protected boolean discoverAddressSpace(final UUID streamId,
-                                           final NavigableSet<Long> queue,
                                            final long startAddress,
                                            final long stopAddress,
-                                           final Function<ILogData, BackpointerOp> filter,
+                                           final Function<ILogData, BackpointerOp> checkpointFilter,
                                            final boolean checkpoint,
                                            final long maxGlobal) {
-
+        NavigableSet<Long> queue = checkpoint ?
+                queueAddressManager.readCpQueue : queueAddressManager.readQueue;
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
         // log pointer -or- the checkpoint snapshot address, because all
@@ -79,7 +73,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // maxGlobalAddress, we insert it into the read queue.
 
         log.trace("followBackpointers: streamId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
-                "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
+                "filter[{}]", streamId, queue, startAddress, stopAddress, checkpointFilter);
         long readStartTime = System.currentTimeMillis();
         // Whether or not we added entries to the queue.
         boolean entryAdded = false;
@@ -90,7 +84,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // Loop until we have reached the stop address.
         while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
-            backpointerCount++;
+            updateCounter++;
 
             // Read the current address
             ILogData d;
@@ -112,7 +106,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 log.trace("followBackpointers: address[{}] contains streamId[{}], apply filter", currentAddress,
                         streamId);
                 // Check whether we should include the address
-                BackpointerOp op = filter.apply(d);
+                BackpointerOp op = checkpointFilter.apply(d);
                 if (op == BackpointerOp.INCLUDE
                         || op == BackpointerOp.INCLUDE_STOP) {
                     log.trace("followBackpointers: Adding backpointer to address[{}] to queue", currentAddress);

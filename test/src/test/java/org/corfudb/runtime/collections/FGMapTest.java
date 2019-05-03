@@ -171,7 +171,7 @@ public class FGMapTest extends AbstractViewTest {
 >>>>>>> master
         testMap.clear();
         assertThat(testMap)
-                .isEmpty();
+                .isQueueEmpty();
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             testMap.put(Integer.toString(i), Integer.toString(i));

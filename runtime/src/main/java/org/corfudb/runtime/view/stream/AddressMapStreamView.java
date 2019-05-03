@@ -49,8 +49,6 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
     private int batchSize;
 
-    private long addressCount = 0L;
-
     final StreamOptions options;
 
     /** Create a new address map stream view.
@@ -86,12 +84,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             List<Long> batchRead = getBatch(thisRead, queue);
             ILogData ld = readRange(thisRead, batchRead);
 
-            if (queue == getCurrentContext().readQueue) {
+            if (queue == queueAddressManager.readQueue) {
                 // Validate that the data entry belongs to this stream, otherwise, skip.
                 // This verification protects from sequencer regression (tokens assigned in an older epoch
                 // that were never written to, and reassigned on a newer epoch)
                 if (ld.containsStream(this.id)) {
-                    addToResolvedQueue(getCurrentContext(), thisRead, ld);
+                    queueAddressManager.addToResolvedQueue(thisRead);
                     return ld;
                 } else {
                     log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
@@ -134,22 +132,22 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      *
      * @param streamId stream's ID, it is required because this same method can be used for
      *                 discovering addresses from the checkpoint stream.
-     * @param queue    queue to insert discovered addresses in the given range
      * @param startAddress range start address (inclusive)
      * @param stopAddress  range end address (exclusive and lower than start address)
-     * @param filter       function to filter entries
+     * @param checkpointFilter       function to filter entries
      * @param checkpoint   boolean indicating if it is a checkpoint stream
      * @param maxGlobal    maximum Address until which we want to sync (is not necessarily equal to start address)
      * @return
      */
     @Override
     protected boolean discoverAddressSpace(final UUID streamId,
-                                           final NavigableSet<Long> queue,
                                            final long startAddress,
                                            final long stopAddress,
-                                           final Function<ILogData, BackpointerOp> filter,
+                                           final Function<ILogData, BackpointerOp> checkpointFilter,
                                            final boolean checkpoint,
                                            final long maxGlobal) {
+        NavigableSet<Long> queue = checkpoint ?
+                queueAddressManager.readCpQueue : queueAddressManager.readQueue;
         // Sanity check: startAddress must be a valid address and greater than stopAddress.
         // The startAddress refers to the max resolution we want to resolve this stream to,
         // while stopAddress refers to the lower boundary (locally resolved).
@@ -159,7 +157,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             StreamAddressSpace streamAddressSpace = getStreamAddressMap(startAddress, stopAddress, streamId);
 
             if (checkpoint) {
-                processCheckpoint(streamAddressSpace, filter, queue);
+                processCheckpoint(streamAddressSpace, checkpointFilter, queue);
             } else {
                 // Transfer discovered addresses to queue. We must limit to maxGlobal,
                 // as startAddress could be ahead of maxGlobal---in case it reflects
@@ -179,7 +177,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                                         "trimmed at address %s and this space is not covered by the " +
                                         "loaded checkpoint with start address %s, while accessing the " +
                                         "stream at version %s", this, streamAddressSpace.getTrimMark(),
-                                getCurrentContext().checkpointSuccessStartAddr, maxGlobal);
+                                queueAddressManager.getCheckpointSuccessStartAddr(), maxGlobal);
                         log.warn(message);
                         throw new TrimmedException(message);
                     }
@@ -187,7 +185,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             }
         }
 
-        addressCount += queue.size();
+        updateCounter += queue.size();
 
         return !queue.isEmpty();
     }
@@ -342,7 +340,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     streamId, startAddress, previousAddress);
             // if backpointer is a valid log address or Address.NON_EXIST (beginning of the stream)
             if ((Address.isAddress(previousAddress) &&
-                    getCurrentContext().resolvedQueue.contains(previousAddress))
+                    queueAddressManager.resolvedQueue.contains(previousAddress))
                     || previousAddress == Address.NON_EXIST) {
                 log.trace("getStreamAddressMap[{}]: backpointer {} is locally present, do not request " +
                         "stream address map.", streamId, previousAddress);
@@ -368,18 +366,11 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     }
 
     private boolean isTrimResolvedLocally(long trimMark) {
-        return getCurrentContext().checkpointSuccessId == null
-                && getCurrentContext().resolvedQueue.contains(trimMark);
+        return queueAddressManager.isAddressResolved(trimMark);
     }
 
     private boolean isTrimCoveredByCheckpoint(long trimMark) {
-        return getCurrentContext().checkpointSuccessId != null &&
-                getCurrentContext().checkpointSuccessStartAddr >= trimMark;
-    }
-
-    @Override
-    public long getTotalUpdates() {
-        return addressCount;
+        return queueAddressManager.isAddressCoveredByCheckpoint(trimMark);
     }
 }
 

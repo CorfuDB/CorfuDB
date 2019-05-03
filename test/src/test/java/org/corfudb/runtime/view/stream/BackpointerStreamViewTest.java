@@ -182,8 +182,8 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         IStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
         assertThat(svA.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         assertThat(svB.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(((AbstractQueuedStreamView) bpsvB).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(((AbstractQueuedStreamView) bpsvA).getQueueAddressManager().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(((AbstractQueuedStreamView) bpsvB).getQueueAddressManager().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         TokenResponse tail = runtime.getSequencerView().query();
         runtime.getAddressSpaceView().prefixTrim(tail.getToken());
         // First Runtime GC
@@ -198,9 +198,9 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
 
         // Second Runtime GC
         runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(1);
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readQueue).isEmpty();
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readCpQueue).isEmpty();
+        assertThat(((AbstractQueuedStreamView) bpsvA).getQueueAddressManager().resolvedQueue).hasSize(1);
+        assertThat(((AbstractQueuedStreamView) bpsvA).getQueueAddressManager().readQueue).isEmpty();
+        assertThat(((AbstractQueuedStreamView) bpsvA).getQueueAddressManager().readCpQueue).isEmpty();
     }
 
 }

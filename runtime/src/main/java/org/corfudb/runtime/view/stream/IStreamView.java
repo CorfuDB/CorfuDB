@@ -32,58 +32,7 @@ public interface IStreamView extends
      */
     UUID getId();
 
-    /** Reset the state of this stream view, causing the next read to
-     * start from the beginning of this stream.
-     */
-    void reset();
-
-    /**
-     * Garbage collect all the trimmed entries on this stream
-     * @param trimMark start of the active log
-     */
-    void gc(long trimMark);
-
-    /** Seek to the requested maxGlobal address. The next read will
-     * begin at the given global address, inclusive.
-     * @param globalAddress Address to seek to
-     */
-    void seek(long globalAddress);
-
-    /** An enum representing search directions. */
-    @RequiredArgsConstructor
-    enum SearchDirection {
-        /** Search forward. */
-        FORWARD(false, true),
-        /** Search forward, including address given. */
-        FORWARD_INCLUSIVE(true, true),
-        /** Search backwards. */
-        REVERSE(false, false),
-        /** Search backwards, including address given. */
-        REVERSE_INCLUSIVE(true, false);
-
-        /** Whether the address given should be included
-         * in the search.
-         */
-        @Getter
-        final boolean inclusive;
-
-        /** True if the search is forward, false otherwise. */
-        @Getter
-        final boolean forward;
-    }
-
-    /** Find the global address of the next entry in this stream,
-     * in the direction given.
-     *
-     * @param globalAddress     The global address to start searching from.
-     * @param direction         The direction to search.
-     * @return                  The global address of the next entry in the
-     *                          stream, or Address.NOT_FOUND if no entry
-     *                          was found.
-     */
-    long find(long globalAddress, SearchDirection direction);
-
-    /** Append an object to the stream, returning the global address
+    /** Append an object to the stream, returning the address
      * it was written at.
      * <p>
      * Optionally, provide a method to be called when an address is acquired,
@@ -104,7 +53,7 @@ public interface IStreamView extends
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback);
 
-    /** Append an object to the stream, returning the global address it was
+    /** Append an object to the stream, returning the address it was
      * written at.
      * @param   object Object to append/write
      * @return  The (global) address the object was written at.
@@ -112,6 +61,23 @@ public interface IStreamView extends
     default long append(Object object) {
         return append(object, null, null);
     }
+
+    /** Retrieve the current entry in the stream, which was the entry previously
+     * returned by a call to next() or previous(). If the stream was never read
+     * from, NULL will be returned.
+     *
+     * @return The current entry in the stream.
+     */
+    @Nullable
+    ILogData current();
+
+    /** Retrieve the previous entry in the stream. If there are no previous entries,
+     * NULL will be returned.
+     * @return  The previous entry in the stream, or NULL, if no entries are
+     *           available.
+     */
+    @Nullable
+    ILogData previous();
 
     /** Retrieve the next entry from this stream, up to the tail of the stream
      * If there are no entries present, this function will return NULL. If there
@@ -123,23 +89,6 @@ public interface IStreamView extends
     default ILogData next() {
         return nextUpTo(Long.MAX_VALUE);
     }
-
-    /** Retrieve the previous entry in the stream. If there are no previous entries,
-     * NULL will be returned.
-     * @return  The previous entry in the stream, or NULL, if no entries are
-     *           available.
-     */
-    @Nullable
-    ILogData previous();
-
-    /** Retrieve the current entry in the stream, which was the entry previously
-     * returned by a call to next() or previous(). If the stream was never read
-     * from, NULL will be returned.
-     *
-     * @return The current entry in the stream.
-     */
-    @Nullable
-    ILogData current();
 
     /** Retrieve the next entry from this stream, up to the address given or the
      *  tail of the stream. If there are no entries present, this function
@@ -154,7 +103,7 @@ public interface IStreamView extends
 
     /** Retrieve all of the entries from this stream, up to the tail of this
      *  stream. If there are no entries present, this function
-     *  will return an empty list. If there  are holes present in the log,
+     *  will return an empty list. If there are holes present in the log,
      *  they will be filled.
      *
      *  <p>Note: the default implementation is thread-safe only if the
@@ -194,6 +143,34 @@ public interface IStreamView extends
      */
     long getCurrentGlobalPosition();
 
+    /** Seek to the requested maxGlobal address. The next read will
+     * begin at the given global address, inclusive.
+     * @param globalAddress Address to seek to
+     */
+    void seek(long globalAddress);
+
+    /** Find the address of the next entry in this stream given a starting point,
+     * in the direction given.
+     *
+     * @param globalAddress     The global address to start searching from.
+     * @param direction         The direction to search.
+     * @return                  The global address of the next entry in the
+     *                          stream, or Address.NOT_FOUND if no entry
+     *                          was found.
+     */
+    long find(long globalAddress, SearchDirection direction);
+
+    /** Reset the state of this stream view, causing the next read to
+     * start from the beginning of this stream.
+     */
+    void reset();
+
+    /**
+     * Garbage collect all the trimmed entries on this stream
+     * @param trimMark start of the active log
+     */
+    void gc(long trimMark);
+
     /** Get a spliterator for this stream view
      * @return  A spliterator for this stream view.
      */
@@ -232,4 +209,27 @@ public interface IStreamView extends
      * @return total number of updates belonging to this stream.
      */
     long getTotalUpdates();
+
+    /** An enum representing search directions. */
+    @RequiredArgsConstructor
+    enum SearchDirection {
+        /** Search forward. */
+        FORWARD(false, true),
+        /** Search forward, including address given. */
+        FORWARD_INCLUSIVE(true, true),
+        /** Search backwards. */
+        REVERSE(false, false),
+        /** Search backwards, including address given. */
+        REVERSE_INCLUSIVE(true, false);
+
+        /** Whether the address given should be included
+         * in the search.
+         */
+        @Getter
+        final boolean inclusive;
+
+        /** True if the search is forward, false otherwise. */
+        @Getter
+        final boolean forward;
+    }
 }
