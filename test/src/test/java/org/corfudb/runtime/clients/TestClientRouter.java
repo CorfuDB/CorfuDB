@@ -338,23 +338,10 @@ public class TestClientRouter implements IClientRouter {
     }
 
     /**
-     * Starts routing requests.
-     */
-    @Override
-    public void start() {
-
-    }
-
-    /**
      * Stops routing requests.
      */
     @Override
     public void stop() {
-        //TODO - pause pipeline
-    }
-
-    @Override
-    public void stop(boolean unused) {
         //TODO - pause pipeline
     }
 

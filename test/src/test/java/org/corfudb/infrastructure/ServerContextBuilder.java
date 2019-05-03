@@ -1,6 +1,9 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
+
+import io.netty.channel.EventLoopGroup;
+
 import lombok.Data;
 import lombok.experimental.Accessors;
 import org.corfudb.test.concurrent.TestThreadGroups;
@@ -46,8 +49,12 @@ public class ServerContextBuilder {
     String prefix = "";
     String retention = "1000";
 
+    EventLoopGroup bossGroup = null;
+    EventLoopGroup workerGroup = null;
+    EventLoopGroup clientGroup = null;
+
     String clusterId = "auto";
-    boolean isTest = true;
+    boolean test = true;
 
     public ServerContextBuilder() {
 
@@ -86,7 +93,7 @@ public class ServerContextBuilder {
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
-                 .put("<port>", port);
+                 .put("<port>", String.valueOf(port));
 
         // Set the prefix to the port number
         if (prefix.equals("")) {
@@ -95,10 +102,14 @@ public class ServerContextBuilder {
         builder.put("--Prefix", prefix);
 
         // Provide the server with event loop groups
-        if (implementation.equals("local")) {
+        if (implementation.equals("local") && isTest()) {
             builder.put("client", TestThreadGroups.NETTY_CLIENT_GROUP.get());
             builder.put("boss", TestThreadGroups.NETTY_BOSS_GROUP.get());
             builder.put("worker", TestThreadGroups.NETTY_CLIENT_GROUP.get());
+        } else if (bossGroup != null && clientGroup != null && workerGroup != null) {
+            builder.put("client", clientGroup);
+            builder.put("boss", bossGroup);
+            builder.put("worker", workerGroup);
         }
         ServerContext sc = new ServerContext(builder.build());
         sc.setServerRouter(serverRouter);

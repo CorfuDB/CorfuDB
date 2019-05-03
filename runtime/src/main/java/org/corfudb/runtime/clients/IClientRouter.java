@@ -106,16 +106,9 @@ public interface IClientRouter {
     void completeExceptionally(long requestID, Throwable cause);
 
     /**
-     * Starts routing requests.
-     */
-    void start();
-
-    /**
      * Stops routing requests.
      */
     void stop();
-
-    void stop(boolean shutdown);
 
     /**
      * The host that this router is routing requests for.

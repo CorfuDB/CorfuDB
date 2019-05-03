@@ -252,18 +252,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             .findFirst().get();
     }
 
-    /**
-     * {@inheritDoc}.
-     *
-     * @deprecated The router automatically starts now, so this function call is no
-     *             longer necessary
-     */
-    @Override
-    @Deprecated
-    public synchronized void start() {
-        // Do nothing, legacy call
-    }
-
     /** Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
      *
      * @return A {@link ChannelInitializer} which initializes the pipeline.
@@ -382,16 +370,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (channel != null && channel.isOpen()) {
             channel.close();
         }
-    }
-
-    /** {@inheritDoc}
-     *  @deprecated  Deprecated, stopping a router without shutting it down is no longer supported.
-     *               Please use {@link this#stop()}.
-     */
-    @Override
-    @Deprecated
-    public void stop(boolean shutdown) {
-        stop();
     }
 
     /**

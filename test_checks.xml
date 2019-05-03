@@ -50,7 +50,9 @@
     <property name="fileExtensions" value="java, properties, xml"/>
 
     <module name="TreeWalker">
-        <module name="MagicNumber"/>
+        <module name="MagicNumber">
+            <property name="ignoreAnnotation" value="true"/>
+        </module>
 
         <module name="SuppressWarningsHolder" />
     </module>
