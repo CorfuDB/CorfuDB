@@ -1,10 +1,11 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.corfudb.integration.Harness.run;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+
+import static org.corfudb.integration.Harness.run;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -13,8 +14,8 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
-import org.junit.Test;
 
+import org.junit.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -663,7 +664,7 @@ public class WorkflowIT extends AbstractIT {
     public void testRuntimeGCWithStreamWithNoUpdatesAfterCheckpoint() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createDefaultRuntime();
+        runtime = createRuntimeWithCache();
 
         final int numDataEntries = 5;
 

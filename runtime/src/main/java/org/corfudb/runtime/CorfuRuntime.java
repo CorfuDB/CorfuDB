@@ -25,7 +25,6 @@ import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -172,6 +171,13 @@ public class CorfuRuntime {
 
         // region Stream Parameters
         /**
+         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
+         * False, if strategy to discover the address space of a stream relies on the get stream address map.
+         */
+        @Default
+        boolean followBackpointersEnabled = false;
+
+        /**
          * Whether or not to disable backpointers.
          */
         @Default
@@ -196,6 +202,13 @@ public class CorfuRuntime {
          */
         @Default
         int trimRetry = 2;
+
+        /**
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        @Default
+        int streamBatchSize = 10;
         // endregion
 
         //region        Security parameters
@@ -864,8 +877,12 @@ public class CorfuRuntime {
                         .contains(NodeLocator.getLegacyEndpoint(endpoint)))
                 .forEach(endpoint -> {
                     try {
-                        nodeRouterPool.getNodeRouters().get(endpoint).stop();
-                        nodeRouterPool.getNodeRouters().remove(endpoint);
+                        IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);
+                        if (router != null) {
+                            // Stop the channel from keeping connecting/reconnecting to server.
+                            // Also if channel is not closed properly, router will be garbage collected.
+                            router.stop();
+                        }
                     } catch (Exception e) {
                         log.warn("fetchLayout: Exception in stopping and removing "
                                 + "router connection to node {} :", endpoint, e);
@@ -972,7 +989,7 @@ public class CorfuRuntime {
 
             for (CompletableFuture<VersionInfo> versionCf : versions) {
                 final VersionInfo version = CFUtils.getUninterruptibly(versionCf,
-                        TimeoutException.class, NetworkException.class, ShutdownException.class);
+                        TimeoutException.class, NetworkException.class);
                 if (version.getVersion() == null) {
                     log.error("Unexpected server version, server is too old to return"
                             + " version information");
@@ -984,7 +1001,7 @@ public class CorfuRuntime {
                             getVersionString(), version.getVersion());
                 }
             }
-        } catch (TimeoutException | NetworkException | ShutdownException e) {
+        } catch (TimeoutException | NetworkException e) {
             log.error("connect: failed to get version. Couldn't connect to server.", e);
         } catch (Exception ex) {
             // Because checkVersion is just an informational step (log purpose), we don't need to retry

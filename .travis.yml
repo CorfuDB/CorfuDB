@@ -37,6 +37,9 @@ jobs:
     - ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests
   - script:
+    # Prepare docker image
+    - ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
+    # Run integration tests
     - ./mvnw -pl :universe clean verify -Pit
     name: Testing Framework Tests
   - stage: code_quality

@@ -1,7 +1,9 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -11,14 +13,25 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Range;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AppendException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
-
+import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
+import org.corfudb.util.Utils;
 
 
 /** The abstract queued stream view implements a stream backed by a read queue.
@@ -104,19 +117,167 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
-        // Otherwise we remove entries one at a time from the read queue.
-        if (getFrom.size() > 0) {
-            final long thisRead = getFrom.pollFirst();
-            ILogData ld = read(thisRead);
-            if (getFrom == context.readQueue) {
-                addToResolvedQueue(context, thisRead, ld);
+        return removeFromQueue(getFrom);
+    }
+
+    /**
+     * Remove next entry from the queue.
+     *
+     * @param queue queue of entries.
+     * @return next available entry. or null if there are no more entries
+     *         or remaining entries are not part of this stream.
+     */
+    protected abstract ILogData removeFromQueue(NavigableSet<Long> queue);
+
+    @Override
+    public void gc(long trimMark) {
+        // GC stream only if the pointer is ahead from the trim mark (last untrimmed address),
+        // this guarantees that the data to be discarded is already applied to the stream and data will not be lost.
+        // Note: if the pointer is behind, discarding the data immediately will incur in data
+        // loss as checkpoints are only loaded on resets. We don't want to trigger resets as this slows
+        // the runtime.
+        if (getCurrentContext().getGlobalPointer() >= getCurrentContext().getGcTrimMark()) {
+            log.debug("gc[{}]: start GC on stream {} for trim mark {}", this, this.getId(),
+                    getCurrentContext().getGcTrimMark());
+            // Remove all the entries that are strictly less than
+            // the trim mark
+            getCurrentContext().readCpQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
+            getCurrentContext().readQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
+            getCurrentContext().resolvedQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
+
+            if (!getCurrentContext().resolvedQueue.isEmpty()) {
+                getCurrentContext().minResolution = getCurrentContext()
+                        .resolvedQueue.first();
             }
-            return ld;
+        } else {
+            log.debug("gc[{}]: GC not performed on stream {} for this cycle. Global pointer {} is below trim mark {}",
+                    this, this.getId(), getCurrentContext().getGlobalPointer(), getCurrentContext().getGcTrimMark());
         }
 
-        // None of the potential reads ended up being part of this
-        // stream, so we return null.
-        return null;
+        // Set the trim mark for next GC Cycle
+        getCurrentContext().setGcTrimMark(trimMark);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>We loop forever trying to
+     * write, and automatically retrying if we get overwritten (hole filled).
+     */
+    @Override
+    public long append(Object object,
+                       Function<TokenResponse, Boolean> acquisitionCallback,
+                       Function<TokenResponse, Boolean> deacquisitionCallback) {
+        final LogData ld = new LogData(DataType.DATA, object);
+        // Validate if the  size of the log data is under max write size.
+        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+
+        // First, we get a token from the sequencer.
+        TokenResponse tokenResponse = runtime.getSequencerView()
+                .next(id);
+
+        // We loop forever until we are interrupted, since we may have to
+        // acquire an address several times until we are successful.
+        for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
+            // Next, we call the acquisitionCallback, if present, informing
+            // the client of the token that we acquired.
+            if (acquisitionCallback != null) {
+                if (!acquisitionCallback.apply(tokenResponse)) {
+                    // The client did not like our token, so we end here.
+                    // We'll leave the hole to be filled by the client or
+                    // someone else.
+                    log.debug("Acquisition rejected token={}", tokenResponse);
+                    return -1L;
+                }
+            }
+
+            // Now, we do the actual write. We could get an overwrite
+            // exception here - any other exception we should pass up
+            // to the client.
+            try {
+                runtime.getAddressSpaceView().write(tokenResponse, ld);
+                // The write completed successfully, so we return this
+                // address to the client.
+                return tokenResponse.getToken().getSequence();
+            } catch (OverwriteException oe) {
+                log.trace("Overwrite occurred at {}", tokenResponse);
+                // We got overwritten, so we call the deacquisition callback
+                // to inform the client we didn't get the address.
+                if (deacquisitionCallback != null) {
+                    if (!deacquisitionCallback.apply(tokenResponse)) {
+                        log.debug("Deacquisition requested abort");
+                        return -1L;
+                    }
+                }
+                // Request a new token, informing the sequencer we were
+                // overwritten.
+                tokenResponse = runtime.getSequencerView().next(id);
+            } catch (StaleTokenException te) {
+                log.trace("Token grew stale occurred at {}", tokenResponse);
+                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                    log.debug("Deacquisition requested abort");
+                    return -1L;
+                }
+                // Request a new token, informing the sequencer we were
+                // overwritten.
+                tokenResponse = runtime.getSequencerView().next(id);
+            }
+        }
+
+        log.error("append[{}]: failed after {} retries, write size {} bytes",
+                tokenResponse.getSequence(),
+                runtime.getParameters().getWriteRetry(),
+                ILogData.getSerializedSize(object));
+        throw new AppendException();
+    }
+
+    /**
+     * Reads data from an address in the address space.
+     *
+     * It will give the writer a chance to complete based on the time
+     * when the reads of which this individual read is a step started.
+     * If the reads have been going on for longer than the grace period
+     * given for a writer to complete a write, the subsequent individual
+     * read calls will immediately fill the hole on absence of data at
+     * the given address.
+     *
+     * @param address       address to read.
+     * @param readStartTime start time of the range of reads.
+     * @return log data at the address.
+     */
+    protected ILogData read(final long address, long readStartTime) {
+        try {
+            if (System.currentTimeMillis() - readStartTime <
+                    runtime.getParameters().getHoleFillTimeout().toMillis()) {
+                return runtime.getAddressSpaceView().read(address);
+            }
+            return runtime.getAddressSpaceView()
+                    .read(Collections.singleton(address), false)
+                    .get(address);
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
+    }
+
+    @Nonnull
+    protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
+        try {
+            Map<Long, ILogData> dataMap =
+                    runtime.getAddressSpaceView().read(addresses);
+            return addresses.stream().map(dataMap::get).collect(Collectors.toList());
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
+    }
+
+    private void processTrimmedException(TrimmedException te) {
+        if (TransactionalContext.getCurrentContext() != null
+                && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()
+                < getCurrentContext().checkpointSnapshotAddress) {
+            te.setRetriable(false);
+        }
     }
 
     /** {@inheritDoc}
@@ -199,27 +360,6 @@ public abstract class AbstractQueuedStreamView extends
     }
 
     /**
-     * Retrieve the data at the given address which was previously
-     * inserted into the read queue.
-     *
-     * @param address       The address to read.
-     */
-    protected abstract @Nonnull ILogData read(final long address);
-
-    /**
-     * Given a list of addresses, retrieve the data as a list in the same
-     * order of the addresses given in the list.
-     * @param addresses     The addresses to read.
-     * @return              A list of ILogData in the same order as the
-     *                      addresses given.
-     */
-    protected @Nonnull List<ILogData> readAll(@Nonnull final List<Long> addresses) {
-        return addresses.parallelStream()
-                        .map(this::read)
-                        .collect(Collectors.toList());
-    }
-
-    /**
      * Fill the read queue for the current context. This method is called
      * whenever a client requests a read, but there are no addresses left in
      * the read queue.
@@ -232,9 +372,211 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @return              True, if entries were added to the read queue,
      *                      False, otherwise.
+     *
+     * {@inheritDoc}
      */
-    protected abstract boolean fillReadQueue(final long maxGlobal,
-                                          final QueuedStreamContext context);
+    protected boolean fillReadQueue(final long maxGlobal,
+                                    final QueuedStreamContext context) {
+        log.trace("Fill_Read_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
+                maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
+        log.trace("Fill_Read_Queue[{}]: addresses in this stream Resolved queue {}" +
+                        " - ReadQueue {} - CP Queue {}", this,
+                context.resolvedQueue, context.readQueue, context.readCpQueue);
+
+        // If the stream has just been reset and we don't have
+        // any checkpoint entries, we should consult
+        // a checkpoint first.
+        if (context.getGlobalPointer() == Address.NEVER_READ &&
+                context.checkpointSuccessId == null) {
+            // The checkpoint stream ID is the UUID appended with CP
+            final UUID checkpointId = CorfuRuntime
+                    .getCheckpointStreamIdFromId(context.id);
+            // Find the checkpoint, if present
+            try {
+                if (discoverAddressSpace(checkpointId, context.readCpQueue,
+                        runtime.getSequencerView()
+                                .query(checkpointId).getToken().getSequence(),
+                        Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal),
+                        true, maxGlobal)) {
+                    log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
+                            this, context.readCpQueue.size());
+
+                    return true;
+                }
+            } catch (TrimmedException te) {
+                // If we reached a trim and didn't hit a checkpoint, this might be okay,
+                // if the stream was created recently and no checkpoint exists yet.
+                log.warn("Fill_Read_Queue[{}] Trim encountered and no checkpoint detected.", this);
+            }
+        }
+
+        // The maximum address we will fill to.
+        final long maxAddress =
+                Long.min(maxGlobal, context.maxGlobalAddress);
+
+        // If we already reached maxAddress ,
+        // we return since there is nothing left to do.
+        if (context.getGlobalPointer() >= maxAddress) {
+            return false;
+        }
+
+        // If everything is available in the resolved
+        // queue, use it
+        if (context.maxResolution >= maxAddress
+                && context.minResolution < context.getGlobalPointer()) {
+            return fillFromResolved(maxGlobal, context);
+        }
+
+        Long latestTokenValue = null;
+
+        // If the max has been resolved, use it.
+        if (maxGlobal != Address.MAX) {
+            latestTokenValue = context.resolvedQueue.ceiling(maxGlobal);
+        }
+
+        // If we don't have a larger token in resolved, or the request was for
+        // a linearized read, fetch the token from the sequencer.
+        if (latestTokenValue == null || maxGlobal == Address.MAX) {
+            // The stream tail might be ahead of maxGlobal (our max timestamp to resolve up to)
+            // We could limit it to the min between these two (maxGlobal and tail), but that could
+            // lead to reading an address (maxGlobal) that does not belong to our stream and attempt
+            // to deserialize it, or furthermore abort due to a trim on an address that does not even
+            // belong to our stream.
+            // For these reasons, we will keep this as the high boundary and prune
+            // our discovered space of addresses up to maxGlobal.
+            latestTokenValue = runtime.getSequencerView().query(context.id)
+                    .getToken().getSequence();
+            log.trace("Fill_Read_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
+        }
+
+        // If there is no information on the tail of the stream, return,
+        // there is nothing to do
+        if (Address.nonAddress(latestTokenValue)) {
+            // sanity check:
+            // currently, the only possible non-address return value for a token-query
+            // is Address.NON_EXIST
+            if (latestTokenValue != Address.NON_EXIST) {
+                log.warn("TOKEN[{}] unexpected return value", latestTokenValue);
+            }
+            return false;
+        }
+
+        // If everything is available in the resolved
+        // queue, use it
+        if (context.maxResolution >= latestTokenValue
+                && context.minResolution < context.getGlobalPointer()) {
+            return fillFromResolved(latestTokenValue, context);
+        }
+
+        long stopAddress = Long.max(context.globalPointer, context.checkpointSnapshotAddress);
+
+        // We check if we can fill partially from the resolved queue
+        // This is a requirement for the getStreamAddressMaps as it considers the content of the resolved queue
+        // to decide if needs to fetch the address maps or not.
+        if (context.globalPointer < context.maxResolution) {
+            if (fillFromResolved(context.maxResolution, context)) {
+                stopAddress = context.maxResolution;
+                log.trace("fillReadQueue[{}]: current pointer: {}, resolved up to: {}, readQueue: {}, " +
+                                "new stop address: {}", this, context.globalPointer,
+                        context.maxResolution, context.readQueue, stopAddress);
+            }
+        }
+
+        // Now we fetch the address map for this stream from the sequencer in a single call, i.e.,
+        // addresses of this stream in the range (stopAddress, startAddress==latestTokenValue]
+        discoverAddressSpace(context.id, context.readQueue,
+                latestTokenValue,
+                stopAddress,
+                d -> BackpointerOp.INCLUDE, false, maxGlobal);
+
+        return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
+    }
+
+    /**
+     * Defines the strategy to discover addresses belonging to this stream.
+     *
+     * We currently support two mechanisms:
+     *      - Following backpointers (@see org.corfudb.runtime.view.stream.BackpointerStreamView)
+     *      - Requesting the sequencer for the complete address map of a stream.
+     *      (@see org.corfudb.runtime.view.stream.AddressMapStreamView)
+     *
+     * @param streamId stream unique identifier.
+     * @param queue queue to fill up.
+     * @param startAddress read start address (inclusive)
+     * @param stopAddress read stop address (exclusive)
+     * @param filter filter to apply to data
+     * @param checkpoint true if checkpoint discovery, false otherwise.
+     * @param maxGlobal max address to resolve discovery.
+     *
+     * @return true if addresses were discovered, false, otherwise.
+     */
+    protected abstract boolean discoverAddressSpace(final UUID streamId,
+                                                    final NavigableSet<Long> queue,
+                                                    final long startAddress,
+                                                    final long stopAddress,
+                                                    final Function<ILogData, BackpointerOp> filter,
+                                                    final boolean checkpoint,
+                                                    final long maxGlobal);
+
+    protected boolean fillFromResolved(final long maxGlobal,
+                                       final QueuedStreamContext context) {
+        // There's nothing to read if we're already past maxGlobal.
+        if (maxGlobal < context.getGlobalPointer()) {
+            return false;
+        }
+        // Get the subset of the resolved queue, which starts at
+        // globalPointer and ends at maxAddress inclusive.
+        NavigableSet<Long> resolvedSet =
+                context.resolvedQueue.subSet(context.getGlobalPointer(),
+                        false, maxGlobal, true);
+
+        // Put those elements in the read queue
+        context.readQueue.addAll(resolvedSet);
+
+        return !context.readQueue.isEmpty();
+    }
+
+    /**
+     *  {@inheritDoc}
+     *
+     **/
+    protected ILogData read(final long address) {
+        try {
+            return runtime.getAddressSpaceView().read(address);
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
+    }
+
+    protected @Nonnull ILogData readRange(long address, @Nonnull final List<Long> addresses) {
+        try {
+            return runtime.getAddressSpaceView().predictiveReadRange(address, addresses);
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p> We indicate we may have entries available
+     * if the read queue contains entries to read -or-
+     * if the next token is greater than our log pointer.
+     */
+    @Override
+    public boolean getHasNext(QueuedStreamContext context) {
+        return  !context.readQueue.isEmpty()
+                || runtime.getSequencerView().query(context.id).getToken().getSequence()
+                > context.getGlobalPointer();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void close() {}
 
     /**
      * {@inheritDoc}
@@ -266,6 +608,54 @@ public abstract class AbstractQueuedStreamView extends
 
         // Convert the address to never read if there was no result.
         return result == null ? Address.NOT_FOUND : result;
+    }
+
+    protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
+                                              long maxGlobal) {
+        if (data.hasCheckpointMetadata()) {
+            CheckpointEntry cpEntry = (CheckpointEntry)
+                    data.getPayload(runtime);
+
+            // Select the latest cp that has a snapshot address
+            // which is less than maxGlobal
+            if (context.checkpointSuccessId == null &&
+                    cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END
+                    && Long.decode(cpEntry.getDict()
+                    .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)) <= maxGlobal) {
+                log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
+                        this, data.getGlobalAddress(), cpEntry.getCpType(),
+                        Utils.toReadableId(cpEntry.getCheckpointId()),
+                        cpEntry.getCheckpointAuthorId());
+                context.checkpointSuccessId = cpEntry.getCheckpointId();
+
+                context.checkpointSuccessNumEntries = 1L;
+                context.checkpointSuccessBytes = (long) data.getSizeEstimate();
+                context.checkpointSuccessEndAddr = data.getGlobalAddress();
+            }
+            else if (data.getCheckpointId().equals(context.checkpointSuccessId)) {
+                context.checkpointSuccessNumEntries++;
+                context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
+                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                    context.checkpointSuccessStartAddr = Long.decode(cpEntry.getDict()
+                            .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
+                            .SNAPSHOT_ADDRESS) != null) {
+                        context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+                    }
+                    log.trace("Checkpoint[{}] HALT due to START at address {} startAddr"
+                                    + " {} type {} id {} author {}",
+                            this, data.getGlobalAddress(), context.checkpointSuccessStartAddr,
+                            cpEntry.getCpType(),
+                            Utils.toReadableId(cpEntry.getCheckpointId()),
+                            cpEntry.getCheckpointAuthorId());
+                    return BackpointerOp.INCLUDE_STOP;
+                }
+            } else {
+                return BackpointerOp.EXCLUDE;
+            }
+        }
+        return BackpointerOp.INCLUDE;
     }
 
     /**
@@ -363,6 +753,16 @@ public abstract class AbstractQueuedStreamView extends
         return getCurrentContext().getGlobalPointer();
     }
 
+    @VisibleForTesting
+    AbstractQueuedStreamView.QueuedStreamContext getContext() {
+        return this.baseContext;
+    }
+
+    protected enum BackpointerOp {
+        INCLUDE,    /** Include this address. */
+        EXCLUDE,    /** Exclude this address. */
+        INCLUDE_STOP    /** Stop, but also include this address. */
+    }
 
     /** {@inheritDoc}
      *

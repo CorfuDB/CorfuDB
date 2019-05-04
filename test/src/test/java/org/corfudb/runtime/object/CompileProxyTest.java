@@ -61,8 +61,10 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
                 .open();
-        assertThatThrownBy(() -> map.get("key1"))
-                .isInstanceOf(TrimmedException.class);
+        // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
+        assertThatThrownBy(() -> {
+            map.get("key1");
+        }).isInstanceOf(TrimmedException.class);
     }
 
     @Test
