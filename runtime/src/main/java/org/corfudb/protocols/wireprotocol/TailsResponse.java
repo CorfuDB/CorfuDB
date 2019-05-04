@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,6 +30,11 @@ public class TailsResponse implements ICorfuPayload<TailsResponse> {
     final long logTail;
 
     final Map<UUID, Long> streamTails;
+
+    public TailsResponse(long logTail) {
+        this.logTail = logTail;
+        streamTails = Collections.EMPTY_MAP;
+    }
 
     public TailsResponse(ByteBuf buf) {
         epoch = ICorfuPayload.fromBuffer(buf, Long.class);

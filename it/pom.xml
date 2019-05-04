@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.3.20190501225436.7428</version>
+        <version>0.2.3.20190504001134.8180</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -75,6 +75,9 @@
                 <version>3.0.0-M1</version>
                 <configuration>
                     <skipITs>true</skipITs>
+                    <trimStackTrace>false</trimStackTrace>
+                    <!-- Option to generate a file test report or just output the test report to the console. -->
+                    <useFile>false</useFile>
                 </configuration>
             </plugin>
         </plugins>
@@ -93,6 +96,9 @@
                         <configuration>
                             <skipITs>false</skipITs>
                             <reuseForks>false</reuseForks>
+                            <trimStackTrace>false</trimStackTrace>
+                            <!-- Option to generate a file test report or just output the test report to the console. -->
+                            <useFile>false</useFile>
                             <systemProperties>
                                 <property>
                                     <name>project.version</name>

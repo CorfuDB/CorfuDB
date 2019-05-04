@@ -3,7 +3,9 @@ package org.corfudb.runtime.checkpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
@@ -17,9 +19,11 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -311,7 +315,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * <p>
      * the test builds two maps, m2A m2B, and brings up three threads:
      * <p>
-     * 1. one pupolates the maps with mapSize items
+     * 1. one populates the maps with mapSize items
      * 2. one does a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
      * and immediately trims the log up to the checkpoint position.
      * 3. one repeats ITERATIONS_LOW starting a fresh runtime, and instantiating the maps.
@@ -329,35 +333,37 @@ public class CheckpointTest extends AbstractObjectTest {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
 
         CorfuRuntime rt = getARuntime();
-        Map<String, Long> mapA = openMap(rt, streamNameA);
-        Map<String, Long> mapB = openMap(rt, streamNameB);
 
+        try {
+            Map<String, Long> mapA = openMap(rt, streamNameA);
+            Map<String, Long> mapB = openMap(rt, streamNameB);
 
-        // thread 1: pupolates the maps with mapSize items
-        scheduleConcurrently(1, ignored_task_num -> {
-            populateMaps(mapSize, mapA, mapB);
-        });
+            // thread 1: populates the maps with mapSize items
+            scheduleConcurrently(1, ignored_task_num -> {
+                populateMaps(mapSize, mapA, mapB);
+            });
 
-        // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
-        // and immediate prefix-trim of the log up to the checkpoint position
-        scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpointAndTrim(rt, (SMRMap) mapA, (SMRMap) mapB);
-        });
+            // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
+            // and immediate prefix-trim of the log up to the checkpoint position
+            scheduleConcurrently(1, ignored_task_num -> {
+                mapCkpointAndTrim(rt, (SMRMap) mapA, (SMRMap) mapB);
+            });
 
-        // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
-        // they should rebuild from the latest checkpoint (if available).
-        // performs some sanity checks on the map state
-        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
-            validateMapRebuild(mapSize, false);
-        });
+            // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
+            // they should rebuild from the latest checkpoint (if available).
+            // performs some sanity checks on the map state
+            scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
+                validateMapRebuild(mapSize, false);
+            });
 
-        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
+            executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
-        // This time the we check that the new map instances contains all values
-        validateMapRebuild(mapSize, true);
-
-        rt.shutdown();
+            // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
+            // This time we check that the new map instances contain all values
+            validateMapRebuild(mapSize, true);
+        } finally {
+            rt.shutdown();
+        }
     }
 
     /**
@@ -376,7 +382,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * <p>
      * Then, we prefix-trim the log up to position 50.
      * <p>
-     * Now, we start a new runtime and instantiate this map. It should build the map from a snapshot.
+     * Now, we start a new runtime and instantiate this map. It should build the map from a checkpoint.
      * <p>
      * Finally, we start a snapshot-TX at timestamp 77. We verify that the map state is [0, 1, 2, 3, ..., 76].
      */
@@ -386,35 +392,42 @@ public class CheckpointTest extends AbstractObjectTest {
         final int trimPosition = mapSize / 2;
         final int snapshotPosition = trimPosition + 2;
 
+        CountDownLatch latch = new CountDownLatch(1);
+
         t(1, () -> {
 
             CorfuRuntime rt = getARuntime();
-            Map<String, Long> mapA = openMap(rt, streamNameA);
+            try {
+                Map<String, Long> mapA = openMap(rt, streamNameA);
 
-            // first, populate the map
-            for (int i = 0; i < mapSize; i++) {
-                mapA.put(String.valueOf(i), (long) i);
+                // first, populate the map
+                for (int i = 0; i < mapSize; i++) {
+                    mapA.put(String.valueOf(i), (long) i);
+                }
+
+                // now, take a checkpoint and perform a prefix-trim
+                MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+                mcw1.addMap((SMRMap) mapA);
+                mcw1.appendCheckpoints(rt, author);
+
+                // Trim the log
+                Token token = new Token(rt.getLayoutView().getLayout().getEpoch(), trimPosition);
+                rt.getAddressSpaceView().prefixTrim(token);
+                rt.getAddressSpaceView().gc();
+                rt.getAddressSpaceView().invalidateServerCaches();
+                rt.getAddressSpaceView().invalidateClientCache();
+
+                latch.countDown();
+            } finally {
+                rt.shutdown();
             }
-
-            // now, take a checkpoint and perform a prefix-trim
-            MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-            mcw1.addMap((SMRMap) mapA);
-            mcw1.appendCheckpoints(rt, author);
-
-            // Trim the log
-            Token token = new Token(rt.getLayoutView().getLayout().getEpoch(), trimPosition);
-            rt.getAddressSpaceView().prefixTrim(token);
-            rt.getAddressSpaceView().gc();
-            rt.getAddressSpaceView().invalidateServerCaches();
-            rt.getAddressSpaceView().invalidateClientCache();
-
-            rt.shutdown();
         });
 
         AtomicBoolean trimExceptionFlag = new AtomicBoolean(false);
 
         // start a new runtime
         t(2, () -> {
+            latch.await();
             CorfuRuntime rt = getARuntime();
 
             Map<String, Long> localm2A = openMap(rt, streamNameA);
@@ -436,24 +449,26 @@ public class CheckpointTest extends AbstractObjectTest {
                 trimExceptionFlag.set(true);
             }
 
-            if (trimExceptionFlag.get() == false) {
-                assertThat(localm2A.size())
-                        .isEqualTo(snapshotPosition);
+            try {
+                if (trimExceptionFlag.get() == false) {
+                    assertThat(localm2A.size())
+                            .isEqualTo(snapshotPosition);
 
-                // check map positions 0..(snapshot-1)
-                for (int i = 0; i < snapshotPosition; i++) {
-                    assertThat(localm2A.get(String.valueOf(i)))
-                            .isEqualTo((long) i);
-                }
+                    // check map positions 0..(snapshot-1)
+                    for (int i = 0; i < snapshotPosition; i++) {
+                        assertThat(localm2A.get(String.valueOf(i)))
+                                .isEqualTo((long) i);
+                    }
 
-                // check map positions snapshot..(mapSize-1)
-                for (int i = snapshotPosition; i < mapSize; i++) {
-                    assertThat(localm2A.get(String.valueOf(i)))
-                            .isEqualTo(null);
+                    // check map positions snapshot..(mapSize-1)
+                    for (int i = snapshotPosition; i < mapSize; i++) {
+                        assertThat(localm2A.get(String.valueOf(i)))
+                                .isEqualTo(null);
+                    }
                 }
+            } finally {
+                rt.shutdown();
             }
-
-            rt.shutdown();
         });
 
     }
@@ -505,7 +520,6 @@ public class CheckpointTest extends AbstractObjectTest {
         mcw.addMap((SMRMap) testMap2);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
-
         // TX1: Move object to 1
         Token timestamp = new Token(0L, 1);
         getRuntime().getObjectsView().TXBuild()
@@ -516,7 +530,6 @@ public class CheckpointTest extends AbstractObjectTest {
 
         testMap.get("a");
         getRuntime().getObjectsView().TXEnd();
-
 
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);

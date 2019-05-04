@@ -187,7 +187,7 @@ public class ManagementAgent {
         // Start monitoring services that deals with failure and healing detection.
         if (!shutdown) {
             localMonitoringService.start(METRICS_POLL_INTERVAL);
-            remoteMonitoringService.start(METRICS_POLL_INTERVAL);
+            remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
         }
     }
 

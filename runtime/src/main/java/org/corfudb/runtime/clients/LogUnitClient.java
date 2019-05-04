@@ -17,6 +17,8 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -188,8 +190,27 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the globalTail once
      * received.
      */
-    public CompletableFuture<TailsResponse> getTail() {
-        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.msg());
+    public CompletableFuture<TailsResponse> getLogTail() {
+        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(new TailsRequest(TailsRequest.LOG_TAIL)));
+    }
+
+    /**
+     * Get all stream tails (i.e., maximum address written to every stream) and global tail.
+     *
+     * @return A CompletableFuture which will complete with the stream tails once
+     * received.
+     */
+    public CompletableFuture<TailsResponse> getAllTails() {
+        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(TailsRequest.ALL_STREAMS_TAIL));
+    }
+
+    /**
+     * Get the address space for all streams in the log.
+     *
+     * @return A CompletableFuture which will complete with the address space map for all streams.
+     */
+    public CompletableFuture<StreamsAddressResponse> getLogAddressSpace() {
+        return sendMessageWithFuture(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST.msg());
     }
 
     /**
@@ -199,7 +220,6 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Long> getTrimMark() {
         return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
     }
-
 
     /**
      * Send a prefix trim request that will trim the log up to a certain address

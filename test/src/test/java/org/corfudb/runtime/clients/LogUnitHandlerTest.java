@@ -16,9 +16,12 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 import org.assertj.core.api.Assertions;
@@ -34,6 +37,9 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -42,6 +48,7 @@ import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -201,7 +208,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
-    public void flushLogunitCache() throws Exception {
+    public void flushLogUnitCache() throws Exception {
         LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
         serverRouter.addServer(server2);
@@ -448,7 +455,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         LogData ld = getLogDataWithoutId(address);
 
         ld.setId(clientId1);
-        client.write(ld);
+        client.write(ld).join();
 
         LogData ldPrime = client.read(address).get().getAddresses().get(address);
 
@@ -473,7 +480,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         // Set clientId from another thread
         t1(() -> ldOtherThread.setId(clientId1));
-        client.write(ldOtherThread);
+        client.write(ldOtherThread).join();
 
         LogData ldPrime = client.read(address).get().getAddresses().get(address);
         assertThat(ldThisThread).isNotEqualTo(ldPrime);
@@ -495,10 +502,72 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         ldOne.setId(clientId1);
         ldTwo.setId(clientId2);
 
-        client.write(ldOne);
+        client.write(ldOne).join();
 
         LogData ldRead = client.read(address).get().getAddresses().get(address);
         assertThat(ldRead).isEqualTo(ldOne);
         assertThat(ldRead).isNotEqualTo(ldTwo);
+    }
+
+    /**
+     * Ensure log unit client can query log tail.
+     * @throws Exception
+     */
+    @Test
+    public void canQueryLogTail() throws Exception {
+        final long numEntries = 2L;
+
+        // Write 2 Entries
+        byte[] testString = "hello".getBytes();
+        byte[] testString2 = "world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(1, Collections.<UUID>emptySet(), null, testString2, Collections.emptyMap()).get();
+
+        CompletableFuture<TailsResponse> cf = client.getLogTail();
+        long tail = cf.get().getLogTail();
+        assertThat(tail).isEqualTo(numEntries-1);
+    }
+
+    /**
+     * Ensure log unit client can query stream's address space and log address space.
+     * @throws Exception
+     */
+    @Test
+    public void canQueryStreamAddressSpaceAndLogSpace() throws Exception {
+        final UUID streamId = UUID.randomUUID();
+        final long numEntries = 2L;
+        final long addressOne = 0L;
+        final long addressTwo = 1L;
+
+        // Write 2 entries
+        // 1. Entry in Address 0
+        LogData ldOne = getLogDataWithoutId(addressOne);
+        Map<UUID, Long> backpointerMap = new HashMap<>();
+        backpointerMap.put(streamId, Address.NON_ADDRESS);
+        ldOne.setBackpointerMap(backpointerMap);
+        client.write(ldOne);
+
+        // 2. Entry in address 1
+        LogData ldTwo = getLogDataWithoutId(addressTwo);
+        backpointerMap = new HashMap<>();
+        backpointerMap.put(streamId, addressOne);
+        ldTwo.setBackpointerMap(backpointerMap);
+        client.write(ldTwo);
+
+        // Get Stream's Address Space
+        CompletableFuture<StreamsAddressResponse> cf = client.getLogAddressSpace();
+        StreamAddressSpace addressSpace = cf.get().getAddressMap().get(streamId);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
+        assertThat(addressSpace.getAddressMap().contains(addressOne));
+
+        // Get Log Address Space (stream's address space + log tail)
+        CompletableFuture<StreamsAddressResponse> cfLog = client.getLogAddressSpace();
+        StreamsAddressResponse response = cfLog.get();
+        addressSpace = response.getAddressMap().get(streamId);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
+        assertThat(addressSpace.getAddressMap().contains(addressOne));
+        assertThat(response.getLogTail()).isEqualTo(addressTwo);
     }
 }

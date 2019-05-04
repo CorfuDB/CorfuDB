@@ -22,23 +22,30 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.*;
 
 
 /**
@@ -83,9 +90,9 @@ public class LogUnitServer extends AbstractServer {
     private final LoadingCache<Long, ILogData> dataCache;
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
-    private final BatchWriter<Long, ILogData> batchWriter;
+    private final BatchProcessor batchWriter;
 
-    private final ExecutorService executor;
+    private ExecutorService executor;
 
     @Override
     public ExecutorService getExecutor() {
@@ -94,6 +101,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Returns a new LogUnitServer.
+     *
      * @param serverContext context object providing settings and objects
      */
     public LogUnitServer(ServerContext serverContext) {
@@ -114,13 +122,12 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
         }
 
-        batchWriter = new BatchWriter<>(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
+        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         dataCache = Caffeine.newBuilder()
                 .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : ((LogData) v).getData().length)
                 .maximumWeight(config.getMaxCacheSize())
                 .removalListener(this::handleEviction)
-                .writer(batchWriter)
                 .build(this::handleRetrieval);
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
@@ -130,17 +137,65 @@ public class LogUnitServer extends AbstractServer {
      * Service an incoming request for maximum global address the log unit server has written.
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
-    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        TailsResponse tails = batchWriter.queryTails(msg.getEpoch());
-        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tails));
+    public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("handleTailRequest: received a tail request {}", msg);
+        batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
+                .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    /**
+     * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
+     * This is used on sequencer bootstrap to provide the address maps for initialization.
+     */
+    @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
+    public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
+        payloadMsg.copyBaseFields(msg);
+        log.debug("handleLogAddressSpaceRequest: received a log address space request {}", msg);
+        batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
+                .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
+                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, payloadMsg, r);
+                    return null;
+                });
     }
 
     /**
      * Service an incoming request to retrieve the starting address of this logging unit.
      */
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
-    public void handleHeadRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("handleTrimMarkRequest: received a trim mark request {}", msg);
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
+    }
+
+    /**
+     * A helper function that maps an exception to the appropriate response message.
+     */
+    void handleException(Throwable ex, ChannelHandlerContext ctx, CorfuPayloadMsg msg, IServerRouter r) {
+        log.trace("handleException: handling exception {} for {}", ex, msg);
+        if (ex.getCause() instanceof WrongEpochException) {
+            WrongEpochException wee = (WrongEpochException) ex.getCause();
+            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, wee.getCorrectEpoch()));
+        } else if (ex.getCause() instanceof OverwriteException) {
+            OverwriteException owe = (OverwriteException) ex.getCause();
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE
+                    .payloadMsg(owe.getOverWriteCause().getId()));
+        } else if (ex.getCause() instanceof DataOutrankedException) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
+        } else if (ex.getCause() instanceof ValueAdoptedException) {
+            ValueAdoptedException vae = (ValueAdoptedException) ex.getCause();
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(vae.getReadResponse()));
+        } else if (ex.getCause() instanceof TrimmedException) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
+        } else {
+            throw new LogUnitException(ex);
+        }
     }
 
     /**
@@ -150,21 +205,16 @@ public class LogUnitServer extends AbstractServer {
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log write: global: {}, streams: {}", msg.getPayload().getToken(),
                 msg.getPayload().getData().getBackpointerMap());
+        LogData logData = (LogData) msg.getPayload().getData();
 
-        try {
-            LogData logData = (LogData) msg.getPayload().getData();
-            logData.setEpoch(msg.getEpoch());
-            dataCache.put(msg.getPayload().getGlobalAddress(), logData);
-            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-
-        } catch (OverwriteException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
-        } catch (DataOutrankedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
-        } catch (ValueAdoptedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
-                    .getReadResponse()));
-        }
+        batchWriter.addTask(WRITE, msg)
+                .thenRunAsync(() -> {
+                    dataCache.put(msg.getPayload().getGlobalAddress(), logData);
+                    r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+                }, executor).exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+        });
     }
 
     /**
@@ -172,19 +222,59 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
     public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
-                            ChannelHandlerContext ctx, IServerRouter r) {
-        try {
-            List<LogData> entries = msg.getPayload().getEntries();
-            batchWriter.bulkWrite(entries, msg.getEpoch());
-            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-        } catch (OverwriteException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
-        } catch (DataOutrankedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
-        } catch (ValueAdoptedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
-                    .getReadResponse()));
-        }
+                           ChannelHandlerContext ctx, IServerRouter r) {
+        List<LogData> range = msg.getPayload().getEntries();
+        log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
+                range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
+
+        batchWriter.addTask(RANGE_WRITE, msg)
+                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
+    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx,
+                          IServerRouter r) {
+        Token address = msg.getPayload().getAddress();
+        log.debug("fillHole: filling address at {}, epoch {}", address, msg.getEpoch());
+
+        // A hole fill is converted to a regular write in order to reuse the same
+        // write-path.
+        LogData hole = LogData.getHole(address.getSequence());
+        hole.setEpoch(address.getEpoch());
+        CorfuPayloadMsg<WriteRequest> writeReq = new CorfuPayloadMsg<>(CorfuMsgType.WRITE, new WriteRequest(hole));
+        writeReq.copyBaseFields(msg);
+
+        batchWriter.addTask(WRITE, writeReq)
+                .thenRunAsync(() -> {
+                    dataCache.put(address.getSequence(), writeReq.getPayload().getData());
+                    r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+                }, executor).exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    /**
+     * Perform a prefix trim.
+     * Here the token is not used to perform the trim as the epoch at which the checkpoint was completed
+     * might be old. Hence, we use the msg epoch to perform the trim. This should be safe provided that the
+     * trim is performed only on the token provided by the CheckpointWriter which ensures that the checkpoint
+     * was persisted. Using any other address to perform a trim can cause data loss.
+     */
+    @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
+    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
+                            IServerRouter r) {
+        log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
+        batchWriter.addTask(PREFIX_TRIM, msg)
+                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
     }
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
@@ -193,7 +283,7 @@ public class LogUnitServer extends AbstractServer {
         ReadResponse rr = new ReadResponse();
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                    l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
+                 l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.getEmpty(l));
@@ -227,79 +317,40 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx,
-                          IServerRouter r) {
-        try {
-            Token address = msg.getPayload().getAddress();
-            log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
-            LogData hole = LogData.getHole(address.getSequence());
-            hole.setEpoch(msg.getEpoch());
-            dataCache.put(address.getSequence(), hole);
-            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-
-        } catch (OverwriteException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(e.getOverWriteCause().getId()));
-        } catch (DataOutrankedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
-        } catch (ValueAdoptedException e) {
-
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
-                    .getReadResponse()));
-        }
-    }
-
-    /**
-     * Perform a prefix trim.
-     * Here the token is not used to perform the trim as the epoch at which the checkpoint was completed
-     * might be old. Hence, we use the msg epoch to perform the trim. This should be safe provided that the
-     * trim is performed only on the token provided by the CheckpointWriter which ensures that the checkpoint
-     * was persisted. Using any other address to perform a trim can cause data loss.
-     */
-    @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
-    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-                            IServerRouter r) {
-        try {
-            TrimRequest req = msg.getPayload();
-            batchWriter.prefixTrim(req.getAddress().getSequence(), msg.getEpoch());
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        } catch (TrimmedException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
-        }
-    }
-
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
-    private void compact(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        try {
-            streamLog.compact();
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        } catch (RuntimeException ex) {
-            log.error("Internal Error");
-            //TODO(Maithem) Need an internal error return type
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        }
+    private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("handleCompactRequest: received a compact request {}", msg);
+        streamLog.compact();
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
-    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        try {
-            dataCache.invalidateAll();
-        } catch (RuntimeException e) {
-            log.error("Encountered error while flushing cache {}", e);
-        }
+    private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
+        dataCache.invalidateAll();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     /**
      * Seal the server with the epoch.
-     *
+     * <p>
      * - A seal operation is inserted in the queue and then we wait to flush all operations
-     *   in the queue before this operation.
+     * in the queue before this operation.
      * - All operations after this operation but stamped with an older epoch will be failed.
      */
     @Override
     public void sealServerWithEpoch(long epoch) {
-        batchWriter.waitForSealComplete(epoch);
+        CorfuPayloadMsg<Long> msg = new CorfuPayloadMsg<>();
+        msg.setEpoch(epoch);
+        try {
+            batchWriter.addTask(SEAL, msg).join();
+        } catch (CompletionException ce) {
+            if (ce.getCause() instanceof WrongEpochException) {
+                // The BaseServer expects to observe this exception,
+                // when it happens, so it needs to be unwrapped
+                throw (WrongEpochException) ce.getCause();
+            }
+        }
         log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);
     }
 
@@ -309,30 +360,37 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Resets the log unit server via the BatchWriter.
+     * Resets the log unit server via the BatchProcessor.
      * Warning: Clears all data.
-     *
+     * <p>
      * - The epochWaterMark is set to prevent resetting log unit multiple times during
-     *   same epoch.
+     * same epoch.
      * - After this the reset operation is inserted which resets and clears all data.
      * - Finally the cache is invalidated to purge the existing entries.
      */
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
                                            ChannelHandlerContext ctx, IServerRouter r) {
+
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
         // prevent multiple reset in the same epoch. and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.
         if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
                 && msg.getPayload() == serverContext.getServerEpoch()) {
             serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.reset(msg.getPayload());
-            dataCache.invalidateAll();
-            log.info("LogUnit Server Reset.");
+            batchWriter.addTask(RESET, msg)
+                    .thenRun(() -> {
+                        dataCache.invalidateAll();
+                        log.info("LogUnit Server Reset.");
+                        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                    }).exceptionally(ex -> {
+                        handleException(ex, ctx, msg, r);
+                        return null;
+                    });
         } else {
             log.info("LogUnit Server Reset request received but reset already done.");
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         }
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     /**
@@ -340,10 +398,10 @@ public class LogUnitServer extends AbstractServer {
      *
      * @param address The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
-     *
-     *     This function should not care about trimmed addresses, as that is handled in
-     *     the read() and append(). Any address that cannot be retrieved should be returned as
-     *     unwritten (null).
+     * <p>
+     * This function should not care about trimmed addresses, as that is handled in
+     * the read() and append(). Any address that cannot be retrieved should be returned as
+     * unwritten (null).
      */
     private synchronized ILogData handleRetrieval(long address) {
         LogData entry = streamLog.read(address);
@@ -373,6 +431,25 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     long getMaxCacheSize() {
         return config.getMaxCacheSize();
+    }
+
+    @VisibleForTesting
+    BatchProcessor getBatchWriter() {
+        return batchWriter;
+    }
+
+    // The following methods should only be used for unit tests, ideally the executor should be
+    // final, but this "hack" is needed to now when a task as completed
+    @VisibleForTesting
+    void startHandler() {
+        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
+                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
+    }
+
+    @VisibleForTesting
+    void stopHandler() throws Exception {
+        executor.shutdown();
+        executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**

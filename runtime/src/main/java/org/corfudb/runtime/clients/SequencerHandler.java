@@ -10,6 +10,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 
@@ -46,6 +47,12 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
 
     @ClientHandler(type = CorfuMsgType.TOKEN_RES)
     private static Object handleTokenResponse(CorfuPayloadMsg<TokenResponse> msg,
+                                              ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.STREAMS_ADDRESS_RESPONSE)
+    private static Object handleStreamAddressesResponse(CorfuPayloadMsg<StreamsAddressResponse> msg,
                                               ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

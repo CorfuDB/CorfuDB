@@ -43,7 +43,7 @@ class CorfuClusterParams implements GroupParams {
     @Default
     @Getter
     @NonNull
-    private final Duration retryTimeout = Duration.ofSeconds(3);
+    private final Duration retryDuration = Duration.ofSeconds(3);
 
     @Override
     public ImmutableSortedSet<CorfuServerParams> getNodesParams() {
