@@ -160,7 +160,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
 
         // Fetch Stream B and verify backpointer count (which requires 1 read = 1 entry)
         svB.remainingUpTo(totalEntries);
-        assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getBackpointerCount()).isEqualTo(1L);
+        assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getTotalUpdates()).isEqualTo(1L);
     }
 
     @Ignore
@@ -178,12 +178,12 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         }
 
         // Make sure that the stream is built in-memory
-        BackpointerStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        BackpointerStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        IStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        IStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
         assertThat(svA.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         assertThat(svB.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(bpsvA.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(bpsvB.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(((AbstractQueuedStreamView) bpsvB).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         TokenResponse tail = runtime.getSequencerView().query();
         runtime.getAddressSpaceView().prefixTrim(tail.getToken());
         // First Runtime GC
@@ -198,9 +198,9 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
 
         // Second Runtime GC
         runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(bpsvA.getContext().resolvedQueue).hasSize(1);
-        assertThat(bpsvA.getContext().readQueue).isEmpty();
-        assertThat(bpsvA.getContext().readCpQueue).isEmpty();
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(1);
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readQueue).isEmpty();
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readCpQueue).isEmpty();
     }
 
 }

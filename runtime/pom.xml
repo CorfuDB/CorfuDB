@@ -11,6 +11,10 @@
 
     <artifactId>runtime</artifactId>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
     <build>
         <plugins>
             <plugin>
@@ -102,6 +106,11 @@
             <groupId>org.ehcache</groupId>
             <artifactId>sizeof</artifactId>
             <version>0.3.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.roaringbitmap</groupId>
+            <artifactId>RoaringBitmap</artifactId>
+            <version>0.7.36</version>
         </dependency>
     </dependencies>
 

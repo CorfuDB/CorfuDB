@@ -26,20 +26,14 @@
     <url>http://www.corfudb.org</url>
     <description>A cloud scale-consistency platform</description>
 
-    <distributionManagement>
-        <repository>
-            <id>internal.repo</id>
-            <name>Temporary Staging Repository</name>
-            <url>file://${project.build.directory}/mvn-repo</url>
-        </repository>
-    </distributionManagement>
-
     <organization>
         <name>CorfuDB</name>
         <url>http://www.corfudb.org</url>
     </organization>
 
     <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>
@@ -181,6 +175,14 @@
         </dependency>
     </dependencies>
 
+    <distributionManagement>
+        <repository>
+            <id>bintray-corfudb-maven</id>
+            <name>CorfuDB repository</name>
+            <url>https://api.bintray.com/maven/corfudb/maven/org.corfudb/;publish=1</url>
+        </repository>
+    </distributionManagement>
+
     <profiles>
         <profile>
             <id>it</id>
@@ -192,6 +194,9 @@
                         <version>3.0.0-M1</version>
                         <configuration>
                             <forkCount>1</forkCount>
+                            <trimStackTrace>false</trimStackTrace>
+                            <!-- Option to generate a file test report or just output the test report to the console. -->
+                            <useFile>false</useFile>
                             <includes>
                                 <include>**/*IT.java</include>
                             </includes>
@@ -241,6 +246,11 @@
         </pluginManagement>
 
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.0.0-M1</version>
+            </plugin>
             <plugin>
                 <groupId>org.sonarsource.scanner.maven</groupId>
                 <artifactId>sonar-maven-plugin</artifactId>
@@ -313,14 +323,6 @@
                 </configuration>
             </plugin>
             <plugin>
-                <artifactId>maven-deploy-plugin</artifactId>
-                <version>2.8.1</version>
-                <configuration>
-                    <altDeploymentRepository>internal.repo::default::file://${project.build.directory}/mvn-repo
-                    </altDeploymentRepository>
-                </configuration>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>2.10.1</version>
@@ -338,6 +340,8 @@
                     <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
+                    <!-- Option to generate a file test report or just output the test report to the console. -->
+                    <useFile>false</useFile>
                     <skipAfterFailureCount>2</skipAfterFailureCount>
                     <systemPropertyVariables>
                         <propertyName>test.travisBuild</propertyName>

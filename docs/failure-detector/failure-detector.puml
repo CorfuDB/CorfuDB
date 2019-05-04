@@ -1,0 +1,26 @@
+@startuml
+'Network failure between b and c nodes
+
+participant a
+participant b
+participant c
+
+database layout
+
+a --> a: ping
+a --> b: ping
+a --> c : ping
+
+b --> b : ping
+b --> a : ping
+b --> c : ping
+destroy c
+
+c --> b : ping
+destroy b
+c --> a : ping
+c --> c : ping
+
+a -> layout: unresponsiveServers[c]
+
+@enduml

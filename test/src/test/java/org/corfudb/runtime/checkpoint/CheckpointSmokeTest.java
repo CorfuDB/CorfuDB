@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
@@ -67,7 +68,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
         final int objSize = 100;
         long a1 = sv.append(new byte[objSize]);
-        final long cpEndAddress = 2L;
+        final long cpEndAddress = 0L;
         // Verify that the start/end records have been written for empty maps
         assertThat(a1).isEqualTo(cpEndAddress);
     }
@@ -300,6 +301,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *  destroyed (logically, not physically) by the CP, so we have
      *  to use a different position 'history' for our assertion
      *  check.
+     *
+     * +-----------------------------------------------------------------+
+     * | 0  | 1  | 2  | 3 | 4 | 5  | 6 | 7  | 8 | 9  | 10 | 11 | 12 | 13 |
+     * +-----------------------------------------------------------------+
+     * | F0 | F1 | F2 | S | C | M0 | C | M1 | C | M2 | E  | L0 | L1 | L2 |
+     * +-----------------------------------------------------------------+
+     * F : First batch of entries.
+     * S : Start of checkpoint.
+     * C : Continuation of checkpoints
+     * M : Middle batch of entries.
+     * E : End of checkpoints
+     * L : Last batch of entries.
+     *
      */
     @Test
     public void checkpointWriterInterleavedTest() throws Exception {
@@ -455,7 +469,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
         final UUID checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
-        BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
+        IStreamView sv;
+        if (r.getParameters().isFollowBackpointersEnabled()) {
+            sv = new BackpointerStreamView(r, checkpointStreamID);
+        } else {
+            sv = new AddressMapStreamView(r, checkpointStreamID);
+        }
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 
