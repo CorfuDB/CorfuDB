@@ -36,12 +36,12 @@ import org.corfudb.util.Utils;
  * * For each stream, we record a pair:
  * *  - a set of conflict-parameters modified by this transaction on the
  * *  stream,
- * *  - a list of SMR updates by this transcation on the stream.
+ * *  - a list of SMR updates by this transaction on the stream.
  * *
  *
  * <p>The implementation of the current() method looks at the write-set, picks
  * the list of SMRentries corresponding to the current object id, and returns
- * the entry in the list corredponding the the current SMRStream position.
+ * the entry in the list corresponding the the current SMRStream position.
  *
  * <p>previous() decrements the current SMRStream position and returns the entry
  * corresponding to it.
@@ -54,7 +54,7 @@ import org.corfudb.util.Utils;
  * <p>Enter nested transactions.
  *
  * <p>WriteSetSMRStream maintains the abstractions also across nested transactions.
- * It supports navigating forward/backward across the SMREntries in the entire transcation stack.
+ * It supports navigating forward/backward across the SMREntries in the entire transaction stack.
  *
  */
 @Slf4j

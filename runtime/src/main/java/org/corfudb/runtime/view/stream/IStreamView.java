@@ -18,8 +18,6 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
 
-
-
 /** This interface represents a view on a stream. A stream is an ordered
  * set of log entries which can only be appended to and read in sequential
  * order.
@@ -227,4 +225,11 @@ public interface IStreamView extends
     default Stream<ILogData> streamUpTo(long maxGlobal) {
         return StreamSupport.stream(spliteratorUpTo(maxGlobal), false);
     }
+
+    /**
+     * Get total number of updates registered to this stream.
+     *
+     * @return total number of updates belonging to this stream.
+     */
+    long getTotalUpdates();
 }

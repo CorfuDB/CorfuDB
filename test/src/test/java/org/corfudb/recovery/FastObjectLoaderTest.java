@@ -34,6 +34,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 
@@ -555,16 +556,13 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 2);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
-                .connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
         fsm.setDefaultObjectsType(CorfuTable.class);
         fsm.loadMaps();
 
         assertThatMapsAreBuiltIgnore(rt2, "Map1");
-
-
     }
 
     @Test(expected = RuntimeException.class)
@@ -572,12 +570,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
-                .connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         long firstMileStone = 2;
         FastObjectLoader incrementalLoader = new FastObjectLoader(rt2);
-        incrementalLoader.setNumberOfAttempt(1);
+        incrementalLoader.setNumberOfAttempt(0);
         incrementalLoader.setLogTail(firstMileStone);
         incrementalLoader.setDefaultObjectsType(CorfuTable.class);
         incrementalLoader.loadMaps();
@@ -588,11 +585,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         incrementalLoader.setLogHead(firstMileStone + 1);
         incrementalLoader.setLogTail(getDefaultRuntime().getSequencerView().next().getSequence());
         incrementalLoader.loadMaps();
-
     }
 
     @Test
-    public void doNotFailBecauseTrimIsFirst() throws Exception{
+    public void failWhenTrimHappensWhileFastLoading() throws Exception {
         // 1 tables has 1 entry and 2 tables have 2 entries
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
@@ -600,18 +596,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         Token snapShotAddress = checkPointAll(getDefaultRuntime());
         Helpers.trim(getDefaultRuntime(), snapShotAddress);
 
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
-                .connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         // Force a read from 0
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.setLogHead(0L);
         fsm.setDefaultObjectsType(CorfuTable.class);
-        fsm.loadMaps();
-
-        assertThatMapsAreBuilt(rt2);
-
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
+        fsm.setNumberOfAttempt(0);
+        assertThatThrownBy(fsm::loadMaps).isInstanceOf(RuntimeException.class);
     }
 
     @Test

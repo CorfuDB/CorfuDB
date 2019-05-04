@@ -17,7 +17,7 @@ public class Address {
      * @return true for all flag non-address constants
      */
     public static boolean nonAddress(long addr) {
-        return addr < 0;
+        return !isAddress(addr);
     }
 
     /**

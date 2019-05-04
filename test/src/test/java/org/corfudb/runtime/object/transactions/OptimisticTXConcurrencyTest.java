@@ -24,7 +24,7 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
         testOpacity(isInterleaved);
 
-        // verfiy that all aborts are justified
+        // verify that all aborts are justified
         for (int task_num = 0; task_num < numTasks; task_num++) {
             if (commitStatus.get(task_num) != COMMITVALUE) {
                 assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
@@ -55,7 +55,7 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
        testRWConflicts(testInterleaved);
 
-        // verfiy that all aborts are justified
+        // verify that all aborts are justified
         for (int task_num = 0; task_num < numTasks; task_num++) {
             if (commitStatus.get(task_num) != COMMITVALUE)
                 assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||

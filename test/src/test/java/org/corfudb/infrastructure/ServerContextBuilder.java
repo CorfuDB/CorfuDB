@@ -44,7 +44,7 @@ public class ServerContextBuilder {
     String numThreads = "0";
     String handshakeTimeout = "10";
     String prefix = "";
-    String retention = "100";
+    String retention = "1000";
 
     String clusterId = "auto";
     boolean isTest = true;

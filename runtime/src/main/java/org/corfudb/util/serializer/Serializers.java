@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.SerializerException;
 
 
 /**
@@ -34,14 +35,20 @@ public class Serializers {
     /**
      * Return the serializer byte.
      * @param type A byte that tags a serializer
-     * @return     A serializer that corrosponds to the type byte
+     * @return     A serializer that corresponds to the type byte
      */
     public static ISerializer getSerializer(Byte type) {
         if (type <= SYSTEM_SERIALIZERS_COUNT) {
-            return serializersMap.get(type);
-        } else {
+            if (serializersMap.containsKey(type)) {
+                return serializersMap.get(type);
+            }
+        } else if (customSerializers.containsKey(type)) {
             return customSerializers.get(type);
         }
+
+        log.error("Serializer with type code {} not found. Please check custom serializers " +
+                "for this client.", type.intValue());
+        throw new SerializerException(type);
     }
 
     /**

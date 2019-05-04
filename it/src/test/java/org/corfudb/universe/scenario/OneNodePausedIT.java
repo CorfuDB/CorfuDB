@@ -57,7 +57,7 @@ public class OneNodePausedIT extends GenericIntegrationTest {
                 // Verify cluster status is DEGRADED with one node down
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
-                Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
+                Map<String, NodeStatus> statusMap = clusterStatusReport.getClusterNodeStatusMap();
                 assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(NodeStatus.DOWN);
 
                 // Verify data path working fine
@@ -83,6 +83,8 @@ public class OneNodePausedIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

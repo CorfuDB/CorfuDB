@@ -8,6 +8,10 @@ import java.util.concurrent.locks.ReadWriteLock;
  */
 public class LockUtils {
 
+    private LockUtils() {
+        // prevent instantiation of this class
+    }
+
     public static class AutoCloseRwLock implements AutoCloseable {
 
         ReadWriteLock lock;
@@ -18,7 +22,7 @@ public class LockUtils {
         }
 
         /**
-         * Aquire a write lock.
+         * Acquire a write lock.
          * @return Write lock
          */
         public AutoCloseRwLock writeLock() {
@@ -32,7 +36,7 @@ public class LockUtils {
         }
 
         /**
-         * Aquire read lock.
+         * Acquire read lock.
          * @return read lock
          */
         public AutoCloseRwLock readLock() {

@@ -11,8 +11,11 @@ import java.util.Collections;
  * Created by dmalkhi on 1/4/17.
  */
 public abstract class AbstractTransactionsTest extends AbstractObjectTest {
+
     @Before
-    public void becomeCorfuApp() {         getDefaultRuntime(); }
+    public void becomeCorfuApp() {
+        getDefaultRuntime();
+    }
 
     /**
      * Utility method to start a (default type) TX;

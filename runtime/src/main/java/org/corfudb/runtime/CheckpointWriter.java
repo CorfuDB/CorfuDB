@@ -1,37 +1,36 @@
 package org.corfudb.runtime;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.CacheOption;
+import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
-import lombok.Getter;
-import lombok.Setter;
-
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.CacheOption;
-import org.corfudb.runtime.view.StreamsView;
-import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
 
 /** Checkpoint writer for SMRMaps: take a snapshot of the
  *  object via TXBegin(), then dump the frozen object's
@@ -52,6 +51,12 @@ public class CheckpointWriter<T extends Map> {
     private long endAddress;
     private long numEntries = 0;
     private long numBytes = 0;
+
+    // Registry and Timer used for measuring append checkpoint
+    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final String CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
+            "append-checkpoint";
+    private Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
 
     @SuppressWarnings("checkstyle:abbreviation")
     final UUID checkpointStreamID;
@@ -118,15 +123,25 @@ public class CheckpointWriter<T extends Map> {
     }
 
     /**
-     * @return List of global addresses of all entries for this checkpoint.
+     * @return Token at which the snapshot for this checkpoint was taken.
      */
     public Token appendCheckpoint() {
         long start = System.currentTimeMillis();
+
+        // Queries the sequencer for the global log tail. We then read the global log tail to
+        // persist the entry on the logunit in turn preventing from a new sequencer from
+        // regressing tokens.
+        Token markerToken = rt.getSequencerView().query().getToken();
+        if (Address.nonAddress(markerToken.getSequence())) {
+            return markerToken;
+        }
+        rt.getAddressSpaceView().read(markerToken.getSequence());
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
+                .snapshot(markerToken)
                 .build()
                 .begin();
-        try {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
             Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
@@ -137,8 +152,8 @@ public class CheckpointWriter<T extends Map> {
             startCheckpoint(snapshot, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
-            log.info("appendCheckpoint: completed checkpoint for {} at snapshot {} in {} ms", streamId, snapshot,
-                    System.currentTimeMillis() - start);
+            log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
+                    streamId, entries.size(), snapshot, System.currentTimeMillis() - start);
             return snapshot;
         } finally {
             rt.getObjectsView().TXEnd();

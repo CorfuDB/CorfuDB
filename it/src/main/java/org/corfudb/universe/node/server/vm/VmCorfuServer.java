@@ -1,6 +1,5 @@
 package org.corfudb.universe.node.server.vm;
 
-import com.jcraft.jsch.JSchException;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
@@ -15,7 +14,6 @@ import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.IpTablesUtil;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 
@@ -98,8 +96,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         servers.stream()
                 .filter(s -> !s.getParams().equals(params))
                 .forEach(s -> {
-                    executeCommand(String.join(" ", IpTablesUtil.dropInput(s.getIpAddress())));
-                    executeCommand(String.join(" ", IpTablesUtil.dropOutput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.dropInput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.dropOutput(s.getIpAddress())));
                 });
     }
 
@@ -159,8 +157,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         servers.stream()
                 .filter(s -> !s.getParams().equals(params))
                 .forEach(s -> {
-                    executeCommand(String.join(" ", IpTablesUtil.revertDropInput(s.getIpAddress())));
-                    executeCommand(String.join(" ", IpTablesUtil.revertDropOutput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.revertDropInput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.revertDropOutput(s.getIpAddress())));
                 });
     }
 
@@ -194,15 +192,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     private void executeSudoCommand(String cmdLine) {
         String ipAddress = getIpAddress();
 
-        try {
-            commandHelper.executeSudoCommand(ipAddress,
-                    universeParams.getVmUserName(),
-                    universeParams.getVmPassword(),
-                    "sudo " + cmdLine
-            );
-        } catch (JSchException | IOException e) {
-            throw new NodeException("Can't execute sudo command: " + cmdLine, e);
-        }
+        commandHelper.executeSudoCommand(ipAddress,
+                universeParams.getVmUserName(),
+                universeParams.getVmPassword(),
+                cmdLine
+        );
     }
 
     /**

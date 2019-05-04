@@ -1,22 +1,7 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.collections.StringIndexer;
-import org.corfudb.runtime.collections.StringMultiIndexer;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.util.CFUtils;
-import org.junit.Before;
-import org.junit.Test;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -40,7 +25,22 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.collections.StringMultiIndexer;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.util.CFUtils;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -207,6 +207,8 @@ public class ServerRestartIT extends AbstractIT {
         } catch (Exception e) {
             throw e;
         }
+
+        runtimeList.forEach(CorfuRuntime::shutdown);
     }
 
 
@@ -424,9 +426,9 @@ public class ServerRestartIT extends AbstractIT {
         UUID streamNameA = CorfuRuntime.getStreamID("mapA");
         UUID streamNameB = CorfuRuntime.getStreamID("mapB");
 
-        CorfuRuntime corfuRuntime = createDefaultRuntime();
-        Map<String, Integer> mapA = createMap(corfuRuntime, "mapA");
-        Map<String, Integer> mapB = createMap(corfuRuntime, "mapB");
+        runtime = createDefaultRuntime();
+        Map<String, Integer> mapA = createMap(runtime, "mapA");
+        Map<String, Integer> mapB = createMap(runtime, "mapB");
 
         for (int i = 0; i < insertions; i++) {
             mapA.put(Integer.toString(i), i);
@@ -440,10 +442,10 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
+        restartServer(runtime, DEFAULT_ENDPOINT);
 
-        TokenResponse tokenResponseA = corfuRuntime.getSequencerView().next(streamNameA);
-        TokenResponse tokenResponseB = corfuRuntime.getSequencerView().next(streamNameB);
+        TokenResponse tokenResponseA = runtime.getSequencerView().next(streamNameA);
+        TokenResponse tokenResponseB = runtime.getSequencerView().next(streamNameB);
 
         assertThat(tokenResponseA.getToken().getSequence()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
@@ -468,17 +470,17 @@ public class ServerRestartIT extends AbstractIT {
         final int timeToWaitInSeconds = 3;
 
         Process corfuServerProcess = runCorfuServer();
-        final CorfuRuntime corfuRuntime = createDefaultRuntime();
+        runtime = createDefaultRuntime();
 
         // wait for this server long enough to start (by requesting token service)
-        TokenResponse firsttr = corfuRuntime.getSequencerView().next();
+        TokenResponse firsttr = runtime.getSequencerView().next();
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
         corfuServerProcess = runCorfuServer();
 
-        corfuRuntime.invalidateLayout();
-        TokenResponse tr = corfuRuntime.getSequencerView().next();
+        runtime.invalidateLayout();
+        TokenResponse tr = runtime.getSequencerView().next();
 
         assertThat(tr.getEpoch())
                 .isEqualTo(1);
@@ -491,7 +493,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Should succeed. internally, it will refresh the token.
         CompletableFuture cf = CFUtils.within(CompletableFuture.supplyAsync(() -> {
-            corfuRuntime.getAddressSpaceView().write(mockTr, testPayload);
+            runtime.getAddressSpaceView().write(mockTr, testPayload);
             return true;
         }), Duration.ofSeconds(timeToWaitInSeconds));
 
@@ -526,13 +528,13 @@ public class ServerRestartIT extends AbstractIT {
         long mapBStreamTail = -1;
         long globalTail = -1;
 
-        CorfuRuntime corfuRuntime = createDefaultRuntime();
+        runtime = createDefaultRuntime();
         Random rand = new Random(PARAMETERS.SEED);
 
         for (int r = 0; r < PARAMETERS.NUM_ITERATIONS_LOW; r++) {
 
-            Map<String, Integer> mapA = createMap(corfuRuntime, "mapA");
-            Map<String, Integer> mapB = createMap(corfuRuntime, "mapB");
+            Map<String, Integer> mapA = createMap(runtime, "mapA");
+            Map<String, Integer> mapB = createMap(runtime, "mapB");
 
             // activity (i): map put()'s
             boolean updateMaps = rand.nextBoolean();
@@ -560,20 +562,20 @@ public class ServerRestartIT extends AbstractIT {
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) mapA);
                 mcw1.addMap((SMRMap) mapB);
-                Token checkpointAddress = mcw1.appendCheckpoints(corfuRuntime, "dahlia");
+                Token checkpointAddress = mcw1.appendCheckpoints(runtime, "dahlia");
 
                 // Trim the log
-                corfuRuntime.getAddressSpaceView().prefixTrim(checkpointAddress);
-                corfuRuntime.getAddressSpaceView().gc();
-                corfuRuntime.getAddressSpaceView().invalidateServerCaches();
-                corfuRuntime.getAddressSpaceView().invalidateClientCache();
+                runtime.getAddressSpaceView().prefixTrim(checkpointAddress);
+                runtime.getAddressSpaceView().gc();
+                runtime.getAddressSpaceView().invalidateServerCaches();
+                runtime.getAddressSpaceView().invalidateClientCache();
 
                 System.out.println(r + "..ckpoint and trimmed @" + checkpointAddress);
             } else {
                 System.out.println(r + "..no checkpoint/trim");
             }
 
-            SequencerClient sequencerClient = corfuRuntime
+            SequencerClient sequencerClient = runtime
                     .getLayoutView().getRuntimeLayout()
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
@@ -591,13 +593,13 @@ public class ServerRestartIT extends AbstractIT {
 
 
             // activity (iii) shutdown and restart
-            corfuRuntime.shutdown();
+            runtime.shutdown();
             assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
             corfuServerProcess = runCorfuServer();
-            corfuRuntime = createDefaultRuntime();
+            runtime = createDefaultRuntime();
 
-            sequencerClient = corfuRuntime
+            sequencerClient = runtime
                     .getLayoutView().getRuntimeLayout()
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
@@ -626,11 +628,11 @@ public class ServerRestartIT extends AbstractIT {
             boolean restartwithHoles = true; // rand.nextBoolean();
 
             if (restartwithHoles) {
-                corfuRuntime.shutdown();
+                runtime.shutdown();
                 assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
                 corfuServerProcess = runCorfuServer();
-                corfuRuntime = createDefaultRuntime();
+                runtime = createDefaultRuntime();
                 System.out.println(r + "..restart with holes");
                 // in this scenario, the globalTail is left unchanged from before,
                 // because we restart without ever having writes use the tokens
@@ -641,14 +643,14 @@ public class ServerRestartIT extends AbstractIT {
 
             // these writes should throw a StaleTokenException if we restarted
             try {
-                corfuRuntime.getAddressSpaceView()
+                runtime.getAddressSpaceView()
                         .write(tokenResponseA.getToken(), "fixed string".getBytes());
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
             }
 
             try {
-                corfuRuntime.getAddressSpaceView()
+                runtime.getAddressSpaceView()
                         .write(tokenResponseB.getToken(), "fixed string".getBytes());
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
@@ -658,7 +660,6 @@ public class ServerRestartIT extends AbstractIT {
         }
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
-
     }
 
     private CorfuTable createTable(CorfuRuntime corfuRuntime, CorfuTable.IndexRegistry indexer) {
@@ -685,8 +686,8 @@ public class ServerRestartIT extends AbstractIT {
         Process corfuProcess = runCorfuServer();
 
         // Write 1000 entries.
-        CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String> corfuTable1 = createTable(rt1, new StringIndexer());
+        CorfuRuntime runtime1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String> corfuTable1 = createTable(runtime1, new StringIndexer());
         final int num = 1000;
         for (int i = 0; i < num; i++) {
             corfuTable1.put(Integer.toString(i), Integer.toString(i));
@@ -695,34 +696,34 @@ public class ServerRestartIT extends AbstractIT {
         // Checkpoint and trim the log.
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(corfuTable1);
-        Token trimMark = mcw.appendCheckpoints(rt1, "author");
+        Token trimMark = mcw.appendCheckpoints(runtime1, "author");
         Collection<Map.Entry<String, String>> c1a =
                 corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         Collection<Map.Entry<String, String>> c1b =
                 corfuTable1.getByIndex(StringIndexer.BY_VALUE, "9");
-        rt1.getAddressSpaceView().prefixTrim(trimMark);
-        rt1.getAddressSpaceView().invalidateClientCache();
-        rt1.getAddressSpaceView().invalidateServerCaches();
-        rt1.getAddressSpaceView().gc();
+        runtime1.getAddressSpaceView().prefixTrim(trimMark);
+        runtime1.getAddressSpaceView().invalidateClientCache();
+        runtime1.getAddressSpaceView().invalidateServerCaches();
+        runtime1.getAddressSpaceView().gc();
 
         // Restart the corfu server.
         assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
         corfuProcess = runCorfuServer();
 
         // Start a new client and verify the index.
-        CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String> corfuTable2 = createTable(rt2, new StringIndexer());
+        CorfuRuntime runtime2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String> corfuTable2 = createTable(runtime2, new StringIndexer());
         Collection<Map.Entry<String, String>> c2 =
                 corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         assertThat(c1a.size()).isEqualTo(c2.size());
         assertThat(c1a.containsAll(c2)).isTrue();
 
         // Start a new client with cache disabled and fast object loading disabled.
-        CorfuRuntime rt3 = new CorfuRuntime(DEFAULT_ENDPOINT)
+        CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
                 .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
-        CorfuTable<String, String> corfuTable3 = createTable(rt3, new StringIndexer());
+        CorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringIndexer());
         Collection<Map.Entry<String, String>> c3 =
                 corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9");
         assertThat(c1b.size()).isEqualTo(c3.size());
@@ -730,12 +731,16 @@ public class ServerRestartIT extends AbstractIT {
 
         // Stop the corfu server.
         assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+
+        runtime1.shutdown();
+        runtime2.shutdown();
+        runtime3.shutdown();
     }
 
     /**
      * This test has the following steps in order to verify the multi index reconstruction:
      * 1) Writes 1000 entries to the table
-     * 2) Checkpionts and trims
+     * 2) Checkpoints and trims
      * 3) Shuts down and restarts the corfu server
      * 4) Starts a client with cache and fast loading and verify multi index
      * 5) Starts a client without cache and fast loading and verify multi index
@@ -800,5 +805,9 @@ public class ServerRestartIT extends AbstractIT {
 
         // Stop the corfu server
         assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+
+        runtime1.shutdown();
+        runtime2.shutdown();
+        runtime3.shutdown();
     }
 }

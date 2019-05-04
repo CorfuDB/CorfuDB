@@ -33,6 +33,11 @@ public interface Fixtures {
      * Common constants used for test
      */
     class TestFixtureConst {
+
+        private TestFixtureConst() {
+            // prevent instantiation of this class
+        }
+
         // Default name of the CorfuTable created by CorfuClient
         public static final String DEFAULT_STREAM_NAME = "stream";
 
@@ -50,15 +55,22 @@ public interface Fixtures {
      * Common configuration for Universe initialization
      */
     class UniverseFixture extends AbstractUniverseFixture<UniverseParams> {
+        public UniverseParams data;
 
         @Override
         public UniverseParams data() {
+            if (data != null){
+                return data;
+            }
+
             this.servers = FixtureUtil.buildMultipleServers(numNodes, corfuCluster.getName());
             servers.forEach(corfuCluster::add);
 
-            return UniverseParams.universeBuilder()
+            data = UniverseParams.universeBuilder()
                     .build()
                     .add(corfuCluster);
+
+            return data;
         }
     }
 
@@ -68,8 +80,14 @@ public interface Fixtures {
     class VmUniverseFixture extends AbstractUniverseFixture<VmUniverseParams> {
         private static final String VM_PREFIX = "corfu-vm-";
 
+        public VmUniverseParams data;
+
         @Override
         public VmUniverseParams data() {
+            if (data != null){
+                return data;
+            }
+
             this.servers = FixtureUtil.buildVmMultipleServers(numNodes, corfuCluster.getName(), VM_PREFIX);
             servers.forEach(corfuCluster::add);
 
@@ -98,7 +116,9 @@ public interface Fixtures {
                     .build();
             params.add(corfuCluster);
 
-            return params;
+            data = params;
+
+            return data;
         }
     }
 
@@ -118,6 +138,10 @@ public interface Fixtures {
     }
 
     class FixtureUtil {
+
+        private FixtureUtil() {
+            // prevent instantiation of this class
+        }
 
         static ImmutableList<CorfuServerParams> buildMultipleServers(int numNodes, String clusterName) {
 

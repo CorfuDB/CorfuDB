@@ -114,7 +114,7 @@ public class UndoTest extends AbstractTransactionsTest {
     }
 
     /**
-     * Check that optimisitcUndoable is properly reset.
+     * Check that optimisticUndoable is properly reset.
      *
      * An irreversible modification causes a total object-rebuild.
      * <p>

@@ -1,36 +1,18 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getTails;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Iterables;
-import com.google.common.util.concurrent.UncheckedExecutionException;
-
 import io.netty.handler.timeout.TimeoutException;
-
-import java.time.Duration;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -46,6 +28,20 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.time.Duration;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -59,29 +55,19 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = CacheBuilder.newBuilder()
+    final Cache<Long, ILogData> readCache = CacheBuilder.newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
-            .build(new CacheLoader<Long, ILogData>() {
-                @Override
-                public ILogData load(Long value) throws Exception {
-                    return cacheFetch(value);
-                }
-
-                @Override
-                public Map<Long, ILogData> loadAll(Iterable<? extends Long> keys) throws Exception {
-                    return cacheFetch((Iterable<Long>) keys);
-                }
-            });
+            .build();
 
     /**
      * Constructor for the Address Space View.
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
-        MetricRegistry metrics = runtime.getMetrics();
+        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
         final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
                                          this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
@@ -134,7 +120,8 @@ public class AddressSpaceView extends AbstractView {
         }
     }
 
-    /** Write the given log data using a token, returning
+    /**
+     * Write the given log data using a token, returning
      * either when the write has been completed successfully,
      * or throwing an OverwriteException if another value
      * has been adopted, or a WrongEpochException if the
@@ -149,7 +136,12 @@ public class AddressSpaceView extends AbstractView {
      * @throws WrongEpochException  If the token epoch is invalid.
      */
     public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
-        final ILogData ld = new LogData(DataType.DATA, data);
+        ILogData ld;
+        if (data instanceof ILogData) {
+            ld = (ILogData) data;
+        } else {
+            ld = new LogData(DataType.DATA, data);
+        }
 
         layoutHelper(e -> {
             Layout l = e.getLayout();
@@ -163,7 +155,6 @@ public class AddressSpaceView extends AbstractView {
             // Set the data to use the token
             ld.useToken(token);
             ld.setId(runtime.getParameters().getClientId());
-
 
             // Do the write
             try {
@@ -186,6 +177,7 @@ public class AddressSpaceView extends AbstractView {
             } catch (WriteSizeException we) {
                 throw we;
             } catch (RuntimeException re) {
+                log.error("write: Got exception during replication protocol write with token: {}", token, re);
                 validateStateOfWrittenEntry(token.getSequence(), ld);
             }
             return null;
@@ -207,7 +199,8 @@ public class AddressSpaceView extends AbstractView {
         write(token, data, CacheOption.WRITE_THROUGH);
     }
 
-    /** Directly read from the log, returning any
+    /**
+     * Directly read from the log, returning any
      * committed value, or NULL, if no value has
      * been committed.
      *
@@ -228,63 +221,123 @@ public class AddressSpaceView extends AbstractView {
      * @param address An address to read from.
      * @return A result, which be cached.
      */
-    public @Nonnull ILogData read(long address) {
+    public @Nonnull
+    ILogData read(long address) {
         if (!runtime.getParameters().isCacheDisabled()) {
-            ILogData data;
-            try {
-                data = readCache.get(address);
-            } catch (ExecutionException | UncheckedExecutionException e) {
-                // Guava wraps the exceptions thrown from the lower layers, therefore
-                // we need to unwrap them before throwing them to the upper layers that
-                // don't understand the guava exceptions
-                Throwable cause = e.getCause();
-                if (cause instanceof RuntimeException) {
-                    throw (RuntimeException) cause;
-                } else {
-                    throw new RuntimeException(cause);
-                }
+            // The VersionLockedObject and the Transaction layer will generate
+            // undoRecord(s) during a transaction commit, or object sync. These
+            // undo records are stored in transient fields and are not persisted.
+            // A missing undo record can cause a NoRollbackException, thus forcing
+            // a complete object rebuild that generates a "scanning" behavior
+            // which affects the LRU window. In essence, affecting other cache users
+            // and making the VersionLockedObject very sensitive to caching behavior.
+            // A concrete example of this would be unsynchronized readers/writes:
+            // 1. Thread A starts replicating write1
+            // 2. Thread B discovers the write (via stream tail query) and
+            //    tries to read write1
+            // 3. Thread B's read results in a cache miss and the reader thread
+            //    starts loading the value into the cache
+            // 4. Thread A completes its write and caches it with undo records
+            // 5. Thread B finishes loading and caches the loaded value replacing
+            //    the cached value from step 4 (i.e. loss of undo records computed
+            //    by thread A)
+            ILogData data = readCache.getIfPresent(address);
+            if (data == null) {
+                // Loading a value without the cache loader can result in
+                // redundant loading calls (i.e. multiple threads try to
+                // load the same value), but currently a redundant RPC
+                // is much cheaper than the cost of a NoRollBackException, therefore
+                // this trade-off is reasonable
+                final ILogData loadedVal = fetch(address);
+                return readCache.asMap().computeIfAbsent(address, (k) -> loadedVal);
             }
-            if (data == null || data.getType() == DataType.EMPTY) {
-                throw new RuntimeException("Unexpected return of empty data at address "
-                        + address + " on read");
-            } else if (data.isTrimmed()) {
-                throw new TrimmedException();
-            }
+
             return data;
         }
+
         return fetch(address);
+    }
+
+    /**
+     * This method reads a batch of addresses if 'nextRead' is not found in the cache.
+     * In the case of a cache miss, it piggybacks on the read for nextRead.
+     *
+     * If 'nextRead' is present in the cache, it directly returns this data.
+     *
+     * @param nextRead current address of interest
+     * @param addresses batch of addresses to read (bring into the cache) in case there is a cache miss (includes
+     *                  nextRead)
+     * @return data for current 'address' of interest.
+     */
+    public @Nonnull ILogData predictiveReadRange(Long nextRead, List<Long> addresses) {
+        if (runtime.getParameters().isCacheDisabled()) {
+            return fetch(nextRead);
+        }
+
+        ILogData data = readCache.getIfPresent(nextRead);
+        if (data == null) {
+            log.trace("predictiveReadRange: request to read {}", addresses);
+            Map<Long, ILogData> mapAddresses = this.read(addresses);
+            data = mapAddresses.get(nextRead);
+        }
+
+        return data;
+    }
+
+    /**
+     * Read the given object from a range of addresses.
+     *
+     * - If the waitForWrite flag is set to true, when an empty address is encountered,
+     * it waits for one hole to be filled. All the rest empty addresses within the list
+     * are hole filled directly and the reader does not wait.
+     * - In case the flag is set to false, none of the reads wait for write completion and
+     * the empty addresses are hole filled right away.
+     *
+     * @param addresses An iterable with addresses to read from
+     * @return A result, which be cached.
+     */
+    public Map<Long, ILogData> read(Iterable<Long> addresses) {
+        return read(addresses, true);
     }
 
     /**
      * Read the given object from a range of addresses.
      *
      * @param addresses An iterable with addresses to read from
-     * @return A result, which be cached.
+     * @param waitForWrite Flag whether wait for write is required or hole fill directly.
+     * @return A map of read addresses, which will be cached if caching is enabled
      */
-    public Map<Long, ILogData> read(Iterable<Long> addresses) {
-        Map<Long, ILogData> addressesMap;
+    public Map<Long, ILogData> read(Iterable<Long> addresses, boolean waitForWrite) {
+        Map<Long, ILogData> result = new HashMap<>();
+
         if (!runtime.getParameters().isCacheDisabled()) {
-            try {
-                addressesMap = readCache.getAll(addresses);
-            } catch (ExecutionException | UncheckedExecutionException e) {
-                Throwable cause = e.getCause();
-                if (cause instanceof RuntimeException) {
-                    throw (RuntimeException) cause;
+            Set<Long> addressesToFetch = new HashSet<>();
+
+            for (Long address : addresses) {
+                ILogData val = readCache.getIfPresent(address);
+                if (val == null) {
+                    addressesToFetch.add(address);
                 } else {
-                    throw new RuntimeException(cause);
+                    result.put(address, val);
                 }
             }
-        } else {
-            addressesMap = this.cacheFetch(addresses);
-        }
 
-        for (ILogData logData : addressesMap.values()) {
-            if (logData.isTrimmed()) {
-                throw new TrimmedException();
+            // At this point we computed a subset of the addresses that
+            // resulted in a cache miss and need to be fetched
+            if (!addressesToFetch.isEmpty()) {
+                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite);
+                for (Map.Entry<Long, ILogData> entry : fetchedAddresses.entrySet()) {
+                    // After fetching a value, we need to insert it in the cache.
+                    // Note that based on code inspection it seems like operations
+                    // on the cache's map view are reflected in the cache's statistics.
+                    result.put(entry.getKey(), readCache.asMap()
+                            .computeIfAbsent(entry.getKey(), (k) -> entry.getValue()));
+                }
             }
+            return result;
+        } else {
+            return fetchAll(addresses, waitForWrite);
         }
-
-        return addressesMap;
     }
 
     /**
@@ -319,11 +372,30 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Get the last address in the address space
+     * Get the log's tail, i.e., last address in the address space.
+     */
+    public Long getLogTail() {
+        return layoutHelper(
+                e -> Utils.getLogTail(e.getLayout(), runtime));
+    }
+
+    /**
+     * Get all tails, includes: log tail and stream tails.
      */
     public TailsResponse getAllTails() {
         return layoutHelper(
-                e -> getTails(e.getLayout(), runtime));
+                e -> Utils.getAllTails(e.getLayout(), runtime));
+    }
+
+    /**
+     * Get log address space, which includes:
+     *     1. Addresses belonging to each stream.
+     *     2. Log Tail.
+     * @return
+     */
+    public StreamsAddressResponse getLogAddressSpace() {
+        return layoutHelper(
+                e -> Utils.getLogAddressSpace(e.getLayout(), runtime));
     }
 
     /**
@@ -342,6 +414,16 @@ public class AddressSpaceView extends AbstractView {
 
         for (int x = 0; x < numRetries; x++) {
             try {
+                // By changing the order of the trimming operations, i.e., signal the
+                // sequencer about a trim before actually trimming the log unit, we prevent a race condition,
+                // in which a client could attempt to read a trimmed address over and over again, as signal
+                // has not reached the sequencer. The problem with this is that we have a retry limit of 2, so
+                // if the race is present on just one cycle we will abort due to trimmed exception.
+                // In this case we avoid this case, and even if the log unit trim fails,
+                // this data is checkpointed so there is no actual correctness implication.
+                // TODO(Maithem): trimCache should be epoch aware?
+                runtime.getSequencerView().trimCache(address.getSequence());
+
                 layoutHelper(e -> {
                             e.getLayout().getPrefixSegments(address.getSequence()).stream()
                                     .flatMap(seg -> seg.getStripes().stream())
@@ -354,8 +436,6 @@ public class AddressSpaceView extends AbstractView {
                                     });
                             return null;
                 }, true);
-                // TODO(Maithem): trimCache should be epoch aware?
-                runtime.getSequencerView().trimCache(address.getSequence());
                 break;
             } catch (NetworkException | TimeoutException e) {
                 log.warn("prefixTrim: encountered a network error on try {}", x, e);
@@ -363,19 +443,11 @@ public class AddressSpaceView extends AbstractView {
                 Sleep.sleepUninterruptibly(retryRate);
             } catch (WrongEpochException wee) {
                 long serverEpoch = wee.getCorrectEpoch();
-                // Retry if wrongEpochException corresponds to message epoch (only)
-                if (address.getEpoch() == serverEpoch) {
-                    long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                    log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, " +
-                            "while server is in epoch {}. Invalidate layout for this client " +
-                            "and retry, attempt: {}/{}", address, runtimeEpoch, serverEpoch, x+1, numRetries);
-                    runtime.invalidateLayout();
-                } else {
-                    // wrongEpochException corresponds to a stale trim address (prefix trim token on the wrong epoch)
-                    log.error("prefixTrim[{}]: stale prefix trim. Prefix trim on wrong epoch {}, " +
-                            "while server on epoch {}", address, address.getEpoch(), serverEpoch);
-                    throw wee;
-                }
+                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
+                log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, while server is in epoch {}. "
+                                + "Invalidate layout for this client and retry, attempt: {}/{}",
+                        address, runtimeEpoch, serverEpoch, x + 1, numRetries);
+                runtime.invalidateLayout();
             }
         }
     }
@@ -398,7 +470,8 @@ public class AddressSpaceView extends AbstractView {
         });
     }
 
-    /** Force all server caches to be invalidated.
+    /**
+     * Force all server caches to be invalidated.
      */
     public void invalidateServerCaches() {
         log.debug("InvalidateServerCaches");
@@ -413,86 +486,90 @@ public class AddressSpaceView extends AbstractView {
         });
     }
 
-    /** Force the client cache to be invalidated. */
+    /**
+     * Force the client cache to be invalidated.
+     */
     public void invalidateClientCache() {
         readCache.invalidateAll();
     }
 
     /**
-     * Fetch an address for insertion into the cache.
+     * Fetch a collection of addresses for insertion into the cache.
+     * The result map returned is ordered by address.
      *
-     * @param address An address to read from.
-     * @return A result to be cached. If the readresult is empty,
-     *         This entry will be scheduled to self invalidate.
+     * @param addresses    collection of addresses to read from.
+     * @param waitForWrite flag whether wait for write is required or hole fill directly.
+     * @return a ordered map of read addresses.
      */
-    private @Nonnull ILogData cacheFetch(long address) {
-        log.trace("CacheMiss[{}]", address);
-        ILogData result = fetch(address);
-        if (result.getType() == DataType.EMPTY) {
-            throw new RuntimeException("Unexpected empty return at " +  address + " from fetch");
+    @Nonnull
+    public Map<Long, ILogData> fetchAll(Iterable<Long> addresses, boolean waitForWrite) {
+        Map<Long, ILogData> result = new TreeMap<>();
+
+        Iterable<List<Long>> batches = Iterables.partition(addresses,
+                runtime.getParameters().getBulkReadSize());
+
+        for (List<Long> batch : batches) {
+            try {
+                // Doesn't handle the case where some address have a different replication mode
+                Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
+                        .getReplicationMode(batch.iterator().next())
+                        .getReplicationProtocol(runtime)
+                        .readAll(e, batch, waitForWrite));
+                // Sanity check for returned addresses
+                if (batchResult.size() != batch.size()) {
+                    log.error("fetchAll: Requested number of addresses not equal to the read result" +
+                            "from server, requested: {}, returned: {}", batch, batchResult.keySet());
+                    throw new UnrecoverableCorfuError("Requested number of addresses not equal to the read result");
+                }
+                result.putAll(batchResult);
+            } catch (Exception e) {
+                log.error("fetchAll: Couldn't read addresses {}", batch, e);
+                throw new UnrecoverableCorfuError("Unexpected error during fetchAll", e);
+            }
         }
+
+        result.forEach(this::checkLogData);
         return result;
     }
 
     /**
-     * Fetch a collection of addresses for insertion into the cache.
+     * Checks whether a log entry is valid or not. If a read
+     * returns null, Empty, or trimmed an exception will be
+     * thrown.
      *
-     * @param addresses collection of addresses to read from.
-     * @return A result to be cached
+     * @param address the address being checked
+     * @param logData the ILogData at the address being checked
      */
-    public @Nonnull
-    Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
-        Map<Long, ILogData> allAddresses = new HashMap<>();
-
-        Iterable<List<Long>> batches = Iterables.partition(addresses,
-            runtime.getParameters().getBulkReadSize());
-
-        for (List<Long> batch : batches) {
-            try {
-                //doesn't handle the case where some address have a different replication mode
-                allAddresses.putAll(layoutHelper(e -> e.getLayout()
-                        .getReplicationMode(batch.iterator().next())
-                        .getReplicationProtocol(runtime)
-                        .readAll(e, batch)));
-            } catch (Exception e) {
-                log.error("cacheFetch: Couldn't read addresses {}", batch, e);
-                throw new UnrecoverableCorfuError(
-                    "Unexpected error during cacheFetch", e);
-            }
+    private void checkLogData(long address, ILogData logData) {
+        if (logData == null || logData.getType() == DataType.EMPTY) {
+            throw new RuntimeException("Unexpected return of empty data at address "
+                    + address + " on read");
         }
 
-        return allAddresses;
-    }
-
-    /**
-     * Fetch a collection of addresses.
-     *
-     * @param addresses collection of addresses to read from.
-     * @return A result to be cached
-     */
-    public @Nonnull
-    Map<Long, ILogData> cacheFetch(Set<Long> addresses) {
-        return layoutHelper(e -> e.getLayout().getReplicationMode(addresses.iterator().next())
-                .getReplicationProtocol(runtime)
-                .readRange(e, addresses));
+        if (logData.isTrimmed()) {
+            throw new TrimmedException();
+        }
     }
 
     /**
      * Explicitly fetch a given address, bypassing the cache.
      *
-     * @param address An address to read from.
-     * @return A result, which will be uncached.
+     * @param address an address to read from.
+     * @return the log data read at address
      */
     public @Nonnull
     ILogData fetch(final long address) {
-        return layoutHelper(e -> e.getLayout().getReplicationMode(address)
+        ILogData result = layoutHelper(e -> e.getLayout().getReplicationMode(address)
                 .getReplicationProtocol(runtime)
                 .read(e, address)
         );
+
+        checkLogData(address, result);
+        return result;
     }
 
     @VisibleForTesting
-    LoadingCache<Long, ILogData> getReadCache() {
+    Cache<Long, ILogData> getReadCache() {
         return readCache;
     }
 }

@@ -9,12 +9,17 @@ import com.google.gson.JsonParser;
  * Created by mdhawan on 6/28/16.
  */
 public class JsonUtils {
-    public static final Gson parser = new GsonBuilder().setPrettyPrinting()
-                                            .create();
+
+    private JsonUtils() {
+        // prevent instantiation of this class
+    }
+
+    public static final Gson parser = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson REGULAR_PARSER = new GsonBuilder().create();
 
 
     /**
-     * Return an intedented json string.
+     * Return an indented json string.
      * @param jsonString Json String
      * @return           Pretty json string
      */
@@ -22,5 +27,9 @@ public class JsonUtils {
         JsonParser p = new JsonParser();
         JsonElement e = p.parse(jsonString);
         return parser.toJson(e);
+    }
+
+    public static <T> String toJson(T obj){
+        return REGULAR_PARSER.toJson(obj);
     }
 }

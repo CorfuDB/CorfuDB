@@ -75,7 +75,7 @@ public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmU
         Layout layout = buildLayout();
         log.info("Bootstrap corfu cluster. Cluster: {}. layout: {}", params.getName(), layout.asJSONString());
 
-        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryTimeout());
+        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryDuration());
     }
 
     /**

@@ -12,8 +12,10 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
@@ -49,15 +51,12 @@ public class TwoLinksFailureIT extends GenericIntegrationTest {
 
                 // Disconnect server0 with server1 and server2
                 server0.disconnect(Arrays.asList(server1, server2));
-                waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
-
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server0.getEndpoint());
+                waitForLayoutChange(layout -> layout.getUnresponsiveServers()
+                        .equals(Collections.singletonList(server0.getEndpoint())), corfuClient);
 
                 // Cluster status should be DEGRADED after one node is marked unresponsive
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                // TODO: uncomment the following line after ClusterStatus API is fixed for partial partition
-                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
-                // TODO: add node status check after we redefine NodeStatus semantics
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
@@ -82,6 +81,8 @@ public class TwoLinksFailureIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.util;
 
 import com.google.common.collect.ImmutableMap;
+import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -11,13 +12,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import lombok.extern.slf4j.Slf4j;
-
 /**
  * Created by mwei on 3/29/16.
  */
 @Slf4j
 public class ReflectionUtils {
+
+    private ReflectionUtils() {
+        // prevent instantiation of this class
+    }
+
     static Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
             .put("int", Integer.TYPE)
             .put("long", Long.TYPE)
@@ -41,12 +45,12 @@ public class ReflectionUtils {
     private static Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
 
     public static String getShortMethodName(String longName) {
-        int packageIndex = longName.substring(0, longName.indexOf("(")).lastIndexOf(".");
+        int packageIndex = longName.substring(0, longName.indexOf('(')).lastIndexOf('.');
         return longName.substring(packageIndex + 1);
     }
 
     public static String getMethodNameOnlyFromString(String s) {
-        return s.substring(0, s.indexOf("("));
+        return s.substring(0, s.indexOf('('));
     }
 
     public static Class<?> getPrimitiveType(String s) {
@@ -59,7 +63,7 @@ public class ReflectionUtils {
      * @return Array of types
      */
     public static Class[] getArgumentTypesFromString(String s) {
-        String argList = s.contains("(") ? s.substring(s.indexOf("(") + 1, s.length() - 1) : s;
+        String argList = s.contains("(") ? s.substring(s.indexOf('(') + 1, s.length() - 1) : s;
         return Arrays.stream(argList.split(","))
                 .filter(x -> !x.equals(""))
                 .map(x -> {
@@ -77,7 +81,7 @@ public class ReflectionUtils {
     }
 
     /**
-     * Extract argument types from a string that reperesents the method
+     * Extract argument types from a string that represents the method
      * signature.
      * @param args Signature string
      * @return Array of types

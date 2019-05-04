@@ -9,12 +9,8 @@ import static org.fusesource.jansi.Ansi.ansi;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.util.ContextInitializer;
 import ch.qos.logback.core.joran.spi.JoranException;
 import com.google.common.collect.ImmutableList;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -27,22 +23,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -55,6 +36,18 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 /**
  * This is the new Corfu server single-process executable.
@@ -83,8 +76,10 @@ public class CorfuServer {
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] "
-                    + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w "
-                    + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
+                    + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
+                    + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
+                    + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
+                    + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
@@ -140,7 +135,7 @@ public class CorfuServer {
                     + "              The read/write batch size used for data transfer operations [default: 100].\n"
                     + " -R <retention>, --metadata-retention=<retention>                         "
                     + "              Maximum number of system reconfigurations (i.e. layouts)    "
-                    + "retained for debugging purposes [default: 100].\n"
+                    + "retained for debugging purposes [default: 1000].\n"
                     + " -p <seconds>, --compact=<seconds>                                        "
                     + "              The rate the log unit should compact entries (find the,\n"
                     + "                                                                          "
@@ -183,6 +178,18 @@ public class CorfuServer {
                     + "              Comma separated list of TLS protocols to use.\n"
                     + "                                                                          "
                     + "              [default: TLSv1.1,TLSv1.2].\n"
+                    + " --base-server-threads=<base_server_threads>                              "
+                    + "              Number of threads dedicated for the base server.\n          "
+                    + "                                                                          "
+                    + " --layout-server-threads=<layout_server_threads>                          "
+                    + "              Number of threads dedicated for the layout server.\n        "
+                    + "                                                                          "
+                    + " --management-server-threads=<management_server_threads>                  "
+                    + "              Number of threads dedicated for the management server.\n"
+                    + "                                                                          "
+                    + " --logunit-threads=<logunit_threads>                  "
+                    + "              Number of threads dedicated for the logunit server.\n"
+                    + "                                                                          "
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
@@ -311,7 +318,7 @@ public class CorfuServer {
                     router,
                     (String) opts.get("--address"),
                     port).channel().closeFuture().syncUninterruptibly();
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("CorfuServer: Server exiting due to unrecoverable error: ", e);
             System.exit(EXIT_ERROR_CODE);
         }

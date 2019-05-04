@@ -3,8 +3,10 @@ package org.corfudb.runtime.exceptions;
 import java.util.UUID;
 
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
 /**
@@ -18,11 +20,23 @@ public class TransactionAbortedException extends RuntimeException {
     @Getter
     TxResolutionInfo txResolutionInfo;
 
+    /**
+     * The key that triggered the abort.
+     */
     @Getter
     byte[] conflictKey;
 
+    /**
+     * The stream ID at which the conflict occurred.
+     */
     @Getter
     UUID conflictStream;
+
+    /**
+     * The address at which the conflict occurred.
+     */
+    @Getter
+    Long offendingAddress;
 
     @Getter
     Throwable cause;
@@ -36,19 +50,25 @@ public class TransactionAbortedException extends RuntimeException {
      * @param conflictKey conflict key
      * @param abortCause cause
      */
-    public TransactionAbortedException(
-            TxResolutionInfo txResolutionInfo,
-            byte[] conflictKey, AbortCause abortCause, AbstractTransactionalContext context) {
-        this(txResolutionInfo, conflictKey, null, abortCause, null, context);
+    public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
+            byte[] conflictKey, UUID conflictStream, Long offendingAddress, AbortCause abortCause,
+            AbstractTransactionalContext context) {
+        this(txResolutionInfo, conflictKey, conflictStream, offendingAddress, abortCause, null, context);
     }
 
-    public TransactionAbortedException(
-            TxResolutionInfo txResolutionInfo,
-            byte[] conflictKey, UUID conflictStream,
+    public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
+            AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
+        this(txResolutionInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,
+                Address.NON_ADDRESS, abortCause, cause, context);
+    }
+
+    public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
+            byte[] conflictKey, UUID conflictStream, Long offendingAddress,
             AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
-                + " | Transaction ID = " + txResolutionInfo.getTXid()
+                + " | Failed Transaction ID = " + txResolutionInfo.getTXid()
+                + " | Offending Address = " + offendingAddress
                 + " | Conflict Key = " + Utils.bytesToHex(conflictKey)
                 + " | Conflict Stream = " + conflictStream
                 + " | Cause = " + abortCause
@@ -58,9 +78,10 @@ public class TransactionAbortedException extends RuntimeException {
                 + (cause == null ? "" : " | Message = " + cause.getMessage()));
         this.txResolutionInfo = txResolutionInfo;
         this.conflictKey = conflictKey;
+        this.conflictStream = conflictStream;
+        this.offendingAddress = offendingAddress;
         this.abortCause = abortCause;
         this.cause = cause;
-        this.conflictStream = conflictStream;
         this.context = context;
     }
 

@@ -1,14 +1,14 @@
 package org.corfudb;
 
+import static java.time.temporal.ChronoUnit.MILLIS;
+import static java.time.temporal.ChronoUnit.MINUTES;
+import static java.time.temporal.ChronoUnit.SECONDS;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
-
-import static java.time.temporal.ChronoUnit.MILLIS;
-import static java.time.temporal.ChronoUnit.MINUTES;
-import static java.time.temporal.ChronoUnit.SECONDS;
 
 
 /** This class contains automatically calculated parameters used for timeouts
@@ -63,7 +63,7 @@ public class CorfuTestParameters {
     /** Used when the concurrency factor should be only one thread. */
     public final int CONCURRENCY_ONE;
 
-    /** Used when there should be only two threads for a concurency test. */
+    /** Used when there should be only two threads for a concurrency test. */
     public final int CONCURRENCY_TWO;
 
     /** Used when a few threads, on the order of 10 should be used to
@@ -80,7 +80,7 @@ public class CorfuTestParameters {
     /** Whether or not the build was started on Travis-CI. */
     public final boolean TRAVIS_BUILD;
 
-    /** Used to indicate when determinstic seeding is to be used
+    /** Used to indicate when deterministic seeding is to be used
      */
     public final long SEED;
 

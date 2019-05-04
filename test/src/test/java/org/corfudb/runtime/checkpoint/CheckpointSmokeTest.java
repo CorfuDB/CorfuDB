@@ -2,10 +2,17 @@ package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
-import org.apache.velocity.context.AbstractContext;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -19,16 +26,13 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.*;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
@@ -64,7 +68,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
         final int objSize = 100;
         long a1 = sv.append(new byte[objSize]);
-        final long cpEndAddress = 2L;
+        final long cpEndAddress = 0L;
         // Verify that the start/end records have been written for empty maps
         assertThat(a1).isEqualTo(cpEndAddress);
     }
@@ -139,7 +143,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     /** Second smoke test, steps:
      *
      * 1. Put a few keys into an SMRMap "m" with prefix keyPrefixFirst.
-     * 2. Write a checkpoint (3 records totoal) into "m"'s stream.
+     * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
      *    the keys written by step #1.
      *    In between the 3 CP records, write some additional keys to "m"
@@ -297,6 +301,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *  destroyed (logically, not physically) by the CP, so we have
      *  to use a different position 'history' for our assertion
      *  check.
+     *
+     * +-----------------------------------------------------------------+
+     * | 0  | 1  | 2  | 3 | 4 | 5  | 6 | 7  | 8 | 9  | 10 | 11 | 12 | 13 |
+     * +-----------------------------------------------------------------+
+     * | F0 | F1 | F2 | S | C | M0 | C | M1 | C | M2 | E  | L0 | L1 | L2 |
+     * +-----------------------------------------------------------------+
+     * F : First batch of entries.
+     * S : Start of checkpoint.
+     * C : Continuation of checkpoints
+     * M : Middle batch of entries.
+     * E : End of checkpoints
+     * L : Last batch of entries.
+     *
      */
     @Test
     public void checkpointWriterInterleavedTest() throws Exception {
@@ -452,7 +469,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
         final UUID checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
-        BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
+        IStreamView sv;
+        if (r.getParameters().isFollowBackpointersEnabled()) {
+            sv = new BackpointerStreamView(r, checkpointStreamID);
+        } else {
+            sv = new AddressMapStreamView(r, checkpointStreamID);
+        }
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 

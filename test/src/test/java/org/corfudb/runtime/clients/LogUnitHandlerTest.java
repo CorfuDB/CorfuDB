@@ -16,11 +16,15 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
+import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
@@ -33,6 +37,9 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -41,6 +48,7 @@ import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -49,13 +57,11 @@ import org.junit.Test;
  */
 public class LogUnitHandlerTest extends AbstractClientTest {
 
-    LogUnitClient client;
-    ServerContext serverContext;
-    String dirPath;
-    LogUnitServer server;
+    private LogUnitClient client;
+    private ServerContext serverContext;
 
-    final UUID clientId1 = UUID.fromString("7903ba37-e3e7-407b-b9e9-f8eacaa94d5e");
-    final UUID clientId2 = UUID.fromString("a15bbffc-91cb-4a96-bb30-e1ecc5f522da");
+    private final UUID clientId1 = UUID.fromString("7903ba37-e3e7-407b-b9e9-f8eacaa94d5e");
+    private final UUID clientId2 = UUID.fromString("a15bbffc-91cb-4a96-bb30-e1ecc5f522da");
 
     private LogData getLogDataWithoutId(long address) {
         ByteBuf b = Unpooled.buffer();
@@ -69,7 +75,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        dirPath = PARAMETERS.TEST_TEMP_DIR;
+        String dirPath = PARAMETERS.TEST_TEMP_DIR;
         serverContext = new ServerContextBuilder()
                 .setInitialToken(0)
                 .setSingle(false)
@@ -78,7 +84,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .build();
-        server = new LogUnitServer(serverContext);
+        LogUnitServer server = new LogUnitServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
                 .build();
@@ -98,7 +104,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     public void canReadWrite()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(0, null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
@@ -152,6 +158,11 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         client.writeRange(entries).get();
 
+        // Ensure that the overwrite detection mechanism is working as expected.
+        Assertions.assertThatExceptionOfType(ExecutionException.class).isThrownBy(
+                () -> client.writeRange(entries).get())
+                .withCauseInstanceOf(OverwriteException.class);
+
         // "Restart the logging unit
         LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
@@ -171,8 +182,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         final long address0 = 0;
         final long address1 = 1;
-        client.write(address0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.write(address1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(address0, null, testString, Collections.emptyMap()).get();
+        client.write(address1, null, testString, Collections.emptyMap()).get();
         LogData r = client.read(address0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
@@ -183,7 +194,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.prefixTrim(new Token(0L, address0));
         client.compact();
 
-        // For logunit cach flush
+        // For logunit cache flush
         LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
         serverRouter.addServer(server2);
@@ -195,14 +206,14 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
-    public void flushLogunitCache() throws Exception {
+    public void flushLogUnitCache() throws Exception {
         LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
         serverRouter.addServer(server2);
 
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(0, null, testString, Collections.emptyMap()).get();
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
         client.flushCache().get();
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
@@ -215,7 +226,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             throws Exception {
         byte[] testString = "hello world".getBytes();
 
-        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
+        client.write(0, new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
@@ -223,7 +234,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .isEqualTo(testString);
 
         byte[] testString2 = "hello world 2".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString2, Collections.emptyMap()).get();
+        client.write(0, new IMetadata.DataRank(2), testString2, Collections.emptyMap()).get();
         r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
@@ -236,7 +247,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     public void cannotOutrank() throws ExecutionException, InterruptedException {
         byte[] testString = "hello world".getBytes();
 
-        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString, Collections.emptyMap()).get();
+        client.write(0, new IMetadata.DataRank(2), testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
@@ -245,7 +256,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         byte[] testString2 = "hello world 2".getBytes();
         try {
-            client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString2, Collections.emptyMap()).get();
+            client.write(0, new IMetadata.DataRank(1), testString2, Collections.emptyMap()).get();
             fail();
         } catch (ExecutionException e) {
             // expected
@@ -262,7 +273,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     public void valueCanBeAdopted() throws ExecutionException, InterruptedException {
         byte[] testString = "hello world".getBytes();
 
-        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
+        client.write(0, new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType()) .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
@@ -297,8 +308,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     public void overwriteThrowsException()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), null,
+        client.write(0, null, testString, Collections.emptyMap()).get();
+        assertThatThrownBy(() -> client.write(0, null,
                 testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
@@ -316,7 +327,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .isEqualTo(DataType.HOLE);
         assertThat(r.getGlobalAddress()).isEqualTo(address0);
 
-        assertThatThrownBy(() -> client.write(address0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get())
+        assertThatThrownBy(() -> client.write(address0, null, testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
@@ -325,7 +336,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     public void holeFillCannotOverwrite()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(0, null, testString, Collections.emptyMap()).get();
 
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
@@ -353,7 +364,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         CorfuRuntimeParameters p = CorfuRuntimeParameters.builder().build();
         final int numBatches = 3;
         for (long x = 0; x < numBatches * p.getBulkReadSize(); x++) {
-            client.write(x, Collections.emptySet(), null, payload, Collections.emptyMap()).get();
+            client.write(x, null, payload, Collections.emptyMap()).get();
         }
 
         // Read half a batch
@@ -363,7 +374,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             halfBatch.add(x);
         }
 
-        ReadResponse resp = client.read(halfBatch).get();
+        ReadResponse resp = client.readAll(halfBatch).get();
         assertThat(resp.getAddresses().size()).isEqualTo(half);
 
         // Read two batches
@@ -373,7 +384,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             twoBatchAddresses.add(x);
         }
 
-        resp = client.read(twoBatchAddresses).get();
+        resp = client.readAll(twoBatchAddresses).get();
         assertThat(resp.getAddresses().size()).isEqualTo(twoBatches);
     }
 
@@ -384,7 +395,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         final long ADDRESS_1 = 1338L;
 
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString,
+        client.write(0, null, testString,
                 ImmutableMap.<UUID, Long>builder()
                         .put(CorfuRuntime.getStreamID("hello"), ADDRESS_0)
                         .put(CorfuRuntime.getStreamID("hello2"), ADDRESS_1)
@@ -400,8 +411,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     @Test
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, Collections.<UUID>emptySet(), null,
+        client.write(0, null, testString, Collections.emptyMap()).get();
+        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, null,
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry
@@ -442,7 +453,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         LogData ld = getLogDataWithoutId(address);
 
         ld.setId(clientId1);
-        client.write(ld);
+        client.write(ld).join();
 
         LogData ldPrime = client.read(address).get().getAddresses().get(address);
 
@@ -467,7 +478,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         // Set clientId from another thread
         t1(() -> ldOtherThread.setId(clientId1));
-        client.write(ldOtherThread);
+        client.write(ldOtherThread).join();
 
         LogData ldPrime = client.read(address).get().getAddresses().get(address);
         assertThat(ldThisThread).isNotEqualTo(ldPrime);
@@ -489,10 +500,72 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         ldOne.setId(clientId1);
         ldTwo.setId(clientId2);
 
-        client.write(ldOne);
+        client.write(ldOne).join();
 
         LogData ldRead = client.read(address).get().getAddresses().get(address);
         assertThat(ldRead).isEqualTo(ldOne);
         assertThat(ldRead).isNotEqualTo(ldTwo);
+    }
+
+    /**
+     * Ensure log unit client can query log tail.
+     * @throws Exception
+     */
+    @Test
+    public void canQueryLogTail() throws Exception {
+        final long numEntries = 2L;
+
+        // Write 2 Entries
+        byte[] testString = "hello".getBytes();
+        byte[] testString2 = "world".getBytes();
+        client.write(0, null, testString, Collections.emptyMap()).get();
+        client.write(1, null, testString2, Collections.emptyMap()).get();
+
+        CompletableFuture<TailsResponse> cf = client.getLogTail();
+        long tail = cf.get().getLogTail();
+        assertThat(tail).isEqualTo(numEntries-1);
+    }
+
+    /**
+     * Ensure log unit client can query stream's address space and log address space.
+     * @throws Exception
+     */
+    @Test
+    public void canQueryStreamAddressSpaceAndLogSpace() throws Exception {
+        final UUID streamId = UUID.randomUUID();
+        final long numEntries = 2L;
+        final long addressOne = 0L;
+        final long addressTwo = 1L;
+
+        // Write 2 entries
+        // 1. Entry in Address 0
+        LogData ldOne = getLogDataWithoutId(addressOne);
+        Map<UUID, Long> backpointerMap = new HashMap<>();
+        backpointerMap.put(streamId, Address.NON_ADDRESS);
+        ldOne.setBackpointerMap(backpointerMap);
+        client.write(ldOne);
+
+        // 2. Entry in address 1
+        LogData ldTwo = getLogDataWithoutId(addressTwo);
+        backpointerMap = new HashMap<>();
+        backpointerMap.put(streamId, addressOne);
+        ldTwo.setBackpointerMap(backpointerMap);
+        client.write(ldTwo);
+
+        // Get Stream's Address Space
+        CompletableFuture<StreamsAddressResponse> cf = client.getLogAddressSpace();
+        StreamAddressSpace addressSpace = cf.get().getAddressMap().get(streamId);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
+        assertThat(addressSpace.getAddressMap().contains(addressOne));
+
+        // Get Log Address Space (stream's address space + log tail)
+        CompletableFuture<StreamsAddressResponse> cfLog = client.getLogAddressSpace();
+        StreamsAddressResponse response = cfLog.get();
+        addressSpace = response.getAddressMap().get(streamId);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
+        assertThat(addressSpace.getAddressMap().contains(addressOne));
+        assertThat(response.getLogTail()).isEqualTo(addressTwo);
     }
 }

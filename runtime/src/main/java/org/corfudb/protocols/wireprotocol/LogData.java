@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.serializer.Serializers;
 
 /**
@@ -19,6 +20,8 @@ import org.corfudb.util.serializer.Serializers;
  */
 @Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
+
+    public final static LogData EMPTY = new LogData(DataType.EMPTY);
 
     public static final int NOT_KNOWN = -1;
 
@@ -67,7 +70,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
                         final Object actualValue =
                                 Serializers.CORFU.deserialize(copyBuf, runtime);
-                        // TODO: Remove circular dependency on logentry.
+                        // TODO: Remove circular dependency on logEntry.
                         if (actualValue instanceof LogEntry) {
                             ((LogEntry) actualValue).setEntry(this);
                             ((LogEntry) actualValue).setRuntime(runtime);
@@ -256,5 +259,18 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Override
     public String toString() {
         return "LogData[" + getGlobalAddress() + "]";
+    }
+
+    /**
+     * Verify that max payload is enforced for the specified limit.
+     *
+     * @param limit Max write limit.
+     */
+    public void checkMaxWriteSize(int limit) {
+        try (ILogData.SerializationHandle sh = this.getSerializedForm()) {
+            if (limit != 0 && getSizeEstimate() > limit) {
+                throw new WriteSizeException(getSizeEstimate(), limit);
+            }
+        }
     }
 }

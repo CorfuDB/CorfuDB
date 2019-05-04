@@ -1,8 +1,5 @@
 package org.corfudb.recovery;
 
-import com.google.common.collect.ContiguousSet;
-import com.google.common.collect.DiscreteDomain;
-import com.google.common.collect.Range;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -13,7 +10,6 @@ import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
-import java.util.Map;
 import java.util.UUID;
 
 import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
@@ -23,9 +19,14 @@ import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKe
  */
 public class RecoveryUtils {
 
-    static ObjectsView.ObjectID getObjectIdFromStreamId(UUID streamId, Class type) {
+    private RecoveryUtils() {
+        // prevent instantiation of this class
+    }
+
+    private static ObjectsView.ObjectID getObjectIdFromStreamId(UUID streamId, Class type) {
         return new ObjectsView.ObjectID(streamId, type);
     }
+
     static boolean isCheckPointEntry(ILogData logData) {
         return logData.hasCheckpointMetadata();
     }
@@ -38,9 +39,8 @@ public class RecoveryUtils {
         return logData.getCheckpointedStreamStartLogAddress();
     }
 
-    /** Create a new object SMRMap as recipient of SMRUpdates (if doesn't exist yet)
-     *
-     * @param streamId
+    /**
+     * Create a new object SMRMap as recipient of SMRUpdates (if doesn't exist yet)
      */
     static void createObjectIfNotExist(CorfuRuntime runtime, UUID streamId, ISerializer serializer, Class type) {
         if (!runtime.getObjectsView().getObjectCache()
@@ -75,43 +75,17 @@ public class RecoveryUtils {
     }
 
     /**
-     * Get a range of LogData from the server
-     *
-     * This is using the underlying bulk read implementation for
-     * fetching a range of addresses. This read will return
-     * a map ordered by address.
-     *
-     * It uses a ClosedOpen range : [start, end)
-     * (e.g [0, 5) == (0,1,2,3,4))
-     *
-     * @param start start address for the bulk read
-     * @param end end address for the bulk read
-     * @return logData map ordered by addresses (increasing)
-     */
-    static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
-        return runtime.getAddressSpaceView().
-                cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
-    }
-
-    /** Deserialize a logData by getting the logEntry
+     * Deserialize a logData by getting the logEntry
      *
      * Getting the underlying logEntry should trigger deserialization only once.
-     * Next access should just returned the logEntry direclty.
-     *
-     * @param logData
-     * @return
-     * @throws Exception
+     * Next access should just returned the logEntry directly.
      */
-    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) throws Exception{
+    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) throws Exception {
         return logData.getLogEntry(runtime);
     }
 
     /**
      * Look in the objectCache for the corresponding CorfuCompileProxy
-     *
-     * @param runtime
-     * @param streamId
-     * @return
      */
     static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId, Class type) {
         ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, type);

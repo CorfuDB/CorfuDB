@@ -2,8 +2,11 @@ package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 
@@ -52,7 +55,22 @@ public interface StreamLog {
     /**
      * Get the global tail and stream tails.
      */
-    TailsResponse getTails();
+    TailsResponse getTails(List<UUID> streams);
+
+    /**
+     * Get the global log tail.
+     */
+    long getLogTail();
+
+    /**
+     * Get global and all stream tails.
+     */
+    TailsResponse getAllTails();
+
+    /**
+     * Get the address space for every stream.
+     */
+    StreamsAddressResponse getStreamsAddressSpace();
 
     /**
      * Get the first untrimmed address in the address space.
@@ -70,13 +88,6 @@ public interface StreamLog {
      * Close the stream log.
      */
     void close();
-
-    /**
-     * unmap/release the memory for entry.
-     *
-     * @param address  address to release
-     */
-    void release(long address, LogData entry);
 
     /**
      * Clears all data and resets all segment handlers.

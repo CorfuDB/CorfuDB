@@ -19,6 +19,16 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 @Slf4j
 public class ScenarioUtils {
 
+    public static void waitForNextEpoch(CorfuClient corfuClient, long nextEpoch) {
+        waitForLayoutChange(layout -> {
+            if(layout.getEpoch() > nextEpoch){
+                throw new IllegalStateException("Layout epoch is ahead of next epoch. Next epoch: " + nextEpoch +
+                        ", layout epoch: " + layout.getEpoch());
+            }
+            return layout.getEpoch() == nextEpoch;
+        }, corfuClient);
+    }
+
     /**
      * Refreshes the layout and waits for a limited time for the refreshed layout to
      * satisfy the expected verifier.
@@ -102,6 +112,19 @@ public class ScenarioUtils {
             fail("Cluster should already be down");
         } catch (UnreachableClusterException e) {
             log.info("Successfully waited failure detector to detect cluster down");
+        }
+    }
+
+    static void waitForClusterUp(CorfuTable table, String value) {
+        for (int i = 0; i < 3; i++) {
+            try {
+                table.get(value);
+                return;
+            } catch (UnreachableClusterException e) {
+                log.info("Successfully waited failure detector to detect cluster down");
+            }
+
+            waitUninterruptibly(Duration.ofSeconds(10));
         }
     }
 

@@ -14,6 +14,7 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -42,7 +43,7 @@ class CorfuClusterParams implements GroupParams {
     @Default
     @Getter
     @NonNull
-    private final Duration retryTimeout = Duration.ofSeconds(3);
+    private final Duration retryDuration = Duration.ofSeconds(3);
 
     @Override
     public ImmutableSortedSet<CorfuServerParams> getNodesParams() {
@@ -64,5 +65,15 @@ class CorfuClusterParams implements GroupParams {
 
     public String getFullNodeName(String nodeName) {
         return name + "-corfu-" + nodeName;
+    }
+
+    public int size(){
+        return getNodesParams().size();
+    }
+
+    public List<String> getClusterNodes() {
+        return getNodesParams().stream()
+                .map(CorfuServerParams::getName)
+                .collect(Collectors.toList());
     }
 }

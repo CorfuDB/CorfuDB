@@ -59,6 +59,10 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .containsKeys("a", "b", "c");
     }
 
+    /**
+     * The test ensures the checkpointWriter uses the real tail to checkpoint. We then perform a trim using an older
+     * epoch. As long as the trim address is obtained from the checkpoint, trimming of data should be safe.
+     */
     @Test
     public void ensureMCWUsesRealTail() throws Exception {
         Map<String, String> map = getDefaultRuntime().getObjectsView().build()
@@ -78,13 +82,43 @@ public class CheckpointTrimTest extends AbstractViewTest {
         }
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map);
+        mcw.addMap(map);
         Token trimAddress = mcw.appendCheckpoints(getRuntime(), "author");
         Token staleTrimAddress = new Token(trimAddress.getEpoch() - 1, trimAddress.getSequence());
-        assertThatThrownBy(() -> getRuntime().getAddressSpaceView().prefixTrim(staleTrimAddress))
-                .isInstanceOf(WrongEpochException.class);
+
+        getRuntime().getAddressSpaceView().prefixTrim(staleTrimAddress);
+
+        Token expectedTrimMark = new Token(getRuntime().getLayoutView().getLayout().getEpoch(),
+                staleTrimAddress.getSequence() + 1);
+        assertThat(getRuntime().getAddressSpaceView().getTrimMark())
+                .isEqualByComparingTo(expectedTrimMark);
     }
 
+    /**
+     * The log address created in the below test:
+     *
+     *                        snapshot tx for map read
+     *                                    v
+     * +-------------------------------------------------------+
+     * | 0  | 1  | 2  | 3 | 4 | 5 | 6  | 7  | 8  | 9 | 10 | 11 |
+     * +-------------------------------------------------------+
+     * | F0 | F1 | F2 | S | M | E | F0 | F1 | F2 | S | M  | E  |
+     * +-------------------------------------------------------+
+     *              ^
+     *          Trim point
+     *
+     * F    : Map operation
+     * S    : Start of checkpoint
+     * M    : Continuation of checkpoint
+     * E    : End of checkpoint
+     *
+     * Checkpoint snapshots taken: 3 and 10.
+     *
+     * Values of variables in the test:
+     * checkpointAddress = 8
+     * ckpointGap = 5
+     * trimAddress = 2
+     */
     @Test
     public void testSuccessiveCheckpointTrim() throws Exception {
         final int nCheckpoints = 2;

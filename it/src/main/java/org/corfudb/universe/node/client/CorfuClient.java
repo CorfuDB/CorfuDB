@@ -30,6 +30,11 @@ public interface CorfuClient extends Node {
     void connect();
 
     /**
+     * See {@link CorfuRuntime()}
+     */
+    CorfuRuntime getRuntime();
+
+    /**
      * See {@link LayoutView#getLayout()}
      */
     Layout getLayout();
@@ -58,5 +63,7 @@ public interface CorfuClient extends Node {
     default void systemDownHandler() {
         throw new UnreachableClusterException("Cluster is unavailable");
     }
+
+    void shutdown();
 
 }

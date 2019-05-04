@@ -34,8 +34,7 @@ public abstract class BaseCorfuAppUtils {
      * @return a CorfuRuntime object, with which Corfu applications perform all Corfu operations
      */
     private CorfuRuntime getRuntimeAndConnect(String configurationString) {
-        CorfuRuntime corfuRuntime = new CorfuRuntime(configurationString).connect();
-        return corfuRuntime;
+        return new CorfuRuntime(configurationString).connect();
     }
 
     private static final String USAGE = "Usage: HelloCorfu [-c <conf>]\n"

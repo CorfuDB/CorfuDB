@@ -1,17 +1,20 @@
 package org.corfudb.security.sasl;
 
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 
 import javax.security.sasl.SaslException;
-
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * Created by sneginhal on 02/01/2017.
  * Utility for SASL options parsing.
  */
 public class SaslUtils {
+
+    private SaslUtils() {
+        // prevent instantiation of this class
+    }
 
     /**
      * Parse username and password files for SASL authentication.

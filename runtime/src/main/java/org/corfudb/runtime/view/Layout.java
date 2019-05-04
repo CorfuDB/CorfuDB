@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
 
+import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.Data;
@@ -16,6 +17,7 @@ import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
 import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
+import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
@@ -23,6 +25,7 @@ import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +40,12 @@ import java.util.stream.Collectors;
  */
 @Data
 public class Layout {
+
+    /**
+     * Sorting layouts according to epochs in descending order
+     */
+    public static final Comparator<Layout> LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();
+
     /**
      * A Gson parser.
      */
@@ -244,13 +253,8 @@ public class Layout {
      * @param globalAddress The global address.
      */
     public LayoutStripe getStripe(long globalAddress) {
-        for (LayoutSegment ls : segments) {
-            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
-                // TODO: this does not account for shifting segments.
-                return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));
-            }
-        }
-        throw new RuntimeException("Unmapped address!");
+        LayoutSegment ls = getSegment(globalAddress);
+        return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));
     }
 
     /**
@@ -268,11 +272,32 @@ public class Layout {
     }
 
     /**
+     * Get the first segment.
+     * @return Returns the segment at index 0.
+     */
+    public LayoutSegment getFirstSegment() {
+        return this.getSegments().get(0);
+    }
+
+    /**
      * Return latest segment.
-     *
+     * @return the latest segment.
      */
     public LayoutSegment getLatestSegment() {
         return this.getSegments().get(this.getSegments().size() - 1);
+    }
+
+    /**
+     * Get the last node in the last segment.
+     *
+     * @return Returns the last node in the last segment.
+     */
+    public String getLastAddedNodeInLastSegment() {
+
+        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
+        // Returning the last node in the first stripe for determinism.
+        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
+        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
     }
 
     /**
@@ -324,6 +349,17 @@ public class Layout {
         this.clusterId = layoutCopy.clusterId;
     }
 
+    public void nextEpoch() {
+        epoch += 1;
+    }
+
+    public ImmutableList<String> getActiveLayoutServers() {
+        return layoutServers.stream()
+                // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
+                .filter(s -> !unresponsiveServers.contains(s))
+                .collect(ImmutableList.toImmutableList());
+    }
+
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override
@@ -346,7 +382,11 @@ public class Layout {
 
             @Override
             public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                return new BackpointerStreamView(r, streamId, options);
+                if (r.getParameters().isFollowBackpointersEnabled()) {
+                    return new BackpointerStreamView(r, streamId, options);
+                } else {
+                    return new AddressMapStreamView(r, streamId, options);
+                }
             }
 
             @Override
@@ -355,7 +395,7 @@ public class Layout {
                     return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new ChainReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
                                     r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
@@ -389,7 +429,11 @@ public class Layout {
 
             @Override
             public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                return new BackpointerStreamView(r, streamId, options);
+                if (r.getParameters().isFollowBackpointersEnabled()) {
+                    return new BackpointerStreamView(r, streamId, options);
+                } else {
+                    return new AddressMapStreamView(r, streamId, options);
+                }
             }
 
             @Override
@@ -398,7 +442,7 @@ public class Layout {
                     return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new QuorumReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
                                     r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
@@ -545,6 +589,15 @@ public class Layout {
 
         public int getNumberOfStripes() {
             return stripes.size();
+        }
+
+        /**
+         * Gets the first stripe.
+         *
+         * @return Returns the stripe at index 0.
+         */
+        public LayoutStripe getFirstStripe() {
+            return stripes.get(0);
         }
 
         /**

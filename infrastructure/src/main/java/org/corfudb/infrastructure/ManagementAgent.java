@@ -1,21 +1,20 @@
 package org.corfudb.infrastructure;
 
-import java.time.Duration;
-
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
-import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
+
+import java.time.Duration;
+
+import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -33,12 +32,18 @@ public class ManagementAgent {
 
     private final ServerContext serverContext;
 
+
     /**
      * Interval in checking presence of management layout to start management agent tasks.
-     * In milliseconds.
      */
     @Getter
     private static final Duration CHECK_BOOTSTRAP_INTERVAL = Duration.ofSeconds(1);
+
+    /**
+     * Interval in retrying layout recovery when management server started.
+     */
+    private static final Duration RECOVERY_RETRY_INTERVAL = Duration.ofSeconds(1);
+
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
@@ -76,17 +81,18 @@ public class ManagementAgent {
 
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
-     * Spawns the initialization task which recovers if required, bootstraps sequencer and
-     * schedules detector tasks.
+     * Spawns an initialization task which recovers if required, and start monitoring services.
      *
      * @param runtimeSingletonResource Singleton resource to fetch runtime.
      * @param serverContext            Server Context.
      */
     ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
-                    @NonNull ClusterStateContext clusterStateContext) {
+                    @NonNull ClusterStateContext clusterContext,
+                    @NonNull FailureDetector failureDetector) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
+        this.localMonitoringService = new LocalMonitoringService(serverContext, runtimeSingletonResource);
 
         Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.
@@ -109,10 +115,13 @@ public class ManagementAgent {
             log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
         }
 
-        this.localMonitoringService = new LocalMonitoringService(serverContext,
-                runtimeSingletonResource, clusterStateContext);
-        this.remoteMonitoringService = new RemoteMonitoringService(serverContext,
-                runtimeSingletonResource, clusterStateContext, new FailureDetector(), new HealingDetector());
+        this.remoteMonitoringService = new RemoteMonitoringService(
+                serverContext,
+                runtimeSingletonResource,
+                clusterContext,
+                failureDetector,
+                localMonitoringService
+        );
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
@@ -128,32 +137,57 @@ public class ManagementAgent {
 
     /**
      * Initialization task.
+     * This task is blocked until the management server is bootstrapped and has a connected runtime.
      * Performs recovery if required.
-     * Bootstraps the primary sequencer if the server has been bootstrapped.
-     * Initiates the failure detection and healing detection tasks.
+     * Initiates the monitoring services which performs failure detection and healing detection tasks.
      */
     private void initializationTask() {
+        log.info("Start initialization task");
 
+        // Wait for management server to be bootstrapped.
         try {
             while (!shutdown && serverContext.getManagementLayout() == null) {
-                log.warn("Management Server waiting to be bootstrapped");
+                log.warn("initializationTask: Management Server waiting to be bootstrapped");
                 Sleep.MILLISECONDS.sleepRecoverably(CHECK_BOOTSTRAP_INTERVAL.toMillis());
             }
-
-            // Recover if flag is false
-            if (!recovered) {
-                RecoveryHandler.retryUntilRecovery(serverContext, getCorfuRuntime());
-            }
-
-            this.localMonitoringService.start(METRICS_POLL_INTERVAL);
-            this.remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
-
         } catch (InterruptedException e) {
-            log.error("initializationTask: InitializationTask interrupted.");
-            throw new UnrecoverableCorfuInterruptedError(e);
-        } catch (Exception e) {
-            log.error("initializationTask: Error in initializationTask.", e);
-            throw new UnrecoverableCorfuError(e);
+            // Due to shutdown, which interrupts this thread
+            log.debug("initializationTask: Initialization task interrupted without " +
+                    "management server bootstrapped");
+            return;
+        }
+
+        // Retry layout recovery if need until success.
+        long recoveryAttempts = 0;
+        while (!shutdown && !recovered) {
+            try {
+                Layout layout = serverContext.copyManagementLayout();
+                if (runRecoveryReconfiguration(layout, getCorfuRuntime())) {
+                    // If recovery succeeds, reconfiguration was successful.
+                    // Save the latest management layout.
+                    serverContext.saveManagementLayout(getCorfuRuntime().getLayoutView().getLayout());
+                    log.info("initializationTask: Recovery completed");
+                    recovered = true;
+                    continue;
+                }
+
+                log.error("initializationTask: Recovery failed {} times. Retrying in {}s.",
+                        ++recoveryAttempts, RECOVERY_RETRY_INTERVAL);
+                Sleep.MILLISECONDS.sleepRecoverably(RECOVERY_RETRY_INTERVAL.toMillis());
+            } catch (InterruptedException e) {
+                // Due to shutdown, which interrupts this thread
+                log.debug("initializationTask: Initialization task interrupted without being recovered");
+                return;
+            } catch (Exception e) {
+                // Retry recovering for any exception encountered.
+                log.error("initializationTask: exception happened during layout recovery, {}", e);
+            }
+        }
+
+        // Start monitoring services that deals with failure and healing detection.
+        if (!shutdown) {
+            localMonitoringService.start(METRICS_POLL_INTERVAL);
+            remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
         }
     }
 
@@ -167,14 +201,11 @@ public class ManagementAgent {
     }
 
     /**
-     * Shutdown the detectorTaskScheduler, workers and initializationTaskThread.
+     * Shutdown the initializationTaskThread and monitoring services.
      */
     public void shutdown() {
         // Shutting the fault detector.
         shutdown = true;
-
-        remoteMonitoringService.shutdown();
-        localMonitoringService.shutdown();
 
         try {
             initializationTaskThread.interrupt();
@@ -183,6 +214,9 @@ public class ManagementAgent {
             log.error("initializationTask interrupted : {}", ie);
             throw new UnrecoverableCorfuInterruptedError(ie);
         }
+
+        remoteMonitoringService.shutdown();
+        localMonitoringService.shutdown();
 
         log.info("Management Agent shutting down.");
     }

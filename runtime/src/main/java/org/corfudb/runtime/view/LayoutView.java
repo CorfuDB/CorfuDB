@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
@@ -93,7 +94,7 @@ public class LayoutView extends AbstractView {
         Layout layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
         //phase 2: propose the new layout.
         propose(epoch, rank, layoutToPropose);
-        //phase 3: commited
+        //phase 3: committed
         committed(epoch, layoutToPropose);
     }
 
@@ -202,16 +203,7 @@ public class LayoutView extends AbstractView {
     public Layout propose(long epoch, long rank, Layout layout)
             throws QuorumUnreachableException, OutrankedException {
         CompletableFuture<Boolean>[] proposeList = getLayout().getLayoutServers().stream()
-                .map(x -> {
-                    CompletableFuture<Boolean> cf = new CompletableFuture<>();
-                    try {
-                        // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout);
-                    } catch (NetworkException e) {
-                        cf.completeExceptionally(e);
-                    }
-                    return cf;
-                })
+                .map(x -> getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout))
                 .toArray(CompletableFuture[]::new);
 
         long timeouts = 0L;
@@ -324,5 +316,29 @@ public class LayoutView extends AbstractView {
 
             log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
         }
+    }
+
+    /**
+     * Bootstraps the layout server of the specified node.
+     * If already bootstrapped, it completes silently.
+     *
+     * @param endpoint Endpoint to bootstrap.
+     * @param layout   Layout to bootstrap with.
+     * @return Completable Future which completes with True when the layout server is bootstrapped.
+     */
+    CompletableFuture<Boolean> bootstrapLayoutServer(@Nonnull String endpoint, @Nonnull Layout layout) {
+        return getRuntimeLayout(layout).getLayoutClient(endpoint).bootstrapLayout(layout)
+                .exceptionally(throwable -> {
+                    try {
+                        CFUtils.unwrap(throwable, AlreadyBootstrappedException.class);
+                    } catch (AlreadyBootstrappedException e) {
+                        log.info("bootstrapLayoutServer: Layout Server {} already bootstrapped.", endpoint);
+                    }
+                    return true;
+                })
+                .thenApply(result -> {
+                    log.info("bootstrapLayoutServer: Layout Server {} bootstrap successful", endpoint);
+                    return true;
+                });
     }
 }

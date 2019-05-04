@@ -61,7 +61,7 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
                 .stream()
                 .map(serverParams -> {
                     CorfuServer server = buildCorfuServer(serverParams);
-                    nodes.put(serverParams.getName(), server);
+                    nodes.put(server.getEndpoint(), server);
                     return server;
                 })
                 .map(this::deployCorfuServerAsync)

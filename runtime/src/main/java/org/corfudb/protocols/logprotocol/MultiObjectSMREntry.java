@@ -18,7 +18,7 @@ import org.corfudb.util.serializer.Serializers;
 
 
 /**
- * A log entry sturcture which contains a collection of multiSMRentries,
+ * A log entry structure which contains a collection of multiSMRentries,
  * each one contains a list of updates for one object.
  */
 @Deprecated // TODO: Add replacement method that conforms to style

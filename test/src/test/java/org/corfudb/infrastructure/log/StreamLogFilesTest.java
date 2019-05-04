@@ -18,16 +18,19 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
+import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -200,11 +203,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write the same range twice
         log.append(entries);
         log.sync(true);
-        long logSize = FileUtils.sizeOfDirectory(file);
-        log.append(entries);
-        log.sync(true);
-        long logSize2 = FileUtils.sizeOfDirectory(file);
-        assertThat(logSize2).isEqualTo(logSize);
+
+        Assertions.assertThatExceptionOfType(OverwriteException.class)
+                .isThrownBy(() -> log.append(entries));
     }
 
     @Test
@@ -420,30 +421,30 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getTails().getLogTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
 
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
         for (long x = 0; x <= lastAddress; x++){
             writeToLog(log, x);
-            assertThat(log.getTails().getLogTail()).isEqualTo(x);
+            assertThat(log.getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress);
+        assertThat(log.getLogTail()).isEqualTo(lastAddress);
 
         // Advance the tail some more
         final long tailDelta = 5;
         for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
             writeToLog(log, x);
-            assertThat(log.getTails().getLogTail()).isEqualTo(x);
+            assertThat(log.getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail one last time
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress + tailDelta);
+        assertThat(log.getLogTail()).isEqualTo(lastAddress + tailDelta);
     }
 
     @Test
@@ -523,7 +524,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
         log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getTails().getLogTail()).isEqualTo(midSegmentAddress);
+        assertThat(log.getLogTail()).isEqualTo(midSegmentAddress);
         assertThat(log.getTrimMark()).isEqualTo(midSegmentAddress + 1);
     }
 
@@ -572,7 +573,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
         final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
-        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailBeforeReset);
+        assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
         log.reset();
@@ -581,7 +582,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final long globalTailAfterReset = Address.NON_ADDRESS;
         final long trimMarkAfterReset = 0L;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
-        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailAfterReset);
+        assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 
@@ -660,8 +661,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int serializedEntrySize = 100;
         byte[] entryBytes = new byte[serializedEntrySize];
         Metadata metadata = Metadata.newBuilder()
-                .setPayloadChecksum(StreamLogFiles.getChecksum(serializedEntrySize))
-                .setLengthChecksum(StreamLogFiles.getChecksum(entryBytes.length))
+                .setPayloadChecksum(Checksum.getChecksum(serializedEntrySize))
+                .setLengthChecksum(Checksum.getChecksum(entryBytes.length))
                 .setLength(entryBytes.length)
                 .build();
 

@@ -6,8 +6,10 @@ import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.corfudb.universe.universe.Universe.UniverseMode;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,6 +61,12 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                     );
                 }
 
+                // Reset all nodes so that we do not end up with an OverwriteException.
+                for (CorfuServer candidate : servers) {
+                    corfuClient.getRuntime().getLayoutView().getRuntimeLayout()
+                            .getBaseClient(candidate.getEndpoint()).reset();
+                }
+
                 // Verify layout contains only the node that is not removed
                 corfuClient.invalidateLayout();
                 assertThat(corfuClient.getLayout().getAllServers()).containsExactly(server0.getEndpoint());
@@ -69,6 +77,9 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                 }
             });
 
+            if (universeMode == UniverseMode.VM){
+                ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(15));
+            }
 
             testCase.it("should add two nodes back to corfu cluster", data -> {
                 // Sequentially add two nodes back into cluster
@@ -90,6 +101,8 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

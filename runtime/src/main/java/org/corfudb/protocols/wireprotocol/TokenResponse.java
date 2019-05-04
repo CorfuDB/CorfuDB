@@ -18,6 +18,7 @@ import lombok.Data;
 public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
     public static byte[] NO_CONFLICT_KEY = new byte[]{};
+    public static UUID NO_CONFLICT_STREAM = new UUID(0, 0);
 
     /**
      * Constructor for TokenResponse.
@@ -26,8 +27,9 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
      * @param backpointerMap  map of backpointers for all requested streams
      */
     public TokenResponse(Token token, Map<UUID, Long> backpointerMap) {
-        respType = TokenType.NORMAL;
-        conflictKey = NO_CONFLICT_KEY;
+        this.respType = TokenType.NORMAL;
+        this.conflictKey = NO_CONFLICT_KEY;
+        this.conflictStream = NO_CONFLICT_STREAM;
         this.token = token;
         this.backpointerMap = backpointerMap;
         this.streamTails = Collections.emptyList();
@@ -36,10 +38,11 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /** the cause/type of response. */
     final TokenType respType;
 
-    /**
-     * In case there is a conflict, signal to the client which key was responsible for the conflict.
-     */
+    // In case of a conflict, signal to the client which key was responsible for the conflict.
     final byte[] conflictKey;
+
+    // In case of a conflict, signal to the client which stream was responsible for the conflict.
+    final UUID conflictStream;
 
     /** The current token,
      * or overload with "cause address" in case token request is denied. */
@@ -58,6 +61,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
         conflictKey = ICorfuPayload.fromBuffer(buf, byte[].class);
+        conflictStream = ICorfuPayload.fromBuffer(buf, UUID.class);
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         Long sequence = ICorfuPayload.fromBuffer(buf, Long.class);
         token = new Token(epoch, sequence);
@@ -69,6 +73,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
         ICorfuPayload.serialize(buf, conflictKey);
+        ICorfuPayload.serialize(buf, conflictStream);
         ICorfuPayload.serialize(buf, token.getEpoch());
         ICorfuPayload.serialize(buf, this.getSequence());
         ICorfuPayload.serialize(buf, backpointerMap);

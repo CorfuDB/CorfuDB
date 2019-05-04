@@ -1,25 +1,21 @@
 package org.corfudb.runtime;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.serializer.ISerializer;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.BiConsumer;
-
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.util.Utils;
-import org.corfudb.util.serializer.ISerializer;
 
 /**
  * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
@@ -28,6 +24,12 @@ import org.corfudb.util.serializer.ISerializer;
 public class MultiCheckpointWriter<T extends Map> {
     @Getter
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
+
+    // Registry and Timer used for measuring append checkpoints
+    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
+            "append-several-checkpoints";
+    private Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
@@ -59,7 +61,7 @@ public class MultiCheckpointWriter<T extends Map> {
         Token minSnapshot = Token.UNINITIALIZED;
 
         final long cpStart = System.currentTimeMillis();
-        try {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointsTimer)) {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
 

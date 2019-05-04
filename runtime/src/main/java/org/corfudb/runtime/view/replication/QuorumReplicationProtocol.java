@@ -6,18 +6,9 @@
 
 package org.corfudb.runtime.view.replication;
 
-import java.time.Duration;
-import java.util.Comparator;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -39,6 +30,19 @@ import org.corfudb.util.Holder;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Created by kspirov on 4/23/17.
@@ -96,6 +100,20 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         } catch (RuntimeException e) {
             throw e;
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Nonnull
+    public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
+                                       List<Long> addresses,
+                                       boolean waitForWrite) {
+        // TODO: replace this naive implementation
+        return addresses.stream()
+                .map(addr -> new SimpleImmutableEntry<>(addr, read(runtimeLayout, addr)))
+                .collect(Collectors.toMap(SimpleImmutableEntry::getKey, SimpleImmutableEntry::getValue));
     }
 
     /**

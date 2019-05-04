@@ -75,7 +75,7 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
 
         // Create memory measurer for the object under investigation
         final Gauge<Long> arrayListSizeGauge =
-                MetricsUtils.addMemoryMeasurerFor(corfuRuntime.getMetrics(), arrayList);
+                MetricsUtils.addMemoryMeasurerFor(CorfuRuntime.getDefaultMetrics(), arrayList);
         final Long initialArraySize = arrayListSizeGauge.getValue();
 
         // Increase the memory consumption and assert the expected behavior
@@ -125,7 +125,7 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
         // Create and fill a map that will be used to assess nulling out behavior
         Map<String, String> map1 = new HashMap<>();
         final Gauge<Long> map1Measurer =
-                MetricsUtils.addMemoryMeasurerFor(corfuRuntime.getMetrics(), map1);
+                MetricsUtils.addMemoryMeasurerFor(CorfuRuntime.getDefaultMetrics(), map1);
 
         final int countMap1 = 300000;
         for (int i = 0; i < countMap1; i++) {
@@ -142,7 +142,7 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
         // Create and fill a map that will not be nulled out
         Map<String, String> map2 = new HashMap<>();
         final Gauge<Long> map2Measurer =
-                MetricsUtils.addMemoryMeasurerFor(corfuRuntime.getMetrics(), map2);
+                MetricsUtils.addMemoryMeasurerFor(CorfuRuntime.getDefaultMetrics(), map2);
 
         final int countMap2 = 1000;
         for (int i = 0; i < countMap2; i++) {

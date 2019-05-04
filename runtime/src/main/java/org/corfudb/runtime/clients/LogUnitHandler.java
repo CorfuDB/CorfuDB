@@ -149,7 +149,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @param msg Incoming Message
      * @param ctx Context
      * @param r   Router
-     * @throws Exception Throws excepton if write is performed to a non-existent entry.
+     * @throws Exception Throws exception if write is performed to a non-existent entry.
      */
     @ClientHandler(type = CorfuMsgType.ERROR_NOENTRY)
     private static Object handleNoEntry(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
@@ -192,6 +192,12 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ClientHandler(type = CorfuMsgType.TAIL_RESPONSE)
     private static Object handleTailResponse(CorfuPayloadMsg<TailsResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
+    private static Object handleStreamsAddressResponse(CorfuPayloadMsg<TailsResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.management;
 
 import javax.annotation.Nonnull;
 
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 
@@ -18,5 +19,5 @@ public interface IDetector {
      *
      * @return A poll report containing the results of the poll.
      */
-    PollReport poll(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime);
+    PollReport poll(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, SequencerMetrics sequencerMetrics);
 }

@@ -11,10 +11,13 @@ import javax.annotation.Nonnull;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -70,14 +73,12 @@ public class ManagementClient extends AbstractClient {
                 .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
     }
 
-    /**
-     * Requests for a heartbeat message containing the node status.
-     *
-     * @return A future which will return the node health metrics of
-     * the node which was requested for the heartbeat.
-     */
-    public CompletableFuture<ClusterState> sendHeartbeatRequest() {
-        return sendMessageWithFuture(CorfuMsgType.HEARTBEAT_REQUEST.msg());
+    public CompletableFuture<NodeState> sendNodeStateRequest() {
+        return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());
+    }
+
+    public CompletableFuture<FailureDetectorMetrics> sendFailureDetectorMetricsRequest() {
+        return sendMessageWithFuture(CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST.msg());
     }
 
     /**
@@ -125,6 +126,21 @@ public class ManagementClient extends AbstractClient {
                         isSequencerServer,
                         isLogUnitServer,
                         stripeIndex));
+        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+    }
+
+    /**
+     * Creates a workflow request to restore all redundancies and merge all segments.
+     *
+     * @param endpoint Endpoint to restore redundancy.
+     * @return CreateWorkflowResponse which gives the workflowId.
+     * @throws TimeoutException when the rpc times out
+     */
+    public CreateWorkflowResponse mergeSegments(@Nonnull String endpoint) throws TimeoutException {
+        OrchestratorMsg req = new OrchestratorMsg(new RestoreRedundancyMergeSegmentsRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));

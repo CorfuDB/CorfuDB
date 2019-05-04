@@ -5,31 +5,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +25,6 @@ import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -65,6 +43,25 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+
+import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -141,6 +138,11 @@ public class CorfuRuntime {
         @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
 
         /**
+         * Time limit after which the reader gives up and fills the hole.
+         */
+        @Default Duration holeFillTimeout = Duration.ofSeconds(10);
+
+        /**
          * Whether or not to disable the cache.
          */
         @Default
@@ -169,6 +171,13 @@ public class CorfuRuntime {
 
         // region Stream Parameters
         /**
+         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
+         * False, if strategy to discover the address space of a stream relies on the get stream address map.
+         */
+        @Default
+        boolean followBackpointersEnabled = false;
+
+        /**
          * Whether or not to disable backpointers.
          */
         @Default
@@ -193,6 +202,13 @@ public class CorfuRuntime {
          */
         @Default
         int trimRetry = 2;
+
+        /**
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        @Default
+        int streamBatchSize = 10;
         // endregion
 
         //region        Security parameters
@@ -252,7 +268,7 @@ public class CorfuRuntime {
          * shutdown abruptly without terminating the connection properly.
          */
         @Default
-        int idleConnectionTimeout = 30;
+        int idleConnectionTimeout = 7;
 
         /**
          * The period at which the client sends keep-alive messages to the
@@ -260,7 +276,7 @@ public class CorfuRuntime {
          * for the whole period.
          */
         @Default
-        int keepAlivePeriod = 10;
+        int keepAlivePeriod = 2;
 
         /**
          * {@link Duration} before connections timeout.
@@ -367,7 +383,6 @@ public class CorfuRuntime {
         static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
                 ImmutableMap.<ChannelOption, Object>builder()
                         .put(ChannelOption.TCP_NODELAY, true)
-                        .put(ChannelOption.SO_KEEPALIVE, true)
                         .put(ChannelOption.SO_REUSEADDR, true)
                         .build();
 
@@ -481,7 +496,14 @@ public class CorfuRuntime {
     private final ManagementView managementView = new ManagementView(this);
 
     /**
-     * A list of known layout servers.
+     * List of initial set of layout servers, i.e., servers specified in
+     * connection string on bootstrap.
+     */
+    @Getter
+    private volatile List<String> bootstrapLayoutServers;
+
+    /**
+     * List of known layout servers, refreshed on each fetchLayout.
      */
     @Getter
     private volatile List<String> layoutServers;
@@ -530,9 +552,6 @@ public class CorfuRuntime {
 
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
-    @Getter
-    @Setter
-    private MetricRegistry metrics = new MetricRegistry();
 
     /** Initialize a default static registry which through that different metrics
      * can be registered and reported */
@@ -623,9 +642,12 @@ public class CorfuRuntime {
         this.parameters = parameters;
 
         // Populate the initial set of layout servers
-        layoutServers = parameters.getLayoutServers().stream()
+        bootstrapLayoutServers = parameters.getLayoutServers().stream()
                 .map(NodeLocator::toString)
                 .collect(Collectors.toList());
+
+        // Initialize list of layout servers (this list will get updated for every new layout)
+        layoutServers = new ArrayList<>(bootstrapLayoutServers);
 
         // Set the initial cluster Id
         clusterId = parameters.getClusterId();
@@ -637,9 +659,6 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        synchronized (metrics) {
-            MetricsUtils.metricsReportingSetup(metrics);
-        }
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 
@@ -773,10 +792,11 @@ public class CorfuRuntime {
      */
     public CorfuRuntime parseConfigurationString(String configurationString) {
         // Parse comma sep. list.
-        layoutServers = Pattern.compile(",")
+        bootstrapLayoutServers = Pattern.compile(",")
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
+        layoutServers = new ArrayList<>(bootstrapLayoutServers);
         return this;
     }
 
@@ -787,6 +807,7 @@ public class CorfuRuntime {
      * @return A CorfuRuntime, to support the builder pattern.
      */
     public CorfuRuntime addLayoutServer(String layoutServer) {
+        bootstrapLayoutServers.add(layoutServer);
         layoutServers.add(layoutServer);
         return this;
     }
@@ -813,7 +834,7 @@ public class CorfuRuntime {
             return;
         }
         layout = fetchLayout(latestLayout == null
-                ? layoutServers : latestLayout.getLayoutServers());
+                ? bootstrapLayoutServers : latestLayout.getLayoutServers());
     }
 
     /**
@@ -856,8 +877,12 @@ public class CorfuRuntime {
                         .contains(NodeLocator.getLegacyEndpoint(endpoint)))
                 .forEach(endpoint -> {
                     try {
-                        nodeRouterPool.getNodeRouters().get(endpoint).stop();
-                        nodeRouterPool.getNodeRouters().remove(endpoint);
+                        IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);
+                        if (router != null) {
+                            // Stop the channel from keeping connecting/reconnecting to server.
+                            // Also if channel is not closed properly, router will be garbage collected.
+                            router.stop();
+                        }
                     } catch (Exception e) {
                         log.warn("fetchLayout: Exception in stopping and removing "
                                 + "router connection to node {} :", endpoint, e);
@@ -908,6 +933,9 @@ public class CorfuRuntime {
 
                         checkClusterId(l);
 
+                        // Update/refresh list of layout servers
+                        this.layoutServers = l.getLayoutServers();
+
                         layout = layoutFuture;
                         latestLayout = l;
                         log.debug("Layout server {} responded with layout {}", s, l);
@@ -919,7 +947,14 @@ public class CorfuRuntime {
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
                                 "Interrupted during layout fetch", ie);
-                    } catch (Exception e) {
+                    } catch (ExecutionException ee){
+                        if (ee.getCause() instanceof TimeoutException) {
+                            log.warn("Tried to get layout from {} but failed by timeout", s);
+                        } else {
+                            log.warn("Tried to get layout from {} but failed with exception:", s, ee);
+                        }
+                    }
+                    catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }
@@ -954,7 +989,7 @@ public class CorfuRuntime {
 
             for (CompletableFuture<VersionInfo> versionCf : versions) {
                 final VersionInfo version = CFUtils.getUninterruptibly(versionCf,
-                        TimeoutException.class, NetworkException.class, ShutdownException.class);
+                        TimeoutException.class, NetworkException.class);
                 if (version.getVersion() == null) {
                     log.error("Unexpected server version, server is too old to return"
                             + " version information");
@@ -966,7 +1001,7 @@ public class CorfuRuntime {
                             getVersionString(), version.getVersion());
                 }
             }
-        } catch (TimeoutException | NetworkException | ShutdownException e) {
+        } catch (TimeoutException | NetworkException e) {
             log.error("connect: failed to get version. Couldn't connect to server.", e);
         } catch (Exception ex) {
             // Because checkVersion is just an informational step (log purpose), we don't need to retry
@@ -982,9 +1017,9 @@ public class CorfuRuntime {
      */
     public synchronized CorfuRuntime connect() {
         if (layout == null) {
-            log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
+            log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
             // Fetch the current layout and save the future.
-            layout = fetchLayout(layoutServers);
+            layout = fetchLayout(bootstrapLayoutServers);
             try {
                 layout.get();
             } catch (Exception e) {

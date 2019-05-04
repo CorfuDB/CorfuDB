@@ -1,36 +1,50 @@
 package org.corfudb;
 
-import java.io.IOException;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.fusesource.jansi.Ansi.ansi;
+
+import java.io.File;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntConsumer;
+
 import javax.annotation.Nonnull;
+
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
 import org.corfudb.test.concurrent.TestThreadGroups;
-import org.corfudb.test.logging.TestLogger;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.concurrent.SingletonResource;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
-import org.junit.runners.model.Statement;
 import org.junit.runner.Description;
-
-import java.io.File;
-import java.util.*;
-import java.util.concurrent.*;
-import java.time.Duration;
-
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.IntConsumer;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.fusesource.jansi.Ansi.ansi;
+import org.junit.runners.model.Statement;
 
 /**
  * Created by mwei on 12/13/15.
@@ -52,20 +66,9 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
-    public static final int LOG_ELEMENTS = 25;
-
-    public static final SingletonResource<TestLogger> LOGGER =
-        SingletonResource.withInitial(() -> new TestLogger(LOG_ELEMENTS));
-
-    @Before
-    public void initLogging() {
-        LOGGER.get().reset(); // Get a logger instance and reset it
-    }
-
     @AfterClass
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();
-        LOGGER.cleanup(TestLogger::reset);
     }
 
     /** A watcher which prints whether tests have failed or not, for a useful
@@ -201,23 +204,6 @@ public class AbstractCorfuTest {
             });
         }
 
-        /** Print the latest logs, up to the number of log entries defined in LOG_ELEMENTS.
-         *
-         */
-        protected void printLogs() {
-            System.out.println(ansi().fgCyan().bold().a("Last ").a(LOG_ELEMENTS)
-                .a(" Logs Until Failure")
-                .reset());
-            Iterable<byte[]> logEvents = LOGGER.get().getEventsAndReset();
-            logEvents.forEach(e -> {
-                try {
-                    System.out.write(e);
-                } catch (IOException ie) {
-                    System.out.println("Exception printing log: " + ie.getMessage());
-                }
-            });
-        }
-
         /** Run when the test fails, prints the name of the exception
          * with the line number the exception was caused on.
          * @param e             The exception which caused the error.
@@ -233,7 +219,6 @@ public class AbstractCorfuTest {
                     .a(lineOut)
                     .a("]").newline());
             printThreads();
-            printLogs();
             System.out.flush();
         }
 
@@ -246,7 +231,6 @@ public class AbstractCorfuTest {
                 .a("TIMED OUT").reset()
                 .a("]").newline());
             printThreads();
-            printLogs();
             System.out.flush();
         }
 
@@ -594,7 +578,7 @@ public class AbstractCorfuTest {
     }
 
     // Not the best factoring, but we need to throw an exception whenever
-    // one has not been caught. (becuase the user)
+    // one has not been caught. (because the user)
     private volatile Exception lastException;
 
     public class AssertableObject<T> {
@@ -870,7 +854,7 @@ public class AbstractCorfuTest {
     }
     /**
      * This engine takes the testSM state machine (same as scheduleInterleaved above),
-     * and executes state machines in separate threads running concurrenty.
+     * and executes state machines in separate threads running concurrently.
      * There is no explicit interleaving control here.
      *
      * @param numThreads specifies desired concurrency level

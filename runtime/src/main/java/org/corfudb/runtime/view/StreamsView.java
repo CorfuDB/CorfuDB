@@ -2,9 +2,7 @@ package org.corfudb.runtime.view;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
@@ -13,11 +11,12 @@ import javax.annotation.Nullable;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
-import com.google.common.collect.TreeMultimap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -27,8 +26,6 @@ import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
@@ -48,8 +45,14 @@ public class StreamsView extends AbstractView {
     @Getter
     Multimap<UUID, IStreamView> streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());
 
+    /**
+     * Max write size.
+     */
+    final int maxWrite;
+
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
+        maxWrite = runtime.getParameters().getMaxWriteSize();
     }
 
     /**
@@ -120,6 +123,10 @@ public class StreamsView extends AbstractView {
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
+
+        final LogData ld = new LogData(DataType.DATA, object);
+        ld.checkMaxWriteSize(maxWrite);
+
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
                 ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info
@@ -131,32 +138,32 @@ public class StreamsView extends AbstractView {
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT) {
                 throw new TransactionAbortedException(
                         conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.CONFLICT,
+                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                        tokenResponse.getToken().getSequence(), AbortCause.CONFLICT,
                         TransactionalContext.getCurrentContext());
             } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
                 throw new TransactionAbortedException(
                         conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.NEW_SEQUENCER,
+                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                        tokenResponse.getToken().getSequence(), AbortCause.NEW_SEQUENCER,
                         TransactionalContext.getCurrentContext());
             } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_OVERFLOW) {
                 throw new TransactionAbortedException(
                         conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.SEQUENCER_OVERFLOW,
+                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                        tokenResponse.getToken().getSequence(), AbortCause.SEQUENCER_OVERFLOW,
                         TransactionalContext.getCurrentContext());
             } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_TRIM) {
                 throw new TransactionAbortedException(
                         conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.SEQUENCER_TRIM,
+                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                        tokenResponse.getToken().getSequence(), AbortCause.SEQUENCER_TRIM,
                         TransactionalContext.getCurrentContext());
             }
 
             // Attempt to write to the log
             try {
-                runtime.getAddressSpaceView().write(tokenResponse, object, cacheOption);
+                runtime.getAddressSpaceView().write(tokenResponse, ld, cacheOption);
                 // If we're here, we succeeded, return the acquired token
                 return tokenResponse.getSequence();
             } catch (OverwriteException oe) {
@@ -185,7 +192,8 @@ public class StreamsView extends AbstractView {
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
-                        temp.getToken(), temp.getBackpointerMap(), Collections.emptyList());
+                        tokenResponse.getConflictStream(), temp.getToken(),
+                        temp.getBackpointerMap(), Collections.emptyList());
 
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer
@@ -194,8 +202,10 @@ public class StreamsView extends AbstractView {
 
                 throw new TransactionAbortedException(
                         conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.NEW_SEQUENCER, // in the future, perhaps define a new AbortCause?
+                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                        tokenResponse.getToken().getSequence(), AbortCause.NEW_SEQUENCER, // in the future,
+                        // perhaps
+                        // define a new AbortCause?
                         TransactionalContext.getCurrentContext());
             }
         }
