@@ -154,7 +154,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         rs.add(ADDRESS_1);
         rs.add(ADDRESS_2);
 
-        Map<Long, ILogData> m = rt.getAddressSpaceView().read(rs);
+        Map<Long, ILogData> m = rt.getAddressSpaceView().read(rs, true);
 
         assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
@@ -184,7 +184,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         Range range = Range.closed(ADDRESS_0, ADDRESS_2);
         ContiguousSet<Long> addresses = ContiguousSet.create(range, DiscreteDomain.longs());
 
-        Map<Long, ILogData> m = rt.getAddressSpaceView().read(addresses);
+        Map<Long, ILogData> m = rt.getAddressSpaceView().read(addresses, true);
 
         assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
@@ -247,7 +247,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         }
 
         Map<Long, ILogData> readResult = rt.getAddressSpaceView().read(
-                ContiguousSet.create(Range.closed(0L, numAddresses - 1), DiscreteDomain.longs()));
+                ContiguousSet.create(Range.closed(0L, numAddresses - 1), DiscreteDomain.longs()), true);
 
         readResult.forEach((addr, data) ->
                 assertThat(data.getPayload(rt)).isEqualTo((testString + addr).getBytes()));
