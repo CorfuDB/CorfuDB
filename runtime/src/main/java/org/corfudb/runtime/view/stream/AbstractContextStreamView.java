@@ -307,7 +307,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     protected boolean processEntryForContext(final ILogData data) {
         if (data != null) {
-            final Object payload = data.getPayload(runtime);
+            final Object payload = data.getPayload();
         }
         return false;
     }

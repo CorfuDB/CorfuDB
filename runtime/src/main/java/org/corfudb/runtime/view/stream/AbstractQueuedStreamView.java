@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -14,7 +13,6 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Range;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -29,8 +27,6 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.util.Utils;
 
 
@@ -613,8 +609,7 @@ public abstract class AbstractQueuedStreamView extends
     protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
                                               long maxGlobal) {
         if (data.hasCheckpointMetadata()) {
-            CheckpointEntry cpEntry = (CheckpointEntry)
-                    data.getPayload(runtime);
+            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload();
 
             // Select the latest cp that has a snapshot address
             // which is less than maxGlobal
