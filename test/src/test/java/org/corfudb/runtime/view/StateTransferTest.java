@@ -944,8 +944,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Read data to validate we are able to decompress correctly
         for (int i = 0; i < writtenAddressesBatch2; i++) {
-            assertThat(rt.getAddressSpaceView().read(i)
-                    .getPayload(rt)).isEqualTo(DEFAULT_PAYLOAD);
+            assertThat(rt.getAddressSpaceView().read(i).getPayload()).isEqualTo(DEFAULT_PAYLOAD);
         }
 
     }

@@ -6,7 +6,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
@@ -35,35 +34,29 @@ public class StreamViewSMRAdapter implements ISMRStream {
     /**
      * The stream view backing this adapter.
      */
-    final IStreamView streamView;
+    private final IStreamView streamView;
 
-    /**
-     * Necessary until the runtime is no longer necessary for deserialization.
-     */
-    final CorfuRuntime runtime;
-
-    public StreamViewSMRAdapter(CorfuRuntime runtime,
-                                IStreamView streamView) {
-        this.runtime = runtime;
+    public StreamViewSMRAdapter(IStreamView streamView) {
         this.streamView = streamView;
     }
 
     private List<SMREntry> dataAndCheckpointMapper(ILogData logData) {
+        Object payload = logData.getPayload();
+
         if (logData.hasCheckpointMetadata()) {
             // This is a CHECKPOINT record.  Extract the SMREntries, if any.
-            CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
+            CheckpointEntry cp = (CheckpointEntry) payload;
             if (cp.getSmrEntries() != null
                     && cp.getSmrEntries().getUpdates().size() > 0) {
-                cp.getSmrEntries().getUpdates().forEach(e -> {
-                    e.setRuntime(runtime);
-                    e.setGlobalAddress(logData.getGlobalAddress());
-                });
+                cp.getSmrEntries().getUpdates().forEach(e ->
+                        e.setGlobalAddress(logData.getGlobalAddress()));
                 return cp.getSmrEntries().getUpdates();
-            } else {
-                return (List<SMREntry>) Collections.EMPTY_LIST;
             }
+            return Collections.emptyList();
+        } else if (payload instanceof ISMRConsumable) {
+            return ((ISMRConsumable) payload).getSMRUpdates(streamView.getId());
         } else {
-            return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
+            return Collections.emptyList();
         }
     }
 
@@ -79,10 +72,9 @@ public class StreamViewSMRAdapter implements ISMRStream {
      * @return Returns a list of SMR Entries upto the maxGlobal.
      */
     public List<SMREntry> remainingUpTo(long maxGlobal) {
-        return streamView.remainingUpTo(maxGlobal).stream()
+        return streamView.remainingUpTo(maxGlobal)
+                .stream()
                 .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
-                        || m.hasCheckpointMetadata())
                 .map(this::dataAndCheckpointMapper)
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
@@ -98,26 +90,25 @@ public class StreamViewSMRAdapter implements ISMRStream {
         ILogData data = streamView.current();
         if (data == null
                 || data.getType() != DataType.DATA
-                || !(data.getPayload(runtime) instanceof ISMRConsumable)) {
+                || !(data.getPayload() instanceof ISMRConsumable)) {
             return Collections.emptyList();
         }
 
-        return ((ISMRConsumable) data.getPayload(runtime)).getSMRUpdates(streamView.getId());
+        return ((ISMRConsumable) data.getPayload()).getSMRUpdates(streamView.getId());
     }
 
     /**
      * Returns the list of SMREntries positioned at the previous log position of this stream.
      *
-     * @return Returns the list of SMREntries positioned at the previous log position of this
-     *     stream.
+     * @return the list of SMREntries positioned at the previous log position of this stream.
      */
     public List<SMREntry> previous() {
         ILogData data = streamView.previous();
         while (Address.isAddress(streamView.getCurrentGlobalPosition())
                 && data != null) {
             if (data.getType() == DataType.DATA
-                    && data.getPayload(runtime) instanceof ISMRConsumable) {
-                return ((ISMRConsumable) data.getPayload(runtime))
+                    && data.getPayload() instanceof ISMRConsumable) {
+                return ((ISMRConsumable) data.getPayload())
                         .getSMRUpdates(streamView.getId());
             }
             data = streamView.previous();
@@ -147,7 +138,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public Stream<SMREntry> streamUpTo(long maxGlobal) {
         return streamView.streamUpTo(maxGlobal)
                 .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
+                .filter(m -> m.getPayload() instanceof ISMRConsumable
                         || m.hasCheckpointMetadata())
                 .map(this::dataAndCheckpointMapper)
                 .flatMap(List::stream);

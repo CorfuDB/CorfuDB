@@ -2,19 +2,15 @@ package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.reflect.TypeToken;
 
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -703,7 +699,7 @@ public class CheckpointTest extends AbstractObjectTest {
         Supplier<StreamingMap<String, String>> writerMapSupplier = () ->
                 new PersistedStreamingMap<>(Paths.get(path + tableId + "writer"),
                         PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                        Serializers.JSON, rt);
+                        Serializers.JSON);
 
         CorfuTable<String, String> diskBackedMap = rt.getObjectsView()
                 .build()
@@ -729,7 +725,7 @@ public class CheckpointTest extends AbstractObjectTest {
         Supplier<StreamingMap<String, String>> readerMapSupplier = () ->
                 new PersistedStreamingMap<>(Paths.get(path + tableId + "reader"),
                         PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                        Serializers.JSON, rt);
+                        Serializers.JSON);
 
         CorfuTable<String, String> newDiskBackedMap = newRt.getObjectsView()
                 .build()

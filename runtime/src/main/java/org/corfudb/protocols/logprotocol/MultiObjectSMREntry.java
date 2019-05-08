@@ -5,7 +5,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
@@ -16,7 +15,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.google.common.base.Preconditions.checkState;
-
 
 /**
  * A log entry structure which contains a collection of multiSMREntries,
@@ -85,8 +83,8 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * @param b The remaining buffer.
      */
     @Override
-    public void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
-        super.deserializeBuffer(b, rt);
+    public void deserializeBuffer(ByteBuf b) {
+        super.deserializeBuffer(b);
         int numStreams = b.readInt();
         for (int i = 0; i < numStreams; i++) {
             UUID streamId = new UUID(b.readLong(), b.readLong());
@@ -136,7 +134,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
             // The stream exists and it needs to be deserialized
             byte[] streamUpdatesBuf = streamBuffers.get(id);
             ByteBuf buf = Unpooled.wrappedBuffer(streamUpdatesBuf);
-            MultiSMREntry multiSMREntry = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+            MultiSMREntry multiSMREntry = (MultiSMREntry) Serializers.CORFU.deserialize(buf);
             multiSMREntry.setGlobalAddress(getGlobalAddress());
             streamBuffers.remove(id);
             return multiSMREntry;

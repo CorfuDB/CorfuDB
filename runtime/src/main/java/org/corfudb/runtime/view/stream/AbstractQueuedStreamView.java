@@ -645,7 +645,7 @@ public abstract class AbstractQueuedStreamView extends
     protected boolean scanCheckpointStream(final QueuedStreamContext context, ILogData data,
                                            long maxGlobal) {
         if (data.hasCheckpointMetadata()) {
-            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload(runtime);
+            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload();
 
             // Consider only checkpoints that are less than maxGlobal
             // Because we are traversing in reverse order END marker of a checkpoint should be found first.

@@ -65,8 +65,7 @@ public class CompressionTest extends AbstractViewTest {
         rt.getAddressSpaceView().invalidateClientCache();
 
         // Read data
-        return rt.getAddressSpaceView().read(address)
-                .getPayload(rt);
+        return rt.getAddressSpaceView().read(address).getPayload();
     }
 
     private List<Codec.Type> getReadersCodec(Codec.Type codec) {

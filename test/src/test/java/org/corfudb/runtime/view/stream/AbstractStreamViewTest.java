@@ -64,7 +64,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         // iterations) appending to it
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(sv.hasNext()).isTrue();
-            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.next().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
@@ -80,7 +80,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         // traverse the stream backwards, while periodically (every ten
         // iterations) appending to it
         for (int i = PARAMETERS.NUM_ITERATIONS_LOW - 1; i >= 0; i--) {
-            byte[] payLoad = (byte[]) sv.current().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.current().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
@@ -116,7 +116,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         sv.seek(2);
 
         // The previous entry should be ENTRY_0
-        assertThat((byte[])sv.previous().getPayload(runtime))
+        assertThat((byte[])sv.previous().getPayload())
                 .isEqualTo(ENTRY_0);
     }
 
@@ -145,7 +145,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
                 sv.append(String.valueOf(i).getBytes());
                 sv.append(String.valueOf(i).getBytes());
             }
-            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.next().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)));
         }
     }
@@ -243,7 +243,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
 
         int remainingCounter = trimMark + 1;
         for (ILogData data: stream) {
-            byte[] payLoad = (byte[]) data.getPayload(this.getRuntime());
+            byte[] payLoad = (byte[]) data.getPayload();
             assertThat(new String(payLoad)).isEqualTo(String.valueOf(remainingCounter));
             remainingCounter++;
         }
@@ -288,7 +288,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         // Traverse stream until syncMark
         for (int i = 0; i < traverseMark; i++) {
             assertThat(sv.hasNext()).isTrue();
-            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.next().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);

@@ -97,11 +97,9 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .TRANSACTION_STREAM_ID);
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
-        assertThat(txns.get(0).getLogEntry(getRuntime()).getType())
-                .isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
+        assertThat(txns.get(0).getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
 
-        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
-                (getRuntime());
+        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry();
         MultiSMREntry entryMap = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
         assertThat(entryMap).isNotNull();
 

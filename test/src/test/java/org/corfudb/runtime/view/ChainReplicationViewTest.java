@@ -32,7 +32,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA))
@@ -62,7 +62,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                assertThat(r.getAddressSpaceView().read(i).getPayload(getRuntime()))
+                assertThat(r.getAddressSpaceView().read(i).getPayload())
                         .isEqualTo(Integer.toString(i).getBytes());
             }
         });
@@ -104,7 +104,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(r.getAddressSpaceView().read(0L)
@@ -144,7 +144,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));

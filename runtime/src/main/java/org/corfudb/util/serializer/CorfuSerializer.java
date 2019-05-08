@@ -2,7 +2,6 @@ package org.corfudb.util.serializer;
 
 import io.netty.buffer.ByteBuf;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.runtime.CorfuRuntime;
 
 /**
  * Created by mwei on 9/29/15.
@@ -30,13 +29,13 @@ public class CorfuSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+    public Object deserialize(ByteBuf b) {
         if (b.readByte() != corfuPayloadMagic) {
             byte[] bytes = new byte[b.readableBytes()];
             b.readBytes(bytes);
             return bytes;
         }
-        return LogEntry.deserialize(b, rt);
+        return LogEntry.deserialize(b);
     }
 
     /**

@@ -30,7 +30,7 @@ public class Serializers {
     private static final Map<Byte, ISerializer> serializersMap;
 
     static {
-        serializersMap = new HashMap();
+        serializersMap = new HashMap<>();
         serializersMap.put(CORFU.getType(), CORFU);
         serializersMap.put(JAVA.getType(), JAVA);
         serializersMap.put(JSON.getType(), JSON);

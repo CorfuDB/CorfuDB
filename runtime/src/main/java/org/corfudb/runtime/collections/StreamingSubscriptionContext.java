@@ -30,11 +30,6 @@ import org.corfudb.runtime.CorfuRuntime;
 public class StreamingSubscriptionContext {
 
     /**
-     * Corfu Runtime.
-     */
-    private final CorfuRuntime runtime;
-
-    /**
      * StreamListener.
      */
     @Getter
@@ -122,7 +117,6 @@ public class StreamingSubscriptionContext {
     public StreamingSubscriptionContext(@Nonnull CorfuRuntime runtime, @Nonnull StreamListener listener,
             @Nonnull String namespace, @Nonnull List<TableSchema> tableSchemas,
             long startAddress) {
-        this.runtime = runtime;
         this.listener = listener;
         this.namespace = namespace;
         this.tablesOfInterest = tableSchemas.stream().collect(Collectors.toMap(
@@ -182,7 +176,7 @@ public class StreamingSubscriptionContext {
                 return false;
             }
 
-            MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload(runtime);
+            MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload();
             long epoch = logData.getEpoch();
             //Build the CorfuStreamEntries from the MultiObjectSMREntry.
             CorfuStreamEntries update = new CorfuStreamEntries(multiObjSMREntry.getEntryMap()

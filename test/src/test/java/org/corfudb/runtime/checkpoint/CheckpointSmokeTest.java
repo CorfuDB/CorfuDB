@@ -74,8 +74,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Verify that the start/end records have been written for empty maps
         assertThat(a1).isEqualTo(cpEndAddress);
         // Verify that checkpoint start address is the enforced hole (0L)
-        LogEntry cpStart = (CheckpointEntry) r.getAddressSpaceView().read(1L)
-                .getPayload(r);
+        LogEntry cpStart = (CheckpointEntry) r.getAddressSpaceView().read(1L).getPayload();
         assertThat(((CheckpointEntry) cpStart).getDict()
                 .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("0");
     }

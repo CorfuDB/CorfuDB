@@ -63,9 +63,9 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     public boolean hasNext() {
         if (next == null && wrappedRocksIterator.isOpen() && wrappedRocksIterator.isValid()) {
             // Retrieve entry if it exists and move the iterator
-            K key = (K) serializer.deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.key()), null);
+            K key = (K) serializer.deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.key()));
             V value = loadValues ? (V) serializer
-                    .deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.value()), null) : null;
+                    .deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.value())) : null;
             next = new AbstractMap.SimpleEntry(key, value);
             wrappedRocksIterator.next();
         }

@@ -100,7 +100,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         }
 
         @Override
-        public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+        public Object deserialize(ByteBuf b) {
             return gson.fromJson(new String(byteArrayFromBuf(b)), clazz);
         }
 
@@ -124,7 +124,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         final Options options = new Options().setCreateIfMissing(true);
         final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, String>(
                 persistedCacheLocation, options,
-                new PojoSerializer(String.class), getRuntime());
+                new PojoSerializer(String.class));
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(mapSupplier, ICorfuVersionPolicy.DEFAULT)
@@ -167,7 +167,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                         .setWriteBufferSize(FileUtils.ONE_KB);
 
         final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, String>(
-                persistedCacheLocation, options, Serializers.JSON, getRuntime());
+                persistedCacheLocation, options, Serializers.JSON);
         final CorfuTable<String, String> table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(mapSupplier,ICorfuVersionPolicy.DEFAULT)
@@ -202,7 +202,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                         // The size is checked either during flush or compaction.
                         .setWriteBufferSize(FileUtils.ONE_KB);
         final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, Pojo>(
-                persistedCacheLocation, options, new PojoSerializer(Pojo.class), getRuntime());
+                persistedCacheLocation, options, new PojoSerializer(Pojo.class));
         CorfuTable<String, Pojo>
                 table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Pojo>>() {})

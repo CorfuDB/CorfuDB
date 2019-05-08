@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.serializer.Serializers;
 
@@ -65,7 +64,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     /**
      * Return the payload.
      */
-    public Object getPayload(CorfuRuntime runtime) {
+    public Object getPayload() {
         Object value = payload.get();
         if (value == null) {
             synchronized (this.payload) {
@@ -86,12 +85,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
                         final Object actualValue;
                         try {
-                            actualValue =
-                                    Serializers.CORFU.deserialize(serializedBuf, runtime);
-
+                            actualValue = Serializers.CORFU.deserialize(serializedBuf);
                             if (actualValue instanceof LogEntry) {
                                 ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
-                                ((LogEntry) actualValue).setRuntime(runtime);
                             }
                             value = actualValue == null ? this.payload : actualValue;
                             this.payload.set(value);

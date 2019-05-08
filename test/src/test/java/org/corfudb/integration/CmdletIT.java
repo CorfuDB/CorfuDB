@@ -160,8 +160,8 @@ public class CmdletIT extends AbstractIT {
         String commandAppend = "echo '" + payload2 + "' | " + CORFU_PROJECT_DIR + "bin/corfu_stream -i " + streamA + " -c " + ENDPOINT + " append";
         runCmdletGetOutput(commandAppend);
 
-        assertThat(streamViewA.next().getPayload(runtime)).isEqualTo(payload1.getBytes());
-        assertThat(streamViewA.next().getPayload(runtime)).isEqualTo((payload2 + "\n").getBytes());
+        assertThat(streamViewA.next().getPayload()).isEqualTo(payload1.getBytes());
+        assertThat(streamViewA.next().getPayload()).isEqualTo((payload2 + "\n").getBytes());
         assertThat(streamViewA.next()).isNull();
         shutdownCorfuServer(corfuServerProcess);
     }

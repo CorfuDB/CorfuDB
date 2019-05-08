@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
@@ -73,14 +72,12 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     private final ContextAwareMap<K, V> optimisticMap = new StreamingMapDecorator<>();
     private final AtomicInteger dataSetSize = new AtomicInteger();
-    private final CorfuRuntime corfuRuntime;
     private final ISerializer serializer;
     private final RocksDB rocksDb;
 
     public PersistedStreamingMap(@NonNull Path dataPath,
                                  @NonNull Options options,
-                                 @NonNull ISerializer serializer,
-                                 @NonNull CorfuRuntime corfuRuntime) {
+                                 @NonNull ISerializer serializer) {
         try {
             RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.rocksDb = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
@@ -88,7 +85,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             throw new UnrecoverableCorfuError(e);
         }
         this.serializer = serializer;
-        this.corfuRuntime = corfuRuntime;
     }
 
     /**
@@ -149,7 +145,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             if (value == null) {
                 return null;
             }
-            return (V) serializer.deserialize(Unpooled.wrappedBuffer(value), corfuRuntime);
+            return (V) serializer.deserialize(Unpooled.wrappedBuffer(value));
         } catch (RocksDBException ex) {
             throw new UnrecoverableCorfuError(ex);
         } finally {

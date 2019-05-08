@@ -54,14 +54,12 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
 
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
-        assertThat(txns.get(0).getLogEntry(getRuntime()).getType()).isEqualTo
+        assertThat(txns.get(0).getLogEntry().getType()).isEqualTo
             (LogEntry.LogEntryType.MULTIOBJSMR);
 
-        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
-            (getRuntime());
+        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry();
         assertThat(tx1.getEntryMap().size()).isEqualTo(1);
-        MultiSMREntry entryMap = tx1.getEntryMap().entrySet().iterator()
-                                                        .next().getValue();
+        MultiSMREntry entryMap = tx1.getEntryMap().entrySet().iterator().next().getValue();
         assertThat(entryMap).isNotNull();
         assertThat(entryMap.getUpdates().size()).isEqualTo(1);
         SMREntry smrEntry = entryMap.getUpdates().get(0);

@@ -32,10 +32,10 @@ public class LogEntryTest {
         Serializers.CORFU.serialize(smr2, buf);
 
         SMREntry.seekToEnd(buf);
-        SMREntry recoveredEntry = (SMREntry) Serializers.CORFU.deserialize(buf, null);
+        SMREntry recoveredEntry = (SMREntry) Serializers.CORFU.deserialize(buf);
         assertThat(recoveredEntry).isEqualTo(smr2);
         buf.resetReaderIndex();
-        recoveredEntry = (SMREntry) Serializers.CORFU.deserialize(buf, null);
+        recoveredEntry = (SMREntry) Serializers.CORFU.deserialize(buf);
         assertThat(recoveredEntry).isEqualTo(smr1);
 
         // Verify that both entries can be skipped
@@ -65,10 +65,10 @@ public class LogEntryTest {
         Serializers.CORFU.serialize(multiSMR2, buf);
 
         MultiSMREntry.seekToEnd(buf);
-        MultiSMREntry recoveredMultiSMR = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+        MultiSMREntry recoveredMultiSMR = (MultiSMREntry) Serializers.CORFU.deserialize(buf);
         assertThat(recoveredMultiSMR).isEqualTo(multiSMR2);
         buf.resetReaderIndex();
-        recoveredMultiSMR = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+        recoveredMultiSMR = (MultiSMREntry) Serializers.CORFU.deserialize(buf);
         assertThat(recoveredMultiSMR).isEqualTo(multiSMR1);
 
         // Verify that both entries can be skipped
@@ -106,7 +106,7 @@ public class LogEntryTest {
         ByteBuf buf = Unpooled.buffer();
         multiObjSmrEntry.serialize(buf);
 
-        MultiObjectSMREntry deserializedEntry = (MultiObjectSMREntry) LogEntry.deserialize(buf, null);
+        MultiObjectSMREntry deserializedEntry = (MultiObjectSMREntry) LogEntry.deserialize(buf);
         deserializedEntry.setGlobalAddress(entryAddress);
 
         // Verify that the buffer cache contains both streams

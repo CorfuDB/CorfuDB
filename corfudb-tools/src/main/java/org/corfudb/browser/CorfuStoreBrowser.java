@@ -2,17 +2,13 @@ package org.corfudb.browser;
 
 import com.google.common.reflect.TypeToken;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -105,7 +101,7 @@ public class CorfuStoreBrowser {
                     new PersistedStreamingMap<>(
                             Paths.get(diskPath),
                             options,
-                            dynamicProtobufSerializer, runtime);
+                            dynamicProtobufSerializer);
             corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
         }
 

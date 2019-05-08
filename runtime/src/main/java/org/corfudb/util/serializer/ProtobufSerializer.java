@@ -77,7 +77,7 @@ public class ProtobufSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+    public Object deserialize(ByteBuf b) {
 
         try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {
             MessageType type = MessageType.valueOf(bbis.readInt());

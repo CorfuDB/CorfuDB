@@ -56,7 +56,7 @@ public class ExceptionMsg implements ICorfuPayload<ExceptionMsg> {
     public ExceptionMsg(ByteBuf b) {
         Throwable t;
         try {
-            t = (Throwable) Serializers.JAVA.deserialize(b, null);
+            t = (Throwable) Serializers.JAVA.deserialize(b);
         } catch (Exception e) {
             t = new DeserializationFailedException();
         }

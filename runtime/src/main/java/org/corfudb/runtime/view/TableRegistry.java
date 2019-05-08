@@ -291,7 +291,7 @@ public class TableRegistry {
             mapSupplier = () -> new PersistedStreamingMap<>(
                     tableOptions.getPersistentDataPath().get(),
                     PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                    protobufSerializer, this.runtime);
+                    protobufSerializer);
         }
 
         // Open and return table instance.

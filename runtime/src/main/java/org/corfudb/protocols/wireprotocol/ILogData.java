@@ -2,8 +2,8 @@ package org.corfudb.protocols.wireprotocol;
 
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.runtime.CorfuRuntime;
 
+import javax.annotation.Nonnull;
 import java.util.UUID;
 
 /**
@@ -16,12 +16,12 @@ import java.util.UUID;
  */
 public interface ILogData extends IMetadata, Comparable<ILogData> {
 
-    Object getPayload(CorfuRuntime t);
+    Object getPayload();
 
     DataType getType();
 
     @Override
-    default int compareTo(ILogData o) {
+    default int compareTo(@Nonnull ILogData o) {
         return getGlobalAddress().compareTo(o.getGlobalAddress());
     }
 
@@ -78,8 +78,8 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     /**
      * Return the payload as a log entry.
      */
-    default LogEntry getLogEntry(CorfuRuntime runtime) {
-        return (LogEntry) getPayload(runtime);
+    default LogEntry getLogEntry() {
+        return (LogEntry) getPayload();
     }
 
     /**

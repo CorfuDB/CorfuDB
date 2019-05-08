@@ -282,7 +282,7 @@ public class CorfuStoreIT extends AbstractIT {
                 final Options options = new Options().setCreateIfMissing(true);
                 final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () -> new PersistedStreamingMap<>(
                         persistedCacheLocation, options,
-                        dynamicProtobufSerializer, runtimeC);
+                        dynamicProtobufSerializer);
                 corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
             }
 

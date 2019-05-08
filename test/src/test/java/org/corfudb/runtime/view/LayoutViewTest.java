@@ -227,7 +227,7 @@ public class LayoutViewTest extends AbstractViewTest {
         sv.append(testPayload);
         startReconfigurationLatch.countDown();
         layoutReconfiguredLatch.await();
-        assertThat(sv.next().getPayload(corfuRuntime)).isEqualTo("hello world".getBytes());
+        assertThat(sv.next().getPayload()).isEqualTo("hello world".getBytes());
         assertThat(sv.next()).isEqualTo(null);
     }
 

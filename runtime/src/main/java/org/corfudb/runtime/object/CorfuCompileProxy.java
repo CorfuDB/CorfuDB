@@ -126,8 +126,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                             ISerializer serializer, ICorfuSMR<T> wrapperObject
-    ) {
+                             ISerializer serializer, ICorfuSMR<T> wrapperObject) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -136,8 +135,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
-        underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
+        underlyingObject = new VersionLockedObject<>(
+                this::getNewInstance,
+                new StreamViewSMRAdapter(rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject);
 
         final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();

@@ -889,7 +889,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify checkpoint START_LOG_ADDRESS
             LogEntry cpStart = (CheckpointEntry) runtimeRestart.getAddressSpaceView().read(checkpointStartRecord)
-                    .getPayload(runtimeRestart);
+                    .getPayload();
             assertThat(((CheckpointEntry) cpStart).getDict()
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("8");
 
@@ -1158,7 +1158,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify Checkpoint START_LOG_ADDRESS (reading start record)
             // Because the stream was empty, it should force a hole on 0, and this should be the start address
-            LogEntry cpStart = (CheckpointEntry) runtime.getAddressSpaceView().read(1L).getPayload(runtime);
+            LogEntry cpStart = (CheckpointEntry) runtime.getAddressSpaceView().read(1L).getPayload();
             assertThat(((CheckpointEntry) cpStart).getDict()
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("0");
 
