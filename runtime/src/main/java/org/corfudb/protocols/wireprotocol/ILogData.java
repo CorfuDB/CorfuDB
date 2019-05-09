@@ -1,11 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
-import java.util.UUID;
-
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nonnull;
+import java.util.UUID;
 
 /**
  * An interface to log data entries.
@@ -71,14 +69,14 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     /**
      * Return whether or not this entry is a log entry.
      */
-    default boolean isLogEntry(CorfuRuntime runtime) {
+    default boolean isLogEntry() {
         return getPayload() instanceof LogEntry;
     }
 
     /**
      * Return the payload as a log entry.
      */
-    default LogEntry getLogEntry(CorfuRuntime runtime) {
+    default LogEntry getLogEntry() {
         return (LogEntry) getPayload();
     }
 

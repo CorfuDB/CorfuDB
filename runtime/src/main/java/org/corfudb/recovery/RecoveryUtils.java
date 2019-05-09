@@ -81,7 +81,7 @@ public class RecoveryUtils {
      * Next access should just returned the logEntry directly.
      */
     public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) throws Exception {
-        return logData.getLogEntry(runtime);
+        return logData.getLogEntry();
     }
 
     /**

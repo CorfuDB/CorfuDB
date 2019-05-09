@@ -10,11 +10,8 @@ import io.netty.buffer.ByteBufOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.object.ICorfuSMR;
-
 
 /**
  * Created by mwei on 2/10/16.

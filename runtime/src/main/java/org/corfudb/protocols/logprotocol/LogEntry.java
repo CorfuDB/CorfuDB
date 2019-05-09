@@ -14,14 +14,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
 
 
 /**
  * Created by mwei on 1/8/16.
  */
-@ToString(exclude = {"runtime", "entry"})
+@ToString(exclude = {"entry"})
 @NoArgsConstructor
 public class LogEntry implements ICorfuSerializable {
 
