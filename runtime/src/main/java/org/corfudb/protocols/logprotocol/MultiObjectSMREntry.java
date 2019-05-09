@@ -12,9 +12,7 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
-
 
 
 /**
@@ -82,15 +80,15 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * @param b The remaining buffer.
      */
     @Override
-    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
-        super.deserializeBuffer(b, rt);
+    void deserializeBuffer(ByteBuf b) {
+        super.deserializeBuffer(b);
 
         int numUpdates = b.readInt();
         entryMap = new HashMap<>();
         for (int i = 0; i < numUpdates; i++) {
             entryMap.put(
                     new UUID(b.readLong(), b.readLong()),
-                    ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt)));
+                    ((MultiSMREntry) Serializers.CORFU.deserialize(b)));
         }
     }
 
