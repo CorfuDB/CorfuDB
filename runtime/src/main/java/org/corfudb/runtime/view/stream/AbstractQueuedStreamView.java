@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -14,7 +13,6 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Range;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -29,8 +27,6 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.util.Utils;
 
 
@@ -232,34 +228,31 @@ public abstract class AbstractQueuedStreamView extends
     }
 
     /**
-     * Reads data from an address in the address space. It will give the writer a chance to complete based on the time
-     * when the reads of which this individual read is a step started. If the reads have been going on for longer than
-     * the grace period given for a writer to complete a write, the subsequent individual read calls will immediately
-     * fill the hole on absence of data at the given address.
+     * Reads data from an address in the address space.
      *
-     * @param address       Address to read.
-     * @param readStartTime Start time of the range of reads.
-     * @return ILogData at the address.
+     * It will give the writer a chance to complete based on the time
+     * when the reads of which this individual read is a step started.
+     * If the reads have been going on for longer than the grace period
+     * given for a writer to complete a write, the subsequent individual
+     * read calls will immediately fill the hole on absence of data at
+     * the given address.
+     *
+     * @param address       address to read.
+     * @param readStartTime start time of the range of reads.
+     * @return log data at the address.
      */
     protected ILogData read(final long address, long readStartTime) {
-        if (System.currentTimeMillis() - readStartTime < runtime.getParameters().getHoleFillTimeout().toMillis()) {
-            try {
+        try {
+            if (System.currentTimeMillis() - readStartTime <
+                    runtime.getParameters().getHoleFillTimeout().toMillis()) {
                 return runtime.getAddressSpaceView().read(address);
-            } catch (TrimmedException te) {
-                processTrimmedException(te);
-                throw te;
             }
-        } else {
-            RuntimeLayout runtimeLayout = runtime.getLayoutView().getRuntimeLayout();
-            ChainReplicationProtocol replicationProtocol = (ChainReplicationProtocol) runtime
-                    .getLayoutView()
-                    .getLayout()
-                    .getReplicationMode(address)
-                    .getReplicationProtocol(runtime);
-            return replicationProtocol
-                    .readRange(runtimeLayout, Range.encloseAll(Arrays.asList(address)), false)
+            return runtime.getAddressSpaceView()
+                    .read(Collections.singleton(address), false)
                     .get(address);
-
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
         }
     }
 
@@ -267,17 +260,15 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses);
-            return addresses.stream()
-                    .map(dataMap::get)
-                    .collect(Collectors.toList());
+                    runtime.getAddressSpaceView().read(addresses, true);
+            return addresses.stream().map(dataMap::get).collect(Collectors.toList());
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
         }
     }
 
-    void processTrimmedException(TrimmedException te) {
+    private void processTrimmedException(TrimmedException te) {
         if (TransactionalContext.getCurrentContext() != null
                 && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()
                 < getCurrentContext().checkpointSnapshotAddress) {
@@ -617,8 +608,7 @@ public abstract class AbstractQueuedStreamView extends
     protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
                                               long maxGlobal) {
         if (data.hasCheckpointMetadata()) {
-            CheckpointEntry cpEntry = (CheckpointEntry)
-                    data.getPayload(runtime);
+            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload();
 
             // Select the latest cp that has a snapshot address
             // which is less than maxGlobal

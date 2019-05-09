@@ -194,6 +194,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                                    NavigableSet<Long> queue) {
         List<Long> checkpointAddresses = new ArrayList<>();
         streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
+        checkpointAddresses.sort(null);
         Collections.reverse(checkpointAddresses);
 
         // Checkpoint entries will be read in batches of a predefined size,

@@ -14,7 +14,6 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
-import org.corfudb.runtime.CorfuRuntime;
 
 
 /**
@@ -126,12 +125,10 @@ public class CheckpointEntry extends LogEntry {
      * should initialize their contents based on the buffer.
      *
      * @param b The remaining buffer.
-     * @param rt The CorfuRuntime used by the SMR object.
-     * @return A CheckpointEntry.
      */
     @Override
-    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
-        super.deserializeBuffer(b, rt);
+    void deserializeBuffer(ByteBuf b) {
+        super.deserializeBuffer(b);
         cpType = CheckpointEntryType.typeMap.get(b.readByte());
         checkpointId = new UUID(b.readLong(), b.readLong());
         streamId = new UUID(b.readLong(), b.readLong());
@@ -146,7 +143,7 @@ public class CheckpointEntry extends LogEntry {
         smrEntries = null;
         byte hasSmrEntries = b.readByte();
         if (hasSmrEntries > 0) {
-            smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime);
+            smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b);
         }
         smrEntriesBytes = b.readInt();
     }

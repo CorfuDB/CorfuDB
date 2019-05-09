@@ -1,27 +1,8 @@
 package org.corfudb.integration;
 
-import static junit.framework.TestCase.fail;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-
-import java.io.IOException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -46,6 +27,27 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import static junit.framework.TestCase.fail;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ClusterReconfigIT extends AbstractIT {
 
@@ -238,7 +240,7 @@ public class ClusterReconfigIT extends AbstractIT {
      * Fetches all the data from the node.
      *
      * @param corfuRuntime Connected instance of the runtime.
-     * @param endpoint     Endpoint ot query for all the data.
+     * @param endpoint     Endpoint of query for all the data.
      * @param end          End address up to which data needs to be fetched.
      * @return Map of all the addresses contained by the node corresponding to the data stored.
      * @throws Exception
@@ -247,7 +249,8 @@ public class ClusterReconfigIT extends AbstractIT {
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
-                .read(Range.closed(0L, end)).get();
+                .readAll(getRangeAddressAsList(0L, end))
+                .get();
         return readResponse.getAddresses().entrySet()
                 .stream()
                 .filter(longLogDataEntry -> !longLogDataEntry.getValue().isEmpty())
@@ -270,6 +273,11 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(oldEpoch + 1);
         return l;
+    }
+
+    private List<Long> getRangeAddressAsList(long startAddress, long endAddress) {
+        Range<Long> range = Range.closed(startAddress, endAddress);
+        return ContiguousSet.create(range, DiscreteDomain.longs()).asList();
     }
 
     /**
@@ -811,9 +819,9 @@ public class ClusterReconfigIT extends AbstractIT {
         int verificationCounter = 0;
         for (LogData logData : runtime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient("localhost:9002")
-                .read(Range.closed(startAddress, endAddress)).get()
-                .getAddresses().values()) {
-            assertThat(logData.getPayload(runtime))
+                .readAll(getRangeAddressAsList(startAddress, endAddress))
+                .get().getAddresses().values()) {
+            assertThat(logData.getPayload())
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
         }
 
@@ -892,9 +900,9 @@ public class ClusterReconfigIT extends AbstractIT {
         int verificationCounter = 0;
         for (LogData logData : runtime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient("localhost:9002")
-                .read(Range.closed(startAddress, endAddress)).get()
+                .readAll(getRangeAddressAsList(startAddress, endAddress)).get()
                 .getAddresses().values()) {
-            assertThat(logData.getPayload(runtime))
+            assertThat(logData.getPayload())
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
         }
 
@@ -982,7 +990,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final int startAddress = 0;
         final int endAddress = 3;
         for (int i = startAddress; i <= endAddress; i++) {
-            assertThat(runtime.getAddressSpaceView().read(i).getPayload(runtime))
+            assertThat(runtime.getAddressSpaceView().read(i).getPayload())
                     .isEqualTo(Integer.toString(i).getBytes());
         }
 

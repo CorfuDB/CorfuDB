@@ -1,9 +1,9 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import com.google.common.reflect.TypeToken;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,11 +21,9 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -338,6 +336,7 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void periodicCkpointTrimTest() throws Exception {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
+        final int WAIT_TIME_SECONDS = 10;
 
         CorfuRuntime rt = getARuntime();
 
@@ -368,7 +367,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // Verify that last trim cycle completed (async task) before validating map rebuild
             Token currentTrimMark =  Token.UNINITIALIZED;
             while(currentTrimMark.getSequence() != lastValidCheckpoint.getSequence() + 1L) {
-                currentTrimMark = getARuntime().getAddressSpaceView().getTrimMark();
+                currentTrimMark = getRuntime().getAddressSpaceView().getTrimMark();
             }
 
             // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
