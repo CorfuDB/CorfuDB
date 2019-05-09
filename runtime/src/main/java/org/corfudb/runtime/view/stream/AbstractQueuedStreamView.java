@@ -264,7 +264,7 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses, true);
+                    runtime.getAddressSpaceView().read(addresses);
             return addresses.stream().map(dataMap::get).collect(Collectors.toList());
         } catch (TrimmedException te) {
             processTrimmedException(te);
