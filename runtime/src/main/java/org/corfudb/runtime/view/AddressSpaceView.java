@@ -6,6 +6,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 
@@ -249,12 +251,10 @@ public class AddressSpaceView extends AbstractView {
                 // is much cheaper than the cost of a NoRollBackException, therefore
                 // this trade-off is reasonable
                 final ILogData loadedVal = fetch(address);
-                return readCache.asMap().computeIfAbsent(address, (k) -> loadedVal);
+                return cacheLoadAndGet(readCache, address, loadedVal);
             }
-
-            return data;
-        }
-
+        return data;
+    }
         return fetch(address);
     }
 
@@ -301,11 +301,30 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Attempts to insert a loaded value into the cache and return the cached value for a particular key.
+     */
+    private ILogData cacheLoadAndGet(Cache<Long, ILogData> cache, long address, ILogData loadedValue) {
+        try {
+            return cache.get(address, () -> loadedValue);
+        } catch (ExecutionException | UncheckedExecutionException e) {
+            // Guava wraps the exceptions thrown from the lower layers, therefore
+            // we need to unwrap them before throwing them to the upper layers that
+            // don't understand the guava exceptions
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            } else {
+                throw new RuntimeException(cause);
+            }
+        }
+    }
+
+    /**
      * Read the given object from a range of addresses.
      *
      * @param addresses An iterable with addresses to read from
      * @param waitForWrite Flag whether wait for write is required or hole fill directly.
-     * @return A map of read addresses, which will be cached if caching is enabled
+     * @return A map of addresses read, which will be cached if caching is enabled
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses, boolean waitForWrite) {
         Map<Long, ILogData> result = new HashMap<>();
@@ -328,10 +347,7 @@ public class AddressSpaceView extends AbstractView {
                 Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite);
                 for (Map.Entry<Long, ILogData> entry : fetchedAddresses.entrySet()) {
                     // After fetching a value, we need to insert it in the cache.
-                    // Note that based on code inspection it seems like operations
-                    // on the cache's map view are reflected in the cache's statistics.
-                    result.put(entry.getKey(), readCache.asMap()
-                            .computeIfAbsent(entry.getKey(), (k) -> entry.getValue()));
+                    result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
                 }
             }
             return result;
