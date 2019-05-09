@@ -12,6 +12,7 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
 
@@ -53,14 +54,14 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
      * @param b The remaining buffer.
      */
     @Override
-    void deserializeBuffer(ByteBuf b) {
-        super.deserializeBuffer(b);
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+        super.deserializeBuffer(b, rt);
 
         int numUpdates = b.readInt();
         updates = new ArrayList<>();
         for (int i = 0; i < numUpdates; i++) {
             updates.add(
-                    (SMREntry) Serializers.CORFU.deserialize(b));
+                    (SMREntry) Serializers.CORFU.deserialize(b, rt));
         }
     }
 

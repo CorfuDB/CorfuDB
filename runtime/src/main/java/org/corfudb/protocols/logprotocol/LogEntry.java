@@ -30,6 +30,12 @@ public class LogEntry implements ICorfuSerializable {
                     .collect(Collectors.toMap(LogEntryType::asByte, Function.identity()));
 
     /**
+     * The runtime to use.
+     */
+    @Setter
+    protected CorfuRuntime runtime;
+
+    /**
      * The type of log entry.
      */
     @Getter
@@ -58,12 +64,13 @@ public class LogEntry implements ICorfuSerializable {
      * @param b The buffer to deserialize.
      * @return A LogEntry.
      */
-    public static ICorfuSerializable deserialize(ByteBuf b) {
+    public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt) {
         try {
             LogEntryType let = typeMap.get(b.readByte());
             LogEntry l = let.entryType.newInstance();
             l.type = let;
-            l.deserializeBuffer(b);
+            l.runtime = rt;
+            l.deserializeBuffer(b, rt);
             return l;
         } catch (InstantiationException | IllegalAccessException ie) {
             throw new RuntimeException("Error deserializing entry", ie);
@@ -76,7 +83,7 @@ public class LogEntry implements ICorfuSerializable {
      *
      * @param b The remaining buffer.
      */
-    void deserializeBuffer(ByteBuf b) {
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         // In the base case, we don't do anything.
     }
 

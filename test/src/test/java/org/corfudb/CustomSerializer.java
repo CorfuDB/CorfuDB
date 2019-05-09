@@ -1,6 +1,7 @@
 package org.corfudb;
 
 import io.netty.buffer.ByteBuf;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -19,8 +20,8 @@ public class CustomSerializer implements ISerializer {
         return type;
     }
 
-    public Object deserialize(ByteBuf b) {
-        return serializer.deserialize(b);
+    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+        return serializer.deserialize(b, rt);
     }
 
     public void serialize(Object o, ByteBuf b) {
