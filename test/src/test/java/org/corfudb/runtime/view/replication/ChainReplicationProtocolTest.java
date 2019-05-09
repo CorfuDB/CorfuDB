@@ -77,7 +77,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         ILogData readResult = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0)
                 .read(0).get().getAddresses().get(0L);
 
-        assertThat(readResult.getPayload(r))
+        assertThat(readResult.getPayload())
             .isEqualTo("incomplete".getBytes());
     }
 
@@ -102,7 +102,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         // reflect the -other- clients value
         ILogData readResult = rp.read(runtimeLayout, 0);
 
-        assertThat(readResult.getPayload(r))
+        assertThat(readResult.getPayload())
                 .isEqualTo("incomplete".getBytes());
     }
 

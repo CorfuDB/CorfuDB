@@ -18,7 +18,6 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -113,7 +112,6 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
@@ -126,7 +124,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         LogUnitServerAssertions.assertThat(u0)
                 .isEmptyAtAddress(ADDRESS_0);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("0".getBytes());
 
         LogUnitServerAssertions.assertThat(u1)
@@ -164,7 +162,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         tr = r.getSequencerView().next(streamA);
 
         //make sure we can still read the stream.
-        assertThat(sv.next().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload())
                 .isEqualTo(testPayload);
 
         int address = 0;
@@ -191,7 +189,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
                 testPayload);
         ILogData x = r.getAddressSpaceView().read(0);
         assertNotNull(x.getRank());
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(r))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA))
@@ -224,7 +222,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                assertThat(r.getAddressSpaceView().read(i).getPayload(getRuntime()))
+                assertThat(r.getAddressSpaceView().read(i).getPayload())
                         .isEqualTo(Integer.toString(i).getBytes());
             }
         });
@@ -251,7 +249,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(r.getAddressSpaceView().read(0L)
@@ -277,7 +275,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));

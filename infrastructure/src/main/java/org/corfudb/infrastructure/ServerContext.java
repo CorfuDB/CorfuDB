@@ -180,7 +180,7 @@ public class ServerContext implements AutoCloseable {
 
     int getLogunitThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
-        return threadCount == null ? BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors() : threadCount;
+        return threadCount == null ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
     }
 
     int getManagementServerThreadCount() {

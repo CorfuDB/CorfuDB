@@ -22,6 +22,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -36,6 +37,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -128,6 +130,28 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     private void initStreamLogDirectory() {
         if (logDir.toFile().exists()) {
+            String corfuDir = logDir.getParent().toString();
+            // If FileSystem is mounted as read-only, Corfu server cannot function.
+            try {
+                FileStore fs = Files.getFileStore(Paths.get(corfuDir));
+                if (fs.isReadOnly()) {
+                    throw new UnrecoverableCorfuError("Cannot start Corfu on a read-only filesystem:"
+                            +corfuDir);
+                }
+            } catch (IOException e) {
+                throw new UnrecoverableCorfuError("Unable to retrieve Corfu Filesystem permissions"+
+                        corfuDir);
+            }
+
+            // corfu dir in the filesystem must be writable for writing configuration files.
+            File corfuDirFile = new File(corfuDir);
+            if (!corfuDirFile.canWrite()) {
+                throw new UnrecoverableCorfuError("Corfu directory is not writable "+corfuDir);
+            }
+            File logDirectory = new File(logDir.toString());
+            if (!logDirectory.canWrite()) {
+                throw new UnrecoverableCorfuError("Stream log directory not writable in "+corfuDir);
+            }
             log.info("Log directory already exists: {}", logDir);
             return;
         }
@@ -219,7 +243,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public TailsResponse getTails() {
+    public long getLogTail() {
+        return logMetadata.getGlobalTail();
+    }
+
+    @Override
+    public TailsResponse getTails(List<UUID> streams) {
+        Map<UUID, Long> tails = new HashMap<>();
+        streams.forEach(stream -> {
+            tails.put(stream, logMetadata.getStreamTails().get(stream));
+        });
+        return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public StreamsAddressResponse getStreamsAddressSpace() {
+        return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
+    }
+
+    @Override
+    public TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
     }

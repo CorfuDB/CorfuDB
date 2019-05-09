@@ -52,7 +52,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         // iterations) appending to it
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(sv.hasNext()).isTrue();
-            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.next().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
@@ -68,7 +68,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         // traverse the stream backwards, while periodically (every ten
         // iterations) appending to it
         for (int i = PARAMETERS.NUM_ITERATIONS_LOW - 1; i >= 0; i--) {
-            byte[] payLoad = (byte[]) sv.current().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.current().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
@@ -104,7 +104,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         sv.seek(2);
 
         // The previous entry should be ENTRY_0
-        assertThat((byte[])sv.previous().getPayload(runtime))
+        assertThat((byte[])sv.previous().getPayload())
                 .isEqualTo(ENTRY_0);
     }
 
@@ -133,7 +133,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
                 sv.append(String.valueOf(i).getBytes());
                 sv.append(String.valueOf(i).getBytes());
             }
-            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            byte[] payLoad = (byte[]) sv.next().getPayload();
             assertThat(new String(payLoad).equals(String.valueOf(i)));
         }
     }
@@ -160,7 +160,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
 
         // Fetch Stream B and verify backpointer count (which requires 1 read = 1 entry)
         svB.remainingUpTo(totalEntries);
-        assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getBackpointerCount()).isEqualTo(1L);
+        assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getTotalUpdates()).isEqualTo(1L);
     }
 
     @Ignore
@@ -178,12 +178,12 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         }
 
         // Make sure that the stream is built in-memory
-        BackpointerStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        BackpointerStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        IStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        IStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
         assertThat(svA.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         assertThat(svB.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(bpsvA.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(bpsvB.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(((AbstractQueuedStreamView) bpsvB).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         TokenResponse tail = runtime.getSequencerView().query();
         runtime.getAddressSpaceView().prefixTrim(tail.getToken());
         // First Runtime GC
@@ -198,9 +198,9 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
 
         // Second Runtime GC
         runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(bpsvA.getContext().resolvedQueue).hasSize(1);
-        assertThat(bpsvA.getContext().readQueue).isEmpty();
-        assertThat(bpsvA.getContext().readCpQueue).isEmpty();
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(1);
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readQueue).isEmpty();
+        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readCpQueue).isEmpty();
     }
 
 }

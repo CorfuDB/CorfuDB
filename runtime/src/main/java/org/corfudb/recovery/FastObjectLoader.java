@@ -1,14 +1,9 @@
 package org.corfudb.recovery;
 
-import static org.corfudb.recovery.RecoveryUtils.createObjectIfNotExist;
-import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
-import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
-import static org.corfudb.recovery.RecoveryUtils.getLogData;
-import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
-import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
-import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
-
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.Range;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
 import lombok.Getter;
@@ -43,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -52,6 +48,14 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+
+import static org.corfudb.recovery.RecoveryUtils.createObjectIfNotExist;
+import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
+import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
+import static org.corfudb.recovery.RecoveryUtils.getLogData;
+import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
 
 /** The FastObjectLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -290,7 +294,7 @@ public class FastObjectLoader {
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getAddressSpaceView().getAllTails().getLogTail();
+        logTail = runtime.getAddressSpaceView().getLogTail();
     }
 
     private void resetAddressProcessed() {
@@ -728,9 +732,7 @@ public class FastObjectLoader {
 
     /**
      * This method will apply for each address the consumer given in parameter.
-     *
      * The Necromancer thread is used to do the heavy lifting.
-     * @param logDataProcessor
      */
     private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) {
 
@@ -738,10 +740,12 @@ public class FastObjectLoader {
         nextRead = logHead;
         while (nextRead <= logTail) {
             try {
-                final long start = nextRead;
-                final long stopNotIncluded = Math.min(start + batchReadSize, logTail + 1);
-                nextRead = stopNotIncluded;
-                final Map<Long, ILogData> range = getLogData(runtime, start, stopNotIncluded);
+                final long lower = nextRead;
+                final long upper = Math.min(lower + batchReadSize - 1, logTail);
+                nextRead = upper + 1;
+                Map<Long, ILogData> range =
+                        runtime.getAddressSpaceView().fetchAll(ContiguousSet.create(
+                                Range.closed(lower, upper), DiscreteDomain.longs()), true);
 
                 // Sanity
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {
@@ -763,7 +767,7 @@ public class FastObjectLoader {
 
                 invokeNecromancer(range, logDataProcessor);
 
-            } catch (TrimmedException ex){
+            } catch (TrimmedException ex) {
                 log.warn("Error loading data", ex);
                 handleRetry();
             }

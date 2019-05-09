@@ -30,7 +30,6 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -62,7 +61,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         Serializers.CORFU.serialize(streamEntry, b);
         long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload()).isEqualTo(streamEntry);
 
         // Disable checksum, then append and read then same entry
         // An overwrite exception should occur, since we are writing the
@@ -72,7 +71,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             newLog.append(address0, new LogData(DataType.DATA, b));
         })
                 .isInstanceOf(OverwriteException.class);
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload()).isEqualTo(streamEntry);
     }
 
     @Test
@@ -293,7 +292,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
 
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload()).isEqualTo(streamEntry);
 
         log.close();
 
@@ -318,7 +317,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(address0, new LogData(DataType.DATA, b));
         log.append(address1, new LogData(DataType.DATA, b));
 
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload()).isEqualTo(streamEntry);
         log.close();
 
         final int OVERWRITE_BYTES = 4;
@@ -371,7 +370,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         for (int x = 0; x < num_entries * num_threads; x++) {
             long address = (long) x;
             LogData data = log.read(address);
-            byte[] bytes = (byte[]) data.getPayload(null);
+            byte[] bytes = (byte[]) data.getPayload();
             assertThat(bytes).isEqualTo(streamEntry);
         }
     }
@@ -421,30 +420,30 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getTails().getLogTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
 
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
         for (long x = 0; x <= lastAddress; x++){
             writeToLog(log, x);
-            assertThat(log.getTails().getLogTail()).isEqualTo(x);
+            assertThat(log.getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress);
+        assertThat(log.getLogTail()).isEqualTo(lastAddress);
 
         // Advance the tail some more
         final long tailDelta = 5;
         for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
             writeToLog(log, x);
-            assertThat(log.getTails().getLogTail()).isEqualTo(x);
+            assertThat(log.getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail one last time
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress + tailDelta);
+        assertThat(log.getLogTail()).isEqualTo(lastAddress + tailDelta);
     }
 
     @Test
@@ -524,7 +523,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
         log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getTails().getLogTail()).isEqualTo(midSegmentAddress);
+        assertThat(log.getLogTail()).isEqualTo(midSegmentAddress);
         assertThat(log.getTrimMark()).isEqualTo(midSegmentAddress + 1);
     }
 
@@ -573,7 +572,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
         final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
-        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailBeforeReset);
+        assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
         log.reset();
@@ -582,7 +581,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final long globalTailAfterReset = Address.NON_ADDRESS;
         final long trimMarkAfterReset = 0L;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
-        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailAfterReset);
+        assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 
@@ -645,7 +644,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Open the segment again and verify that the entry write can be read (i.e. log file can be
         // parsed correctly).
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload()).isEqualTo(streamEntry);
     }
 
     @Test
@@ -701,6 +700,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+        assertThat(log.read(address0).getPayload()).isEqualTo(streamEntry);
     }
 }

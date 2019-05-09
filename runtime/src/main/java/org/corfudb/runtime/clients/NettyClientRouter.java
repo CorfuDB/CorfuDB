@@ -11,7 +11,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
@@ -20,7 +19,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.concurrent.GlobalEventExecutor;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -52,7 +50,6 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.SaslUtils;
@@ -381,7 +378,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public void stop() {
         log.debug("stop: Shutting down router for {}", node);
         shutdown = true;
-        connectionFuture.completeExceptionally(new ShutdownException());
+        connectionFuture.completeExceptionally(new NetworkException("Router stopped", node));
+        if (channel != null && channel.isOpen()) {
+            channel.close();
+        }
     }
 
     /** {@inheritDoc}
@@ -414,9 +414,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError(e);
-        } catch (TimeoutException | ExecutionException e) {
+        } catch (TimeoutException te) {
             CompletableFuture<T> f = new CompletableFuture<>();
-            f.completeExceptionally(e);
+            f.completeExceptionally(te);
+            return f;
+        } catch (ExecutionException ee) {
+            CompletableFuture<T> f = new CompletableFuture<>();
+            f.completeExceptionally(ee.getCause());
             return f;
         }
 
