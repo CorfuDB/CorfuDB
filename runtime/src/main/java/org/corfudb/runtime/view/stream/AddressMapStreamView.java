@@ -2,7 +2,6 @@ package org.corfudb.runtime.view.stream;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
@@ -11,6 +10,7 @@ import java.util.function.Function;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.Iterables;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -193,36 +193,110 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, BackpointerOp> filter,
                                    NavigableSet<Long> queue) {
         List<Long> checkpointAddresses = new ArrayList<>();
-        List<ILogData> checkpointData = new ArrayList<>();
         streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
+        checkpointAddresses.sort(null);
+        Collections.reverse(checkpointAddresses);
 
-        // Read all checkpoint entries in a batch read
-        try {
-            checkpointData = readAll(checkpointAddresses);
-        } catch (TrimmedException te) {
-            if (options.ignoreTrimmed) {
-                log.warn("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}]," +
-                        " stream[{}]", this, checkpointAddresses, id);
-            } else {
-                throw te;
+        // Checkpoint entries will be read in batches of a predefined size,
+        // the reason not to read them all in a single call is that:
+        // 1. There might be more than one checkpoint and not all of them might be required.
+        // The latest checkpoint subsumes all other checkpoints (we could be reading
+        // more data than necessary).
+        // 2. Because trims are async (between sequencer and log unit), part of these
+        // addresses (for instance for the first checkpoint) might have been already
+        // trimmed from the log, but stream maps (sequencer) still do not reflect it
+        // (causing unnecessary TrimmedExceptions--as this checkpoint is not even
+        // needed in the first place).
+        Iterable<List<Long>> batches = Iterables.partition(checkpointAddresses,
+                runtime.getParameters().getCheckpointReadBatchSize());
+
+        boolean checkpointResolved = false;
+        for (List<Long> batch : batches) {
+            if (checkpointResolved) {
+                // No need to fetch next batch of addresses, checkpoint has been resolved.
+                break;
+            }
+
+            try {
+                List<ILogData> entries = readAll(batch);
+                for (ILogData data : entries) {
+                    checkpointResolved = filterCheckpointEntry(data, filter, queue);
+                    if (checkpointResolved) {
+                        break;
+                    }
+                }
+            } catch (TrimmedException te) {
+                // Read one entry at a time for the last failed batch, this way we might load
+                // the required checkpoint entries until the stop condition is fulfilled
+                // without hitting a trimmed position. If we do hit a trim it is an actual
+                // TrimmedException
+                checkpointResolved = processCheckpointBatchByEntry(batch, filter, queue);
             }
         }
+    }
 
-        // Sort in reverse order (based on address) to process
-        Collections.sort(checkpointData, Comparator.comparing(ILogData::getGlobalAddress).reversed());
-
-        for (ILogData data: checkpointData) {
-            BackpointerOp op = filter.apply(data);
-            if (op == BackpointerOp.INCLUDE || op == BackpointerOp.INCLUDE_STOP) {
-                log.trace("getStreamAddressMap[{}]: Adding checkpoint address[{}] to queue",
-                        this, data.getGlobalAddress());
-                queue.add(data.getGlobalAddress());
-                // Check if we need to stop
-                if (op == BackpointerOp.INCLUDE_STOP) {
-                    break;
+    /**
+     * Process a batch of addresses as single entries.
+     *
+     * @param batch list of addresses to read.
+     * @param filter filter to apply to checkpoint data.
+     * @param queue read queue.
+     *
+     * @return True, resolved checkpoint (reached end of valid checkpoint).
+     *         False, otherwise.
+     */
+    private boolean processCheckpointBatchByEntry(List<Long> batch,
+                                                  Function<ILogData, BackpointerOp> filter,
+                                                  NavigableSet<Long> queue) {
+        long lastReadAddress = Address.NON_ADDRESS;
+        try {
+            boolean checkpointResolved;
+            for (long address : batch) {
+                lastReadAddress = address;
+                ILogData data = read(address);
+                checkpointResolved = filterCheckpointEntry(data, filter, queue);
+                if (checkpointResolved) {
+                    // Return if checkpoint has already been resolved (reached stop).
+                    return true;
                 }
             }
+        } catch (TrimmedException ste) {
+            // The valid checkpoint has been trimmed.
+            if (options.ignoreTrimmed) {
+                log.warn("processCheckpoint[{}]: Ignoring trimmed exception for address[{}]," +
+                        " stream[{}]", this, lastReadAddress, id);
+            } else {
+                throw ste;
+            }
         }
+
+        return false;
+    }
+
+    /**
+     * Applies filter to checkpoint entry and indicates if the checkpoint has been completely resolved
+     * (i.e., reached the stop point).
+     *
+     * @param data checkpoint data entry.
+     * @param filter filter to apply to checkpoint.
+     * @param queue read queue.
+     * @return True, if checkpoint reached stop point (resolved)
+     *         False, if checkpoint resolution needs to continue.
+     */
+    private boolean filterCheckpointEntry(ILogData data, Function<ILogData, BackpointerOp> filter,
+                                          NavigableSet<Long> queue) {
+        BackpointerOp op = filter.apply(data);
+        if (op == BackpointerOp.INCLUDE || op == BackpointerOp.INCLUDE_STOP) {
+            log.trace("filterCheckpointEntry[{}]: Adding checkpoint address[{}] to queue",
+                    this, data.getGlobalAddress());
+            queue.add(data.getGlobalAddress());
+            // Check if we need to stop
+            if (op == BackpointerOp.INCLUDE_STOP) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private StreamAddressSpace getStreamAddressMap(long startAddress, long stopAddress, UUID streamId) {
