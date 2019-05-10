@@ -400,9 +400,8 @@ public abstract class AbstractQueuedStreamView extends
                     return true;
                 }
             } catch (TrimmedException te) {
-                // If we reached a trim and didn't hit a checkpoint, this might be okay,
-                // if the stream was created recently and no checkpoint exists yet.
-                log.warn("Fill_Read_Queue[{}] Trim encountered and no checkpoint detected.", this);
+                log.warn("Fill_Read_Queue[{}] Trim encountered.", this);
+                throw te;
             }
         }
 

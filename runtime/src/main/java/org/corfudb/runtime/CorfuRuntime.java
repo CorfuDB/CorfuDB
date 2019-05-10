@@ -209,6 +209,13 @@ public class CorfuRuntime {
          */
         @Default
         int streamBatchSize = 10;
+
+        /**
+         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
+         * address discovery mechanism relies on address maps instead of follow backpointers;
+         */
+        @Default
+        int checkpointReadBatchSize = 5;
         // endregion
 
         //region        Security parameters
