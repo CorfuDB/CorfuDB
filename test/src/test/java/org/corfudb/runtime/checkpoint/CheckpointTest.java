@@ -614,6 +614,68 @@ public class CheckpointTest extends AbstractObjectTest {
         getRuntime().getObjectsView().TXBegin();
         testMap.put("a", "b");
         getRuntime().getObjectsView().TXEnd();
+    }
 
+    /**
+     * This test validates that trimming the address space on a non-existing address (-1)
+     * after data is already present in the log, does not lead to sequencer trims.
+     *
+     * Note: this comes along with the fact that trimming the bitmap on a negative value,
+     * gives the cardinality of infinity (all entries in the map).
+     *
+     */
+    @Test
+    public void testPrefixTrimOnNonAddress() throws Exception {
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
+        final String streamName = "test";
+
+        CorfuRuntime rt = getARuntime();
+        CorfuRuntime runtime = getARuntime();
+
+        try {
+            Map<String, Long> testMap = rt.getObjectsView().build()
+                    .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                    })
+                    .setStreamName(streamName)
+                    .open();
+
+            // Checkpoint (should return -1 as no  actual data is written yet)
+            MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+            mcw.addMap(testMap);
+            Token checkpointAddress = mcw.appendCheckpoints(rt, author);
+
+            // Write several entries into the log.
+            for (int i = 0; i < mapSize; i++) {
+                try {
+                    testMap.put(String.valueOf(i), (long) i);
+                } catch (TrimmedException te) {
+                    // shouldn't happen
+                    te.printStackTrace();
+                    throw te;
+                }
+            }
+
+            // Prefix Trim on checkpoint snapshot address
+            rt.getAddressSpaceView().prefixTrim(checkpointAddress);
+            rt.getAddressSpaceView().gc();
+            rt.getAddressSpaceView().invalidateServerCaches();
+            rt.getAddressSpaceView().invalidateClientCache();
+
+            // Rebuild stream from fresh runtime
+            try {
+                Map<String, Long> localTestMap = openMap(runtime, streamName);
+                for (int i = 0; i < localTestMap.size(); i++) {
+                    assertThat(localTestMap.get(String.valueOf(i))).isEqualTo((long) i);
+                }
+                assertThat(localTestMap.size()).isEqualTo(mapSize);
+            } catch (TrimmedException te) {
+                // shouldn't happen
+                te.printStackTrace();
+                throw te;
+            }
+        } finally {
+            rt.shutdown();
+            runtime.shutdown();
+        }
     }
 }
