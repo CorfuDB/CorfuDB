@@ -55,7 +55,7 @@ public interface ISerializer {
      * @param b The bytebuf to deserialize.
      * @return The deserialized object.
      */
-    Object deserialize(ByteBuf b);
+    Object deserialize(ByteBuf b, CorfuRuntime rt);
 
     /**
      * Serialize an object into a given byte buffer.

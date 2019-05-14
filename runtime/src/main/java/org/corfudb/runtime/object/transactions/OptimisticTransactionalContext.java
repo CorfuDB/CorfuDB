@@ -16,6 +16,7 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -341,7 +342,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     getWriteSetEntryList(x.getStreamID());
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
-                            .getPayload())
+                            .getPayload(this.transaction.getRuntime()))
                     .getSMRUpdates(x.getStreamID());
             if (committedWrites.size()
                     == entryWrites.size()) {

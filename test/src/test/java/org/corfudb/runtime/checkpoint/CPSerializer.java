@@ -6,6 +6,7 @@ import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.io.IOException;
@@ -31,7 +32,7 @@ public class CPSerializer implements ISerializer {
         return type;
     }
 
-    public Object deserialize(ByteBuf b) {
+    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
         Type mapType = new TypeToken<Map<String, Long>>(){}.getType();
 
         int classNameLength = b.readShort();

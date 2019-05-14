@@ -9,6 +9,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 
 
 /**
@@ -34,7 +35,7 @@ public class JavaSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    public Object deserialize(ByteBuf b) {
+    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
         try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {
             try (ObjectInputStream ois = new ObjectInputStream(bbis)) {
                 return ois.readObject();

@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -99,8 +100,8 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      * @param b The remaining buffer.
      */
     @Override
-    void deserializeBuffer(ByteBuf b) {
-        super.deserializeBuffer(b);
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+        super.deserializeBuffer(b, rt);
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
         b.readBytes(methodBytes, 0, methodLength);
@@ -111,7 +112,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = serializerType.deserialize(objBuf);
+            arguments[arg] = serializerType.deserialize(objBuf, rt);
             b.skipBytes(len);
         }
         SMRArguments = arguments;

@@ -821,7 +821,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .getLogUnitClient("localhost:9002")
                 .readAll(getRangeAddressAsList(startAddress, endAddress))
                 .get().getAddresses().values()) {
-            assertThat(logData.getPayload())
+            assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
         }
 
@@ -902,7 +902,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .getLogUnitClient("localhost:9002")
                 .readAll(getRangeAddressAsList(startAddress, endAddress)).get()
                 .getAddresses().values()) {
-            assertThat(logData.getPayload())
+            assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
         }
 
@@ -990,7 +990,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final int startAddress = 0;
         final int endAddress = 3;
         for (int i = startAddress; i <= endAddress; i++) {
-            assertThat(runtime.getAddressSpaceView().read(i).getPayload())
+            assertThat(runtime.getAddressSpaceView().read(i).getPayload(runtime))
                     .isEqualTo(Integer.toString(i).getBytes());
         }
 
