@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -192,10 +194,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
     private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, BackpointerOp> filter,
                                    NavigableSet<Long> queue) {
-        List<Long> checkpointAddresses = new ArrayList<>();
+        SortedSet<Long> checkpointAddresses = new TreeSet<>(Collections.reverseOrder());
         streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
-        checkpointAddresses.sort(null);
-        Collections.reverse(checkpointAddresses);
 
         // Checkpoint entries will be read in batches of a predefined size,
         // the reason not to read them all in a single call is that:
