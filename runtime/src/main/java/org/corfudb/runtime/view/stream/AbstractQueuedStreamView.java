@@ -232,34 +232,31 @@ public abstract class AbstractQueuedStreamView extends
     }
 
     /**
-     * Reads data from an address in the address space. It will give the writer a chance to complete based on the time
-     * when the reads of which this individual read is a step started. If the reads have been going on for longer than
-     * the grace period given for a writer to complete a write, the subsequent individual read calls will immediately
-     * fill the hole on absence of data at the given address.
+     * Reads data from an address in the address space.
      *
-     * @param address       Address to read.
-     * @param readStartTime Start time of the range of reads.
-     * @return ILogData at the address.
+     * It will give the writer a chance to complete based on the time
+     * when the reads of which this individual read is a step started.
+     * If the reads have been going on for longer than the grace period
+     * given for a writer to complete a write, the subsequent individual
+     * read calls will immediately fill the hole on absence of data at
+     * the given address.
+     *
+     * @param address       address to read.
+     * @param readStartTime start time of the range of reads.
+     * @return log data at the address.
      */
     protected ILogData read(final long address, long readStartTime) {
-        if (System.currentTimeMillis() - readStartTime < runtime.getParameters().getHoleFillTimeout().toMillis()) {
-            try {
+        try {
+            if (System.currentTimeMillis() - readStartTime <
+                    runtime.getParameters().getHoleFillTimeout().toMillis()) {
                 return runtime.getAddressSpaceView().read(address);
-            } catch (TrimmedException te) {
-                processTrimmedException(te);
-                throw te;
             }
-        } else {
-            RuntimeLayout runtimeLayout = runtime.getLayoutView().getRuntimeLayout();
-            ChainReplicationProtocol replicationProtocol = (ChainReplicationProtocol) runtime
-                    .getLayoutView()
-                    .getLayout()
-                    .getReplicationMode(address)
-                    .getReplicationProtocol(runtime);
-            return replicationProtocol
-                    .readRange(runtimeLayout, Range.encloseAll(Arrays.asList(address)), false)
+            return runtime.getAddressSpaceView()
+                    .read(Collections.singleton(address), false)
                     .get(address);
-
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
         }
     }
 
@@ -268,16 +265,14 @@ public abstract class AbstractQueuedStreamView extends
         try {
             Map<Long, ILogData> dataMap =
                     runtime.getAddressSpaceView().read(addresses);
-            return addresses.stream()
-                    .map(dataMap::get)
-                    .collect(Collectors.toList());
+            return addresses.stream().map(dataMap::get).collect(Collectors.toList());
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
         }
     }
 
-    void processTrimmedException(TrimmedException te) {
+    private void processTrimmedException(TrimmedException te) {
         if (TransactionalContext.getCurrentContext() != null
                 && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()
                 < getCurrentContext().checkpointSnapshotAddress) {
@@ -409,9 +404,8 @@ public abstract class AbstractQueuedStreamView extends
                     return true;
                 }
             } catch (TrimmedException te) {
-                // If we reached a trim and didn't hit a checkpoint, this might be okay,
-                // if the stream was created recently and no checkpoint exists yet.
-                log.warn("Fill_Read_Queue[{}] Trim encountered and no checkpoint detected.", this);
+                log.warn("Fill_Read_Queue[{}] Trim encountered.", this);
+                throw te;
             }
         }
 

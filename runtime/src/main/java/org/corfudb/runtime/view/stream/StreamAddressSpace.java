@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.view.Address;
 import org.roaringbitmap.longlong.LongIterator;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
@@ -108,6 +109,14 @@ public class StreamAddressSpace {
      * @param trimMark upper limit of addresses to trim
      */
     public void trim(Long trimMark) {
+        if (!Address.isAddress(trimMark)) {
+            // If not valid address return and do not attempt to trim.
+            return;
+        }
+
+        // Note: if a negative value is passed to this API the cardinality
+        // of the bitmap is returned, which would be incorrect as we would
+        // be removing all addresses upon an invalid trim mark.
         long numAddressesToTrim = addressMap.rankLong(trimMark);
 
         if (numAddressesToTrim <= NO_ADDRESSES) {
@@ -116,7 +125,7 @@ public class StreamAddressSpace {
 
         List<Long> addressesToTrim = new ArrayList<>();
         LongIterator it = addressMap.getLongIterator();
-        for (int i=0; i < numAddressesToTrim; i++) {
+        for (int i = 0; i < numAddressesToTrim; i++) {
             addressesToTrim.add(it.next());
         }
 
