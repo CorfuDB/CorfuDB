@@ -133,7 +133,7 @@ public class BaseServer extends AbstractServer {
     private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote reset requested from client {}", msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        CorfuServer.restartServer(serverContext, true);
+        CorfuServer.restartServer(true);
     }
 
     /**
@@ -149,6 +149,6 @@ public class BaseServer extends AbstractServer {
     private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote restart requested from client {}", msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        CorfuServer.restartServer(serverContext, false);
+        CorfuServer.restartServer(false);
     }
 }
