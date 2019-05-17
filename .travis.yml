@@ -45,6 +45,8 @@ jobs:
   - stage: code_quality
     name: Code Quality
     script:
+    # Prepare docker image
+    - ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
     - |
       ./mvnw verify -Pit sonar:sonar \
       -Dtest.travisBuild=true \
