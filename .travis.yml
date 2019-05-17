@@ -59,16 +59,14 @@ jobs:
       -Dmaven.javadoc.skip=true
     - bash <(curl -s https://codecov.io/bash)
     - .travis_scripts/javadocs.sh
-
+    
 notifications:
   email:
-  - corfudb-dev@googlegroups.com
-  webhooks:
-    urls:
-    - https://webhooks.gitter.im/e/e26458f01e3586e3c140
-    on_success: always
+    recipients:
+      - corfu-dev@vmware.com
+      - corfudb-dev@googlegroups.com
+    on_success: never
     on_failure: always
-    on_start: true
 
 addons:
   apt:
