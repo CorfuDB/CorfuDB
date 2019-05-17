@@ -285,17 +285,15 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("read: {}", msg.getPayload().getRange());
+        long address = msg.getPayload().getAddress();
+        log.trace("read: {}", msg.getPayload().getAddress());
         ReadResponse rr = new ReadResponse();
         try {
-            for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                 l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
-                ILogData e = dataCache.get(l);
-                if (e == null) {
-                    rr.put(l, LogData.getEmpty(l));
-                } else {
-                    rr.put(l, (LogData) e);
-                }
+            ILogData e = dataCache.get(address);
+            if (e == null) {
+                rr.put(address, LogData.getEmpty(address));
+            } else {
+                rr.put(address, (LogData) e);
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
@@ -409,13 +407,13 @@ public class LogUnitServer extends AbstractServer {
      * the read() and append(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    private synchronized ILogData handleRetrieval(long address) {
+    private ILogData handleRetrieval(long address) {
         LogData entry = streamLog.read(address);
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
-    private synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
+    private void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
     }
 

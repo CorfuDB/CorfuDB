@@ -347,11 +347,11 @@ public class SequencerServer extends AbstractServer {
             // Advance the trim mark, if the new trim request has a higher trim mark.
             trimMark = msg.getPayload();
             cache.invalidateUpTo(trimMark);
-        }
 
-        // Remove trimmed addresses from each address map and set new trim mark
-        for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
-            streamAddressSpace.trim(trimMark);
+            // Remove trimmed addresses from each address map and set new trim mark
+            for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
+                streamAddressSpace.trim(trimMark);
+            }
         }
 
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
