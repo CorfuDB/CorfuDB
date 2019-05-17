@@ -59,7 +59,7 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
                 .isEqualTo(DataType.DATA);
         assertThat(read.getGlobalAddress())
                 .isEqualTo(0);
-        assertThat(read.getPayload())
+        assertThat(read.getPayload(r))
                 .isEqualTo("hello world".getBytes());
     }
 

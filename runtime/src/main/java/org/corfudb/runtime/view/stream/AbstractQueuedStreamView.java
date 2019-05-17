@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Range;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -27,6 +29,8 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.util.Utils;
 
 
@@ -260,7 +264,7 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses, true);
+                    runtime.getAddressSpaceView().read(addresses);
             return addresses.stream().map(dataMap::get).collect(Collectors.toList());
         } catch (TrimmedException te) {
             processTrimmedException(te);
@@ -400,9 +404,8 @@ public abstract class AbstractQueuedStreamView extends
                     return true;
                 }
             } catch (TrimmedException te) {
-                // If we reached a trim and didn't hit a checkpoint, this might be okay,
-                // if the stream was created recently and no checkpoint exists yet.
-                log.warn("Fill_Read_Queue[{}] Trim encountered and no checkpoint detected.", this);
+                log.warn("Fill_Read_Queue[{}] Trim encountered.", this);
+                throw te;
             }
         }
 
@@ -609,7 +612,8 @@ public abstract class AbstractQueuedStreamView extends
     protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
                                               long maxGlobal) {
         if (data.hasCheckpointMetadata()) {
-            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload();
+            CheckpointEntry cpEntry = (CheckpointEntry)
+                    data.getPayload(runtime);
 
             // Select the latest cp that has a snapshot address
             // which is less than maxGlobal

@@ -7,6 +7,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
@@ -59,22 +60,13 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = CacheBuilder.newBuilder()
+    final Cache<Long, ILogData> readCache = CacheBuilder.newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+            .removalListener(this::handleEviction)
             .recordStats()
-            .build(new CacheLoader<Long, ILogData>() {
-                @Override
-                public ILogData load(Long value) throws Exception {
-                    return fetch(value);
-                }
-
-                @Override
-                public Map<Long, ILogData> loadAll(Iterable<? extends Long> keys) throws Exception {
-                    return fetchAll((Iterable<Long>) keys, true);
-                }
-            });
+            .build();
 
     /**
      * Constructor for the Address Space View.
@@ -91,6 +83,11 @@ public class AddressSpaceView extends AbstractView {
         metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
+    public void handleEviction(RemovalNotification<Long, ILogData> notification) {
+        if (log.isTraceEnabled()) {
+            log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+        }
+    }
 
     /**
      * Remove all log entries that are less than the trim mark
@@ -238,21 +235,35 @@ public class AddressSpaceView extends AbstractView {
     public @Nonnull
     ILogData read(long address) {
         if (!runtime.getParameters().isCacheDisabled()) {
-            try {
-                return readCache.get(address);
-            } catch (ExecutionException | UncheckedExecutionException e) {
-                // Guava wraps the exceptions thrown from the lower layers, therefore
-                // we need to unwrap them before throwing them to the upper layers that
-                // don't understand the guava exceptions
-                Throwable cause = e.getCause();
-                if (cause instanceof RuntimeException) {
-                    throw (RuntimeException) cause;
-                } else {
-                    throw new RuntimeException(cause);
-                }
+            // The VersionLockedObject and the Transaction layer will generate
+            // undoRecord(s) during a transaction commit, or object sync. These
+            // undo records are stored in transient fields and are not persisted.
+            // A missing undo record can cause a NoRollbackException, thus forcing
+            // a complete object rebuild that generates a "scanning" behavior
+            // which affects the LRU window. In essence, affecting other cache users
+            // and making the VersionLockedObject very sensitive to caching behavior.
+            // A concrete example of this would be unsynchronized readers/writes:
+            // 1. Thread A starts replicating write1
+            // 2. Thread B discovers the write (via stream tail query) and
+            //    tries to read write1
+            // 3. Thread B's read results in a cache miss and the reader thread
+            //    starts loading the value into the cache
+            // 4. Thread A completes its write and caches it with undo records
+            // 5. Thread B finishes loading and caches the loaded value replacing
+            //    the cached value from step 4 (i.e. loss of undo records computed
+            //    by thread A)
+            ILogData data = readCache.getIfPresent(address);
+            if (data == null) {
+                // Loading a value without the cache loader can result in
+                // redundant loading calls (i.e. multiple threads try to
+                // load the same value), but currently a redundant RPC
+                // is much cheaper than the cost of a NoRollBackException, therefore
+                // this trade-off is reasonable
+                final ILogData loadedVal = fetch(address);
+                return cacheLoadAndGet(readCache, address, loadedVal);
             }
-        }
-
+        return data;
+    }
         return fetch(address);
     }
 
@@ -275,7 +286,7 @@ public class AddressSpaceView extends AbstractView {
         ILogData data = readCache.getIfPresent(nextRead);
         if (data == null) {
             log.trace("predictiveReadRange: request to read {}", addresses);
-            Map<Long, ILogData> mapAddresses = this.read(addresses, true);
+            Map<Long, ILogData> mapAddresses = this.read(addresses);
             data = mapAddresses.get(nextRead);
         }
 
@@ -294,23 +305,64 @@ public class AddressSpaceView extends AbstractView {
      * @param addresses An iterable with addresses to read from
      * @return A result, which be cached.
      */
+    public Map<Long, ILogData> read(Iterable<Long> addresses) {
+        return read(addresses, true);
+    }
+
+    /**
+     * Attempts to insert a loaded value into the cache and return the cached value for a particular key.
+     */
+    private ILogData cacheLoadAndGet(Cache<Long, ILogData> cache, long address, ILogData loadedValue) {
+        try {
+            return cache.get(address, () -> loadedValue);
+        } catch (ExecutionException | UncheckedExecutionException e) {
+            // Guava wraps the exceptions thrown from the lower layers, therefore
+            // we need to unwrap them before throwing them to the upper layers that
+            // don't understand the guava exceptions
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            } else {
+                throw new RuntimeException(cause);
+            }
+        }
+    }
+
+    /**
+     * Read the given object from a range of addresses.
+     *
+     * @param addresses An iterable with addresses to read from
+     * @param waitForWrite Flag whether wait for write is required or hole fill directly.
+     * @return A map of addresses read, which will be cached if caching is enabled
+     */
     public Map<Long, ILogData> read(Iterable<Long> addresses, boolean waitForWrite) {
-        if (!runtime.getParameters().isCacheDisabled() && waitForWrite) {
-            try {
-                return readCache.getAll(addresses);
-            } catch (ExecutionException | UncheckedExecutionException e) {
-                Throwable cause = e.getCause();
-                if (cause instanceof RuntimeException) {
-                    throw (RuntimeException) cause;
+        Map<Long, ILogData> result = new HashMap<>();
+
+        if (!runtime.getParameters().isCacheDisabled()) {
+            Set<Long> addressesToFetch = new HashSet<>();
+
+            for (Long address : addresses) {
+                ILogData val = readCache.getIfPresent(address);
+                if (val == null) {
+                    addressesToFetch.add(address);
                 } else {
-                    throw new RuntimeException(cause);
+                    result.put(address, val);
                 }
             }
-        } else if (!waitForWrite) {
+
+            // At this point we computed a subset of the addresses that
+            // resulted in a cache miss and need to be fetched
+            if (!addressesToFetch.isEmpty()) {
+                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite);
+                for (Map.Entry<Long, ILogData> entry : fetchedAddresses.entrySet()) {
+                    // After fetching a value, we need to insert it in the cache.
+                    result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
+                }
+            }
+            return result;
+        } else {
             return fetchAll(addresses, waitForWrite);
         }
-
-        return fetchAll(addresses, true);
     }
 
     /**
