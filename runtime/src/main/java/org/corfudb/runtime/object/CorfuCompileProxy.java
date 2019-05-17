@@ -184,7 +184,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .access(this, accessMethod, conflictObject);
             } catch (Exception e) {
-                log.error("Access[{}] Exception: {}", this, e);
+                log.error("Access[{}]", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -237,7 +237,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .logUpdate(this, entry, conflictObject);
             } catch (Exception e) {
-                log.warn("Update[{}] Exception: {}", this, e);
+                log.warn("Update[{}]", this, e);
                 this.abortTransaction(e);
             }
         }
