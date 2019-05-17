@@ -292,6 +292,13 @@ public class AbstractIT extends AbstractCorfuTest {
         return rt;
     }
 
+    public static CorfuRuntime createRuntimeWithCache() {
+        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT)
+                .setCacheDisabled(false)
+                .connect();
+        return rt;
+    }
+
     public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {
         Map<String, Integer> map = rt.getObjectsView()
                 .build()

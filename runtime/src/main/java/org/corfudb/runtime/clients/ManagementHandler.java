@@ -44,12 +44,6 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
         return msg.getPayload();
     }
 
-    @ClientHandler(type = CorfuMsgType.HEARTBEAT_RESPONSE)
-    private static Object handleHeartbeatResponse(CorfuPayloadMsg<ClusterState> msg,
-                                                  ChannelHandlerContext ctx, IClientRouter r) {
-        return msg.getPayload();
-    }
-
     @ClientHandler(type = CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR)
     private static Object handleNoBootstrapError(CorfuMsg msg,
                                                  ChannelHandlerContext ctx, IClientRouter r)

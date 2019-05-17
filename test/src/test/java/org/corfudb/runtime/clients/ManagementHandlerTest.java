@@ -11,7 +11,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.junit.After;
 import org.junit.Test;
@@ -108,14 +108,14 @@ public class ManagementHandlerTest extends AbstractClientTest {
     }
 
     /**
-     * Tests the heartbeat request and asserts if response is received.
+     * Tests the Node State request and asserts if response is received.
      *
      * @throws Exception
      */
     @Test
-    public void sendHeartbeatRequest()
+    public void sendNodeStateRequest()
             throws Exception {
-        ClusterState clusterState = client.sendHeartbeatRequest().get();
-        assertThat(clusterState).isNotNull();
+        NodeState nodeState= client.sendNodeStateRequest().get();
+        assertThat(nodeState).isNotNull();
     }
 }
