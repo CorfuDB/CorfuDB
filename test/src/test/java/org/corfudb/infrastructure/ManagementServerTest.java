@@ -8,8 +8,10 @@ import org.junit.After;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Checks the various services and messages handled by the
@@ -85,5 +87,18 @@ public class ManagementServerTest extends AbstractServerTest {
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+    }
+
+    /**
+     * Shutting down the management server's executor and test whether the heartbeats can go through.
+     */
+    @Test
+    public void testHeartbeatSeparateThread() {
+        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        managementServer.getExecutor(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED).shutdownNow();
+        assertThatThrownBy(() -> sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout)))
+                .isInstanceOf(RejectedExecutionException.class);
+        sendMessage(CorfuMsgType.NODE_STATE_REQUEST.msg());
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.NODE_STATE_RESPONSE);
     }
 }

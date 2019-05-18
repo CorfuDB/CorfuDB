@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
@@ -15,6 +14,8 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.net.InetSocketAddress;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,8 +35,13 @@ public class BaseServer extends AbstractServer {
     }
 
     @Override
-    public ExecutorService getExecutor() {
+    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
         return executor;
+    }
+
+    @Override
+    public List<ExecutorService> getExecutors() {
+        return Collections.singletonList(executor);
     }
 
     public BaseServer(@Nonnull ServerContext context) {
