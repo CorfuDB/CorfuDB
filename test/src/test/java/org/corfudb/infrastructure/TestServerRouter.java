@@ -115,7 +115,7 @@ public class TestServerRouter implements IServerRouter {
         if (validateEpoch(msg, null)) {
             if (as != null) {
                 try {
-                    as.getExecutor().submit(() -> as.handleMessage(msg, null, this)).get();
+                    as.getExecutor(msg.getMsgType()).submit(() -> as.handleMessage(msg, null, this)).get();
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(ie);
@@ -135,7 +135,7 @@ public class TestServerRouter implements IServerRouter {
         if (validateEpoch(msg, ctx)) {
             if (as != null) {
                 try {
-                    as.getExecutor().submit(() -> as.handleMessage(msg, ctx, this)).get();
+                    as.getExecutor(msg.getMsgType()).submit(() -> as.handleMessage(msg, ctx, this)).get();
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(ie);
