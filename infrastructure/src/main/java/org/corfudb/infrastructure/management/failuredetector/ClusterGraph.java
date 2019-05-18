@@ -196,6 +196,7 @@ public class ClusterGraph {
      * Collect all node ranks in a graph and choose the node with smallest number of successful connections and
      * with highest name (sorted alphabetically)
      *
+     * @param unresponsiveServers list of unresponsive nodes in the layout
      * @return failed node
      */
     public Optional<NodeRank> findFailedNode(List<String> unresponsiveServers) {
