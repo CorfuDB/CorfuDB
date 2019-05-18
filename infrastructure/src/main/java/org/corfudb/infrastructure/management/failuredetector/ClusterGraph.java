@@ -109,8 +109,8 @@ public class ClusterGraph {
 
                         //If current node is not the local node and another node is unavailable we don't change
                         // the adjacent node connectivity matrix, we leave it as is
-                        if (adjNode.getType() == NodeConnectivityType.UNAVAILABLE){
-                            if (!isLocalNode(node)){
+                        if (adjNode.getType() == NodeConnectivityType.UNAVAILABLE) {
+                            if (!isLocalNode(node)) {
                                 newConnectivity.put(adjNodeName, node.getConnectionStatus(adjNodeName));
                                 return;
                             }
@@ -124,7 +124,7 @@ public class ClusterGraph {
                         //Symmetric failure - connection successful only if both nodes connected status is true
                         //in the other case - make the failure symmetric
                         ConnectionStatus status = ConnectionStatus.OK;
-                        if (EnumSet.of(nodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)){
+                        if (EnumSet.of(nodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)) {
                             status = ConnectionStatus.FAILED;
                         }
                         newConnectivity.put(adjNodeName, status);
@@ -161,7 +161,7 @@ public class ClusterGraph {
      * Note: it's not required to choose a particular one for entire cluster to add a node to unresponsive list.
      * In a partitioned scenario, a minority side can choose to have a decision maker
      * just that it's decisions will not be used as it does not have consensus
-     *
+     * <p>
      * The decision maker always exists. There is always at least the local node,
      * it always has at least one successful connection to itself.
      * We also have two additional checks to prevent all possible incorrect ways. Decision maker not found if:
@@ -196,9 +196,10 @@ public class ClusterGraph {
      * Collect all node ranks in a graph and choose the node with smallest number of successful connections and
      * with highest name (sorted alphabetically)
      *
+     * @param unresponsiveServers list of unresponsive nodes in the layout
      * @return failed node
      */
-    public Optional<NodeRank> findFailedNode() {
+    public Optional<NodeRank> findFailedNode(List<String> unresponsiveServers) {
         log.trace("Looking for failed node");
 
         NavigableSet<NodeRank> nodes = getNodeRanks();
@@ -209,6 +210,24 @@ public class ClusterGraph {
 
         NodeRank last = nodes.last();
         if (last.getNumConnections() == graph.size()) {
+            return Optional.empty();
+        }
+
+        //If the node is connected to all alive nodes (nodes not in unresponsive list)
+        // in the cluster, that node can't be a failed node.
+        // We can't rely on information from nodes in unresponsive list.
+        Optional<NodeRank> fullyConnected = findFullyConnectedNode(
+                last.getEndpoint(),
+                unresponsiveServers
+        );
+
+        //check if failed node is fully connected
+        boolean isFailedNodeFullyConnected = fullyConnected
+                .map(fcNode -> fcNode.equals(last))
+                .orElse(false);
+
+        if (isFailedNodeFullyConnected) {
+            log.trace("Fully connected node can't be a failed node");
             return Optional.empty();
         }
 
@@ -226,26 +245,41 @@ public class ClusterGraph {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 
         NodeConnectivity node = getNodeConnectivity(endpoint);
-        for (String adjacent : node.getConnectivity().keySet()) {
-            //if adjacent node is unresponsive then then exclude it from  fully connected graph
-            if (unresponsiveNodes.contains(adjacent)) {
-                continue;
-            }
 
-            NodeConnectivity adjacentNode = getNodeConnectivity(adjacent);
-
-            //if adjacent node is unavailable then exclude it from  fully connected graph
-            if (adjacentNode.getType() == NodeConnectivityType.UNAVAILABLE) {
-                continue;
-            }
-
-            if (adjacentNode.getConnectionStatus(endpoint) != ConnectionStatus.OK) {
-                log.trace("Fully connected node not found");
+        switch (node.getType()) {
+            case NOT_READY:
+            case UNAVAILABLE:
+                log.trace("Not connected node: {}", endpoint);
                 return Optional.empty();
-            }
-        }
+            case CONNECTED:
+                for (String adjacent : node.getConnectivity().keySet()) {
+                    //if adjacent node is unresponsive then exclude it from fully connected graph
+                    if (unresponsiveNodes.contains(adjacent)) {
+                        continue;
+                    }
 
-        return Optional.of(new NodeRank(endpoint, getNodeConnectivity(endpoint).getConnected()));
+                    NodeConnectivity adjacentNode = getNodeConnectivity(adjacent);
+
+                    //if adjacent node is unavailable then exclude it from  fully connected graph
+                    if (adjacentNode.getType() == NodeConnectivityType.UNAVAILABLE) {
+                        continue;
+                    }
+
+                    if (adjacentNode.getConnectionStatus(endpoint) != ConnectionStatus.OK) {
+                        log.trace("Fully connected node not found");
+                        return Optional.empty();
+                    }
+                }
+
+                NodeRank rank = new NodeRank(
+                        endpoint,
+                        getNodeConnectivity(endpoint).getConnected()
+                );
+
+                return Optional.of(rank);
+            default:
+                throw new IllegalStateException("Unknown node state");
+        }
     }
 
     /**
