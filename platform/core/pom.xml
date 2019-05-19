@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/maven-v4_0_0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.corfudb</groupId>
+        <artifactId>corfu-platform</artifactId>
+        <version>0.2.3-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>corfu-platform-core</artifactId>
+    <packaging>jar</packaging>
+    <name>Corfu Platform Core Api</name>
+
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+
+        <reactivestream.version>1.0.2</reactivestream.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.reactivestreams</groupId>
+            <artifactId>reactive-streams-tck</artifactId>
+            <version>${reactivestream.version}</version>
+        </dependency>
+    </dependencies>
+</project>
