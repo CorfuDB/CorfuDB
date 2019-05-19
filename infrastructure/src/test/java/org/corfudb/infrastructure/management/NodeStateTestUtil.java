@@ -14,9 +14,12 @@ import java.util.List;
 import java.util.Map;
 
 public class NodeStateTestUtil {
-    private static final List<String> NODE_NAMES = Arrays.asList(
-            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"
-    );
+
+    private static final List<NodeName> NODE_NAMES = Arrays.asList(NodeName.values());
+
+    public static final String A = NodeName.a.name();
+    public static final String B = NodeName.b.name();
+    public static final String C = NodeName.c.name();
 
     private NodeStateTestUtil() {
         //prevent creating class instances
@@ -25,7 +28,7 @@ public class NodeStateTestUtil {
     public static NodeState nodeState(String endpoint, ConnectionStatus... connectionStates) {
         Map<String, ConnectionStatus> connectivity = new HashMap<>();
         for (int i = 0; i < connectionStates.length; i++) {
-            connectivity.put(NODE_NAMES.get(i), connectionStates[i]);
+            connectivity.put(NODE_NAMES.get(i).name(), connectionStates[i]);
         }
 
         NodeConnectivity nodeConnectivity = NodeConnectivity.builder()
@@ -39,5 +42,9 @@ public class NodeStateTestUtil {
                 .heartbeat(new HeartbeatTimestamp(0, 0))
                 .connectivity(nodeConnectivity)
                 .build();
+    }
+
+    public enum NodeName {
+        a, b, c, d, e, f, g, h, i, j, k
     }
 }

@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.management;
 
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.C;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.ClusterState.buildClusterState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
@@ -8,28 +11,39 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class CompleteGraphAdvisorTest {
+
+    /**
+     * By definition, a fully connected node can not be added to the unresponsive list.
+     * Failed connection(s) between unresponsive and fully connected node(s)
+     * can't be used to determine if a fully connected node is failed.
+     */
+    @Test
+    public void testUnresponsiveAndFullyConnectedNode() {
+        final String localEndpoint = A;
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
+
+        ClusterState clusterState = buildClusterState(
+                localEndpoint,
+                nodeState(A, OK, OK, OK),
+                nodeState(B, OK, OK, FAILED),
+                nodeState(C, OK, FAILED, OK)
+        );
+
+        List<String> unresponsiveServers = Collections.singletonList("b");
+        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers);
+        assertFalse(failedServer.isPresent());
+    }
 
     @Test
     public void testFailedServer_disconnected_c() {
