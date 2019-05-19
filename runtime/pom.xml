@@ -53,6 +53,11 @@
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
+            <artifactId>corfu-client-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
             <artifactId>format</artifactId>
             <version>${project.version}</version>
         </dependency>

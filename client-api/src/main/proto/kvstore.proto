@@ -1,0 +1,155 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime";
+option java_outer_classname = "KvStore";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
+
+//------------ Schema -------------------//
+// ProtoBuf message description. This metadata is used to understand
+// the structure of the serialized message.
+// Example:
+// message User {
+//   string name = 1;
+// }
+// Schema is:
+// name:"User"
+// field {
+//   name:"name"
+//   label: LABEL_OPTIONAL
+//   type: TYPE_STRING
+// }
+message MessageSchema {
+    google.protobuf.DescriptorProto metaInfo = 1;
+}
+
+// Primary key by which a record is retrieved.
+// This is a mandatory field  required by Corfu layer to understand
+// the schema of the serialized payload.
+// The primary key currently only supports hash indexing.
+message Key {
+    MessageSchema schema = 1;
+    google.protobuf.Any payload = 2;
+}
+
+// The actual data that is stored by the business logic.
+// The schema is required in order to create secondary indices on the Value payload.
+message Value {
+    MessageSchema schema = 1;
+    google.protobuf.Any payload = 2;
+}
+
+// A version that is tied to the record structure, signaling the total number of
+// modifications that have been done.
+// Read-only access for clients.
+message Version {
+    int64 ver = 1;
+}
+
+// Persisted meta-data associated with the record. This is read-only for the clients,
+// and should not be used in business logic.
+// Example: Migration info, AAA info, etc.
+message RecordMetadata {
+    map<string, google.protobuf.Any> context = 1;
+}
+// Ties all underlying concepts such as Key, Value, Version and Context into one object.
+message Record {
+    Key key = 1;
+    Value value = 2;
+    Version version = 3;
+    RecordMetadata metadata = 4;
+}
+
+//------------ information schema -------------------//
+// A grouping concept that allows for resource isolation.
+// For example, the same table name can exist within several different namespaces.
+message Namespace {
+    string name = 1;
+}
+
+// Contains all necessary information for describing a table.
+message Table {
+    Namespace namespace = 1;
+    string name = 2;
+}
+
+// Defines an exact match secondary index on the specified list of fields.
+message Index {
+    repeated google.protobuf.Any fields = 1;
+}
+
+// A meta-information which defines a Corfu Table
+message TableSchema {
+    Table table = 1;
+    MessageSchema keySchema = 2;
+    MessageSchema valueSchema = 3;
+    Index index = 4;
+}
+
+//------------ CRUD -------------------//
+// We are following CQRS pattern https://martinfowler.com/bliki/CQRS.html
+
+// A command which changes a database state.
+message Command {
+    CommandType commandType = 1;
+    Table table = 2;
+    Record record = 3;
+    OperationalCtx ctx = 4;
+
+    enum CommandType {
+        CREATE = 0;
+        UPDATE = 1;
+        DELETE = 2;
+    }
+}
+
+// Every CRUD operation returns an ActionResult, which contains the Table on which
+// the operation was performed and the resulting Record.
+message ActionResult {
+    Table table = 1;
+    Record result = 2;
+}
+
+//------------ Context -------------------//
+// The purpose of a context is to allow an object or a function to alter its behavior
+// depending on the context in which it is operating.
+message OperationalCtx {
+    IsolationCtx isolationCtx = 1;
+    ExecutionCtx executionCtx = 2;
+}
+
+// A context that defines different isolation guarantees. The client is free to choose
+// how the API should behave, depending on the underlying implementation.
+// Defines address in the log for snapshot queries.
+message IsolationCtx {
+    int64 epoch = 1;
+    int64 sequenceNumber = 2;
+}
+
+// A context that defines different execution mechanisms.
+message ExecutionCtx {
+    // Example asynchronous execution of the CRUD commands.
+    bool async = 1;
+}
+
+//------------ Transaction -------------------//
+// Defines a set of command operations that are executed atomically.
+message TransactionBuilder {
+    repeated TxBuilderOperation operation = 2;
+}
+
+// A union describing all possible commands.
+message TxBuilderOperation {
+    Command command = 1;
+}
+
+//------------ Query Interface -------------------//
+// Get the record associated with the provided key.
+// User defined snapshot is used if an appropriate OperationalCtx is provided.
+message GetQuery {
+    Table table = 1;
+    Key key = 2;
+    OperationalCtx context = 3;
+}

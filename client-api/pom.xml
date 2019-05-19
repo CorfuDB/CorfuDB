@@ -2,6 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
@@ -9,10 +10,12 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>format</artifactId>
+    <artifactId>corfu-client-api</artifactId>
+    <packaging>jar</packaging>
+    <name>Corfu Client Api</name>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <maven.deploy.skip>false</maven.deploy.skip>
     </properties>
 
     <dependencies>
@@ -29,7 +32,7 @@
             <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
-                <version>3.1.0.2</version>
+                <version>3.8.0</version>
                 <executions>
                     <execution>
                         <phase>generate-sources</phase>
@@ -37,9 +40,10 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <protocVersion>3.1.0</protocVersion>
+                            <protocVersion>3.8.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
                             <inputDirectories>
-                                <include>proto</include>
+                                <include>src/main/proto</include>
                             </inputDirectories>
                             <outputDirectory>
                                 target/generated-sources
@@ -51,6 +55,5 @@
 
         </plugins>
     </build>
-
 
 </project>
