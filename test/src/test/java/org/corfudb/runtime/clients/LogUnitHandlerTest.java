@@ -211,14 +211,14 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(0);
         byte[] testString = "hello world".getBytes();
         client.write(0, null, testString, Collections.emptyMap()).get();
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(1);
         client.flushCache().get();
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(0);
         LogData r = client.read(0).get().getAddresses().get(0L);
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(1);
     }
 
     @Test
