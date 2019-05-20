@@ -19,6 +19,9 @@ import java.util.Optional;
  * </li>
  * <li>to* {@literal =>} Copy-conversion (buffer-transfer).</li>
  * </ul>
+ *
+ * @author jameschang
+ * @since 2018-07-25
  */
 public class ByteString implements Value, Serializable, Comparable<ByteString> {
 

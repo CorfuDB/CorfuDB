@@ -25,7 +25,7 @@
         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>platform-core</artifactId>
+            <artifactId>corfu-platform-core</artifactId>
             <version>${version}</version>
         </dependency>
         <!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
