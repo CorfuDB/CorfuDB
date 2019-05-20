@@ -43,7 +43,6 @@
         <junit.jupiter.version>5.4.2</junit.jupiter.version>
         <opentracing.version>0.31.0</opentracing.version>
         <quicktheories.version>0.25</quicktheories.version>
-        <reactivestream.version>1.0.2</reactivestream.version>
     </properties>
 
     <scm>

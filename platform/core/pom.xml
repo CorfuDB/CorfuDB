@@ -18,6 +18,8 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
+
+        <reactivestream.version>1.0.2</reactivestream.version>
     </properties>
 
     <dependencies>
