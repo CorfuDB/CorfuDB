@@ -14,16 +14,21 @@ import java.util.Optional;
  * <p>
  * Note regarding interface prefix naming conventions:
  * <ul>
- *     <li>as* {@literal =>} Some kind of cast or low-cost conversion / wrapping, *if possible*, or
- *         degenerates to copy-conversion if not possible.
- *     </li>
- *     <li>to* {@literal =>} Copy-conversion (buffer-transfer).</li>
+ * <li>as* {@literal =>} Some kind of cast or low-cost conversion / wrapping, *if possible*, or
+ * degenerates to copy-conversion if not possible.
+ * </li>
+ * <li>to* {@literal =>} Copy-conversion (buffer-transfer).</li>
  * </ul>
+ *
+ * @author jameschang
+ * @since 2018-07-25
  */
 public class ByteString implements Value, Serializable, Comparable<ByteString> {
 
-    /** A static instance of {@link ByteString} denoting an empty data content container. */
-    private static ByteString EMPTY = new ByteString(new byte[0]);
+    /**
+     * A static instance of {@link ByteString} denoting an empty data content container.
+     */
+    private static final ByteString EMPTY = new ByteString(new byte[0]);
 
     private final byte[] data;
     private final int offset;
@@ -50,17 +55,17 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
      * instance. Thus, any mutation performed on this data may potentially violate the immutability
      * contract.
      *
-     * @return     raw internal {@code byte[]} data.
+     * @return raw internal {@code byte[]} data.
      */
     @Override
     public byte[] asBytes() {
-        return (offset == 0 && length == data.length)? data : toBytes();
+        return (offset == 0 && length == data.length) ? data : toBytes();
     }
 
     /**
      * Retrieves a {@code byte[]} containing a copy of the content within this {@link ByteString}.
      *
-     * @return     a clone of the internal {@code byte[]} data.
+     * @return a clone of the internal {@code byte[]} data.
      */
     public byte[] toBytes() {
         if (offset == 0 && length == data.length) {
@@ -76,7 +81,7 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Creates a view of the bytes within this {@link ByteString} as a read-only {@link ByteBuffer}.
      *
-     * @return     a read-only {@link ByteBuffer} instance.
+     * @return a read-only {@link ByteBuffer} instance.
      */
     public ByteBuffer asByteBuffer() {
         return ByteBuffer.wrap(data, offset, length).asReadOnlyBuffer();
@@ -85,7 +90,7 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Returns the size of the data content contained in this {@link ByteString} instance.
      *
-     * @return    the number of bytes of the data content as an {@code int}.
+     * @return the number of bytes of the data content as an {@code int}.
      */
     public int size() {
         return length;
@@ -94,18 +99,15 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Creates a slice of this {@link ByteString} that represents a sub-region of the original data.
      *
-     * @param offset
-     *            starting offset of the slice.
-     * @param length
-     *            length of the slice.
-     *
-     * @return    a new instance of {@link ByteString} representing the sliced data.
+     * @param offset starting offset of the slice.
+     * @param length length of the slice.
+     * @return a new instance of {@link ByteString} representing the sliced data.
      */
     public Optional<ByteString> slice(int offset, int length) {
         if (validateSliceRange(this, offset, length)) {
             return Optional.of(length == 0 ?
-                                       empty() :
-                                       new ByteString(data, this.offset + offset, length));
+                    empty() :
+                    new ByteString(data, this.offset + offset, length));
         } else {
             return Optional.empty();
         }
@@ -177,14 +179,10 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
      * Validates the input {@link ByteString} may contain a slice ranging from input {@code offset}
      * and {@code length}.
      *
-     * @param instance
-     *            instance to check for slice range.
-     * @param offset
-     *            starting offset of the slice within the {@code instance}.
-     * @param length
-     *            length of the slice.
-     *
-     * @return    {@code true} if {@code instance} may contain the slice, {@code false} otherwise.
+     * @param instance instance to check for slice range.
+     * @param offset   starting offset of the slice within the {@code instance}.
+     * @param length   length of the slice.
+     * @return {@code true} if {@code instance} may contain the slice, {@code false} otherwise.
      */
     private static boolean validateSliceRange(ByteString instance, int offset, int length) {
         return (offset >= 0 &&
@@ -195,7 +193,7 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Create an empty {@link ByteString}.
      *
-     * @return    an empty {@link ByteString} instance with zero-length for data content.
+     * @return an empty {@link ByteString} instance with zero-length for data content.
      */
     public static ByteString empty() {
         return EMPTY;
@@ -204,11 +202,9 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Create a new {@link ByteString} containing a clone of the bytes of {@code data}.
      *
-     * @param data
-     *            data content.
-     *
-     * @return    an instance of {@link ByteString} with internal offset set to 0, and length to the
-     *            length of the input {@code data} byte array.
+     * @param data data content.
+     * @return an instance of {@link ByteString} with internal offset set to 0, and length to the
+     * length of the input {@code data} byte array.
      */
     public static ByteString of(byte... data) {
         if (data == null) {
@@ -221,11 +217,9 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Create a new {@link ByteString} containing a clone of the bytes of {@code data}.
      *
-     * @param data
-     *            data content.
-     *
-     * @return    an instance of {@link ByteString} with internal offset set to 0, and length to the
-     *            length of the data read from {@code data} (i.e. {@code data.remaining()}).
+     * @param data data content.
+     * @return an instance of {@link ByteString} with internal offset set to 0, and length to the
+     * length of the data read from {@code data} (i.e. {@code data.remaining()}).
      */
     public static ByteString of(ByteBuffer data) {
         if (data == null) {
@@ -242,15 +236,11 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
      * Create a new {@link ByteString} containing a copy of {@code length} bytes of {@code data}
      * starting at {@code offset}.
      *
-     * @param data
-     *            data content.
-     * @param offset
-     *            offset to data content to start including from.
-     * @param length
-     *            length of data content to be included as byte-string's content.
-     *
-     * @return    an instance of {@link ByteString} with internal offset set to 0, and content
-     *            length to {@code length - offset}.
+     * @param data   data content.
+     * @param offset offset to data content to start including from.
+     * @param length length of data content to be included as byte-string's content.
+     * @return an instance of {@link ByteString} with internal offset set to 0, and content
+     * length to {@code length - offset}.
      */
     public static ByteString of(byte[] data, int offset, int length) {
         if (data == null || length == 0) {
@@ -269,10 +259,8 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Converts a {@link ByteString} to {@link ByteString} encoded in base64 encoding.
      *
-     * @param instance
-     *            instance to convert from.
-     *
-     * @return    base64 encoding of the data as a {@link ByteString}.
+     * @param instance instance to convert from.
+     * @return base64 encoding of the data as a {@link ByteString}.
      */
     public static ByteString encodeBase64(ByteString instance) {
         return new ByteString(Base64.getEncoder().encode(instance.asBytes()));
@@ -281,10 +269,8 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Converts a encoded base64 {@link ByteString} to a decoded {@link ByteString}.
      *
-     * @param instance
-     *            instance to convert from.
-     *
-     * @return    decoded content of the base64-encoded string as a {@link ByteString}.
+     * @param instance instance to convert from.
+     * @return decoded content of the base64-encoded string as a {@link ByteString}.
      */
     public static ByteString decodeBase64(ByteString instance) {
         return new ByteString(Base64.getDecoder().decode(instance.asBytes()));
@@ -293,10 +279,8 @@ public class ByteString implements Value, Serializable, Comparable<ByteString> {
     /**
      * Converts a encoded UTF-8 {@link ByteString} to a decoded {@link String}.
      *
-     * @param instance
-     *            instance to convert from.
-     *
-     * @return    UTF-8 decoded as a {@link String} from the data content.
+     * @param instance instance to convert from.
+     * @return UTF-8 decoded as a {@link String} from the data content.
      */
     public static String utf8(ByteString instance) {
         return new String(instance.data, instance.offset, instance.length, StandardCharsets.UTF_8);
