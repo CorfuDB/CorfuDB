@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -76,8 +78,13 @@ public class LayoutServer extends AbstractServer {
     }
 
     @Override
-    public ExecutorService getExecutor() {
+    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
         return executor;
+    }
+
+    @Override
+    public List<ExecutorService> getExecutors() {
+        return Collections.singletonList(executor);
     }
 
     /**

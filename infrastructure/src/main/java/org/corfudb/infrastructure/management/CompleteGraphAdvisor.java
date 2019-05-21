@@ -76,7 +76,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             return Optional.empty();
         }
 
-        Optional<NodeRank> maybeFailedNode = symmetric.findFailedNode();
+        Optional<NodeRank> maybeFailedNode = symmetric.findFailedNode(unresponsiveServers);
         if (!maybeFailedNode.isPresent()) {
             return Optional.empty();
         }
@@ -140,6 +140,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
     /**
      * Returns a new cluster graph from the cluster state
+     *
      * @param clusterState a cluster state
      * @return a transformed cluster graph
      */

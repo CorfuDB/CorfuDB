@@ -38,6 +38,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
@@ -95,8 +96,13 @@ public class LogUnitServer extends AbstractServer {
     private ExecutorService executor;
 
     @Override
-    public ExecutorService getExecutor() {
+    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
         return executor;
+    }
+
+    @Override
+    public List<ExecutorService> getExecutors() {
+        return Collections.singletonList(executor);
     }
 
     /**
@@ -401,13 +407,13 @@ public class LogUnitServer extends AbstractServer {
      * the read() and append(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    private synchronized ILogData handleRetrieval(long address) {
+    private ILogData handleRetrieval(long address) {
         LogData entry = streamLog.read(address);
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
-    private synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
+    private void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
     }
 

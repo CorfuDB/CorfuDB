@@ -25,6 +25,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -56,6 +57,13 @@ public class ClusterReconfigIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
+    }
+
+    @After
+    public void tearDown() {
+        if (runtime != null) {
+            runtime.shutdown();
+        }
     }
 
     private Random getRandomNumberGenerator() {
@@ -144,6 +152,7 @@ public class ClusterReconfigIT extends AbstractIT {
                     } catch (TransactionAbortedException e) {
                         // A transaction aborted exception is expected during
                         // some reconfiguration cases.
+                        e.printStackTrace();
                     }
                 }).doesNotThrowAnyException();
             }
@@ -390,6 +399,7 @@ public class ClusterReconfigIT extends AbstractIT {
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
         final Layout layout = getLayout(3);
         final int retries = 3;
+        Sleep.SECONDS.sleepUninterruptibly(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
@@ -571,6 +581,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
 
         shutdownCorfuServer(corfuServer_1);
+        router.stop();
     }
 
     /**
@@ -603,6 +614,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
 
         shutdownCorfuServer(corfuServer_1);
+        router.stop();
     }
 
 
