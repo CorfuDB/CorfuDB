@@ -580,30 +580,39 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         while (fileChannel.size() - fileChannel.position() > 0) {
             long channelOffset = fileChannel.position();
             Metadata metadata = parseMetadata(fileChannel);
-            LogEntry entry = parseEntry(fileChannel, metadata);
 
-            if (entry == null) {
-                // Metadata or Entry were partially written
-                log.warn("Malformed entry, metadata {} in file {}", metadata, segment.getFileName());
+            long globalAddress;
+            //Try to avoid reading entire entry while building segment index
+            if (metadata != null && metadata.hasGlobalAddress()) {
+                globalAddress = metadata.getGlobalAddress();
+            } else {
+                LogEntry entry = parseEntry(fileChannel, metadata);
+                if (entry == null) {
+                    // Metadata or Entry were partially written
+                    log.warn("Malformed entry, metadata {} in file {}", metadata, segment.getFileName());
 
-                // Note that after rewinding the channel pointer, it is important to truncate
-                // any bytes that were written. This is required to avoid an ambiguous case
-                // where a subsequent write (after a failed write) succeeds but writes less
-                // bytes than the partially written buffer. In that case, the log unit can't
-                // determine if the bytes correspond to a partially written buffer that needs
-                // to be ignored, or if the bytes correspond to a corrupted metadata field.
-                fileChannel.truncate(fileChannel.position());
-                fileChannel.force(true);
-                return;
+                    // Note that after rewinding the channel pointer, it is important to truncate
+                    // any bytes that were written. This is required to avoid an ambiguous case
+                    // where a subsequent write (after a failed write) succeeds but writes less
+                    // bytes than the partially written buffer. In that case, the log unit can't
+                    // determine if the bytes correspond to a partially written buffer that needs
+                    // to be ignored, or if the bytes correspond to a corrupted metadata field.
+                    fileChannel.truncate(fileChannel.position());
+                    fileChannel.force(true);
+                    return;
+                }
+
+                globalAddress = entry.getGlobalAddress();
             }
 
             AddressMetaData addressMetadata = new AddressMetaData(
+                    globalAddress,
                     metadata.getPayloadChecksum(),
                     metadata.getLength(),
                     channelOffset + METADATA_SIZE
             );
 
-            segment.getKnownAddresses().put(entry.getGlobalAddress(), addressMetadata);
+            segment.getKnownAddresses().put(globalAddress, addressMetadata);
         }
     }
 
@@ -838,9 +847,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         + allRecordsBuf.position() + METADATA_SIZE;
                 allRecordsBuf.put(entryBuffs.get(ind));
                 Metadata metadata = metadataList.get(ind);
-                recordsMap.put(entries.get(ind).getGlobalAddress(),
-                        new AddressMetaData(metadata.getPayloadChecksum(),
-                                metadata.getLength(), channelOffset));
+                final AddressMetaData addressMetaData = new AddressMetaData(
+                        entries.get(ind).getGlobalAddress(),
+                        metadata.getPayloadChecksum(),
+                        metadata.getLength(),
+                        channelOffset
+                );
+                recordsMap.put(entries.get(ind).getGlobalAddress(), addressMetaData);
             }
 
             allRecordsBuf.flip();
@@ -910,7 +923,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             logMetadata.update(entry);
         }
 
-        return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
+        return new AddressMetaData(
+                metadata.getGlobalAddress(),
+                metadata.getPayloadChecksum(),
+                metadata.getLength(),
+                channelOffset
+        );
     }
 
     private long getSegment(LogData entry) {

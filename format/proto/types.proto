@@ -52,6 +52,7 @@ message Metadata {
     required sfixed32 payload_checksum = 1;
     required sfixed32 length_checksum = 2;
     required sfixed32 length = 3;
+    optional sfixed64 global_address = 4;
 }
 
 message TrimEntry {
