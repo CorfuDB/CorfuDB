@@ -38,7 +38,7 @@ public class LogMetadata {
 
     public LogMetadata() {
         this.globalTail = Address.NON_ADDRESS;
-        this.streamTails = new HashMap();
+        this.streamTails = new HashMap<>();
         this.streamsAddressSpaceMap = new HashMap<>();
     }
 
