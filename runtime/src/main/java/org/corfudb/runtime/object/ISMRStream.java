@@ -71,9 +71,7 @@ public interface ISMRStream {
      *
      * @return The UUID for this stream.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    default UUID getID() {
-        return new UUID(0L, 0L);
-    }
+    @SuppressWarnings("checkstyle:abbreviation")
+    UUID getID();
+
 }

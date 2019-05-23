@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.Getter;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -44,10 +45,18 @@ public class StreamViewSMRAdapter implements ISMRStream {
      */
     final CorfuRuntime runtime;
 
+    /**
+     * Name of the wrapped stream.
+     */
+    @Getter
+    private final StreamId streamId;
+
+
     public StreamViewSMRAdapter(CorfuRuntime runtime,
-                                IStreamView streamView) {
+                                IStreamView streamView, StreamId streamId) {
         this.runtime = runtime;
         this.streamView = streamView;
+        this.streamId = streamId;
     }
 
     private List<SMREntry> dataAndCheckpointMapper(ILogData logData) {
@@ -112,7 +121,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      * Returns the list of SMREntries positioned at the previous log position of this stream.
      *
      * @return Returns the list of SMREntries positioned at the previous log position of this
-     *     stream.
+     * stream.
      */
     public List<SMREntry> previous() {
         ILogData data = streamView.previous();

@@ -11,7 +11,6 @@ import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +80,7 @@ public class VersionLockedObject<T> {
     /**
      * The stream view this object is backed by.
      */
-    private final ISMRStream smrStream;
+    private final StreamViewSMRAdapter smrStream;
 
     /**
      * The optimistic SMR stream on this object, if any.
@@ -474,11 +473,10 @@ public class VersionLockedObject<T> {
     @Override
     public String toString() {
         WriteSetSMRStream optimisticStream = this.optimisticStream;
-
-        return object.getClass().getSimpleName()
-                + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
-                + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
-                + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
+        return object.getClass().getSimpleName() +
+                "[" + smrStream.getStreamId().getName() + "]@" +
+                (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe()) +
+                (optimisticStream == null ? "" : "+" + optimisticStream.pos());
     }
 
 

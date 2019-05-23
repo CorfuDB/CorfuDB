@@ -40,7 +40,7 @@ import java.util.function.Supplier;
  * are backed by a stream.
  * <p>
  * <p>This class implements the methods that an in-memory corfu-object proxy carries
- * in order to by in sync with a stream.
+ * in order to be in sync with a stream.
  * <p>
  * <p>We refer to the program's object as the -corfu object-,
  * and to the internal object implementation as the -proxy-.
@@ -75,11 +75,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     CorfuRuntime rt;
 
     /**
-     * The ID of the stream of the log.
+     * The StreamId of the stream of the log.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-            UUID streamID;
+    private final StreamId streamId;
+
+    /**
+     * The name of the stream of the log.
+     */
+    @Getter
+    String streamName;
 
     /**
      * The type of the underlying object. We use this to instantiate
@@ -122,7 +126,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * Creates a CorfuCompileProxy object on a particular stream.
      *
      * @param rt                  Connected CorfuRuntime instance.
-     * @param streamID            StreamID of the log.
+     * @param streamId            StreamID of the log.
      * @param type                Type of underlying object to instantiate a new instance.
      * @param args                Arguments to create this proxy.
      * @param serializer          Serializer used by the SMR entries to serialize the arguments.
@@ -133,7 +137,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
+    public CorfuCompileProxy(CorfuRuntime rt, StreamId streamId, Class<T> type, Object[] args,
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
@@ -141,7 +145,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Set<String> resetSet
     ) {
         this.rt = rt;
-        this.streamID = streamID;
+        this.streamId = streamId;
         this.type = type;
         this.args = args;
         this.serializer = serializer;
@@ -149,7 +153,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
+                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamId.getId()), streamId),
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
 
@@ -193,7 +197,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
             // Linearize this read against a timestamp
             final long timestamp = rt.getSequencerView()
-                            .query(getStreamID()).getToken().getSequence();
+                    .query(getStreamID()).getToken().getSequence();
             log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
             try {
@@ -343,7 +347,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public UUID getStreamID() {
-        return streamID;
+        return streamId.getId();
     }
 
     /**
@@ -477,7 +481,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     @Override
     public String toString() {
-        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
+        return type.getSimpleName() + "[" + Utils.toReadableId(streamId.getId()) + "]";
     }
 
     private void abortTransaction(Exception e) {

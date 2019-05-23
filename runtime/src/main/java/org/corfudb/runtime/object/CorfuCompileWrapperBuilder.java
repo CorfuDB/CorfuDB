@@ -18,7 +18,7 @@ public class CorfuCompileWrapperBuilder {
      *
      * @param type       Type of SMR object.
      * @param rt         Connected instance of the CorfuRuntime.
-     * @param streamID   StreamID of the SMR Object.
+     * @param streamId   StreamID of the SMR Object.
      * @param args       Arguments passed to instantiate the object.
      * @param serializer Serializer to be used to serialize the object arguments.
      * @param <T>        Type
@@ -27,10 +27,9 @@ public class CorfuCompileWrapperBuilder {
      * @throws IllegalAccessException Illegal Access to the Object.
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                   UUID streamID, Object[] args,
+                                   StreamId streamId, Object[] args,
                                    ISerializer serializer)
             throws ClassNotFoundException, IllegalAccessException,
             InstantiationException {
@@ -59,7 +58,7 @@ public class CorfuCompileWrapperBuilder {
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
+        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamId,
                 type, args, serializer,
                 wrapperObject.getCorfuSMRUpcallMap(),
                 wrapperObject.getCorfuUndoMap(),
