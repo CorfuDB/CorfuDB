@@ -1,8 +1,7 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
