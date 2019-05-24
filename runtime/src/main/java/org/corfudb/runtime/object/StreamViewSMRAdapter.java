@@ -1,8 +1,8 @@
 package org.corfudb.runtime.object;
 
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.logprotocol.SMRRecord;
+import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -50,21 +51,16 @@ public class StreamViewSMRAdapter implements ISMRStream {
     }
 
     private List<SMRRecord> dataAndCheckpointMapper(ILogData logData) {
-        if (logData.hasCheckpointMetadata()) {
-            // This is a CHECKPOINT record.  Extract the SMREntries, if any.
-            CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
-            if (cp.getSmrEntries() != null
-                    && cp.getSmrEntries().getSMRUpdates(streamView.getId()).size() > 0) {
-                cp.getSmrEntries().getSMRUpdates(streamView.getId()).forEach(e -> {
-                    e.setGlobalAddress(logData.getGlobalAddress());
-                });
-                return cp.getSmrEntries().getSMRUpdates(streamView.getId());
-            } else {
-                return Collections.emptyList();
+        List<SMRRecord> updates = ((SMRLogEntry) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
+        IntStream.range(0, updates.size()).forEach(i -> {
+            SMRRecord entry = updates.get(i);
+            // It is not necessary to compute locator when it has been computed
+            if (entry.locator == null) {
+                entry.setLocator(new SMRRecordLocator(logData.getGlobalAddress(), streamView.getId(), i));
             }
-        } else {
-            return ((SMRLogEntry) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
-        }
+        });
+
+        return updates;
     }
 
     @Override

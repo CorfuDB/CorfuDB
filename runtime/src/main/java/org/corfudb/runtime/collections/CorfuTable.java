@@ -28,6 +28,7 @@ import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.annotations.Accessor;
@@ -59,6 +60,9 @@ import org.corfudb.util.ImmuableListSetWrapper;
 @Slf4j
 @CorfuObject
 public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
+
+    @Getter
+    private ILocatorStore<K> locatorStore = new MapLocatorStore<>();
 
     /**
      * Denotes a function that supplies the unique name of an index registered to
