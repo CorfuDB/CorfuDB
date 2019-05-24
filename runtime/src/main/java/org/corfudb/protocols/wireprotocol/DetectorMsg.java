@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 
 import java.util.Set;

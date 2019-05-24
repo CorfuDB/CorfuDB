@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
+import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

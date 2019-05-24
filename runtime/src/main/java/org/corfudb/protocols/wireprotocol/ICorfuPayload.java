@@ -28,6 +28,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.List;
@@ -172,19 +173,47 @@ public interface ICorfuPayload<T> {
         if (rawType.isAssignableFrom(Map.class)) {
             return (T) mapFromBuffer(
                     buf,
-                    token.resolveType(Map.class.getTypeParameters()[0]).getRawType(),
-                    token.resolveType(Map.class.getTypeParameters()[1]).getRawType()
+                    token.resolveType(Map.class.getTypeParameters()[0]),
+                    token.resolveType(Map.class.getTypeParameters()[1])
             );
         }
 
         if (rawType.isAssignableFrom(Set.class)) {
             return (T) setFromBuffer(
                     buf,
-                    token.resolveType(Set.class.getTypeParameters()[0]).getRawType()
+                    token.resolveType(Set.class.getTypeParameters()[0])
+            );
+        }
+
+        if (rawType.isAssignableFrom(List.class)) {
+            return (T) listFromBuffer(
+                    buf,
+                    token.resolveType(List.class.getTypeParameters()[0])
             );
         }
 
         return (T) fromBuffer(buf, rawType);
+    }
+
+    /**
+     * A really simple flat map implementation. The first entry is the size of the map as an int,
+     * and the next entries are each key followed by its value.
+     * Maps of maps are currently not supported.
+     *
+     * @param buf        The buffer to deserialize.
+     * @param keyToken   The class token of the keys.
+     * @param valueToken The class token of the values.
+     * @param <K>        The type of the keys.
+     * @param <V>        The type of the values.
+     * @return Map
+     */
+    static <K, V> Map<K, V> mapFromBuffer(ByteBuf buf, TypeToken<K> keyToken, TypeToken<V> valueToken) {
+        int numEntries = buf.readInt();
+        ImmutableMap.Builder<K, V> builder = ImmutableMap.builder();
+        for (int i = 0; i < numEntries; i++) {
+            builder.put(fromBuffer(buf, keyToken), fromBuffer(buf, valueToken));
+        }
+        return builder.build();
     }
 
     /**
@@ -200,10 +229,23 @@ public interface ICorfuPayload<T> {
      * @return Map
      */
     static <K, V> Map<K, V> mapFromBuffer(ByteBuf buf, Class<K> keyClass, Class<V> valueClass) {
+        return mapFromBuffer(buf, TypeToken.of(keyClass), TypeToken.of(valueClass));
+    }
+
+    /**
+     * A really simple flat set implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value.
+     *
+     * @param buf        The buffer to deserialize.
+     * @param valueToken The token of class of the values.
+     * @param <V>        The type of the values.
+     * @return Set of value types
+     */
+    static <V> Set<V> setFromBuffer(ByteBuf buf, TypeToken<V> valueToken) {
         int numEntries = buf.readInt();
-        ImmutableMap.Builder<K, V> builder = ImmutableMap.builder();
+        ImmutableSet.Builder<V> builder = ImmutableSet.builder();
         for (int i = 0; i < numEntries; i++) {
-            builder.put(fromBuffer(buf, keyClass), fromBuffer(buf, valueClass));
+            builder.add(fromBuffer(buf, valueToken));
         }
         return builder.build();
     }
@@ -218,10 +260,23 @@ public interface ICorfuPayload<T> {
      * @return Set of value types
      */
     static <V> Set<V> setFromBuffer(ByteBuf buf, Class<V> valueClass) {
+        return setFromBuffer(buf, TypeToken.of(valueClass));
+    }
+
+    /**
+     * A really simple flat list implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value.
+     *
+     * @param <V>        The type of the values.
+     * @param buf        The buffer to deserialize.
+     * @param valueToken The token of class of the values.
+     * @return List of values types
+     */
+    static <V> List<V> listFromBuffer(ByteBuf buf, TypeToken<V> valueToken) {
         int numEntries = buf.readInt();
-        ImmutableSet.Builder<V> builder = ImmutableSet.builder();
+        ImmutableList.Builder<V> builder = ImmutableList.builder();
         for (int i = 0; i < numEntries; i++) {
-            builder.add(fromBuffer(buf, valueClass));
+            builder.add(fromBuffer(buf, valueToken));
         }
         return builder.build();
     }
@@ -236,12 +291,7 @@ public interface ICorfuPayload<T> {
      * @return List of values types
      */
     static <V> List<V> listFromBuffer(ByteBuf buf, Class<V> valueClass) {
-        int numEntries = buf.readInt();
-        ImmutableList.Builder<V> builder = ImmutableList.builder();
-        for (int i = 0; i < numEntries; i++) {
-            builder.add(fromBuffer(buf, valueClass));
-        }
-        return builder.build();
+        return listFromBuffer(buf, TypeToken.of(valueClass));
     }
 
     /**
