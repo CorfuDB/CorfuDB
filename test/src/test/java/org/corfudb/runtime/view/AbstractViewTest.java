@@ -22,7 +22,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseHandler;
@@ -184,6 +184,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtimeRouterMap.keySet().forEach(CorfuRuntime::shutdown);
         runtimeRouterMap.clear();
         testServerMap.clear();
+        runtime.shutdown();
     }
 
     /** Add a server at a specific port, using the given configuration options.
@@ -300,7 +301,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 });
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
-                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
+                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(0L,
                         Collections.emptyMap(), l.getEpoch(), false)), null,
                         primarySequencerNode.serverRouter);
     }

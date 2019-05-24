@@ -194,6 +194,9 @@
                         <version>3.0.0-M1</version>
                         <configuration>
                             <forkCount>1</forkCount>
+                            <trimStackTrace>false</trimStackTrace>
+                            <!-- Option to generate a file test report or just output the test report to the console. -->
+                            <useFile>false</useFile>
                             <includes>
                                 <include>**/*IT.java</include>
                             </includes>
@@ -337,6 +340,8 @@
                     <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
+                    <!-- Option to generate a file test report or just output the test report to the console. -->
+                    <useFile>false</useFile>
                     <skipAfterFailureCount>2</skipAfterFailureCount>
                     <systemPropertyVariables>
                         <propertyName>test.travisBuild</propertyName>

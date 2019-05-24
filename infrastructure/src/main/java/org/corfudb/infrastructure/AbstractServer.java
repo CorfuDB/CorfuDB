@@ -5,9 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.UnaryOperator;
 
 /**
  * Created by mwei on 12/4/15.
@@ -75,14 +75,16 @@ public abstract class AbstractServer {
         return state.get();
     }
 
-    public abstract ExecutorService getExecutor();
+    public abstract ExecutorService getExecutor(CorfuMsgType corfuMsgType);
+
+    public abstract List<ExecutorService> getExecutors();
 
     /**
      * Shutdown the server.
      */
     public void shutdown() {
         setState(ServerState.SHUTDOWN);
-        getExecutor().shutdownNow();
+        getExecutors().forEach(ExecutorService::shutdownNow);
     }
 
     /**

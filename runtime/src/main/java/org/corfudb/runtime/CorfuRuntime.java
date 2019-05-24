@@ -171,6 +171,13 @@ public class CorfuRuntime {
 
         // region Stream Parameters
         /**
+         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
+         * False, if strategy to discover the address space of a stream relies on the get stream address map.
+         */
+        @Default
+        boolean followBackpointersEnabled = false;
+
+        /**
          * Whether or not to disable backpointers.
          */
         @Default
@@ -195,6 +202,20 @@ public class CorfuRuntime {
          */
         @Default
         int trimRetry = 2;
+
+        /**
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        @Default
+        int streamBatchSize = 10;
+
+        /**
+         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
+         * address discovery mechanism relies on address maps instead of follow backpointers;
+         */
+        @Default
+        int checkpointReadBatchSize = 5;
         // endregion
 
         //region        Security parameters

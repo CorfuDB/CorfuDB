@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
-import org.corfudb.infrastructure.CorfuServer;
+import org.corfudb.infrastructure.CorfuServerNode;
 import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -489,9 +489,9 @@ public class NettyCommTest extends AbstractCorfuTest {
         serverData.shutdownServer();
     }
 
-    void runWithBaseServer(NettyServerDataConstructor nsdc,
-            NettyClientRouterConstructor ncrc, NettyCommFunction actionFn)
-            throws Exception {
+    private void runWithBaseServer(NettyServerDataConstructor nsdc,
+                                   NettyClientRouterConstructor ncrc,
+                                   NettyCommFunction actionFn) throws Exception {
         int port = findRandomOpenPort();
 
         NettyServerData d = nsdc.createNettyServerData(port);
@@ -500,14 +500,13 @@ public class NettyCommTest extends AbstractCorfuTest {
             d.bootstrapServer();
             ncr = ncrc.createNettyClientRouter(port);
             ncr.addClient(new BaseHandler());
-            ncr.start();
             actionFn.runTest(ncr, d);
         } catch (Exception ex) {
             log.error("Exception ", ex);
             throw ex;
         } finally {
             try {
-                if (ncr != null) {ncr.stop(true);}
+                if (ncr != null) {ncr.stop();}
             } catch (Exception ex) {
                 log.warn("Error shutting down client...", ex);
             }
@@ -540,25 +539,25 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         private final String address = "localhost";
 
-        public NettyServerData(@Nonnull ServerContext context) {
+        NettyServerData(@Nonnull ServerContext context) {
             this.serverContext = context;
         }
 
-        void bootstrapServer() throws Exception {
-            NettyServerRouter nsr =
-                new NettyServerRouter(Collections.singletonList(new BaseServer(serverContext)));
-            f = CorfuServer.startAndListen(serverContext.getBossGroup(),
-                                            serverContext.getWorkerGroup(),
-                                            b -> CorfuServer.configureBootstrapOptions(
-                                                serverContext, b),
-                                            serverContext,
-                                            nsr,
-                                            address,
-                                            serverContext.getServerConfig(Integer.class,
-                                                "<port>"));
+        void bootstrapServer() {
+            BaseServer baseServer = new BaseServer(serverContext);
+            NettyServerRouter nsr = new NettyServerRouter(Collections.singletonList(baseServer));
+            CorfuServerNode corfuServerNode = new CorfuServerNode(serverContext,
+                    Collections.singletonMap(BaseServer.class, baseServer));
+            f = corfuServerNode.bindServer(serverContext.getBossGroup(),
+                    serverContext.getWorkerGroup(),
+                    corfuServerNode::configureBootstrapOptions,
+                    serverContext,
+                    nsr,
+                    address,
+                    serverContext.getServerConfig(Integer.class, "<port>"));
         }
 
-        public void shutdownServer() {
+        void shutdownServer() {
             f.channel().close().awaitUninterruptibly();
         }
 

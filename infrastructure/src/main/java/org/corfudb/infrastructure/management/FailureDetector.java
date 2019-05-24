@@ -155,10 +155,12 @@ public class FailureDetector implements IDetector {
 
         List<PollReport> reports = new ArrayList<>();
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
+            long pollIterationStartTime = System.nanoTime();
+
             PollReport currReport = pollIteration(allServers, router, epoch, sequencerMetrics, layout);
             reports.add(currReport);
 
-            long pollInterval = modifyIterationTimeouts(router, currReport);
+            long pollInterval = modifyIterationTimeouts(router, currReport, pollIterationStartTime);
 
             // Sleep for the provided poll interval before starting the next iteration
             Sleep.MILLISECONDS.sleepUninterruptibly(pollInterval);
@@ -208,8 +210,8 @@ public class FailureDetector implements IDetector {
      * @param currReport current poll report
      * @return updated poll interval
      */
-    private long modifyIterationTimeouts(Map<String, IClientRouter> router, PollReport currReport) {
-        long pollIterationStartTime = System.nanoTime();
+    private long modifyIterationTimeouts(Map<String, IClientRouter> router, PollReport currReport,
+                                         long pollIterationStartTime) {
         long pollInterval = initialPollInterval;
 
         Set<String> allReachableNodes = currReport.getAllReachableNodes();

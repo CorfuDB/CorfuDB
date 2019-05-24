@@ -73,16 +73,6 @@ public class ManagementClient extends AbstractClient {
                 .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
     }
 
-    /**
-     * Requests for a heartbeat message containing the node status.
-     *
-     * @return A future which will return the node health metrics of
-     * the node which was requested for the heartbeat.
-     */
-    public CompletableFuture<ClusterState> sendHeartbeatRequest() {
-        return sendMessageWithFuture(CorfuMsgType.HEARTBEAT_REQUEST.msg());
-    }
-
     public CompletableFuture<NodeState> sendNodeStateRequest() {
         return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());
     }

@@ -9,7 +9,8 @@ import java.util.UUID;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -17,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.view.Address;
 import org.junit.Before;
 import org.junit.Test;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 /**
  * Created by mwei on 12/13/15.
@@ -211,20 +213,20 @@ public class SequencerServerTest extends AbstractServerTest {
         long globalTail = getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence();
 
         // Construct new tails
-        Map<UUID, Long> tailMap = new HashMap<>();
+        Map<UUID, StreamAddressSpace> tailMap = new HashMap<>();
         long newTailA = tailA + 2;
         long newTailB = tailB + 1;
         // This one should not be updated
         long newTailC = tailC - 1;
 
-        tailMap.put(streamA, newTailA);
-        tailMap.put(streamB, newTailB);
-        tailMap.put(streamC, newTailC);
+        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailA)));
+        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailB)));
+        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailC)));
 
         // Modifying the sequencerEpoch to simulate sequencer reset.
         server.setSequencerEpoch(-1L);
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.BOOTSTRAP_SEQUENCER,
-                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap, 0L, false)));
+                new SequencerRecoveryMsg(globalTail + 2, tailMap, 0L, false)));
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singletonList(streamA))));
@@ -264,18 +266,18 @@ public class SequencerServerTest extends AbstractServerTest {
         // Sequencer accepts a delta bootstrap message only if the new epoch is consecutive.
         long newEpoch = serverContext.getServerEpoch() + 1;
         serverContext.setServerEpoch(newEpoch, serverContext.getServerRouter());
-        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(
+        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
                 Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
         // Sequencer accepts only a full bootstrap message if the epoch is not consecutive.
         newEpoch = serverContext.getServerEpoch() + 2;
         serverContext.setServerEpoch(newEpoch, serverContext.getServerRouter());
-        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(
+        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
                 Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.NACK);
-        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(
-                num, Collections.singletonMap(streamA, num), newEpoch, false)));
+        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
+                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(num))), newEpoch, false)));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
         sendMessage(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())));

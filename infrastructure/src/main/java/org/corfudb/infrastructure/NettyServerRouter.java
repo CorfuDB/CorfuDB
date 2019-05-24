@@ -135,7 +135,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                         log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                     }
 
-                    handler.getExecutor().submit(() -> {
+                    handler.getExecutor(m.getMsgType()).submit(() -> {
                         try {
                             handler.handleMessage(m, ctx, this);
                         } catch (Throwable t) {

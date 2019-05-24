@@ -4,7 +4,9 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.runtime.view.Address;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
@@ -29,11 +31,15 @@ public class LogMetadata {
     private volatile long globalTail;
 
     @Getter
+    private final Map<UUID, StreamAddressSpace> streamsAddressSpaceMap;
+
+    @Getter
     private final Map<UUID, Long> streamTails;
 
     public LogMetadata() {
         this.globalTail = Address.NON_ADDRESS;
-        this.streamTails = new HashMap();
+        this.streamTails = new HashMap<>();
+        this.streamsAddressSpaceMap = new HashMap<>();
     }
 
     public void update(List<LogData> entries) {
@@ -46,8 +52,17 @@ public class LogMetadata {
         long entryAddress = entry.getGlobalAddress();
         updateGlobalTail(entryAddress);
         for (UUID streamId : entry.getStreams()) {
+            // Update stream tails
             long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
             streamTails.put(streamId, Math.max(currentStreamTail, entryAddress));
+
+            // Update stream address map (used for sequencer recovery)
+            // Since this is the first entry found for this stream (i.e., smallest address),
+            // we set the trim mark to be exactly the backpointer of this entry (address already trimmed or it would've
+            // shown up  as we go through the log from the beginning).
+            streamsAddressSpaceMap.putIfAbsent(streamId, new StreamAddressSpace(entry.getBackpointer(streamId),
+                    new Roaring64NavigableMap()));
+            streamsAddressSpaceMap.get(streamId).addAddress(entryAddress);
         }
 
         // We should also consider checkpoint metadata while updating the tails.
@@ -68,6 +83,13 @@ public class LogMetadata {
                 // but that can be addressed in another issue.
                 long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
                 streamTails.put(streamId, Math.max(currentStreamTail, streamTailAtCP));
+
+                // The trim mark is part of the address space information and is also required
+                // so clients can observe updates to streams that have been completely checkpointed.
+                // If we hit a checkpoint and the stream is not present in the map, the checkpointed
+                // address is the last trimmed address for this stream.
+                streamsAddressSpaceMap.putIfAbsent(streamId,
+                        new StreamAddressSpace(streamTailAtCP, new Roaring64NavigableMap()));
             }
         }
     }
