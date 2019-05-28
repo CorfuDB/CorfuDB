@@ -84,11 +84,6 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         return this;
     }
 
-    public ObjectBuilder<T> setArgumentsArray(Object[] arguments) {
-        this.arguments = arguments;
-        return this;
-    }
-
     /**
      * Open an Object.
      */
