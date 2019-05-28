@@ -14,7 +14,6 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
@@ -79,11 +78,6 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
     }
 
     public ObjectBuilder<T> setArguments(Object... arguments) {
-        this.arguments = arguments;
-        return this;
-    }
-
-    public ObjectBuilder<T> setArgumentsArray(Object[] arguments) {
         this.arguments = arguments;
         return this;
     }
