@@ -284,7 +284,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
             indexSpec.add(index);
         });
         log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
-                secondaryIndexes.keySet().toString());
+                secondaryIndexes.keySet());
         mainMap = mapImpl;
     }
 
