@@ -1,7 +1,7 @@
 language: java
 sudo: required
-dist: trusty
-jdk: oraclejdk8
+dist: xenial
+jdk: openjdk8
 
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
