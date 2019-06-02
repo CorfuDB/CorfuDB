@@ -63,7 +63,7 @@ public class MemoryFootprintIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create CorfuTable
         CorfuTable testTable = runtime
