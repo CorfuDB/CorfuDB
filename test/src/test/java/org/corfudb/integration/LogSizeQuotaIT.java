@@ -1,7 +1,8 @@
 package org.corfudb.integration;
 
 import org.apache.commons.io.FileUtils;
-import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -101,7 +102,8 @@ public class LogSizeQuotaIT extends AbstractIT {
         assertThat(txnAborted).isTrue();
 
         // bump up the sequencer counter to create multiple empty segments
-        final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE;
+        ServerContext sc = new ServerContextBuilder().build();
+        final int emptySlots = sc.getStreamLogParams().recordsPerSegment;
         for (int x = 0; x < emptySlots; x++) {
             rt.getSequencerView().next();
         }
