@@ -1,14 +1,13 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.Data;
-import lombok.NonNull;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -21,34 +20,38 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Maithem
  */
 @Slf4j
-@Data
-class SegmentHandle {
-    final long segment;
+@Getter
+class StreamLogSegment extends AbstractLogSegment {
 
-    @NonNull
-    final FileChannel writeChannel;
+    private long garbagePayloadSize;
 
-    @NonNull
-    final FileChannel readChannel;
-
-    @NonNull
-    String fileName;
+    private long totalPayloadSize;
 
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
-    private final Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private volatile int refCount = 0;
 
-
-    public synchronized void retain() {
-        refCount++;
+    public StreamLogSegment(long segmentAddress, String fileName,
+                            FileChannel writeChannel, FileChannel readChannel) {
+        super(segmentAddress, fileName, writeChannel, readChannel);
     }
 
-    public synchronized void release() {
-        if (refCount == 0) {
-            throw new IllegalStateException("refCount cannot be less than 0, segment " + segment);
+    public void recordSegmentStats(LogData logData) {
+        if (logData.getData() == null) {
+            throw new IllegalStateException("LogData is missing data field.");
         }
-        refCount--;
+        totalPayloadSize += logData.getData().length;
+    }
+
+    public double getGarbagePayloadSizeMB() {
+        return (double) garbagePayloadSize / 1024 / 1024;
+    }
+
+    public double getGarbageRatio() {
+        return (double) garbagePayloadSize / totalPayloadSize;
+    }
+
+    @Override
+    public void append(long address, LogData entry) {
+
     }
 
     public void close() {
