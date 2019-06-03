@@ -47,8 +47,6 @@ public class StreamLogDataStoreTest {
 
         DataStore ds = new DataStore(opts, val -> log.info("clean up"));
 
-        return StreamLogDataStore.builder()
-                .dataStore(ds)
-                .build();
+        return new StreamLogDataStore(ds);
     }
 }
