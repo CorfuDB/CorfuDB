@@ -1,13 +1,7 @@
 package org.corfudb.runtime.clients;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -34,15 +28,13 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.StreamLogParams;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.runtime.exceptions.QuotaExceededException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -52,10 +44,30 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 12/14/15.
@@ -459,8 +471,10 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     @Test
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
+        StreamLogParams params = serverContext.getStreamLogParams();
+
         client.write(0, null, testString, Collections.emptyMap()).get();
-        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, null,
+        client.write(params.recordsPerSegment + 1, null,
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry
@@ -468,7 +482,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         String logFilePath = logDir + File.separator + "0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
 
-        ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
+        ByteBuffer metaDataBuf = ByteBuffer.allocate(StreamLogParams.METADATA_SIZE);
         file.getChannel().read(metaDataBuf);
         metaDataBuf.flip();
 
@@ -477,7 +491,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         serverRouter.addServer(server2);
 
         Types.Metadata metadata = Types.Metadata.parseFrom(metaDataBuf.array());
-        final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
+        final int fileOffset = Integer.BYTES + StreamLogParams.METADATA_SIZE + metadata.getLength() + 20;
         final int CORRUPT_BYTES = 0xFFFF;
         file.seek(fileOffset); // Skip file header
         file.writeInt(CORRUPT_BYTES);
