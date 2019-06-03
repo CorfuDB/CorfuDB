@@ -1,13 +1,32 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
-
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.EventLoopGroup;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.paxos.PaxosDataStore;
+import org.corfudb.infrastructure.log.StreamLogDataStore;
+import org.corfudb.infrastructure.log.StreamLogParams;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
+import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.UuidUtils;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.nio.file.Files;
 import java.time.Duration;
@@ -23,27 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.annotation.Nonnull;
-
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.infrastructure.paxos.PaxosDataStore;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
-import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.NodeLocator;
-import org.corfudb.util.UuidUtils;
+import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
  * Server Context:
@@ -640,6 +639,33 @@ public class ServerContext implements AutoCloseable {
         } else {
             return prefix + "-";
         }
+    }
+
+    /**
+     * Get the user defined log size quota percentage.
+     *
+     * @return log size quota percentage
+     */
+    private double getLogSizeQuotaPercentage() {
+        String logSizeQuotaPercentage = getServerConfig(String.class, "--log-size-quota-percentage");
+        return logSizeQuotaPercentage == null ? 100.0 : Double.valueOf(logSizeQuotaPercentage);
+    }
+
+    /**
+     * Get a new instance of {@link StreamLogParams} representing the stream log parameters.
+     *
+     * @return an instance of {@link StreamLogParams}
+     */
+    public StreamLogParams getStreamLogParams() {
+        return StreamLogParams.builder()
+                .logPath(getServerConfig(String.class, "--log-path"))
+                .verifyChecksum(!getServerConfig(Boolean.class, "--no-verify"))
+                .logSizeQuotaPercentage(getLogSizeQuotaPercentage())
+                .build();
+    }
+
+    public StreamLogDataStore getStreamLogDataStore() {
+        return new StreamLogDataStore(dataStore);
     }
 
     /**
