@@ -31,6 +31,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.log.StreamLogDataStore;
+import org.corfudb.infrastructure.log.StreamLogParams;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -660,6 +662,22 @@ public class ServerContext implements AutoCloseable {
         } else {
             return prefix + "-";
         }
+    }
+
+    /**
+     * Get a new instance of {@link StreamLogParams} representing the stream log parameters.
+     *
+     * @return an instance of {@link StreamLogParams}
+     */
+    public StreamLogParams getStreamLogParams() {
+        return StreamLogParams.builder()
+                .logPath(getServerConfig(String.class, "--log-path"))
+                .verifyChecksum(!getServerConfig(Boolean.class, "--no-verify"))
+                .build();
+    }
+
+    public StreamLogDataStore getStreamLogDataStore() {
+        return new StreamLogDataStore(dataStore);
     }
 
     /**

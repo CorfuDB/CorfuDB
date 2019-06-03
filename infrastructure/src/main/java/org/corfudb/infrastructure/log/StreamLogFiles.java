@@ -1,5 +1,9 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.log.StreamLogParams.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogParams.VERSION;
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
@@ -9,6 +13,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -16,7 +21,6 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -69,20 +73,14 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 @Slf4j
 public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpace {
 
-    public static final int METADATA_SIZE = Metadata.newBuilder()
-            .setLengthChecksum(-1)
-            .setPayloadChecksum(-1)
-            .setLength(-1)
-            .build()
-            .getSerializedSize();
-    public static final int VERSION = 2;
-    public static final int RECORDS_PER_LOG_FILE = 10000;
+    @Getter
+    private final StreamLogParams logParams;
+    @Getter
     private final Path logDir;
-    private final boolean verify;
 
     private final StreamLogDataStore dataStore;
 
-    private ConcurrentMap<String, SegmentHandle> writeChannels;
+    private ConcurrentMap<String, StreamLogSegment> streamLogSegments;
     private Set<FileChannel> channelsToSync;
     private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
 
@@ -97,16 +95,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Returns a file-based stream log object.
      *
-     * @param serverContext Context object that provides server state such as epoch,
-     *                      segment and start address
-     * @param noVerify      Disable checksum if true
+     * @param streamLogParams    stream log parameters
+     * @param streamLogDataStore stream log data-store which stores persisted meta information
      */
-    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
-        logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
-        writeChannels = new ConcurrentHashMap<>();
+    public StreamLogFiles(StreamLogParams streamLogParams, StreamLogDataStore streamLogDataStore) {
+        logParams = streamLogParams;
+        logDir = Paths.get(logParams.logPath, "log");
+        streamLogSegments = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
-        this.verify = !noVerify;
-        this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
+        dataStore = streamLogDataStore;
 
         initStreamLogDirectory();
         verifyLogs();
@@ -122,8 +119,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    private long getStartingSegment() {
-        return dataStore.getStartingAddress() / RECORDS_PER_LOG_FILE;
+    private long getSegmentAddress(long globalAddress) {
+        return globalAddress / logParams.recordsPerSegment;
     }
 
     /**
@@ -136,22 +133,22 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             try {
                 FileStore fs = Files.getFileStore(Paths.get(corfuDir));
                 if (fs.isReadOnly()) {
-                    throw new UnrecoverableCorfuError("Cannot start Corfu on a read-only filesystem:"
-                            +corfuDir);
+                    throw new UnrecoverableCorfuError("Cannot start Corfu on a " +
+                            "read-only filesystem: " + corfuDir);
                 }
             } catch (IOException e) {
-                throw new UnrecoverableCorfuError("Unable to retrieve Corfu Filesystem permissions"+
-                        corfuDir);
+                throw new UnrecoverableCorfuError("Unable to retrieve Corfu " +
+                        "filesystem permissions: " + corfuDir);
             }
 
-            // corfu dir in the filesystem must be writable for writing configuration files.
+            // Corfu dir in the filesystem must be writable for writing configuration files.
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
-                throw new UnrecoverableCorfuError("Corfu directory is not writable "+corfuDir);
+                throw new UnrecoverableCorfuError("Corfu directory is not writable " + corfuDir);
             }
             File logDirectory = new File(logDir.toString());
             if (!logDirectory.canWrite()) {
-                throw new UnrecoverableCorfuError("Stream log directory not writable in "+corfuDir);
+                throw new UnrecoverableCorfuError("Stream log directory not writable in " + corfuDir);
             }
             log.info("Log directory already exists: {}", logDir);
             return;
@@ -172,7 +169,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * consecutive segments from [startSegment, endSegment]
      */
     private void initializeLogMetadata() {
-        long startingSegment = getStartingSegment();
+        long startingSegment = getSegmentAddress(dataStore.getStartingAddress());
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
@@ -181,7 +178,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
         // for stream trim mark computation.
         for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
-            SegmentHandle segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
+            StreamLogSegment segment = getSegmentHandleForAddress(currentSegment * logParams.recordsPerSegment + 1);
+
             try {
                 for (Long address : segment.getKnownAddresses().keySet()) {
                     // skip trimmed entries
@@ -196,8 +194,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
 
-        // Open segment will add entries to the writeChannels map, therefore we need to clear it
-        writeChannels.clear();
+        // Open segment will add entries to the streamLogSegments map, therefore we need to clear it
+        streamLogSegments.clear();
         long end = System.currentTimeMillis();
         log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
     }
@@ -273,7 +271,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // an atomic operation, it is possible to set an incorrect tail segment. In
         // that case we will need to scan more than one segment
         logMetadata.updateGlobalTail(address);
-        long segment = address / RECORDS_PER_LOG_FILE;
+        long segment = getSegmentAddress(address);
 
         dataStore.updateTailSegment(segment);
     }
@@ -332,7 +330,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new IllegalStateException(msg);
             }
 
-            if (verify && !header.getVerifyChecksum()) {
+            if (logParams.verifyChecksum && !header.getVerifyChecksum()) {
                 String msg = String.format("Log file %s not generated with check sums, can't verify!",
                         file.getAbsoluteFile());
                 throw new IllegalStateException(msg);
@@ -364,7 +362,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private void trimPrefix() {
         // Trim all segments up till the segment that contains the starting address
         // (i.e. trim only complete segments)
-        long endSegment = getStartingSegment() - 1;
+        long endSegment = getSegmentAddress(dataStore.getStartingAddress()) - 1;
 
         if (endSegment < 0) {
             log.debug("Only one segment detected, ignoring trim");
@@ -578,7 +576,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             return null;
         }
 
-        if (verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
+        if (logParams.verifyChecksum && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
             String errorMessage = getDataCorruptionErrorMessage(
                     "Checksum mismatch detected while trying to read file",
                     channel, fileName
@@ -600,18 +598,18 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
-     * Reads an address space from a log file into a SegmentHandle.
+     * Reads an address space from a log file into a StreamLogSegment.
      *
      * @param segment Object containing state for the segment to be read
      */
-    private void readAddressSpace(SegmentHandle segment) throws IOException {
+    private void readAddressSpace(StreamLogSegment segment) throws IOException {
         FileChannel fileChannel = segment.getWriteChannel();
         fileChannel.position(0);
 
         LogHeader header = parseHeader(fileChannel, segment.getFileName());
         if (header == null) {
             log.warn("Couldn't find log header for {}, creating new header.", segment.getFileName());
-            writeHeader(fileChannel, VERSION, verify);
+            writeHeader(fileChannel, VERSION, logParams.verifyChecksum);
             return;
         }
 
@@ -652,7 +650,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param address The address of the entry.
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
-    private LogData readRecord(SegmentHandle segment, long address) throws IOException {
+    private LogData readRecord(StreamLogSegment segment, long address) throws IOException {
         FileChannel fileChannel = segment.getReadChannel();
 
         AddressMetaData metaData = segment.getKnownAddresses().get(address);
@@ -712,14 +710,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param address The address to open.
      * @return The FileChannel for that address.
      */
-    SegmentHandle getSegmentHandleForAddress(long address) {
-        long segment = address / RECORDS_PER_LOG_FILE;
+    StreamLogSegment getSegmentHandleForAddress(long address) {
+        long segment = getSegmentAddress(address);
 
         String filePath = logDir + File.separator;
         filePath += segment;
         filePath += ".log";
 
-        SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
+        StreamLogSegment handle = streamLogSegments.computeIfAbsent(filePath, a -> {
             FileChannel writeCh = null;
             FileChannel readCh = null;
 
@@ -727,7 +725,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 writeCh = getChannel(a, false);
                 readCh = getChannel(a, true);
 
-                SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, a);
+                StreamLogSegment sh = new StreamLogSegment(segment, a, writeCh, readCh);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 // Once the segment address space is loaded, it should be ready to accept writes.
@@ -741,7 +739,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         });
 
-        handle.retain();
         return handle;
     }
 
@@ -852,7 +849,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return A map of AddressMetaData for the written records
      * @throws IOException IO exception
      */
-    private Map<Long, AddressMetaData> writeRecords(SegmentHandle segment,
+    private Map<Long, AddressMetaData> writeRecords(StreamLogSegment segment,
                                                     List<LogData> entries) throws IOException {
         Map<Long, AddressMetaData> recordsMap = new HashMap<>();
 
@@ -873,7 +870,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireWriteLock(segment.getSegment())) {
+                     segmentLocks.acquireWriteLock(segment.getStartAddress())) {
             for (int ind = 0; ind < entryBuffs.size(); ind++) {
                 long channelOffset = segment.getWriteChannel().position()
                         + allRecordsBuf.position() + METADATA_SIZE;
@@ -937,7 +934,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param entry   The LogData to append.
      * @return Returns metadata for the written record
      */
-    private AddressMetaData writeRecord(SegmentHandle segment, long address,
+    private AddressMetaData writeRecord(StreamLogSegment segment, long address,
                                         LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
         Metadata metadata = getMetadata(logEntry);
@@ -946,7 +943,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long channelOffset;
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireWriteLock(segment.getSegment())) {
+                     segmentLocks.acquireWriteLock(segment.getStartAddress())) {
             channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
             safeWrite(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
@@ -955,10 +952,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
-    }
-
-    private long getSegment(LogData entry) {
-        return entry.getGlobalAddress() / RECORDS_PER_LOG_FILE;
     }
 
     /**
@@ -1015,8 +1008,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         // Check if the range spans more than two segments
         long lastAddress = range.get(range.size() - 1).getGlobalAddress();
-        long firstSegment = firstAddress / RECORDS_PER_LOG_FILE;
-        long endSegment = lastAddress / RECORDS_PER_LOG_FILE;
+        long firstSegment = getSegmentAddress(firstAddress);
+        long endSegment = getSegmentAddress(lastAddress);
 
         return endSegment - firstSegment <= 1;
     }
@@ -1059,8 +1052,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // check if the entries range cross a segment
         LogData first = entries.get(0);
         LogData last = entries.get(entries.size() - 1);
-        SegmentHandle firstSh = getSegmentHandleForAddress(first.getGlobalAddress());
-        SegmentHandle lastSh = getSegmentHandleForAddress(last.getGlobalAddress());
+        StreamLogSegment firstSh = getSegmentHandleForAddress(first.getGlobalAddress());
+        StreamLogSegment lastSh = getSegmentHandleForAddress(last.getGlobalAddress());
 
         // Extract all addresses associated with the provided write range.
         Set<Long> pendingWrites = range.stream()
@@ -1080,10 +1073,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         List<LogData> segTwoEntries = new ArrayList<>();
 
         for (LogData curr : entries) {
-            if (getSegment(curr) == firstSh.getSegment() &&
+            if (getSegmentAddress(curr.getGlobalAddress()) == firstSh.getStartAddress() &&
                     !firstSh.getKnownAddresses().containsKey(curr.getGlobalAddress())) {
                 segOneEntries.add(curr);
-            } else if (getSegment(curr) == lastSh.getSegment() &&
+            } else if (getSegmentAddress(curr.getGlobalAddress()) == lastSh.getStartAddress() &&
                     !lastSh.getKnownAddresses().containsKey(curr.getGlobalAddress())) {
                 segTwoEntries.add(curr);
             }
@@ -1103,9 +1096,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             log.error("Disk_write[{}-{}]: Exception", first.getGlobalAddress(),
                     last.getGlobalAddress(), e);
             throw new RuntimeException(e);
-        } finally {
-            firstSh.release();
-            lastSh.release();
         }
     }
 
@@ -1115,13 +1105,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             throw new OverwriteException(OverwriteCause.TRIM);
         }
 
-        SegmentHandle segment = getSegmentHandleForAddress(address);
+        StreamLogSegment segment = getSegmentHandleForAddress(address);
 
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            if (segment.getKnownAddresses().containsKey(address)
-                    || segment.getTrimmedAddresses().contains(address)) {
+            if (segment.getKnownAddresses().containsKey(address)) {
                 if (entry.getRank() == null) {
                     OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
                     log.trace("Disk_write[{}]: overwritten exception, cause: {}", address, overwriteCause);
@@ -1140,8 +1129,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", address, e);
             throw new RuntimeException(e);
-        } finally {
-            segment.release();
         }
     }
 
@@ -1150,27 +1137,22 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (isTrimmed(address)) {
             return LogData.getTrimmed(address);
         }
-        SegmentHandle segment = getSegmentHandleForAddress(address);
+        StreamLogSegment segment = getSegmentHandleForAddress(address);
 
         try {
-            if (segment.getPendingTrims().contains(address)) {
-                return LogData.getTrimmed(address);
-            }
             return readRecord(segment, address);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        } finally {
-            segment.release();
         }
     }
 
     @Override
     public void close() {
-        for (SegmentHandle fh : writeChannels.values()) {
+        for (StreamLogSegment fh : streamLogSegments.values()) {
             fh.close();
         }
 
-        writeChannels = new ConcurrentHashMap<>();
+        streamLogSegments = new ConcurrentHashMap<>();
     }
 
     /**
@@ -1179,19 +1161,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param endSegment The segment index of the last segment up to (including) the end segment.
      */
     private void closeSegmentHandlers(long endSegment) {
-        for (SegmentHandle sh : writeChannels.values()) {
-            if (sh.getSegment() > endSegment) {
+        for (StreamLogSegment sh : streamLogSegments.values()) {
+            if (sh.getStartAddress() > endSegment) {
                 continue;
-            }
-
-            if (sh.getRefCount() != 0) {
-                log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {}, attempting to trim anyways",
-                        sh.getSegment(), sh.getRefCount()
-                );
             }
             channelsToSync.remove(sh.getWriteChannel());
             sh.close();
-            writeChannels.remove(sh.getFileName());
+            streamLogSegments.remove(sh.getFileName());
         }
     }
 
@@ -1233,7 +1209,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void reset() {
         // Trim all segments
-        long endSegment = Math.max(logMetadata.getGlobalTail(), 0L) / RECORDS_PER_LOG_FILE;
+        long endSegment = getSegmentAddress(Math.max(logMetadata.getGlobalTail(), 0L));
         log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
         // Close segments before deleting their corresponding log files
@@ -1252,7 +1228,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
-        writeChannels.clear();
+        streamLogSegments.clear();
         log.info("reset: Completed, end segment {}", endSegment);
     }
 
@@ -1262,8 +1238,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @VisibleForTesting
-    Collection<SegmentHandle> getOpenSegmentHandles() {
-        return writeChannels.values();
+    Collection<StreamLogSegment> getOpenSegmentHandles() {
+        return streamLogSegments.values();
     }
 
     public static class Checksum {
