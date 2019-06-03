@@ -26,6 +26,7 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.StreamLogParams;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -138,7 +139,7 @@ public class LogUnitServer extends AbstractServer {
                     .convertToByteStringRepresentation(config.getMaxCacheSize()));
             streamLog = new InMemoryStreamLog();
         } else {
-            streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
+            streamLog = new StreamLogFiles(serverContext.getStreamLogParams(), serverContext.getStreamLogDataStore());
         }
 
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
@@ -507,7 +508,6 @@ public class LogUnitServer extends AbstractServer {
         private final double cacheSizeHeapRatio;
         private final long maxCacheSize;
         private final boolean memoryMode;
-        private final boolean noVerify;
         private final boolean noSync;
 
         /**
@@ -523,7 +523,6 @@ public class LogUnitServer extends AbstractServer {
                     .cacheSizeHeapRatio(cacheSizeHeapRatio)
                     .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
                     .memoryMode(Boolean.valueOf(opts.get("--memory").toString()))
-                    .noVerify((Boolean) opts.get("--no-verify"))
                     .noSync((Boolean) opts.get("--no-sync"))
                     .build();
         }
