@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.Builder;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.KvDataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
@@ -14,8 +14,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * Keeps stream log related meta information: startingAddress and tailSegment.
  * Provides access to the stream log related meta information.
  */
-@Builder
 @Slf4j
+@RequiredArgsConstructor
 public class StreamLogDataStore {
     private static final String TAIL_SEGMENT_PREFIX = "TAIL_SEGMENT";
     public static final String TAIL_SEGMENT_KEY = "CURRENT";
