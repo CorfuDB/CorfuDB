@@ -116,7 +116,12 @@ public class LogEntry implements ICorfuSerializable {
         SMR(1, SMREntry.class),
         MULTIOBJSMR(7, MultiObjectSMREntry.class),
         MULTISMR(8, MultiSMREntry.class),
-        CHECKPOINT(10, CheckpointEntry.class);
+        CHECKPOINT(10, CheckpointEntry.class),
+
+        // SMREntryGarbageInfo
+        SMR_GARBAGE(11, SMREntryGarbageInfo.class),
+        MULTISMR_GARBAGE(12, MultiSMREntryGarbageInfo.class),
+        MULTIOBJSMR_GARBAGE(13, MultiObjectSMREntryGarbageInfo.class);
 
         public final int type;
         public final Class<? extends LogEntry> entryType;
