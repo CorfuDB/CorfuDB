@@ -6,6 +6,7 @@ import io.netty.buffer.Unpooled;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -136,7 +137,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      */
     public LogData(ByteBuf buf) {
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
-        if (type == DataType.DATA) {
+        if (type == DataType.DATA || type == DataType.GARBAGE) {
             data = ICorfuPayload.fromBuffer(buf, byte[].class);
         } else {
             data = null;
@@ -215,7 +216,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     void doSerializeInternal(ByteBuf buf) {
         ICorfuPayload.serialize(buf, type);
-        if (type == DataType.DATA) {
+        if (type == DataType.DATA || type == DataType.GARBAGE) {
             if (data == null) {
                 int lengthIndex = buf.writerIndex();
                 buf.writeInt(0);
