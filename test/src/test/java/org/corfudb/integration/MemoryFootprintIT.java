@@ -73,6 +73,9 @@ public class MemoryFootprintIT extends AbstractIT {
                 .setStreamName("volbeat")
                 .open();
 
+        // Force GC first to prevent it from interfering with the size estimates after.
+        System.gc();
+
         // Register memory footprint tracking
         final Gauge<Long> corfuTableSizeGauge = MetricsUtils.addMemoryMeasurerFor(
                 CorfuRuntime.getDefaultMetrics(),

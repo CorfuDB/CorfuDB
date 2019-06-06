@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -241,14 +242,17 @@ public class ManagementViewTest extends AbstractViewTest {
 
     private void setAggressiveDetectorTimeouts(int... managementServersPorts) {
         Arrays.stream(managementServersPorts).forEach(port -> {
-            FailureDetector failureDetector = (FailureDetector) getManagementServer(port)
+            NetworkStretcher stretcher = NetworkStretcher.builder()
+                    .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .build();
+
+            FailureDetector failureDetector = getManagementServer(port)
                     .getManagementAgent()
                     .getRemoteMonitoringService()
                     .getFailureDetector();
-            failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            failureDetector.setMaxPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            failureDetector.setInitialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            failureDetector.setNetworkStretcher(stretcher);
         });
     }
 
