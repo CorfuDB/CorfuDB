@@ -2,15 +2,25 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import lombok.Getter;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
+import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
@@ -24,11 +34,6 @@ import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -194,6 +199,19 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<Long> getTrimMark() {
         return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
+    }
+
+    /**
+     * Request for known addresses in the specified range.
+     *
+     * @param startRange Start of range.
+     * @param endRange   End of range.
+     * @return Known addresses.
+     */
+    public CompletableFuture<KnownAddressResponse> requestKnownAddresses(long startRange,
+                                                                         long endRange) {
+        return sendMessageWithFuture(CorfuMsgType.KNOWN_ADDRESS_REQUEST
+                .payloadMsg(new KnownAddressRequest(startRange, endRange)));
     }
 
     /**

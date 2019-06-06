@@ -8,6 +8,9 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+
+import java.time.Duration;
+
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.junit.Test;
@@ -23,6 +26,7 @@ public class PollReportTest {
         );
 
         final long epoch = 1;
+        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
                 .responsiveServers(ImmutableList.of("a"))
                 .wrongEpochs(ImmutableMap.of("a", epoch))
@@ -45,6 +49,7 @@ public class PollReportTest {
         );
 
         final long epoch = 1;
+        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
                 .responsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
@@ -72,6 +77,7 @@ public class PollReportTest {
         );
 
         final long epoch = 1;
+        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
                 .responsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
@@ -95,7 +101,7 @@ public class PollReportTest {
         );
 
         final long epoch = 1;
-
+        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
                 .responsiveServers(ImmutableList.of("a", "b"))
                 .wrongEpochs(ImmutableMap.of("a", epoch, "b", epoch, "c", epoch))
