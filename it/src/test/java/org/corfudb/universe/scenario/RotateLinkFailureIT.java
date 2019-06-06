@@ -111,7 +111,7 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
                 );
 
                 log.info("Verify data path working fine");
-                waitUninterruptibly(Duration.ofSeconds(10));
+                waitUninterruptibly(Duration.ofSeconds(20));
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
