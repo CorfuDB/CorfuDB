@@ -15,6 +15,8 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.junit.Test;
 
+import java.time.Duration;
+
 public class PollReportTest {
 
     private final long epoch = 1;
@@ -33,6 +35,7 @@ public class PollReportTest {
                 .responsiveServers(ImmutableList.of("a"))
                 .wrongEpochs(ImmutableMap.of("a", epoch))
                 .clusterState(clusterState)
+                .elapsedTime(Duration.ZERO)
                 .build();
 
         assertThat(pollReport.getReachableNodes()).isEmpty();
@@ -57,6 +60,7 @@ public class PollReportTest {
                 .responsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
                 .clusterState(clusterState)
+                .elapsedTime(Duration.ZERO)
                 .build();
 
         assertThat(pollReport.getReachableNodes()).containsExactly("a");
@@ -86,6 +90,7 @@ public class PollReportTest {
                 .responsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
                 .clusterState(clusterState)
+                .elapsedTime(Duration.ZERO)
                 .build();
 
         assertThat(pollReport.getReachableNodes()).containsExactly("a");
@@ -111,6 +116,7 @@ public class PollReportTest {
                 .responsiveServers(ImmutableList.of("a", "b"))
                 .wrongEpochs(ImmutableMap.of("a", epoch, "b", epoch, "c", epoch))
                 .clusterState(clusterState)
+                .elapsedTime(Duration.ZERO)
                 .build();
 
         assertThat(pollReport.isCurrentLayoutSlotUnFilled()).isTrue();
