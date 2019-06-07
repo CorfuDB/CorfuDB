@@ -74,6 +74,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             log.warn("prefixTrim: Ignoring repeated trim {}", address);
         } else {
             startingAddress = address + 1;
+
+            // Trim address space maps.
+            logMetadata.prefixTrim(address);
         }
     }
 

@@ -35,12 +35,14 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -454,6 +456,16 @@ public class LogUnitServer extends AbstractServer {
     void stopHandler() throws Exception {
         executor.shutdown();
         executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    @VisibleForTesting
+    StreamAddressSpace getStreamAddressSpace(UUID streamID) {
+        return streamLog.getStreamsAddressSpace().getAddressMap().get(streamID);
+    }
+
+    @VisibleForTesting
+    void prefixTrim(long trimAddress) {
+        streamLog.prefixTrim(trimAddress);
     }
 
     /**
