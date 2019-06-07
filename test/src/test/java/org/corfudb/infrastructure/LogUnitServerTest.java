@@ -9,12 +9,15 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Random;
@@ -300,6 +303,73 @@ public class LogUnitServerTest extends AbstractServerTest {
                                     (low_payload+i)
                                             .getBytes());
 
+    }
+
+    /**
+     * This test verifies that on Log Unit reset/restart, a stream address map and its corresponding
+     * trim mark is properly set.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkLogUnitResetStreamRebuilt() throws Exception {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        final long maxAddress = 20000L;
+        final long minAddress = 10000L;
+        final long trimMark = 15000L;
+        UUID streamID = UUID.randomUUID();
+
+        LogUnitServer logUnitServer = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(logUnitServer);
+
+        // Write 10K entries in descending order for the range 20k-10K
+        for (long i = maxAddress; i >= minAddress; i--) {
+            ByteBuf b = Unpooled.buffer();
+            Serializers.CORFU.serialize("Payload".getBytes(), b);
+            WriteRequest m = WriteRequest.builder()
+                    .data(new LogData(DataType.DATA, b))
+                    .build();
+            m.setGlobalAddress(i);
+            long backpointer = i - 1;
+            if (i == minAddress) {
+                // Last entry, backpointer is -6 (non-exist).
+                backpointer = Address.NON_EXIST;
+            }
+            m.setBackpointerMap(Collections.singletonMap(streamID, backpointer));
+            sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+        }
+
+        logUnitServer.getBatchWriter().stopProcessor();
+
+        // Retrieve address space from current log unit server (write path)
+        StreamAddressSpace addressSpace = logUnitServer.getStreamAddressSpace(streamID);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
+
+        // Instantiate new log unit server (restarts) so the log is read and address maps are rebuilt.
+        LogUnitServer newServer = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        // Retrieve address space from new initialized log unit server (bootstrap path)
+        addressSpace = newServer.getStreamAddressSpace(streamID);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
+
+        // Trim the log, and verify that trim mark is updated on log unit
+        newServer.prefixTrim(trimMark);
+        newServer.getBatchWriter().stopProcessor();
+
+        // Retrieve address space from current log unit server (after a prefix trim)
+        addressSpace = newServer.getStreamAddressSpace(streamID);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(trimMark);
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(maxAddress - trimMark);
     }
 
     @Test
