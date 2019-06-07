@@ -9,9 +9,12 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.format.Types;
@@ -28,11 +31,7 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.Utils;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
@@ -60,6 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -1019,6 +1019,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long endSegment = lastAddress / RECORDS_PER_LOG_FILE;
 
         return endSegment - firstSegment <= 1;
+    }
+
+    /**
+     * This method requests for known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    @Override
+    public Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd) {
+
+        Set<Long> result = new HashSet<>();
+        for (long address = rangeStart; address <= rangeEnd; address++) {
+            if (getSegmentHandleForAddress(address).getKnownAddresses().containsKey(address)) {
+                result.add(address);
+            }
+        }
+        return result;
     }
 
     @Override
