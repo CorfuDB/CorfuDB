@@ -3,13 +3,11 @@ package org.corfudb.infrastructure.orchestrator.actions;
 import com.google.common.collect.Sets;
 
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 
 import javax.annotation.Nonnull;
 
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -44,9 +42,7 @@ public class RestoreRedundancyMergeSegments extends Action {
     }
 
     @Override
-    public void impl(@Nonnull CorfuRuntime runtime) throws OutrankedException,
-            ExecutionException,
-            InterruptedException {
+    public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
 
         // Refresh layout.
         runtime.invalidateLayout();
@@ -64,7 +60,9 @@ public class RestoreRedundancyMergeSegments extends Action {
             // Currently the state is transferred for the complete segment.
             // TODO: Add stripe specific transfer granularity for optimization.
             // Transfer the replicated segment to the difference set calculated above.
-            StateTransfer.transfer(layout, lowRedundancyServers, runtime, layout.getFirstSegment());
+            for (String lowRedundancyServer : lowRedundancyServers) {
+                StateTransfer.transfer(layout, lowRedundancyServer, runtime, layout.getFirstSegment());
+            }
 
             // Merge the 2 segments.
             runtime.getLayoutManagementView().mergeSegments(new Layout(layout));
