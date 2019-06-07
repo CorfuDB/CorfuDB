@@ -245,6 +245,7 @@ public class ManagementViewTest extends AbstractViewTest {
             NetworkStretcher stretcher = NetworkStretcher.builder()
                     .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
                     .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .minPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
                     .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
                     .build();
 
