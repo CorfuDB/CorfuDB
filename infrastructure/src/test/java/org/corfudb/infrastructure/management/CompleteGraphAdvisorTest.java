@@ -23,6 +23,8 @@ import java.util.Optional;
 
 public class CompleteGraphAdvisorTest {
 
+    private final long epoch = 1;
+
     /**
      * By definition, a fully connected node can not be added to the unresponsive list.
      * Failed connection(s) between unresponsive and fully connected node(s)
@@ -35,9 +37,9 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
-                nodeState(A, OK, OK, OK),
-                nodeState(B, OK, OK, FAILED),
-                nodeState(C, OK, FAILED, OK)
+                nodeState(A, epoch, OK, OK, OK),
+                nodeState(B, epoch, OK, OK, FAILED),
+                nodeState(C, epoch, OK, FAILED, OK)
         );
 
         List<String> unresponsiveServers = Collections.singletonList("b");
@@ -52,8 +54,8 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, OK, FAILED),
-                nodeState("b", OK, OK, FAILED),
+                nodeState("a", epoch, OK, OK, FAILED),
+                nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
 
@@ -70,9 +72,9 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, OK, OK),
-                nodeState("b", OK, OK, FAILED),
-                nodeState("c", OK, FAILED, OK)
+                nodeState("a", epoch, OK, OK, OK),
+                nodeState("b", epoch, OK, OK, FAILED),
+                nodeState("c", epoch, OK, FAILED, OK)
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
@@ -93,7 +95,7 @@ public class CompleteGraphAdvisorTest {
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 NodeState.getUnavailableNodeState("a"),
-                nodeState("b", OK, OK, OK),
+                nodeState("b", epoch, OK, OK, OK),
                 NodeState.getUnavailableNodeState("c")
         );
 
@@ -117,22 +119,22 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState nodeAClusterState = buildClusterState(
                 "a",
-                nodeState("a", OK, OK, OK),
-                nodeState("b", OK, OK, FAILED),
-                nodeState("c", OK, FAILED, OK)
+                nodeState("a", epoch, OK, OK, OK),
+                nodeState("b", epoch, OK, OK, FAILED),
+                nodeState("c", epoch, OK, FAILED, OK)
         );
 
         ClusterState nodeBClusterState = buildClusterState(
                 "b",
-                nodeState("a", OK, OK, OK),
-                nodeState("b", OK, OK, FAILED),
+                nodeState("a", epoch, OK, OK, OK),
+                nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
         ClusterState nodeCClusterState = buildClusterState(
                 "c",
-                nodeState("a", OK, OK, OK),
+                nodeState("a", epoch, OK, OK, OK),
                 NodeState.getUnavailableNodeState("b"),
-                nodeState("c", OK, FAILED, OK)
+                nodeState("c", epoch, OK, FAILED, OK)
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
@@ -158,9 +160,9 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, FAILED, OK),
-                nodeState("b", FAILED, OK, OK),
-                nodeState("c", OK, OK, OK)
+                nodeState("a", epoch, OK, FAILED, OK),
+                nodeState("b", epoch, FAILED, OK, OK),
+                nodeState("c", epoch, OK, OK, OK)
         );
 
         List<String> unresponsiveServers = new ArrayList<>();

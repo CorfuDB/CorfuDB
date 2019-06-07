@@ -28,6 +28,9 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -186,7 +189,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         continue;
                     }
                     LogData logEntry = read(address);
-                    logMetadata.update(logEntry);
+                    logMetadata.update(logEntry, true, getTrimMark());
                 }
             } finally {
                 segment.close();
@@ -290,6 +293,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.updateStartingAddress(newStartingAddress);
         syncTailSegment(address);
         log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
+
+        // Trim address space maps.
+        logMetadata.prefixTrim(address);
     }
 
     private boolean isTrimmed(long address) {

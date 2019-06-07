@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NonNull;
 import lombok.Singular;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 @Builder
 @AllArgsConstructor
 @ToString
+@Slf4j
 public class ClusterState implements ICorfuPayload<ClusterState> {
 
     /**
@@ -69,6 +71,12 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
      */
     public boolean isReady() {
         if (nodes.isEmpty()) {
+            log.error("Invalid ClusterState: is empty");
+            return false;
+        }
+
+        if (!checkEpochs()) {
+            log.info("ClusterState is not consistent: {}", nodes);
             return false;
         }
 
@@ -79,6 +87,23 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
             }
         }
 
+        return true;
+    }
+
+    private boolean checkEpochs() {
+        long currentEpoch = -1;
+
+        for (NodeState nodeState : nodes.values()) {
+            NodeConnectivity connectivity = nodeState.getConnectivity();
+            if (currentEpoch == -1) {
+                currentEpoch = connectivity.getEpoch();
+                continue;
+            }
+
+            if (connectivity.getEpoch() != currentEpoch) {
+                return false;
+            }
+        }
         return true;
     }
 
