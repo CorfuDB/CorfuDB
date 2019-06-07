@@ -17,12 +17,14 @@ import org.junit.Test;
 
 public class PollReportTest {
 
+    private final long epoch = 1;
+
     @Test
     public void testConnectionStatusesOneNode() {
         final String localEndpoint = "a";
 
         ClusterState clusterState = ClusterState.buildClusterState(
-                localEndpoint, nodeState("a", OK)
+                localEndpoint, nodeState("a", epoch, OK)
         );
 
         final long epoch = 1;
@@ -43,7 +45,7 @@ public class PollReportTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, FAILED, FAILED),
+                nodeState("a", epoch, OK, FAILED, FAILED),
                 NodeState.getUnavailableNodeState("b"),
                 NodeState.getUnavailableNodeState("c")
         );
@@ -71,8 +73,8 @@ public class PollReportTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, FAILED, FAILED),
-                nodeState("b", OK, OK, FAILED),
+                nodeState("a", epoch, OK, FAILED, FAILED),
+                nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
 
@@ -95,8 +97,8 @@ public class PollReportTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, OK, FAILED),
-                nodeState("b", OK, OK, FAILED),
+                nodeState("a", epoch, OK, OK, FAILED),
+                nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
 

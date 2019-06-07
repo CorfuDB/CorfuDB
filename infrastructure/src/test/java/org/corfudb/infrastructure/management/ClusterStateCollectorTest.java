@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class ClusterStateCollectorTest {
+    private final long epoch = 1;
 
     /**
      * Checks the aggregated cluster state.
@@ -38,8 +39,8 @@ public class ClusterStateCollectorTest {
 
         ClusterState predefinedCluster = ClusterState.buildClusterState(
                 localEndpoint,
-                nodeState("a", OK, OK, FAILED),
-                nodeState("b", OK, OK, FAILED),
+                nodeState("a", epoch, OK, OK, FAILED),
+                nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
 
