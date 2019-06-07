@@ -31,7 +31,7 @@ jobs:
     # Prepare docker image
     - ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
     # Run integration tests
-    - ./mvnw -pl :universe clean verify -Pit
+    - ./mvnw -pl :universe  -T 1C clean verify -Pit
     name: Universe Tests
 
 notifications:
