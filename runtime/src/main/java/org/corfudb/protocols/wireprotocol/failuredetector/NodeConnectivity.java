@@ -31,6 +31,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     @Getter
     @NonNull
     private final String endpoint;
+
     @Getter
     @NonNull
     private final NodeConnectivityType type;
@@ -42,6 +43,9 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     @NonNull
     private final ImmutableMap<String, ConnectionStatus> connectivity;
 
+    @Getter
+    private final long epoch;
+
     public NodeConnectivity(ByteBuf buf) {
         endpoint = ICorfuPayload.fromBuffer(buf, String.class);
         type = NodeConnectivityType.valueOf(ICorfuPayload.fromBuffer(buf, String.class));
@@ -52,6 +56,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
                 //transform map of strings to map of ConnectionStatus-es
                 .forEach((node, status) -> connectivityMap.put(node, ConnectionStatus.valueOf(status)));
         connectivity = ImmutableMap.copyOf(connectivityMap);
+        epoch = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
     @Override
@@ -63,6 +68,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
         connectivity.forEach((node, state) -> connectivityStrings.put(node, state.name()));
 
         ICorfuPayload.serialize(buf, connectivityStrings);
+        ICorfuPayload.serialize(buf, epoch);
     }
 
     /**
