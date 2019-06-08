@@ -908,7 +908,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private static void safeWrite(FileChannel channel, ByteBuffer buf) throws IOException {
         long prev = channel.position();
         try {
-            channel.write(buf);
+            do {
+                channel.write(buf);
+            } while (buf.hasRemaining());
+
         } catch (IOException e) {
             // Write failed restore the channels position, so the subsequent writes
             // can overwrite the failed write.
