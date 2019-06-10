@@ -49,6 +49,10 @@ public class LogMetadata {
     }
 
     public void update(LogData entry) {
+        update(entry, false, Address.NON_ADDRESS);
+    }
+
+    public void update(LogData entry, boolean initialize, long globalTrimMark) {
         long entryAddress = entry.getGlobalAddress();
         updateGlobalTail(entryAddress);
         for (UUID streamId : entry.getStreams()) {
@@ -57,12 +61,38 @@ public class LogMetadata {
             streamTails.put(streamId, Math.max(currentStreamTail, entryAddress));
 
             // Update stream address map (used for sequencer recovery)
-            // Since this is the first entry found for this stream (i.e., smallest address),
-            // we set the trim mark to be exactly the backpointer of this entry (address already trimmed or it would've
-            // shown up  as we go through the log from the beginning).
-            streamsAddressSpaceMap.putIfAbsent(streamId, new StreamAddressSpace(entry.getBackpointer(streamId),
-                    new Roaring64NavigableMap()));
-            streamsAddressSpaceMap.get(streamId).addAddress(entryAddress);
+            // Since entries might have been written in random order
+            // We update the trim mark to be the min of all backpointer addresses.
+            streamsAddressSpaceMap.computeIfAbsent(streamId, k ->
+                    new StreamAddressSpace(Address.NON_EXIST, new Roaring64NavigableMap()));
+
+            streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
+                // If restarting the log unit, i.e., scanning all records in the log for initialization,
+                // update the stream trim mark as we read (as entries might not be ordered).
+                // Otherwise, i.e., on log updates (writes) we should not consider this data point for setting
+                // the stream trim mark, as data might not be written in order, hence, we could have invalid
+                // states of the actual address map. In the case of log updates, the trim mark will be set
+                // as prefix trims are performed.
+                if (addressSpace == null) {
+                    Long streamTrimMark = Address.NON_EXIST;
+                    if (initialize) {
+                        streamTrimMark = getStreamTrimMark(Long.MAX_VALUE,
+                                entry.getBackpointer(streamId), globalTrimMark);
+                    }
+                    Roaring64NavigableMap addressMap = new Roaring64NavigableMap();
+                    addressMap.addLong(entryAddress);
+                    return new StreamAddressSpace(streamTrimMark, addressMap);
+                }
+
+                if (initialize) {
+                    long streamTrimMark = getStreamTrimMark(addressSpace.getTrimMark(),
+                            entry.getBackpointer(streamId), globalTrimMark);
+                    addressSpace.setTrimMark(streamTrimMark);
+                }
+
+                addressSpace.addAddress(entryAddress);
+                return addressSpace;
+            });
         }
 
         // We should also consider checkpoint metadata while updating the tails.
@@ -94,8 +124,24 @@ public class LogMetadata {
         }
     }
 
+    private long getStreamTrimMark(long currentTrimMark, long backpointer, long globalTrimMark) {
+        long streamTrimMark = Long.min(currentTrimMark, backpointer);
+        if (streamTrimMark > globalTrimMark) {
+            streamTrimMark = globalTrimMark;
+        }
+        return streamTrimMark;
+    }
+
     public void updateGlobalTail(long newTail) {
         globalTail = Math.max(globalTail, newTail);
     }
 
+    public void prefixTrim(long address) {
+        log.info("prefixTrim: trim stream address maps up to address {}", address);
+        for (Map.Entry<UUID, StreamAddressSpace> streamAddressMap : streamsAddressSpaceMap.entrySet()) {
+            log.trace("prefixTrim: trim address space for stream {} up to trim mark {}",
+                    streamAddressMap.getKey(), address);
+            streamAddressMap.getValue().trim(address);
+        }
+    }
 }

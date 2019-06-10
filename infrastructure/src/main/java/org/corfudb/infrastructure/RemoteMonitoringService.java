@@ -11,14 +11,13 @@ import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
-import org.corfudb.infrastructure.management.IDetector;
+import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
@@ -70,7 +69,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * Detectors to be used to detect failures and healing.
      */
     @Getter
-    private final IDetector failureDetector;
+    private final FailureDetector failureDetector;
 
     /**
      * Detection Task Scheduler Service
@@ -150,7 +149,7 @@ public class RemoteMonitoringService implements MonitoringService {
     RemoteMonitoringService(@NonNull ServerContext serverContext,
                             @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                             @NonNull ClusterStateContext clusterContext,
-                            @NonNull IDetector failureDetector,
+                            @NonNull FailureDetector failureDetector,
                             @NonNull LocalMonitoringService localMonitoringService) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
