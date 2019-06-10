@@ -11,10 +11,16 @@ import com.google.common.collect.Range;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.*;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -476,24 +482,36 @@ public class StateTransferTest extends AbstractViewTest {
         AtomicInteger allowedWrites = new AtomicInteger(rangeWriteCount - 1);
 
         // STEP 1.
-
         // Rule added to fail the state transfer on the last range write.
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
                 corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)
                         && allowedWrites.decrementAndGet() < 0)
                 .drop());
 
-        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments();
-        // Assert that the state transfer fails with a timeout exception.
-        assertThatThrownBy(() -> action1.impl(corfuRuntime))
-                .isInstanceOf(RuntimeException.class)
-                .hasRootCauseInstanceOf(TimeoutException.class);
+        // Everything until addresses 10_990 should be filled.
+        // A timeout Exception before that should just be retried in this test.
+        final long startAddress = 10_980;
+        final long endAddress = 10_989;
+        Set<Long> addressesInSecondToLastRange = Collections.emptySet();
 
-        AtomicInteger rangeWrites = new AtomicInteger();
+        while (addressesInSecondToLastRange.isEmpty()) {
+
+            final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments();
+            // Assert that the state transfer fails with a timeout exception.
+            assertThatThrownBy(() -> action1.impl(corfuRuntime))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasRootCauseInstanceOf(TimeoutException.class);
+
+            addressesInSecondToLastRange = corfuRuntime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(SERVERS.ENDPOINT_1)
+                    .requestKnownAddresses(startAddress, endAddress)
+                    .get()
+                    .getKnownAddresses();
+        }
+
         clearClientRules(corfuRuntime);
 
         // STEP 2.
-
         // Rule added to fail the state transfer on the last range write.
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
                 corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.KNOWN_ADDRESS_REQUEST))
@@ -506,8 +524,8 @@ public class StateTransferTest extends AbstractViewTest {
         clearClientRules(corfuRuntime);
 
         // STEP 3.
-
         // Rule added to count the number of range writes transferred.
+        AtomicInteger rangeWrites = new AtomicInteger();
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
                 corfuMsg -> {
                     if (corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)) {
