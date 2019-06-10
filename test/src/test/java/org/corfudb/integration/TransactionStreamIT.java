@@ -11,6 +11,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +68,7 @@ public class TransactionStreamIT extends AbstractIT {
         final long timeout = 30;
 
         ExecutorService consumer = Executors.newSingleThreadExecutor();
+        List<CorfuRuntime> consumerRts = new ArrayList<>();
 
         // A thread that starts and consumes transaction updates via the Transaction Stream.
         Future<Map<UUID, Integer>> consumerState = consumer.submit(() -> {
@@ -74,6 +76,7 @@ public class TransactionStreamIT extends AbstractIT {
                     .setTransactionLogging(true)
                     .setNumCacheEntries(runtimeCacheSize)
                     .connect();
+            consumerRts.add(consumerRt);
 
             IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
 
@@ -143,6 +146,8 @@ public class TransactionStreamIT extends AbstractIT {
             assertThat(map.size()).isEqualTo(numWritesPerThread);
         }
 
+        producersRt.shutdown();
+        consumerRts.forEach(CorfuRuntime::shutdown);
         shutdownCorfuServer(server_1);
     }
 }
