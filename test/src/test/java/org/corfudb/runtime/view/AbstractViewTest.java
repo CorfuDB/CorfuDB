@@ -20,6 +20,8 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
@@ -38,6 +40,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -304,6 +307,28 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(0L,
                         Collections.emptyMap(), l.getEpoch(), false)), null,
                         primarySequencerNode.serverRouter);
+    }
+
+
+    /**
+     * Set aggressive timeouts for the detectors.
+     *
+     * @param managementServersPorts Management server endpoints.
+     */
+    void setAggressiveDetectorTimeouts(int... managementServersPorts) {
+        Arrays.stream(managementServersPorts).forEach(port -> {
+            NetworkStretcher stretcher = NetworkStretcher.builder()
+                    .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .build();
+
+            FailureDetector failureDetector = getManagementServer(port)
+                    .getManagementAgent()
+                    .getRemoteMonitoringService()
+                    .getFailureDetector();
+            failureDetector.setNetworkStretcher(stretcher);
+        });
     }
 
     /** Get a default CorfuRuntime. The default CorfuRuntime is connected to a single-node

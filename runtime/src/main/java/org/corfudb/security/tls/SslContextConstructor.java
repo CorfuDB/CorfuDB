@@ -1,5 +1,6 @@
 package org.corfudb.security.tls;
 
+import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.security.KeyStore;
@@ -41,10 +42,19 @@ public class SslContextConstructor {
         KeyManagerFactory kmf = createKeyManagerFactory(keyStorePath, ksPasswordFile);
         ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStorePath, tsPasswordFile);
 
-        if (isServer) {
-            return SslContextBuilder.forServer(kmf).sslProvider(SslProvider.OPENSSL).trustManager(tmf).build();
+        SslProvider provider = SslProvider.JDK;
+
+        if (OpenSsl.isAvailable()) {
+            provider = SslProvider.OPENSSL;
         } else {
-            return SslContextBuilder.forClient().sslProvider(SslProvider.OPENSSL).keyManager(kmf).trustManager(tmf).build();
+            log.warn("constructSslContext: couldn't load native openssl library, using JdkSslEngine instead!");
+        }
+
+
+        if (isServer) {
+            return SslContextBuilder.forServer(kmf).sslProvider(provider).trustManager(tmf).build();
+        } else {
+            return SslContextBuilder.forClient().sslProvider(provider).keyManager(kmf).trustManager(tmf).build();
         }
     }
 
