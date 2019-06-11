@@ -76,8 +76,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             .setLengthChecksum(-1)
             .setPayloadChecksum(-1)
             .setLength(-1)
+            .setCodec(Types.CompressionType.NONE)
             .build()
             .getSerializedSize();
+    //TODO(Maithem) bump up format version
     public static final int VERSION = 2;
     public static final int RECORDS_PER_LOG_FILE = 10000;
     private final Path logDir;
@@ -88,6 +90,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private ConcurrentMap<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
     private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
+
+    private final Compressor compressor;
 
     //=================Log Metadata=================
     // TODO(Maithem) this should effectively be final, but it is used
@@ -106,6 +110,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
+
+        //TODO(Maithem): make configurable
+        compressor = getCompressor(Types.CompressionType.valueOf(serverContext
+                .getServerConfig().getOrDefault("--codec", Types.CompressionType.NONE.toString()).toString()));
+
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
@@ -227,13 +236,37 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .setPayloadChecksum(Checksum.getChecksum(message.toByteArray()))
                 .setLengthChecksum(Checksum.getChecksum(message.getSerializedSize()))
                 .setLength(message.getSerializedSize())
+                .setCodec(Types.CompressionType.NONE)
                 .build();
     }
 
+    private static Metadata getMetadata(AbstractMessage message, Compressor compressor) {
+        return Metadata.newBuilder()
+                .setPayloadChecksum(Checksum.getChecksum(message.toByteArray()))
+                .setLengthChecksum(Checksum.getChecksum(message.getSerializedSize()))
+                .setLength(message.getSerializedSize())
+                .setCodec(compressor.getType())
+                .build();
+    }
+
+    //TODO(Maithem): create static compressors
+    static Compressor getCompressor(Types.CompressionType type) {
+        if (type == Types.CompressionType.NONE) {
+            return new NoneCompressor();
+        } else if (type == Types.CompressionType.LZ4) {
+            return new Lz4Compressor();
+        }
+
+        throw new IllegalStateException("Unknown Codec " + type.toString());
+    }
+
     private static ByteBuffer getByteBuffer(Metadata metadata, AbstractMessage message) {
-        ByteBuffer buf = ByteBuffer.allocate(metadata.getSerializedSize() + message.getSerializedSize());
+        ByteBuffer msgBuf = ByteBuffer.allocate(message.getSerializedSize());
+        msgBuf.put(message.toByteArray());
+        ByteBuffer compressedMessage = getCompressor(metadata.getCodec()).encode(msgBuf);
+        ByteBuffer buf = ByteBuffer.allocate(metadata.getSerializedSize() + compressedMessage.remaining());
         buf.put(metadata.toByteArray());
-        buf.put(message.toByteArray());
+        buf.put(compressedMessage);
         buf.flip();
         return buf;
     }
@@ -863,7 +896,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         for (LogData curr : entries) {
             LogEntry logEntry = getLogEntry(curr.getGlobalAddress(), curr);
-            Metadata metadata = getMetadata(logEntry);
+            Metadata metadata = getMetadata(logEntry, compressor);
             metadataList.add(metadata);
             ByteBuffer record = getByteBuffer(metadata, logEntry);
             totalBytes += record.limit();
@@ -940,7 +973,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private AddressMetaData writeRecord(SegmentHandle segment, long address,
                                         LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
-        Metadata metadata = getMetadata(logEntry);
+        Metadata metadata = getMetadata(logEntry, compressor);
 
         ByteBuffer record = getByteBuffer(metadata, logEntry);
         long channelOffset;
