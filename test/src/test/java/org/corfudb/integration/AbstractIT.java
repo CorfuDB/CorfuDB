@@ -53,7 +53,7 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
-    CorfuRuntime runtime;
+    public CorfuRuntime runtime;
 
     public static final Properties PROPERTIES = new Properties();
 

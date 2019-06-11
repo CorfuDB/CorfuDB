@@ -3,8 +3,6 @@ package org.corfudb.runtime.utils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.google.common.collect.ImmutableMap;
-import java.util.UUID;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.NodeLocator.Protocol;
@@ -40,20 +38,14 @@ public class NodeLocatorTest extends AbstractViewTest {
     @Test
     public void nodeCanBeConvertedBackAndForth() {
         NodeLocator locator = NodeLocator.builder()
-                                        .host("localhost")
-                                        .port(1)
-                                        .nodeId(UUID.nameUUIDFromBytes("test".getBytes()))
-                                        .option("test1", "test2")
-                                        .option("test2", "test3")
-                                        .protocol(Protocol.TCP)
-                                        .build();
-        NodeLocator parsed = NodeLocator.parseString(locator.toString());
+                .host("localhost")
+                .port(1)
+                .protocol(Protocol.TCP)
+                .build();
+        NodeLocator parsed = NodeLocator.parseString(locator.toEndpointUrl());
 
-        assertThat(locator)
-            .isEqualTo(parsed);
-
-        assertThat(locator)
-            .isEqualToComparingFieldByField(parsed);
+        assertThat(locator).isEqualToComparingFieldByField(parsed);
+        assertThat(locator).isEqualTo(parsed);
     }
 
     @Test
@@ -62,18 +54,13 @@ public class NodeLocatorTest extends AbstractViewTest {
             .host("localhost")
             .port(1)
             .nodeId(null)
-            .option("test1", "test2")
-            .option("test2", "test3")
             .protocol(Protocol.TCP)
             .build();
 
         NodeLocator parsed = NodeLocator.parseString(locator.toString());
 
-        assertThat(locator)
-            .isEqualTo(parsed);
-
-        assertThat(locator)
-            .isEqualToComparingFieldByField(parsed);
+        assertThat(locator).isEqualToComparingFieldByField(parsed);
+        assertThat(locator).isEqualTo(parsed);
     }
 
 }
