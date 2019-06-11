@@ -68,7 +68,7 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
                                                         corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create an object be measured
         List<byte[]> arrayList = new ArrayList<>();
@@ -120,7 +120,7 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
                                                         corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create and fill a map that will be used to assess nulling out behavior
         Map<String, String> map1 = new HashMap<>();
@@ -157,5 +157,8 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
                 map1Measurer.getValue());
         log.info("Size of map2 after at the end of test:{}",
                 map2Measurer.getValue());
+
+        // Assert the server is shutdown
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 }
