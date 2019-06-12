@@ -132,14 +132,26 @@ public class LogUnitClient extends AbstractClient {
 
     /**
      * Asynchronously read from the logging unit.
+     * Read result is cached at log unit server.
      *
-     * @param address The address to read from.
+     * @param address the address to read from.
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(long address) {
+        return read(address, true);
+    }
+
+    /**
+     * Asynchronously read from the logging unit.
+     *
+     * @param address the address to read from.
+     * @param cacheable whether the read result should be cached on log unit server.
+     * @return a completableFuture which returns a ReadResponse on completion.
+     */
+    public CompletableFuture<ReadResponse> read(long address, boolean cacheable) {
         Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, cacheable)));
 
         return cf.thenApply(x -> {
             context.stop();
@@ -147,16 +159,29 @@ public class LogUnitClient extends AbstractClient {
         });
     }
 
+
+    /**
+     * Read data from the log unit server for a list of addresses.
+     * Read results are <b>NOT</b> cached at log unit server.
+     *
+     * @param addresses list of global addresses.
+     * @return a completableFuture which returns a ReadResponse on completion.
+     */
+    public CompletableFuture<ReadResponse> readAll(List<Long> addresses) {
+       return readAll(addresses, false);
+    }
+
     /**
      * Read data from the log unit server for a list of addresses.
      *
-     * @param list list of global addresses.
+     * @param addresses list of global addresses.
+     * @param cacheable Whether the read results should be cached on log unit server.
      * @return a completableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> readAll(List<Long> list) {
+    public CompletableFuture<ReadResponse> readAll(List<Long> addresses, boolean cacheable) {
         Timer.Context context = getTimerContext("readAll");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(list)));
+                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, cacheable)));
         return cf.thenApply(x -> {
             context.stop();
             return x;

@@ -109,9 +109,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      *
      * @return An estimate on the size of this object, in bytes.
      */
-    default int getSizeEstimate() {
-        return 1; // The default is that we don't know, so we return 1.
-    }
+    int getSizeEstimate();
 
     /** Return whether the entry represents a hole or not. */
     default boolean isHole() {

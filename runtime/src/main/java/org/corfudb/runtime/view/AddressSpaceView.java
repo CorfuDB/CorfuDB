@@ -5,8 +5,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
@@ -353,7 +351,7 @@ public class AddressSpaceView extends AbstractView {
             // At this point we computed a subset of the addresses that
             // resulted in a cache miss and need to be fetched
             if (!addressesToFetch.isEmpty()) {
-                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite);
+                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite, true);
                 for (Map.Entry<Long, ILogData> entry : fetchedAddresses.entrySet()) {
                     // After fetching a value, we need to insert it in the cache.
                     result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
@@ -361,7 +359,7 @@ public class AddressSpaceView extends AbstractView {
             }
             return result;
         } else {
-            return fetchAll(addresses, waitForWrite);
+            return fetchAll(addresses, waitForWrite, true);
         }
     }
 
@@ -522,12 +520,15 @@ public class AddressSpaceView extends AbstractView {
      * Fetch a collection of addresses for insertion into the cache.
      * The result map returned is ordered by address.
      *
-     * @param addresses    collection of addresses to read from.
-     * @param waitForWrite flag whether wait for write is required or hole fill directly.
-     * @return a ordered map of read addresses.
+     * @param addresses     collection of addresses to read from.
+     * @param waitForWrite  flag whether wait for write is required or hole fill directly.
+     * @param cacheOnServer flag whether read results should be cached on log unit server.
+     * @return an ordered map of read addresses.
      */
     @Nonnull
-    public Map<Long, ILogData> fetchAll(Iterable<Long> addresses, boolean waitForWrite) {
+    public Map<Long, ILogData> fetchAll(Iterable<Long> addresses,
+                                        boolean waitForWrite,
+                                        boolean cacheOnServer) {
         Map<Long, ILogData> result = new TreeMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses,
@@ -539,7 +540,7 @@ public class AddressSpaceView extends AbstractView {
                 Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
                         .getReplicationMode(batch.iterator().next())
                         .getReplicationProtocol(runtime)
-                        .readAll(e, batch, waitForWrite));
+                        .readAll(e, batch, waitForWrite, cacheOnServer));
                 // Sanity check for returned addresses
                 if (batchResult.size() != batch.size()) {
                     log.error("fetchAll: Requested number of addresses not equal to the read result" +
@@ -555,6 +556,20 @@ public class AddressSpaceView extends AbstractView {
 
         result.forEach(this::checkLogData);
         return result;
+    }
+
+    /**
+     * Fetch a collection of addresses for insertion into the cache.
+     * The fetch results are <b>NOT</b> cached on log unit server.
+     * The result map returned is ordered by address.
+     *
+     * @param addresses    collection of addresses to read from.
+     * @param waitForWrite flag whether wait for write is required or hole fill directly.
+     * @return an ordered map of read addresses.
+     */
+    @Nonnull
+    public Map<Long, ILogData> nonCacheFetchAll(Iterable<Long> addresses, boolean waitForWrite) {
+        return fetchAll(addresses, waitForWrite, false);
     }
 
     /**
