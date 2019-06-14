@@ -74,7 +74,7 @@ public class LogMetadata {
                 // states of the actual address map. In the case of log updates, the trim mark will be set
                 // as prefix trims are performed.
                 if (addressSpace == null) {
-                    Long streamTrimMark = Address.NON_EXIST;
+                    long streamTrimMark = Address.NON_EXIST;
                     if (initialize) {
                         streamTrimMark = getStreamTrimMark(Long.MAX_VALUE,
                                 entry.getBackpointer(streamId), globalTrimMark);

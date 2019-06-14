@@ -30,7 +30,6 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -450,25 +449,24 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @Test
     public void testPrefixTrim() {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
-        StreamLog log = new StreamLogFiles(getContext(), false);
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
         // Write 50 segments and trim the first 25
         final long numSegments = 50;
-        final long filesPerSegment = 1;
         for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             writeToLog(log, x);
         }
 
         File logs = new File(logDir);
 
-        assertThat((long) logs.list().length).isEqualTo(numSegments * filesPerSegment);
+        assertThat((long) logs.list().length).isEqualTo(numSegments);
 
         final long endSegment = 25;
         long trimAddress = endSegment * StreamLogFiles.RECORDS_PER_LOG_FILE + 1;
 
         // Get references to the segments that will be trimmed
-        Set<SegmentHandle> trimmedHandles = new HashSet();
-        for (SegmentHandle sh : ((StreamLogFiles)log).getSegmentHandles()) {
+        Set<SegmentHandle> trimmedHandles = new HashSet<>();
+        for (SegmentHandle sh : log.getOpenSegmentHandles()) {
             if (sh.getSegment() < endSegment) {
                 trimmedHandles.add(sh);
             }
@@ -478,13 +476,13 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
 
         // Verify that the segments have been removed
-        assertThat(((StreamLogFiles)log).getSegmentHandles().size()).isEqualTo((int) endSegment);
+        assertThat(log.getOpenSegmentHandles().size()).isEqualTo((int) endSegment);
 
         // Verify that first 25 segments have been deleted
         String[] afterTrimFiles = logs.list();
-        assertThat(afterTrimFiles).hasSize((int)((numSegments - endSegment + 1) * filesPerSegment));
+        assertThat(afterTrimFiles).hasSize((int) (numSegments - endSegment));
 
-        Set<String> fileNames = new HashSet(Arrays.asList(afterTrimFiles));
+        Set<String> fileNames = new HashSet<>(Arrays.asList(afterTrimFiles));
         for (long x = endSegment + 1; x < numSegments; x++) {
             String logFile = Long.toString(x) + ".log";
             assertThat(fileNames).contains(logFile);
@@ -534,7 +532,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         final long numSegments = 3;
-        for (long x  = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
             writeToLog(log, x);
         }
 
@@ -546,8 +544,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
 
         File logs = new File(logDir);
-        final int lastTwoSegmentsFiles = 2;
-        assertThat(logs.list()).hasSize(lastTwoSegmentsFiles);
+        final int numFilesLeft = 1;
+        assertThat(logs.list()).hasSize(numFilesLeft);
     }
 
     /**
@@ -564,14 +562,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             writeToLog(log, x);
         }
         final long filesToBeTrimmed = 1;
-        log.prefixTrim(RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1));
+        log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
         log.compact();
 
         File logsDir = new File(logDir);
 
         final int expectedFilesBeforeReset = (int) (numSegments - filesToBeTrimmed);
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
-        final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
+        final long trimMarkBeforeReset = RECORDS_PER_LOG_FILE * filesToBeTrimmed + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
         assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
