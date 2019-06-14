@@ -45,7 +45,7 @@ public class NodeRouterPool {
      */
     public IClientRouter getRouter(NodeLocator endpoint) {
         return nodeRouters.computeIfAbsent(endpoint,
-                s -> createRouterFunction.apply(NodeLocator.getLegacyEndpoint(s)));
+                s -> createRouterFunction.apply(s.toEndpointUrl()));
     }
 
     /**

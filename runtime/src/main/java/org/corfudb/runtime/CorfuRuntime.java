@@ -889,7 +889,7 @@ public class CorfuRuntime {
                 .filter(endpoint -> !layout.getAllServers()
                         // Converting to legacy endpoint format as the layout only contains
                         // legacy format - host:port.
-                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
+                        .contains(endpoint.toEndpointUrl()))
                 .forEach(endpoint -> {
                     try {
                         IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);

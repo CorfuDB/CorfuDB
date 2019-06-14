@@ -13,6 +13,7 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 
+import java.time.Duration;
 import java.util.Set;
 
 /**
@@ -46,6 +47,12 @@ public class PollReport {
      */
     @NonNull
     private final ImmutableList<String> responsiveServers;
+
+    /**
+     * Time spent on collecting this report
+     */
+    @NonNull
+    private final Duration elapsedTime;
 
     /**
      * Returns all connected nodes to the current node including nodes with higher epoch.

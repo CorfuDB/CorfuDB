@@ -132,6 +132,7 @@ public class ClusterGraph {
 
             NodeConnectivity symmetricConnectivity = NodeConnectivity.builder()
                     .endpoint(nodeName)
+                    .epoch(node.getEpoch())
                     .connectivity(ImmutableMap.copyOf(newConnectivity))
                     .type(node.getType())
                     .build();

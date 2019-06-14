@@ -98,11 +98,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         // Create Server & Runtime
         Process server = runDefaultServer();
         // Runtime writers
-        CorfuRuntime rt1 = createDefaultRuntime();
+        runtime = createDefaultRuntime();
 
         try {
             // Write 10K entries on S1 & S2
-            CorfuTable<Integer, String> table1 = rt1.getObjectsView().build()
+            CorfuTable<Integer, String> table1 = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                     })
                     .setStreamName(stream1Name)
@@ -113,7 +113,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Write 10K entries on S2
-            CorfuTable<Integer, String> table2 = rt1.getObjectsView().build()
+            CorfuTable<Integer, String> table2 = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                     })
                     .setStreamName(stream2Name)
@@ -124,8 +124,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Force a hole for S1
-            Token token = rt1.getSequencerView().next(CorfuRuntime.getStreamID(stream1Name)).getToken();
-            rt1.getLayoutView().getRuntimeLayout()
+            Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(stream1Name)).getToken();
+            runtime.getLayoutView().getRuntimeLayout()
                     .getLogUnitClient("tcp://localhost:9000")
                     .fillHole(token);
 
@@ -149,7 +149,6 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
         } finally {
-            rt1.shutdown();
             shutdownCorfuServer(server);
         }
     }
@@ -489,6 +488,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         } finally {
             rt1.shutdown();
             rt2.shutdown();
+            rt3.shutdown();
             shutdownCorfuServer(server);
         }
     }

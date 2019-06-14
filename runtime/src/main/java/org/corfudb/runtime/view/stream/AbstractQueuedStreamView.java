@@ -1,20 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.Optional;
-import java.util.TreeSet;
-import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Range;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -29,9 +15,18 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.util.Utils;
+
+import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Optional;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 
 /** The abstract queued stream view implements a stream backed by a read queue.

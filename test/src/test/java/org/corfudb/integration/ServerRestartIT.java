@@ -252,7 +252,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(corfuServerProcess.isAlive()).isTrue();
 
         // Initialize Client: Create Runtime (Client)
-        CorfuRuntime runtime = createDefaultRuntime();
+        runtime = createDefaultRuntime();
 
         // Create Maps
         List<Map<String, Integer>> smrMapList = new ArrayList<>();
