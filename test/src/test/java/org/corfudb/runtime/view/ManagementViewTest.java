@@ -1580,21 +1580,6 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     /**
-     * Increment the cluster layout epoch by 1.
-     *
-     * @return New committed layout
-     * @throws OutrankedException If layout proposal is outranked.
-     */
-    private Layout incrementClusterEpoch() throws OutrankedException {
-        corfuRuntime.invalidateLayout();
-        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
-        layout.setEpoch(layout.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
-        corfuRuntime.getLayoutView().updateLayout(layout, 1L);
-        return layout;
-    }
-
-    /**
      * Test scenario where the sequencer bootstrap triggers cache cleanup causing maxConflictWildcard to be reset.
      * The runtime requests for 2 tokens but persists only 1 log entry. On an epoch change, the failover sequencer
      * (in this case, itself) is bootstrapped by running the fastObjectLoader.
@@ -1624,8 +1609,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .matches(corfuMsg -> corfuMsg.getMsgType() == CorfuMsgType.BOOTSTRAP_SEQUENCER).drop());
 
         // Increment the sequencer epoch twice so that a full sequencer bootstrap is required.
-        incrementClusterEpoch();
-        Layout layout = incrementClusterEpoch();
+        incrementClusterEpoch(corfuRuntime);
+        Layout layout = incrementClusterEpoch(corfuRuntime);
 
         // Clear rules to now allow sequencer bootstrap.
         clearClientRules(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
