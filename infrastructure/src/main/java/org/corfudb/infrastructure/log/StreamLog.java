@@ -5,10 +5,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
 
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
@@ -20,8 +25,9 @@ public interface StreamLog {
 
     /**
      * Append an entry to the stream log.
-     * @param address  address of append entry
-     * @param entry    entry to append to the log
+     *
+     * @param address address of append entry
+     * @param entry   entry to append to the log
      */
     void append(long address, LogData entry);
 
@@ -30,19 +36,21 @@ public interface StreamLog {
      * Entries that are trimmed, or overwrites other addresses are ignored
      * (i.e. they are not written) and an OverwriteException is not thrown.
      *
-     * @param entries
+     * @param entries entries to append to the log
      */
     void append(List<LogData> entries);
 
     /**
      * Given an address, read the corresponding stream entry.
-     * @param address  address to read from the log
+     *
+     * @param address address to read from the log
      * @return Stream entry if it exists, otherwise return null
      */
     LogData read(long address);
 
     /**
      * Prefix trim the global log.
+     *
      * @param address address to trim the log up to
      */
     void prefixTrim(long address);
@@ -107,19 +115,18 @@ public interface StreamLog {
     /**
      * Get overwrite cause for a given address.
      *
-     * @param address global log address
-     * @param entry entry which would cause the overwrite
-     * @return (OverwriteCause) Cause of the overwrite
+     * @param oldEntry the existing entry
+     * @param newEntry entry which would cause the overwrite
+     * @return cause of the overwrite
      */
-    default OverwriteCause getOverwriteCauseForAddress(long address, LogData entry) {
-        LogData currentEntry = read(address);
+    static OverwriteCause getOverwriteCauseForAddress(LogData oldEntry, LogData newEntry) {
         OverwriteCause cause = OverwriteCause.DIFF_DATA;
 
-        if (currentEntry != null) {
-            if (currentEntry.isHole()) {
+        if (oldEntry != null) {
+            if (oldEntry.isHole()) {
                 cause = OverwriteCause.HOLE;
-            } else if (entry.getData() != null && currentEntry.getData() != null &&
-                    currentEntry.getData().length == entry.getData().length) {
+            } else if (newEntry.getData() != null && oldEntry.getData() != null &&
+                    oldEntry.getData().length == newEntry.getData().length) {
                 // If the entry is already present and it is not a hole, the write
                 // might have been propagated by a fast reader from part of the chain.
                 // Compare based on data length. Based on this info client will do an actual
@@ -139,5 +146,48 @@ public interface StreamLog {
      */
     default boolean quotaExceeded() {
         return false;
+    }
+
+    /**
+     * Check whether the data can be appended to a given log address.
+     * Note that it is not permitted multiple threads to access the same log address
+     * concurrently through this method, this method does not lock or synchronize.
+     *
+     * @param address  the log address of append
+     * @param oldEntry the existing entry
+     * @param newEntry the log entry to append
+     * @throws DataOutrankedException if the log entry cannot be assigned to this log address
+     *                                as there is a data with higher rank
+     * @throws ValueAdoptedException  if the new message is a proposal during the two phase recovery
+     *                                write and there is an existing
+     *                                data at this log address already.
+     * @throws OverwriteException     if the new data is with rank 0 (not from recovery write).
+     *                                This can happen only if there is a bug in the client implementation.
+     */
+    static void assertAppendPermittedUnsafe(long address, LogData oldEntry, LogData newEntry)
+            throws DataOutrankedException, ValueAdoptedException {
+        if (oldEntry.getType() == DataType.EMPTY) {
+            return;
+        }
+        if (newEntry.getRank().getRank() == 0) {
+            // data consistency in danger
+            throw new OverwriteException(OverwriteCause.DIFF_DATA);
+        }
+
+        int compare = newEntry.getRank().compareTo(oldEntry.getRank());
+
+        if (compare < 0) {
+            throw new DataOutrankedException();
+        }
+        if (compare > 0) {
+            if (newEntry.getType() == DataType.RANK_ONLY
+                    && oldEntry.getType() != DataType.RANK_ONLY) {
+                // the new data is a proposal, the other data is not,
+                // so the old value should be adopted
+                ReadResponse resp = new ReadResponse();
+                resp.put(address, oldEntry);
+                throw new ValueAdoptedException(resp);
+            }
+        }
     }
 }
