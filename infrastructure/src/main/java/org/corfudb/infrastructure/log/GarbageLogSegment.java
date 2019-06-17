@@ -1,8 +1,7 @@
 package org.corfudb.infrastructure.log;
 
+import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.wireprotocol.LogData;
-
-import java.nio.channels.FileChannel;
 
 /**
  * Garbage log segment, has one-to-one mapping to a stream log segment.
@@ -12,11 +11,12 @@ import java.nio.channels.FileChannel;
 public class GarbageLogSegment extends AbstractLogSegment {
 
     public GarbageLogSegment(long startAddress, String fileName,
-                             FileChannel writeChannel, FileChannel readChannel) {
-        super(startAddress, fileName, writeChannel, readChannel);
+                             StreamLogParams logParams,
+                             ResourceQuota logSizeQuota,
+                             SegmentMetaData segmentMetaData) {
+        super(startAddress, fileName, logParams, logSizeQuota, segmentMetaData);
     }
 
-    @Override
     public void append(long address, LogData entry) {
 
     }
