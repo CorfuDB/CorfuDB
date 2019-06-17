@@ -40,7 +40,7 @@ public class StreamLogParams {
 
     // Region: compactor parameters
     @Default
-    public String compactionPolicyName = "GarbageThresholdCompactionPolicy";
+    public String compactionPolicyName = "GarbageSizeCompactionPolicy";
 
     @Default
     public long compactorInitialDelay = 15;
