@@ -171,18 +171,13 @@ public class AddressSpaceView extends AbstractView {
                         .getReplicationProtocol(runtime)
                         .write(e, ld);
             } catch (OverwriteException ex) {
-                if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA){
-                    // If we have an overwrite exception with the SAME_DATA cause, it means that the
-                    // server suspects our data has already been written, in this case we need to
-                    // validate the state of the write.
-                    validateStateOfWrittenEntry(token.getSequence(), ld);
-                } else {
-                    // If we have an Overwrite exception with a different cause than SAME_DATA
-                    // we do not need to validate the state of the write, as we know we have been
-                    // certainly overwritten either by other data, by a hole or the address was trimmed.
-                    // Large writes are also rejected right away.
-                    throw ex;
+                if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA) {
+                    // Ignore OverwriteException if the conflicting write is equal This can
+                    // happen when a hole filler thread competes with the main writer
+                    return null;
                 }
+
+                throw ex;
             } catch (WriteSizeException we) {
                 throw we;
             } catch (RuntimeException re) {

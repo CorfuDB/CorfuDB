@@ -66,13 +66,6 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
-     * Return whether or not this entry is a log entry.
-     */
-    default boolean isLogEntry(CorfuRuntime runtime) {
-        return getPayload(runtime) instanceof LogEntry;
-    }
-
-    /**
      * Return the payload as a log entry.
      */
     default LogEntry getLogEntry(CorfuRuntime runtime) {
@@ -95,13 +88,6 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
             return null;
         }
         return getBackpointerMap().get(streamId);
-    }
-
-    /**
-     * Return if this is the first entry in a particular stream.
-     */
-    default boolean isFirstEntry(UUID streamId) {
-        return getBackpointer(streamId) == -1L;
     }
 
     /**

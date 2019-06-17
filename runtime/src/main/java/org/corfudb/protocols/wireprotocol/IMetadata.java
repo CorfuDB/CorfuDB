@@ -158,14 +158,6 @@ public interface IMetadata {
         return new Token(getEpoch(), getGlobalAddress());
     }
 
-    default void clearCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
-    }
-
-    default void setCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
-    }
-
     default boolean hasCheckpointMetadata() {
         return getCheckpointType() != null && getCheckpointId() != null;
     }

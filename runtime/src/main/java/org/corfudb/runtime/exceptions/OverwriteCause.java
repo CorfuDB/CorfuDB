@@ -6,16 +6,12 @@ import lombok.Getter;
 public enum OverwriteCause {
     /** Indicates this address has been already written by a hole.*/
     HOLE(0),
-    /** Indicates this address has been already written and it is 'potentially' the same data
-     * (i.e., based on data length). The client will drive final verification. This intends to be
-     * a hint so verification is only driven in very specific cases.*/
+    /** Indicates this address has been already written and it is the same data..*/
     SAME_DATA(1),
-    /** Indicates this address has been already written and it is a different data (derived from the length).*/
+    /** Indicates this address has been already written and it is a different data.*/
     DIFF_DATA(2),
     /** Indicates this address was already trimmed.*/
-    TRIM(3),
-    /** Indicates there is no actual cause for the overwrite, hence no overwrite exception has occurred. */
-    NONE(4);
+    TRIM(3);
 
     private int id;
     OverwriteCause(int i) {

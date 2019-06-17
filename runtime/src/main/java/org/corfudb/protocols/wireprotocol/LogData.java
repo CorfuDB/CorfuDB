@@ -21,8 +21,6 @@ import org.corfudb.util.serializer.Serializers;
 @Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
-    public final static LogData EMPTY = new LogData(DataType.EMPTY);
-
     public static final int NOT_KNOWN = -1;
 
     @Getter
@@ -243,16 +241,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             return false;
         } else {
             LogData other = (LogData) o;
-            if (compareTo(other) == 0) {
-                boolean sameClientId = getClientId() == null ? other.getClientId() == null :
-                        getClientId().equals(other.getClientId());
-                boolean sameThreadId = getThreadId() == null ? other.getThreadId() == null :
-                        getThreadId().equals(other.getThreadId());
 
-                return sameClientId && sameThreadId;
-            }
+            boolean equalLd;
 
-            return false;
+            acquireBuffer();
+            other.acquireBuffer();
+            // This will implicitly check the payload and the LogData metadata
+            equalLd = this.serializedCache.equals(other.serializedCache);
+            releaseBuffer();
+            other.releaseBuffer();
+
+            return equalLd;
         }
     }
 

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -108,29 +109,28 @@ public interface StreamLog {
      * Get overwrite cause for a given address.
      *
      * @param address global log address
-     * @param entry entry which would cause the overwrite
+     * @param entryToWrite entry which would cause the overwrite
      * @return (OverwriteCause) Cause of the overwrite
      */
-    default OverwriteCause getOverwriteCauseForAddress(long address, LogData entry) {
-        LogData currentEntry = read(address);
-        OverwriteCause cause = OverwriteCause.DIFF_DATA;
-
-        if (currentEntry != null) {
-            if (currentEntry.isHole()) {
-                cause = OverwriteCause.HOLE;
-            } else if (entry.getData() != null && currentEntry.getData() != null &&
-                    currentEntry.getData().length == entry.getData().length) {
-                // If the entry is already present and it is not a hole, the write
-                // might have been propagated by a fast reader from part of the chain.
-                // Compare based on data length. Based on this info client will do an actual
-                // verification on the data
-                cause = OverwriteCause.SAME_DATA;
-            }
-        } else {
-            // No actual entry is found in this address, there is no apparent cause
-            // for the overwrite exception
-            cause = OverwriteCause.NONE;
+    default OverwriteCause getOverwriteCauseForAddress(long address, LogData entryToWrite) {
+        if (entryToWrite == null) {
+            throw new IllegalArgumentException("Entry for " + address + " doesn't exist");
         }
-        return cause;
+
+        LogData localEntry = read(address);
+
+        if (localEntry == null) {
+            throw new IllegalStateException("Detected overwrite on " + address + " but couldn't find the entry locally");
+        }
+
+        if (localEntry.isTrimmed()) {
+            return OverwriteCause.TRIM;
+        } else if (localEntry.isHole()) {
+            return OverwriteCause.HOLE;
+        } else if (localEntry.equals(entryToWrite) && Arrays.equals(localEntry.getData(), entryToWrite.getData())) {
+            return OverwriteCause.SAME_DATA;
+        } else {
+            return OverwriteCause.DIFF_DATA;
+        }
     }
 }

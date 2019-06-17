@@ -392,7 +392,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol
                 .DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
 
-        logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
+        Map<UUID, Long> backpointersMap = getUUIDLongMap(entry.getBackpointersMap());
+        if (!backpointersMap.isEmpty()) {
+            logData.setBackpointerMap(backpointersMap);
+        }
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
 
