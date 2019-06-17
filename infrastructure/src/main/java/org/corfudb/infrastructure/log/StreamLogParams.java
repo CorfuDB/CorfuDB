@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import lombok.Builder;
 import lombok.Builder.Default;
 import org.corfudb.format.Types;
+import org.corfudb.infrastructure.log.compression.Codec;
 
 import java.util.concurrent.TimeUnit;
 
@@ -40,12 +41,12 @@ public class StreamLogParams {
     public double logSizeQuotaPercentage = 100.0;
 
     @Default
-    public String compressionCodecType = "None";
+    public Codec.Type compressionCodec = Codec.Type.None;
     // End region
 
     // Region: compactor parameters
     @Default
-    public String compactionPolicyName = "GarbageThresholdCompactionPolicy";
+    public String compactionPolicyName = "GarbageSizeCompactionPolicy";
 
     @Default
     public long compactorInitialDelay = 15;
