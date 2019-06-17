@@ -25,10 +25,10 @@ public class StreamLogCompactor {
 
     private final ExecutorService compactionWorker;
 
-    public StreamLogCompactor(StreamLogParams logParams) {
+    public StreamLogCompactor(StreamLogParams logParams, SegmentManager segmentManager) {
         this.logParams = logParams;
+        this.segmentManager = segmentManager;
         this.compactionPolicy = CompactionPolicy.getPolicy(logParams);
-        this.segmentManager = new SegmentManager(logParams);
 
         compactionScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
@@ -42,7 +42,8 @@ public class StreamLogCompactor {
     }
 
     private void runCompactor() {
-        List<StreamLogSegment> segments =
+        // TODO: update LogMetaData stream space after compaction
+        List<SegmentMetaData> segments =
                 compactionPolicy.getSegmentsToCompact(segmentManager.getCompactibleSegments());
 
     }

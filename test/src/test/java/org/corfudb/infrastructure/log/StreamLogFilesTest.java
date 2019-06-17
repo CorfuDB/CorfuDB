@@ -12,13 +12,13 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -171,59 +172,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testRangeWriteTrim() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-
-        // A range write that has the first 25% of its entries trimmed
-        final int numEntries = 1000;
-        final double trimmedRatio = .25;
-        List<LogData> entries = new ArrayList<>();
-
-        for (int x = 0; x < numEntries; x++) {
-            if (x < trimmedRatio * numEntries) {
-                entries.add(LogData.getTrimmed(x));
-            } else {
-                entries.add(getEntry(x));
-            }
-        }
-
-        log.append(entries);
-        long trimMarkAfterWrite = (long) (numEntries * trimmedRatio);
-        assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterWrite);
-    }
-
-    @Test
-    public void testRangeWriteAfterPrefixTrim() throws Exception {
-        // This test tries to write a range right after a part of the range to be
-        // written is prefix trimmed.
-        StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-        final long trimMark = 1000;
-        final long trimOverlap = 100;
-        final long numEntries = 200;
-        log.prefixTrim(trimMark);
-
-        List<LogData> entries = new ArrayList<>();
-        for (long x = 0; x < numEntries; x++) {
-            long address = trimMark - trimOverlap + x;
-            entries.add(getEntry(address));
-        }
-
-        log.append(entries);
-
-        StreamLog log2 = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-        List<LogData> readEntries = readRange(0L, trimMark - trimOverlap + numEntries, log2);
-
-        List<LogData> notTrimmed = new ArrayList<>();
-        for (LogData entry : readEntries) {
-            if (!entry.isTrimmed()) {
-                notTrimmed.add(entry);
-            }
-        }
-
-        assertThat((long) notTrimmed.size()).isEqualTo(numEntries - trimOverlap - 1);
-    }
-
-    @Test
     public void badRangeWrite() throws Exception {
         StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
 
@@ -274,27 +222,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         Assertions.assertThatExceptionOfType(OverwriteException.class)
                 .isThrownBy(() -> log.append(entries));
-    }
-
-    @Test
-    public void writingTrimmedEntries() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-
-        final long trimMark = 400;
-        final long numEntries = trimMark + 200;
-        log.prefixTrim(trimMark);
-
-        List<LogData> entries = new ArrayList<>();
-        for (int x = 0; x < numEntries; x++) {
-            entries.add(LogData.getTrimmed(x));
-        }
-
-        File logsDir = log.getLogDir().toFile();
-        long logSize = FileUtils.sizeOfDirectory(logsDir);
-        log.append(entries);
-        log.sync(true);
-        long logSize2 = FileUtils.sizeOfDirectory(logsDir);
-        assertThat(logSize2).isEqualTo(logSize);
     }
 
     /**
@@ -414,6 +341,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Ignore
+    // TODO: change this test to single writer, multiple reader and then add back.
     public void multiThreadedReadWrite() throws Exception {
         StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
 
@@ -533,18 +462,18 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long trimAddress = endSegment * params.recordsPerSegment + 1;
 
         // Get references to the segments that will be trimmed
-        Set<StreamLogSegment> trimmedHandles = new HashSet<>();
-        for (StreamLogSegment sh : log.getOpenSegmentHandles()) {
-            if (sh.getStartAddress() < endSegment) {
-                trimmedHandles.add(sh);
-            }
-        }
+
+        Set<StreamLogSegment> trimmedSegments = log.getSegmentManager().getStreamLogSegments()
+                .values()
+                .stream()
+                .filter(segment -> segment.getOrdinal() < endSegment)
+                .collect(Collectors.toSet());
 
         log.prefixTrim(trimAddress);
         log.compact();
 
         // Verify that the segments have been removed
-        assertThat(log.getOpenSegmentHandles().size()).isEqualTo((int) endSegment);
+        assertThat(log.getSegmentManager().getStreamLogSegments().size()).isEqualTo((int) endSegment);
 
         // Verify that first 25 segments have been deleted
         String[] afterTrimFiles = logsDir.list();
@@ -559,24 +488,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Try to trim an address that is less than the new starting address
         // This shouldn't throw an exception
         log.prefixTrim(trimAddress);
-
-        long trimmedExceptions = 0;
-
-        // Try to read trimmed addresses
-        for(long x = 0; x < numSegments * params.recordsPerSegment; x++) {
-            ILogData logData = log.read(x);
-            if(logData.isTrimmed()) {
-                trimmedExceptions++;
-            }
-        }
-
-        // Verify that the trimmed segment channels are closed
-        for (StreamLogSegment sh : trimmedHandles) {
-            assertThat(sh.getWriteChannel().isOpen()).isFalse();
-        }
-
-        // Address 0 is not reflected in trimAddress
-        assertThat(trimmedExceptions).isEqualTo(trimAddress + 1);
     }
 
     @Test
