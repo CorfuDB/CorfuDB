@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.log.StreamLogDataStore;
 import org.corfudb.infrastructure.log.StreamLogParams;
+import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -688,7 +689,7 @@ public class ServerContext implements AutoCloseable {
                 .logPath(getServerConfig(String.class, "--log-path"))
                 .verifyChecksum(!getServerConfig(Boolean.class, "--no-verify"))
                 .logSizeQuotaPercentage(getLogSizeQuotaPercentage())
-                .compressionCodecType(getServerConfig(String.class, "--compression-codec"))
+                .compressionCodec(Codec.Type.valueOf(getServerConfig(String.class, "--compression-codec")))
                 .build();
     }
 
