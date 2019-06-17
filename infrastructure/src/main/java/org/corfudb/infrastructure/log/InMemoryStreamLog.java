@@ -1,5 +1,12 @@
 package org.corfudb.infrastructure.log;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -8,13 +15,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
+import static org.corfudb.infrastructure.log.StreamLog.assertAppendPermittedUnsafe;
+import static org.corfudb.infrastructure.log.StreamLog.getOverwriteCauseForAddress;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -23,7 +25,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
  * Created by maithem on 7/21/16.
  */
 @Slf4j
-public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
+public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
     private final Set<Long> trimmed;
@@ -115,13 +117,14 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
+        LogData currentEntry = read(address);
         if (entry.getRank() == null) {
-            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+            OverwriteCause overwriteCause = getOverwriteCauseForAddress(currentEntry, entry);
             log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
             throw new OverwriteException(overwriteCause);
         } else {
             // the method below might throw DataOutrankedException or ValueAdoptedException
-            assertAppendPermittedUnsafe(address, entry);
+            assertAppendPermittedUnsafe(address, currentEntry, entry);
         }
     }
 

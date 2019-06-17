@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * The interface of stream log compaction policy, which decides
  * which log segments will be selected for compaction.
- *
+ * <p>
  * Created by WenbinZhu on 5/22/19.
  */
 public interface CompactionPolicy {
@@ -18,10 +18,11 @@ public interface CompactionPolicy {
      * Returns a list of segments selected for compaction based on
      * the compaction policy implementation.
      *
-     * @param compactibleSegments all unprotected segments that can be selected for compaction.
-     * @return a list of segments selected for compaction.
+     * @param compactibleSegments meta data of unprotected segments that
+     *                            can be selected for compaction
+     * @return a list of segments selected for compaction
      */
-    List<StreamLogSegment> getSegmentsToCompact(List<StreamLogSegment> compactibleSegments);
+    List<SegmentMetaData> getSegmentsToCompact(List<SegmentMetaData> compactibleSegments);
 
     static CompactionPolicy getPolicy(StreamLogParams params) {
         try {
