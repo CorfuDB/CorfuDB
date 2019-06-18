@@ -267,26 +267,39 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
         }
     }
 
-    /** The "main" map which contains the primary key-value mappings. */
-    private final Map<K,V> mainMap = new HashMap<>();
+    // The "main" map which contains the primary key-value mappings.
+    private final Map<K,V> mainMap;
     private Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
 
     @Getter
     boolean indexGenerationFailed = false;
 
-    /** Generate a table with the given set of indexes. */
-    public CorfuTable(IndexRegistry<K, V> indices) {
+    /**
+     * Generate a table with a given implementation for the mainMap
+     */
+    public CorfuTable(IndexRegistry<K, V> indices, Map<K, V> mapImpl) {
         indices.forEach(index -> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
             indexSpec.add(index);
         });
-        log.info("CorfuTable: creating CorfuTable with the following indexes: {}", secondaryIndexes.keySet().toString());
+        log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
+                secondaryIndexes.keySet().toString());
+        mainMap = mapImpl;
     }
 
-    /** Default constructor. Generates a table without any secondary indexes. */
+    /**
+     * Generate a table with the given set of indexes.
+     */
+    public CorfuTable(IndexRegistry<K, V> indices) {
+        this(indices, new HashMap<>());
+    }
+
+    /**
+     * Default constructor. Generates a table without any secondary indexes.
+     */
     public CorfuTable() {
-        this(IndexRegistry.empty());
+        this(IndexRegistry.empty(), new HashMap<>());
     }
 
     /** {@inheritDoc} */
