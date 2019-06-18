@@ -9,6 +9,7 @@
     <modules>
         <module>infrastructure</module>
         <module>runtime</module>
+        <module>common</module>
         <module>format</module>
         <module>cmdlets</module>
         <module>test</module>

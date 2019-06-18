@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -27,7 +28,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
-import org.corfudb.util.result.Result;
 
 import java.time.Duration;
 import java.util.Collections;
