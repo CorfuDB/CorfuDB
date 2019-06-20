@@ -2,9 +2,12 @@ package org.corfudb.runtime.clients;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.byLessThan;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
@@ -24,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
+import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
 import org.corfudb.format.Types;
@@ -37,6 +41,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -175,6 +180,81 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         }
 
         assertThat(entries).isEqualTo(readEntries);
+    }
+
+    @Test
+    public void quotaExceededTest() throws Exception {
+        serverRouter.reset();
+        String dirPath = PARAMETERS.TEST_TEMP_DIR;
+        final int maxLogSizeInBytes = 1000;
+        ServerContext sc = serverContext = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(dirPath)
+                .setServerRouter(serverRouter)
+                .setLogSizeQuota(Long.toString(maxLogSizeInBytes))
+                .build();
+        LogUnitServer server = new LogUnitServer(sc);
+        serverRouter.addServer(server);
+
+        long address0 = 0l;
+        long address1 = 1l;
+
+        byte[] payload = new byte[maxLogSizeInBytes / 2];
+
+        client.write(address0, null, payload, Collections.emptyMap()).get();
+        assertThatThrownBy(() -> client.write(address1, null, payload, Collections.emptyMap()).get())
+                .isInstanceOf(ExecutionException.class)
+                .hasRootCauseInstanceOf(QuotaExceededException.class);
+        assertThat(client.read(address0).get().getAddresses().get(address0).getType()).isEqualTo(DataType.DATA);
+        assertThat(client.read(address1).get().getAddresses().get(address1).getType()).isEqualTo(DataType.EMPTY);
+    }
+
+    @Test
+    public void quotaExceededAndTrimTest() throws Exception {
+        final int numWrites = StreamLogFiles.RECORDS_PER_LOG_FILE * 2;
+        final int payloadSize = 100;
+        byte[] payload = new byte[payloadSize];
+        CompletableFuture[] writeFutures = new CompletableFuture[numWrites];
+        for (int x = 0; x < numWrites; x++) {
+            writeFutures[x] = client.write(x, null, payload, Collections.emptyMap());
+        }
+
+        CompletableFuture.allOf(writeFutures).join();
+
+        String logDirPath = serverContext.getServerConfig().get("--log-path").toString();
+        long logDirSize = FileUtils.sizeOfDirectory(new File(logDirPath));
+
+        ServerContext newQuota = serverContext = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(logDirPath)
+                .setServerRouter(serverRouter)
+                .setLogSizeQuota(Long.toString(logDirSize))
+                .build();
+
+        LogUnitServer server2 = new LogUnitServer(newQuota);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
+        final int failedWrites = 10;
+
+        // after setting the new quota, the new writes should start failing
+        for (int x = 0; x < failedWrites; x++) {
+            final int address = numWrites + x;
+            assertThatThrownBy(() -> client.write(address, null, payload, Collections.emptyMap()).get())
+                    .isInstanceOf(ExecutionException.class)
+                    .hasRootCauseInstanceOf(QuotaExceededException.class);
+        }
+
+        client.prefixTrim(new Token(0L, numWrites)).get();
+        client.compact().get();
+
+        // After compaction (log size drops to less than the quota) new writes should
+        // be accepted
+        final int numWritesAfterTrimAndCompaction = 10;
+        for (int x = 0; x < numWritesAfterTrimAndCompaction; x++) {
+            final int address = numWrites + x + 1;
+            assertDoesNotThrow(() -> client.write(address, null, payload, Collections.emptyMap()).get());
+        }
     }
 
     @Test

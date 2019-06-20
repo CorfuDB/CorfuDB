@@ -83,7 +83,7 @@ public class ManagementAgent {
      * Checks and restores if a layout is present in the local datastore to recover from.
      * Spawns an initialization task which recovers if required, and start monitoring services.
      *
-     * @param runtimeSingletonResource Singleton resource to fetch runtime.
+     * @param runtimeSingletonResource Singleton used to fetch runtime.
      * @param serverContext            Server Context.
      */
     ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,

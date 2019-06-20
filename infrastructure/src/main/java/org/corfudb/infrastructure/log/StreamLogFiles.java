@@ -21,6 +21,7 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -41,10 +42,13 @@ import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -57,6 +61,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
@@ -96,6 +102,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // the files of the old instance
     private LogMetadata logMetadata;
 
+    final AtomicReference<ResourceQuota> logSizeQuota;
+
+    /**
+     * The maximum log size in bytes. If this limit is exceeded only high priority
+     * writes will be accepted.
+     */
+    final long logSizeLimit;
 
     /**
      * Returns a file-based stream log object.
@@ -106,12 +119,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
+        initStreamLogDirectory();
+
+        String logSizeQuotaParam = serverContext.getServerConfig().get("--log-size-quota").toString();
+        logSizeLimit = Long.parseLong(logSizeQuotaParam);
+        long initialLogSize = estimateSize(logDir);
+        logSizeQuota = new AtomicReference<>(new ResourceQuota("LogSizeQuota",
+                initialLogSize, logSizeLimit));
+
+
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
 
-        initStreamLogDirectory();
         verifyLogs();
         // Starting address initialization should happen before
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
@@ -210,7 +231,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param verify      Checksum verify flag
      * @throws IOException I/O exception
      */
-    public static void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
+    public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
 
         LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
@@ -218,7 +239,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
-        safeWrite(fileChannel, buf);
+        writeByteBuffer(fileChannel, buf);
         fileChannel.force(true);
     }
 
@@ -238,7 +259,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return buf;
     }
 
-    static ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
+    @VisibleForTesting
+    public static ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
         Metadata metadata = getMetadata(message);
         return getByteBuffer(metadata, message);
     }
@@ -885,7 +907,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
 
             allRecordsBuf.flip();
-            safeWrite(segment.getWriteChannel(), allRecordsBuf);
+            writeByteBuffer(segment.getWriteChannel(), allRecordsBuf);
             channelsToSync.add(segment.getWriteChannel());
             // Sync the global and stream tail(s)
             // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
@@ -897,35 +919,23 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
-     * Attempts to write a buffer to a file channel, if write fails with an
-     * IOException then the channel pointer is moved back to its original position
-     * before the write
+     * Attempts to write a buffer to a file channel.
      *
      * @param channel the channel to write to
      * @param buf     the buffer to write
      * @throws IOException IO exception
      */
-    private static void safeWrite(FileChannel channel, ByteBuffer buf) throws IOException {
-        long prev = channel.position();
-        try {
-            do {
-                channel.write(buf);
-            } while (buf.hasRemaining());
+    private void writeByteBuffer(FileChannel channel, ByteBuffer buf) throws IOException {
+        int bufSize = buf.remaining();
 
-        } catch (IOException e) {
-            // Write failed restore the channels position, so the subsequent writes
-            // can overwrite the failed write.
+        logSizeQuota.updateAndGet(quota -> {
+            ResourceQuota newQuota = quota.acquire(bufSize);
+            newQuota.check();
+            return newQuota;
+        });
 
-            // Note that after rewinding the channel pointer, it is important to truncate
-            // any bytes that were written. This is required to avoid an ambiguous case
-            // where a subsequent write (after a failed write) succeeds but writes less
-            // bytes than the partially written buffer. In that case, the log unit can't
-            // determine if the bytes correspond to a partially written buffer that needs
-            // to be ignored, or if the bytes correspond to a corrupted metadata field.
-            channel.position(prev);
-            channel.truncate(prev);
-            channel.force(true);
-            throw e;
+        while (buf.hasRemaining()) {
+            channel.write(buf);
         }
     }
 
@@ -948,7 +958,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
             channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
-            safeWrite(segment.getWriteChannel(), record);
+            writeByteBuffer(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
             syncTailSegment(address);
             logMetadata.update(entry);
@@ -1224,6 +1234,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 numFiles++;
             }
         }
+
+        final long bytesToFree = freedBytes;
+        logSizeQuota.updateAndGet(resourceQuota -> resourceQuota.release(bytesToFree));
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
     }
 
@@ -1258,6 +1271,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
         writeChannels.clear();
+        logSizeQuota.updateAndGet(resourceQuota -> new ResourceQuota("LogSizeQuota",
+                estimateSize(logDir), logSizeLimit));
         log.info("reset: Completed, end segment {}", endSegment);
     }
 
@@ -1295,6 +1310,35 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         public static int getChecksum(int num) {
             Hasher hasher = Hashing.crc32c().newHasher();
             return hasher.putInt(num).hash().asInt();
+        }
+    }
+
+    /**
+     * Estimate the size (in bytes) of a directory.
+     * From https://stackoverflow.com/a/19869323
+     */
+    long estimateSize(Path directoryPath) {
+        final AtomicLong size = new AtomicLong(0);
+        try {
+            Files.walkFileTree(directoryPath, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file,
+                                                 BasicFileAttributes attrs) {
+                    size.addAndGet(attrs.size());
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    // Skip folders that can't be traversed
+                    log.error("skipped: {}", file, exc);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+
+            return size.get();
+        } catch (IOException ioe) {
+            throw new IllegalStateException(ioe);
         }
     }
 }

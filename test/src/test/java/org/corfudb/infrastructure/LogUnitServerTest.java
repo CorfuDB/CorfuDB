@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
+import org.corfudb.format.Types;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
@@ -17,6 +18,8 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
@@ -421,10 +424,24 @@ public class LogUnitServerTest extends AbstractServerTest {
         File logFile = new File(logFilePath);
         logFile.createNewFile();
         RandomAccessFile file = new RandomAccessFile(logFile, "rw");
-        StreamLogFiles.writeHeader(file.getChannel(), version, noVerify);
+        writeHeader(file.getChannel(), version, noVerify);
         file.close();
 
         return logFile.getAbsolutePath();
+    }
+
+    public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
+
+        Types.LogHeader header = Types.LogHeader.newBuilder()
+                .setVersion(version)
+                .setVerifyChecksum(verify)
+                .build();
+
+        ByteBuffer buf = StreamLogFiles.getByteBufferWithMetaData(header);
+        do {
+            fileChannel.write(buf);
+        } while (buf.hasRemaining());
+        fileChannel.force(true);
     }
 
     @Test (expected = RuntimeException.class)
