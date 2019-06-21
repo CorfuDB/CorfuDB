@@ -466,7 +466,7 @@ public class FastObjectLoader {
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
         } catch (Exception e) {
-            log.error("Cannot deserialize log entry" + logData.getGlobalAddress(), e);
+            log.error("Cannot deserialize log entry " + logData.getGlobalAddress(), e);
             return;
         }
 
