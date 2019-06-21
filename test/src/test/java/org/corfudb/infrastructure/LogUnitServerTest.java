@@ -34,20 +34,17 @@ import static org.junit.Assert.fail;
  */
 public class LogUnitServerTest extends AbstractServerTest {
 
-    private static final double minHeapRatio = 0.1;
-    private static final double maxHeapRatio = 0.9;
-
     @Override
     public AbstractServer getDefaultServer() {
         return new LogUnitServer(new ServerContextBuilder().build());
     }
 
     /**
-     * Waits for the logunit batch writer to drain the operation queue and
+     * Waits for the log unit batch writer to drain the operation queue and
      * reply to all requests.
-     * @param lu logunit to wait for
+     * @param lu log unit to wait for
      */
-    private void waitForLogUnit(LogUnitServer lu) throws Exception {
+    static void waitForLogUnit(LogUnitServer lu) throws Exception {
         lu.getBatchWriter().stopProcessor();
         lu.getBatchWriter().startProcessor();
         lu.stopHandler();
@@ -537,22 +534,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(s2)
                 .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
 
-    }
-
-    @Test
-    public void CheckCacheSizeIsCorrectRatio() throws Exception {
-
-        Random r = new Random(System.currentTimeMillis());
-        double randomCacheRatio = minHeapRatio + (maxHeapRatio - minHeapRatio) * r.nextDouble();
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .setCacheSizeHeapRatio(String.valueOf(randomCacheRatio))
-                .build());
-
-
-        assertThat(s1).hasCorrectCacheSize(randomCacheRatio);
     }
 }
 
