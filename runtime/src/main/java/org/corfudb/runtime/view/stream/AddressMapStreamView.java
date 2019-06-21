@@ -1,8 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
 import java.util.SortedSet;
@@ -13,7 +11,6 @@ import java.util.function.Function;
 import javax.annotation.Nonnull;
 
 import com.google.common.collect.Iterables;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -43,15 +40,9 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
 @Slf4j
 public class AddressMapStreamView extends AbstractQueuedStreamView {
 
-    private static final int COUNTER_INIT_VALUE = 0;
-
     private static final int DIFF_CONSECUTIVE_ADDRESSES = 1;
 
-    private int batchSize;
-
     private long addressCount = 0L;
-
-    final StreamOptions options;
 
     /** Create a new address map stream view.
      *
@@ -61,9 +52,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     public AddressMapStreamView(final CorfuRuntime runtime,
                                 final UUID streamId,
                                 @Nonnull final StreamOptions options) {
-        super(runtime, streamId);
-        this.options = options;
-        batchSize = runtime.getParameters().getStreamBatchSize();
+        super(runtime, streamId, options);
     }
 
     public AddressMapStreamView(final CorfuRuntime runtime,
@@ -83,10 +72,30 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         if (thisRead != null) {
             // In the case that the immediately requested address (thisRead) is not available,
             // read it along with a batch of subsequent addresses.
-            List<Long> batchRead = getBatch(thisRead, queue);
-            ILogData ld = readRange(thisRead, batchRead);
 
-            if (queue == getCurrentContext().readQueue) {
+            ILogData ld;
+
+            try {
+                // The read range has a special behaviour, it attempts to read the address of interest,
+                // and in the case it is not in the cache, it reads a batch of addresses
+                // that will be further required, returning only the data for the address of interest.
+
+                // Because addresses are requested in increasing order and system relies on prefix trim,
+                // we force trimmedExceptions to be thrown by lower layers, and handle ignoreTrimmed at this layer.
+                // Note that lower layers will cache the valid entries, to optimize read performance.
+                ld = read(thisRead, queue);
+            } catch (TrimmedException te) {
+                if (!options.ignoreTrimmed) {
+                    throw te;
+                }
+
+                log.warn("removeFromQueue[{}]: ignoring trimmed addresses {}", this, te.getTrimmedAddresses());
+                // Ignore trimmed address, remove trimmed addresses and get next from queue
+                te.getTrimmedAddresses().forEach(address -> queue.remove(address));
+                return removeFromQueue(queue);
+            }
+
+            if (queue == getCurrentContext().readQueue && ld != null) {
                 // Validate that the data entry belongs to this stream, otherwise, skip.
                 // This verification protects from sequencer regression (tokens assigned in an older epoch
                 // that were never written to, and reassigned on a newer epoch)
@@ -104,28 +113,6 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         }
 
         return null;
-    }
-
-    /**
-     * Prepare a batch of entries to be read, including the current address to retrieve.
-     *
-     * @param currentRead current address to retrieve.
-     * @param queue queue to get entries from.
-     * @return batch of entries.
-     */
-    private List<Long> getBatch(long currentRead, @NonNull NavigableSet<Long> queue) {
-        int counter = COUNTER_INIT_VALUE;
-        List<Long> batchRead = new ArrayList<>();
-        batchRead.add(currentRead);
-        counter++;
-
-        Iterator<Long> it = queue.iterator();
-        while (it.hasNext() && counter < batchSize) {
-            batchRead.add(it.next());
-            counter++;
-        }
-
-        return batchRead;
     }
 
     /**

@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
@@ -50,14 +51,18 @@ public abstract class AbstractQueuedStreamView extends
         AbstractContextStreamView<AbstractQueuedStreamView
                 .QueuedStreamContext> {
 
+    final StreamOptions options;
+
     /** Create a new queued stream view.
      *
      * @param streamId  The ID of the stream
      * @param runtime   The runtime used to create this view.
      */
     public AbstractQueuedStreamView(final CorfuRuntime runtime,
-                                    final UUID streamId) {
+                                    final UUID streamId,
+                                    StreamOptions options) {
         super(runtime, streamId, QueuedStreamContext::new);
+        this.options = options;
     }
 
     /** Add the given address to the resolved queue of the
@@ -247,7 +252,7 @@ public abstract class AbstractQueuedStreamView extends
                 return runtime.getAddressSpaceView().read(address);
             }
             return runtime.getAddressSpaceView()
-                    .read(Collections.singleton(address), false)
+                    .read(Collections.singleton(address), false, false)
                     .get(address);
         } catch (TrimmedException te) {
             processTrimmedException(te);
@@ -259,8 +264,13 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses);
-            return addresses.stream().map(dataMap::get).collect(Collectors.toList());
+                    runtime.getAddressSpaceView().read(addresses, options.ignoreTrimmed);
+            // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
+            // to all requested addresses, for this reason we must filter out data entries not included (null).
+            // Also, we need to preserve ordering for checkpoint logic.
+            return  addresses.stream().map(dataMap::get)
+                    .filter(data -> data != null)
+                    .collect(Collectors.toList());
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -315,6 +325,7 @@ public abstract class AbstractQueuedStreamView extends
             // the start and maxGlobal
             readSet.addAll(context.readQueue.headSet(maxGlobal, true));
         }
+
         List<Long> toRead = readSet.stream()
                 .collect(Collectors.toList());
 
@@ -543,9 +554,20 @@ public abstract class AbstractQueuedStreamView extends
         }
     }
 
-    protected @Nonnull ILogData readRange(long address, @Nonnull final List<Long> addresses) {
+    /**
+     *  This method reads a batch of addresses if 'nextRead' is not found in the cache.
+     *  In the case of a cache miss, it piggybacks on the read for 'nextRead'.
+     *
+     *  If 'nextRead' is present in the cache, it directly returns this data.
+     *
+     * @param nextRead current address of interest
+     * @param addresses batch of addresses to read (bring into the cache) in case there is a cache miss (includes
+     *                  nextRead)
+     * @return data for current 'address' of interest.
+     */
+    protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
         try {
-            return runtime.getAddressSpaceView().predictiveReadRange(address, addresses);
+            return runtime.getAddressSpaceView().read(nextRead, addresses, false);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
