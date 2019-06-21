@@ -10,10 +10,10 @@ Corfu repository is [here](https://cloud.docker.com/u/corfudb/repository/docker/
 `./mvnw -pl infrastructure -DskipTests -Pdocker clean deploy`
 
 #### Pulling the image (particular version)
-`docker pull corfudb/corfu-server:0.2.3-SNAPSHOT`
+`docker pull corfudb/corfu-server:0.3.0-SNAPSHOT`
  
 #### Running corfu server
-`docker run -ti corfudb/corfu-server:0.2.3-SNAPSHOT`
+`docker run -ti corfudb/corfu-server:0.3.0-SNAPSHOT`
 
 P.S.
 The new Docker image does not support any cmdlets.
