@@ -20,6 +20,8 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
@@ -33,11 +35,14 @@ import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.exceptions.OutrankedException;
+
 import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,13 +95,20 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     /** Test Endpoint hostname. */
     private final static String testHostname = "tcp://test";
 
+    private boolean followBackpointers = false;
+
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
+        this(false);
+    }
+
+    public AbstractViewTest(boolean followBackpointers) {
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-            .nettyEventLoop(NETTY_EVENT_LOOP)
-            .build());
+                .followBackpointersEnabled(followBackpointers)
+                .nettyEventLoop(NETTY_EVENT_LOOP)
+                .build());
         // Default number of times to read before hole filling to 0
         // (most aggressive, to surface concurrency issues).
         runtime.getParameters().setHoleFillRetry(0);
@@ -304,6 +316,43 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(0L,
                         Collections.emptyMap(), l.getEpoch(), false)), null,
                         primarySequencerNode.serverRouter);
+    }
+
+
+    /**
+     * Set aggressive timeouts for the detectors.
+     *
+     * @param managementServersPorts Management server endpoints.
+     */
+    void setAggressiveDetectorTimeouts(int... managementServersPorts) {
+        Arrays.stream(managementServersPorts).forEach(port -> {
+            NetworkStretcher stretcher = NetworkStretcher.builder()
+                    .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .build();
+
+            FailureDetector failureDetector = getManagementServer(port)
+                    .getManagementAgent()
+                    .getRemoteMonitoringService()
+                    .getFailureDetector();
+            failureDetector.setNetworkStretcher(stretcher);
+        });
+    }
+
+    /**
+     * Increment the cluster layout epoch by 1.
+     *
+     * @return New committed layout
+     * @throws OutrankedException If layout proposal is outranked.
+     */
+    Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws OutrankedException {
+        corfuRuntime.invalidateLayout();
+        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout.setEpoch(layout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
+        corfuRuntime.getLayoutView().updateLayout(layout, 1L);
+        return layout;
     }
 
     /** Get a default CorfuRuntime. The default CorfuRuntime is connected to a single-node

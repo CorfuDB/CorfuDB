@@ -23,8 +23,6 @@ import java.util.function.Function;
 @Slf4j
 public class BackpointerStreamView extends AbstractQueuedStreamView {
 
-    final StreamOptions options;
-
     /** Create a new backpointer stream view.
      *
      * @param runtime   The runtime to use for accessing the log.
@@ -33,8 +31,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     public BackpointerStreamView(final CorfuRuntime runtime,
                                  final UUID streamId,
                                  @Nonnull final StreamOptions options) {
-        super(runtime, streamId);
-        this.options = options;
+        super(runtime, streamId, options);
     }
 
     public BackpointerStreamView(final CorfuRuntime runtime,
@@ -46,8 +43,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     protected ILogData removeFromQueue(NavigableSet<Long> queue) {
         if (!queue.isEmpty()) {
             final long thisRead = queue.pollFirst();
-            ILogData ld = read(thisRead);
-            if (queue == getCurrentContext().readQueue) {
+            ILogData ld;
+            try {
+                ld = read(thisRead);
+            } catch (TrimmedException te) {
+                if (!options.ignoreTrimmed) {
+                    throw te;
+                }
+
+                return removeFromQueue(queue);
+            }
+
+            if (queue == getCurrentContext().readQueue && ld != null) {
                 addToResolvedQueue(getCurrentContext(), thisRead, ld);
             }
             return ld;

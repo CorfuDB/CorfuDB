@@ -5,12 +5,11 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -37,11 +36,14 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletionException;
@@ -262,8 +264,9 @@ public class AddressSpaceView extends AbstractView {
                 final ILogData loadedVal = fetch(address);
                 return cacheLoadAndGet(readCache, address, loadedVal);
             }
-        return data;
-    }
+            return data;
+        }
+
         return fetch(address);
     }
 
@@ -278,19 +281,42 @@ public class AddressSpaceView extends AbstractView {
      *                  nextRead)
      * @return data for current 'address' of interest.
      */
-    public @Nonnull ILogData predictiveReadRange(Long nextRead, List<Long> addresses) {
+    public @Nonnull ILogData read(Long nextRead, NavigableSet<Long> addresses, boolean ignoreTrimmed) {
         if (runtime.getParameters().isCacheDisabled()) {
             return fetch(nextRead);
         }
 
         ILogData data = readCache.getIfPresent(nextRead);
         if (data == null) {
-            log.trace("predictiveReadRange: request to read {}", addresses);
-            Map<Long, ILogData> mapAddresses = this.read(addresses);
+            List<Long> batch = getBatch(nextRead, addresses);
+            log.trace("read: request address {}, read batch {}", nextRead, batch);
+            Map<Long, ILogData> mapAddresses = this.read(batch, ignoreTrimmed);
             data = mapAddresses.get(nextRead);
         }
 
         return data;
+    }
+
+    /**
+     * Prepare a batch of entries to be read, including the current address to retrieve.
+     *
+     * @param currentRead current address to retrieve.
+     * @param queue queue to get entries from.
+     * @return batch of entries.
+     */
+    private List<Long> getBatch(long currentRead, @NonNull NavigableSet<Long> queue) {
+        int counter = 0;
+        List<Long> batchRead = new ArrayList<>();
+        batchRead.add(currentRead);
+        counter++;
+
+        Iterator<Long> it = queue.iterator();
+        while (it.hasNext() && counter < runtime.getParameters().getStreamBatchSize()) {
+            batchRead.add(it.next());
+            counter++;
+        }
+
+        return batchRead;
     }
 
     /**
@@ -306,8 +332,22 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
-        return read(addresses, true);
+        return read(addresses, true, false);
     }
+
+    /**
+     * Read the given object from a range of addresses.
+     *
+     * - If the ignoreTrimmed flag is set, trimmed addresses are ignored.
+     *
+     * @param addresses An iterable with addresses to read from
+     * @param ignoreTrimmed boolean indicating if trimmed addresses should be ignored.
+     * @return A result, which be cached.
+     */
+    public Map<Long, ILogData> read(Iterable<Long> addresses, boolean ignoreTrimmed) {
+        return read(addresses, true, ignoreTrimmed);
+    }
+
 
     /**
      * Attempts to insert a loaded value into the cache and return the cached value for a particular key.
@@ -335,7 +375,8 @@ public class AddressSpaceView extends AbstractView {
      * @param waitForWrite Flag whether wait for write is required or hole fill directly.
      * @return A map of addresses read, which will be cached if caching is enabled
      */
-    public Map<Long, ILogData> read(Iterable<Long> addresses, boolean waitForWrite) {
+    public Map<Long, ILogData> read(Iterable<Long> addresses, boolean waitForWrite, boolean ignoreTrimmed) {
+        // We need this map to preserve ordering as entries are expected in ascending order.
         Map<Long, ILogData> result = new HashMap<>();
 
         if (!runtime.getParameters().isCacheDisabled()) {
@@ -353,15 +394,14 @@ public class AddressSpaceView extends AbstractView {
             // At this point we computed a subset of the addresses that
             // resulted in a cache miss and need to be fetched
             if (!addressesToFetch.isEmpty()) {
-                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite);
-                for (Map.Entry<Long, ILogData> entry : fetchedAddresses.entrySet()) {
-                    // After fetching a value, we need to insert it in the cache.
-                    result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
-                }
+                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, waitForWrite, true);
+                result.putAll(checkForTrimmedAddresses(fetchedAddresses, true, ignoreTrimmed));
             }
+
             return result;
         } else {
-            return fetchAll(addresses, waitForWrite);
+            Map<Long, ILogData> readAddresses = fetchAll(addresses, waitForWrite, true);
+            return checkForTrimmedAddresses(readAddresses, false, ignoreTrimmed);
         }
     }
 
@@ -520,14 +560,19 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Fetch a collection of addresses for insertion into the cache.
-     * The result map returned is ordered by address.
      *
-     * @param addresses    collection of addresses to read from.
-     * @param waitForWrite flag whether wait for write is required or hole fill directly.
-     * @return a ordered map of read addresses.
+     * Does not validate log entries.
+     *
+     * @param addresses     collection of addresses to read from.
+     * @param waitForWrite  flag whether wait for write is required or hole fill directly.
+     * @param cacheOnServer flag whether read results should be cached on log unit server.
+     *
+     * @return a map of read addresses.
      */
     @Nonnull
-    public Map<Long, ILogData> fetchAll(Iterable<Long> addresses, boolean waitForWrite) {
+    private Map<Long, ILogData> fetchAll(Iterable<Long> addresses,
+                                         boolean waitForWrite,
+                                         boolean cacheOnServer) {
         Map<Long, ILogData> result = new TreeMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses,
@@ -539,7 +584,7 @@ public class AddressSpaceView extends AbstractView {
                 Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
                         .getReplicationMode(batch.iterator().next())
                         .getReplicationProtocol(runtime)
-                        .readAll(e, batch, waitForWrite));
+                        .readAll(e, batch, waitForWrite, cacheOnServer));
                 // Sanity check for returned addresses
                 if (batchResult.size() != batch.size()) {
                     log.error("fetchAll: Requested number of addresses not equal to the read result" +
@@ -553,7 +598,62 @@ public class AddressSpaceView extends AbstractView {
             }
         }
 
-        result.forEach(this::checkLogData);
+        return result;
+    }
+
+    /**
+     * Check list of returned data for trimmed data.
+     *
+     * @param result list of read data
+     * @param cacheOnClient flag whether the valid data should be cached on the client or not.
+     * @param ignoreTrimmed flag whether trimmed data leads to TrimmedExceptions or ignored.
+     *
+     * @return map with valid data (not trimmed) or TrimmedException is thrown is data is trimmed and
+     * flag is not set.
+     */
+    private Map<Long, ILogData> checkForTrimmedAddresses(Map<Long, ILogData> result,
+                                                         boolean cacheOnClient, boolean ignoreTrimmed) {
+        List<Long> trimmedAddresses = new ArrayList<>();
+
+        for (Map.Entry<Long, ILogData> entry : result.entrySet()) {
+            // Add trimmed addresses to list
+            if (!checkLogData(entry.getKey(), entry.getValue(), false)) {
+                trimmedAddresses.add(entry.getKey());
+            } else {
+                if (cacheOnClient) {
+                    // After fetching a value, we need to insert it in the cache.
+                    // Even if trimmed exceptions are thrown, we cache the valid data.
+                    result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
+                } else {
+                    result.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        if (!trimmedAddresses.isEmpty()) {
+            if (!ignoreTrimmed) {
+                throw new TrimmedException(trimmedAddresses);
+            }
+
+            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
+        }
+
+        return result;
+    }
+
+    /**
+     * Fetch a collection of addresses.
+     * The fetch results are <b>NOT</b> cached on log unit server.
+     * The result map returned is ordered by address.
+     *
+     * @param addresses    collection of addresses to read from.
+     * @param waitForWrite flag whether wait for write is required or hole fill directly.
+     * @return an ordered map of read addresses.
+     */
+    @Nonnull
+    public Map<Long, ILogData> nonCacheFetchAll(Iterable<Long> addresses, boolean waitForWrite) {
+        Map<Long, ILogData> result = fetchAll(addresses, waitForWrite, false);
+        result.forEach((address, data) -> checkLogData(address, data, true));
         return result;
     }
 
@@ -564,16 +664,22 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address the address being checked
      * @param logData the ILogData at the address being checked
+     * @return true if valid data, false if address is trimmed.
      */
-    private void checkLogData(long address, ILogData logData) {
+    private boolean checkLogData(long address, ILogData logData, boolean throwException) {
         if (logData == null || logData.getType() == DataType.EMPTY) {
             throw new RuntimeException("Unexpected return of empty data at address "
                     + address + " on read");
         }
 
         if (logData.isTrimmed()) {
-            throw new TrimmedException();
+            if (throwException) {
+                throw new TrimmedException();
+            }
+            return false;
         }
+
+        return true;
     }
 
     /**
@@ -589,8 +695,13 @@ public class AddressSpaceView extends AbstractView {
                 .read(e, address)
         );
 
-        checkLogData(address, result);
+        checkLogDataThrowException(address, result);
+
         return result;
+    }
+
+    private void checkLogDataThrowException(long address, ILogData result) {
+        checkLogData(address, result, true);
     }
 
     @VisibleForTesting

@@ -66,10 +66,14 @@ public interface IReplicationProtocol {
      * @param runtimeLayout the RuntimeLayout stamped with layout to use for the read.
      * @param addresses     a list of addresses to read from.
      * @param waitForWrite  flag whether wait for write is required or hole fill directly.
+     * @param cacheOnServer whether the fetch results should be cached on log unit server.
      * @return a map of addresses to data commit at these address, hole filling if necessary.
      */
     @Nonnull
-    Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout, List<Long> addresses, boolean waitForWrite);
+    Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
+                                List<Long> addresses,
+                                boolean waitForWrite,
+                                boolean cacheOnServer);
 
     /**
      * Peek data from a given address.

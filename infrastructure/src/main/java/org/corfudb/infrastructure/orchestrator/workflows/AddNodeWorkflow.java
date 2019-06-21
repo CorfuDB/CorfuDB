@@ -1,27 +1,25 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
+import static org.corfudb.infrastructure.orchestrator.actions.StateTransfer.transfer;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
+
 import com.google.common.collect.ImmutableList;
 
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.orchestrator.Action;
-import org.corfudb.infrastructure.orchestrator.IWorkflow;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
-import org.corfudb.runtime.exceptions.OutrankedException;
-import org.corfudb.runtime.view.Layout;
+import java.util.List;
+import java.util.UUID;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
-import static org.corfudb.infrastructure.orchestrator.actions.StateTransfer.*;
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
+
 
 /**
  * A definition of a workflow that adds a new node to the cluster. This workflow
@@ -122,9 +120,7 @@ public class AddNodeWorkflow implements IWorkflow {
         }
 
         @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws OutrankedException,
-                ExecutionException,
-                InterruptedException {
+        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
             runtime.invalidateLayout();
             newLayout = runtime.getLayoutView().getLayout();
 
@@ -142,7 +138,8 @@ public class AddNodeWorkflow implements IWorkflow {
                 // The new server is already a part of the last segment. This is based on an
                 // assumption that the newly added node is not removed from the layout.
                 for (int i = 0; i < newLayout.getSegments().size() - 1; i++) {
-                    transfer(newLayout, Collections.singleton(request.getEndpoint()),
+                    transfer(newLayout,
+                            request.getEndpoint(),
                             runtime,
                             newLayout.getSegments().get(i));
                 }

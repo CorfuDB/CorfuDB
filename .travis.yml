@@ -1,7 +1,7 @@
 language: java
 sudo: required
-dist: trusty
-jdk: oraclejdk8
+dist: xenial
+jdk: openjdk8
 
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
@@ -23,7 +23,7 @@ jobs:
   - stage: Tests
     name: Unit Tests
     script:
-    - ./mvnw -pl :test clean test -T 1C -Dtest.travisBuild=true
+    - ./mvnw clean test -T 1C -Dtest.travisBuild=true
   - script:
     - ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests
