@@ -199,8 +199,6 @@ public class CorfuServer {
         printStartupMsg(opts);
         configureLogger(opts);
 
-        log.debug("Started with arguments: {}", opts);
-
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
@@ -233,6 +231,7 @@ public class CorfuServer {
             final ServerContext serverContext = new ServerContext(opts);
             try {
                 activeServer = new CorfuServerNode(serverContext);
+                log.info("Server arguments: {}", opts);
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
