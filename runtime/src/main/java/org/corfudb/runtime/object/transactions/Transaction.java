@@ -8,6 +8,7 @@ import lombok.NonNull;
 
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Priority;
 
 
 /**
@@ -39,6 +40,10 @@ public class Transaction {
      */
     @Default
     final Token snapshot = Token.UNINITIALIZED;;
+
+    @Default
+    //TODO(Maithem) is this inherited?
+    final Priority priority = Priority.NORMAL;
 
     /**
      * Start the transaction with the parameters given

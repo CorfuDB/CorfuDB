@@ -10,12 +10,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CacheOption;
+import org.corfudb.runtime.view.Priority;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
@@ -131,14 +135,16 @@ public class CheckpointWriter<T extends Map> {
         // Queries the sequencer for the global log tail. We then read the global log tail to
         // persist the entry on the logunit in turn preventing from a new sequencer from
         // regressing tokens.
-        Token markerToken = rt.getSequencerView().query().getToken();
+        TokenResponse markerToken = rt.getSequencerView().next();
         if (Address.nonAddress(markerToken.getSequence())) {
-            return markerToken;
+            return markerToken.getToken();
         }
-        rt.getAddressSpaceView().read(markerToken.getSequence());
+
+        LogData ld = new LogData(DataType.HOLE);
+        ld.setWritePriority(Priority.HIGH);
+        rt.getAddressSpaceView().write(markerToken.getToken(), ld);
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
-                .snapshot(markerToken)
                 .build()
                 .begin();
         try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
@@ -188,7 +194,7 @@ public class CheckpointWriter<T extends Map> {
      *  Append an object to a stream without caching the entries.
      */
     private long nonCachedAppend(Object object, UUID ... streamIDs) {
-        return sv.append(object, null, CacheOption.WRITE_AROUND, streamIDs);
+        return sv.append(object, null, CacheOption.WRITE_AROUND, Priority.HIGH, streamIDs);
     }
 
     /** Append zero or more CONTINUATION records to this

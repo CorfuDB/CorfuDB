@@ -122,9 +122,11 @@ public class StreamsView extends AbstractView {
      *                                     the sequencer.
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
-                       @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
+                       @Nonnull CacheOption cacheOption, @Nonnull Priority priority,
+                       @Nonnull UUID ... streamIDs) {
 
         final LogData ld = new LogData(DataType.DATA, object);
+        ld.setWritePriority(priority);
         ld.checkMaxWriteSize(maxWrite);
 
         // Go to the sequencer, grab an initial token.
@@ -221,10 +223,15 @@ public class StreamsView extends AbstractView {
     /**
      * Append to multiple streams and caches the result.
      *
-     * @see StreamsView#append(Object, TxResolutionInfo, CacheOption, UUID...)
+     * @see StreamsView#append(Object, TxResolutionInfo, CacheOption, Priority, UUID...)
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull UUID ... streamIDs) {
-       return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);
+       return append(object, conflictInfo, CacheOption.WRITE_THROUGH, Priority.NORMAL, streamIDs);
+    }
+
+    public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
+                       @Nonnull Priority priority, @Nonnull UUID ... streamIDs) {
+        return append(object, conflictInfo, CacheOption.WRITE_THROUGH, priority, streamIDs);
     }
 }

@@ -32,6 +32,7 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Priority;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -239,7 +240,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
-        writeByteBuffer(fileChannel, buf);
+        writeByteBuffer(fileChannel, buf, Priority.HIGH);
         fileChannel.force(true);
     }
 
@@ -907,7 +908,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
 
             allRecordsBuf.flip();
-            writeByteBuffer(segment.getWriteChannel(), allRecordsBuf);
+            // This API is called by stateTransfer, is that considered a high priority
+            // operation
+            writeByteBuffer(segment.getWriteChannel(), allRecordsBuf, Priority.NORMAL);
             channelsToSync.add(segment.getWriteChannel());
             // Sync the global and stream tail(s)
             // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
@@ -921,16 +924,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Attempts to write a buffer to a file channel.
      *
-     * @param channel the channel to write to
-     * @param buf     the buffer to write
+     * @param channel      the channel to write to
+     * @param buf          the buffer to write
+     * @param priority     write priority: if the log size quota is reached then only
+     *                     high priority writes will be accepted
      * @throws IOException IO exception
      */
-    private void writeByteBuffer(FileChannel channel, ByteBuffer buf) throws IOException {
+    private void writeByteBuffer(FileChannel channel, ByteBuffer buf, Priority priority) throws IOException {
         int bufSize = buf.remaining();
 
         logSizeQuota.updateAndGet(quota -> {
             ResourceQuota newQuota = quota.acquire(bufSize);
-            newQuota.check();
+            if (priority != Priority.HIGH) {
+                newQuota.check();
+            }
             return newQuota;
         });
 
@@ -958,7 +965,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
             channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
-            writeByteBuffer(segment.getWriteChannel(), record);
+            writeByteBuffer(segment.getWriteChannel(), record, entry.getWritePriority());
             channelsToSync.add(segment.getWriteChannel());
             syncTailSegment(address);
             logMetadata.update(entry);
@@ -1129,6 +1136,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void append(long address, LogData entry) {
         if (isTrimmed(address)) {
             throw new OverwriteException(OverwriteCause.TRIM);
+        }
+
+        // Attempt to check the quota even before acquiring a segment,
+        // this reduces the chance of creating empty segments when the
+        // quota is reached.
+        if (entry.getWritePriority() != Priority.HIGH) {
+            logSizeQuota.get().check();
         }
 
         SegmentHandle segment = getSegmentHandleForAddress(address);

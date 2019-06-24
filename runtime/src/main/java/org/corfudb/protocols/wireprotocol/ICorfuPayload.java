@@ -15,6 +15,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Priority;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.JsonUtils;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
@@ -289,13 +290,12 @@ public interface ICorfuPayload<T> {
      *
      * @param buf      The buffer to deserialize.
      * @param keyClass The class of the keys.
-     * @param objClass The class of the values.
      * @param <K>      The type of the keys
      * @param <V>      The type of the values.
      * @return Map for use with enum type keys
      */
     static <K extends Enum<K> & ITypedEnum<K>, V> EnumMap<K, V> enumMapFromBuffer(
-            ByteBuf buf, Class<K> keyClass, Class<V> objClass) {
+            ByteBuf buf, Class<K> keyClass) {
 
         EnumMap<K, V> metadataMap = new EnumMap<>(keyClass);
         byte numEntries = buf.readByte();
@@ -401,6 +401,8 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntryType) payload).asByte());
+        } else if (payload instanceof Priority) {
+            buffer.writeByte(((Priority) payload).asByte());
         } else if (payload instanceof StreamAddressSpace) {
             StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
             buffer.writeLong(streamAddressSpace.getTrimMark());

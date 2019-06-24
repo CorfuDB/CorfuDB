@@ -299,6 +299,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     // a MultiObjectSMREntry that contains the update(s) to objects
                     collectWriteSetEntries(),
                     txInfo,
+                    this.getTransaction().getPriority(),
                     // a set of stream-IDs that contains the affected streams
                     affectedStreams
                 );
@@ -319,6 +320,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     }
 
     /** Try to commit the optimistic updates to each proxy. */
+    //TODO(Maithem): delete
     protected void tryCommitAllProxies() {
         // First, get the committed entry
         // in order to get the backpointers

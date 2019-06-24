@@ -23,6 +23,7 @@ import lombok.Value;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Priority;
 
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
@@ -47,7 +48,7 @@ public interface IMetadata {
      */
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams() {
-        return (Set<UUID>) ((Map<UUID, Long>)getMetadataMap().getOrDefault(
+        return ((Map<UUID, Long>)getMetadataMap().getOrDefault(
                 LogUnitMetadataType.BACKPOINTER_MAP, Collections.emptyMap())).keySet();
     }
 
@@ -158,14 +159,6 @@ public interface IMetadata {
         return new Token(getEpoch(), getGlobalAddress());
     }
 
-    default void clearCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
-    }
-
-    default void setCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
-    }
-
     default boolean hasCheckpointMetadata() {
         return getCheckpointType() != null && getCheckpointId() != null;
     }
@@ -218,12 +211,21 @@ public interface IMetadata {
         getMetadataMap().put(CHECKPOINTED_STREAM_START_LOG_ADDRESS, startLogAddress);
     }
 
+    default Priority getWritePriority() {
+        return (Priority) getMetadataMap()
+                .getOrDefault(LogUnitMetadataType.WRITE_PRIORITY, Priority.NORMAL);
+    }
+
+    default void setWritePriority(Priority priority) {
+        getMetadataMap().put(LogUnitMetadataType.WRITE_PRIORITY, priority);
+    }
+
     @RequiredArgsConstructor
-    public enum LogUnitMetadataType implements ITypedEnum {
+    enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
-        COMMIT(5, TypeToken.of(Boolean.class)),
+        WRITE_PRIORITY(5, TypeToken.of(Priority.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),

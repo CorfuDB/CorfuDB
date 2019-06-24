@@ -22,6 +22,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
@@ -183,8 +184,8 @@ public class AddressSpaceView extends AbstractView {
                     // Large writes are also rejected right away.
                     throw ex;
                 }
-            } catch (WriteSizeException we) {
-                throw we;
+            } catch (WriteSizeException | QuotaExceededException ie) {
+                throw ie;
             } catch (RuntimeException re) {
                 log.error("write: Got exception during replication protocol write with token: {}", token, re);
                 validateStateOfWrittenEntry(token.getSequence(), ld);
