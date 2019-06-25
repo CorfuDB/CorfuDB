@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -42,6 +43,13 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * The runtime the stream view was created with.
      */
     final CorfuRuntime runtime;
+
+    /**
+     * The compaction mark of this stream.
+     */
+    @Getter
+    @Setter
+    volatile long compactionMark = Address.NON_ADDRESS;
 
     /**
      * An ordered set of stream contexts, which store information
