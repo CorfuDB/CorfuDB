@@ -18,7 +18,7 @@ import org.corfudb.universe.node.server.vm.VmCorfuServer;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
-import org.corfudb.universe.util.ClassUtils;
+import org.corfudb.common.util.ClassUtils;
 
 import java.util.Collections;
 import java.util.List;

@@ -9,7 +9,7 @@ import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
-import org.corfudb.universe.util.ClassUtils;
+import org.corfudb.common.util.ClassUtils;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
