@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import lombok.Getter;
@@ -126,19 +127,28 @@ public class CheckpointWriter<T extends Map> {
      * @return Token at which the snapshot for this checkpoint was taken.
      */
     public Token appendCheckpoint() {
-        long start = System.currentTimeMillis();
-
         // Queries the sequencer for the global log tail. We then read the global log tail to
-        // persist the entry on the logunit in turn preventing from a new sequencer from
+        // persist the entry on the log unit in turn preventing from a new sequencer from
         // regressing tokens.
         Token markerToken = rt.getSequencerView().query().getToken();
         if (Address.nonAddress(markerToken.getSequence())) {
             return markerToken;
         }
-        rt.getAddressSpaceView().read(markerToken.getSequence());
+        return appendCheckpointOnSnapshot(markerToken);
+    }
+
+    @VisibleForTesting
+    public Token appendCheckpoint(Token snapshot) {
+        return appendCheckpointOnSnapshot(snapshot);
+    }
+
+    private Token appendCheckpointOnSnapshot(Token snapshotTs) {
+        long start = System.currentTimeMillis();
+
+        rt.getAddressSpaceView().read(snapshotTs.getSequence());
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
-                .snapshot(markerToken)
+                .snapshot(snapshotTs)
                 .build()
                 .begin();
         try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {

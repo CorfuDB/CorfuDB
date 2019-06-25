@@ -27,6 +27,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
@@ -810,4 +811,77 @@ public class ServerRestartIT extends AbstractIT {
         runtime2.shutdown();
         runtime3.shutdown();
     }
+
+    /**
+     * This test verifies that a stream is rebuilt from a checkpoint, whenever two valid checkpoints exist, but the
+     * latest checkpoint in the log is performed on an earlier snapshot.
+     *
+     * It also verifies that behaviour is kept the same after the node is restarted and both checkpoints
+     * still exist.
+     *
+     * 1. Write 25 entries to stream A.
+     * 2. Start a checkpoint (CP2) at snapshot 15, complete it.
+     * 3. Start a checkpoint (CP1) at snapshot 10, complete it.
+     * 4. Trim on token for CP2 (snapshot = 15).
+     * 5. New runtime instantiate stream A (do a mutation to force to load from checkpoint).
+     * 6. Restart the server
+     * 7. Instantiate map again.
+     */
+    @Test
+    public void testUnorderedCheckpointsAndRestartServer() throws Exception {
+        final int numEntries = 25;
+        final int snapshotAddress1 = 10;
+        final int snapshotAddress2 = 15;
+
+        // Start server
+        Process corfuProcess = runCorfuServer();
+
+        CorfuRuntime r = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        // Open map.
+        CorfuTable<String, String> corfuTable1 = createTable(r, new StringMultiIndexer());
+
+        // (1) Write 25 Entries
+        for (int i = 0; i < numEntries; i++) {
+            corfuTable1.put(String.valueOf(i), String.valueOf(i));
+        }
+
+        // Checkpoint Writer 2
+        CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
+                "checkpointer-2", corfuTable1);
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+
+        // Checkpoint Writer 1
+        CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
+                "checkpointer-1", corfuTable1);
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+
+        // Trim @snapshotAddress=15 (Checkpoint Writer 2)
+        r.getAddressSpaceView().prefixTrim(cp2Token);
+
+        // Start a new Runtime
+        CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String> corfuTable2 = createTable(rt2, new StringMultiIndexer());
+
+        rt2.getObjectsView().TXBegin();
+        corfuTable2.put("a", "a");
+        rt2.getObjectsView().TXEnd();
+
+        assertThat(corfuTable2.size()).isEqualTo(numEntries + 1);
+
+        //Restart the corfu server
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+        corfuProcess = runCorfuServer();
+
+        // Start a new Runtime
+        CorfuRuntime rt3 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String> corfuTable3 = createTable(rt3, new StringMultiIndexer());
+
+        rt3.getObjectsView().TXBegin();
+        corfuTable3.put("b", "b");
+        rt3.getObjectsView().TXEnd();
+
+        assertThat(corfuTable3.size()).isEqualTo(numEntries + 2);
+    }
+
 }
