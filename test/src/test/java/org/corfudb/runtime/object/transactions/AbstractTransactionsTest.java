@@ -26,8 +26,8 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
     /**
      * Utility method to end a TX
      */
-    protected void TXEnd() {
-        getRuntime().getObjectsView().TXEnd();
+    protected long TXEnd() {
+        return getRuntime().getObjectsView().TXEnd();
     }
 
 
