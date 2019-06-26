@@ -189,8 +189,7 @@ public class BatchProcessor implements AutoCloseable {
                         }
                     } catch (Exception e) {
                         log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
-                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getAllTails(), e
-                        );
+                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getAllTails(), e);
                         currOp.getFutureResult().completeExceptionally(e);
                     }
                     res.add(currOp);
