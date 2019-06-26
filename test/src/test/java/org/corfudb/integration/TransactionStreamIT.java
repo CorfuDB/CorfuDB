@@ -93,7 +93,7 @@ public class TransactionStreamIT extends AbstractIT {
                 }
 
                 consumed += entries.size();
-                Sleep.MILLISECONDS.sleepUninterruptibly(pollPeriodMs);
+                TimeUnit.MILLISECONDS.sleep(pollPeriodMs);
             }
 
             return counters;
