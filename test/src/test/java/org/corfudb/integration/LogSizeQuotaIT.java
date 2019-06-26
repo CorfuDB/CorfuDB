@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
 
 public class LogSizeQuotaIT extends AbstractIT {
 
@@ -102,7 +103,7 @@ public class LogSizeQuotaIT extends AbstractIT {
 
         // bump up the sequencer counter to create multiple empty segments
         ServerContext sc = new ServerContextBuilder().build();
-        final int emptySlots = StreamLogParams.RECORDS_PER_SEGMENT;
+        final int emptySlots = RECORDS_PER_SEGMENT;
         for (int x = 0; x < emptySlots; x++) {
             rt.getSequencerView().next();
         }

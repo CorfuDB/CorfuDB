@@ -156,7 +156,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 upcallTargetMap, undoRecordTargetMap, undoTargetMap,
-                garbageFunctionMap, resetSet, garbageInformer);
+                garbageFunctionMap, resetSet, garbageInformer, rt);
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();
@@ -212,7 +212,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             }
         }
 
-        throw new TrimmedException();
+        throw new TrimmedException(String.format("Encounter TrimmedException %d times during Non-transactional " +
+                "object access.", rt.getParameters().getTrimRetry()));
     }
 
     /**
