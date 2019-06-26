@@ -1,4 +1,4 @@
-package org.corfudb.universe.util;
+package org.corfudb.common.util;
 
 import java.util.Objects;
 
