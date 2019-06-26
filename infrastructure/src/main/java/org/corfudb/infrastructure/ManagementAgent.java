@@ -89,12 +89,12 @@ public class ManagementAgent {
     ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
                     @NonNull ClusterStateContext clusterContext,
-                    @NonNull FailureDetector failureDetector) {
+                    @NonNull FailureDetector failureDetector,
+                    Layout managementLayout) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
         this.localMonitoringService = new LocalMonitoringService(serverContext, runtimeSingletonResource);
 
-        Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.
         if (managementLayout == null) {
             recovered = true;

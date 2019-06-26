@@ -11,6 +11,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.google.common.collect.ImmutableList;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
@@ -37,13 +38,13 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
+                ImmutableList.of("b"),
                 nodeState(A, epoch, OK, OK, OK),
                 nodeState(B, epoch, OK, OK, FAILED),
                 nodeState(C, epoch, OK, FAILED, OK)
         );
 
-        List<String> unresponsiveServers = Collections.singletonList("b");
-        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers);
+        Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertFalse(failedServer.isPresent());
     }
 
@@ -54,13 +55,13 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
 
-        List<String> unresponsiveServers = new ArrayList<>();
-        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers);
+        Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertTrue(failedServer.isPresent());
         assertEquals(new NodeRank("c", 0), failedServer.get());
     }
@@ -72,13 +73,13 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, OK),
                 nodeState("b", epoch, OK, OK, FAILED),
                 nodeState("c", epoch, OK, FAILED, OK)
         );
 
-        List<String> unresponsiveServers = new ArrayList<>();
-        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers);
+        Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertTrue(failedServer.isPresent());
         assertEquals(new NodeRank("c", 2), failedServer.get());
     }
@@ -94,13 +95,13 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 NodeState.getUnavailableNodeState("a"),
                 nodeState("b", epoch, OK, OK, OK),
                 NodeState.getUnavailableNodeState("c")
         );
 
-        List<String> unresponsiveServers = new ArrayList<>();
-        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers);
+        Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
         assertTrue(failedServer.isPresent());
         assertEquals(new NodeRank("c", 0), failedServer.get());
     }
@@ -119,6 +120,7 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState nodeAClusterState = buildClusterState(
                 "a",
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, OK),
                 nodeState("b", epoch, OK, OK, FAILED),
                 nodeState("c", epoch, OK, FAILED, OK)
@@ -126,30 +128,30 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState nodeBClusterState = buildClusterState(
                 "b",
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, OK),
                 nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
         );
         ClusterState nodeCClusterState = buildClusterState(
                 "c",
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, OK),
                 NodeState.getUnavailableNodeState("b"),
                 nodeState("c", epoch, OK, FAILED, OK)
         );
 
-        List<String> unresponsiveServers = new ArrayList<>();
-
         //Node A is a decision maker, it excludes node C from the cluster
-        Optional<NodeRank> nodeAFailedServer = nodeAAdvisor.failedServer(nodeAClusterState, unresponsiveServers);
+        Optional<NodeRank> nodeAFailedServer = nodeAAdvisor.failedServer(nodeAClusterState);
         assertTrue(nodeAFailedServer.isPresent());
         assertEquals(new NodeRank("c", 2), nodeAFailedServer.get());
 
         //Node B knows that node A is a decision maker, so do nothing
-        Optional<NodeRank> nodeBFailedServer = nodeBAdvisor.failedServer(nodeBClusterState, unresponsiveServers);
+        Optional<NodeRank> nodeBFailedServer = nodeBAdvisor.failedServer(nodeBClusterState);
         assertFalse(nodeBFailedServer.isPresent());
 
         //Node C know that node A is a decision maker, so do nothing
-        Optional<NodeRank> nodeCFailedServer = nodeCAdvisor.failedServer(nodeCClusterState, unresponsiveServers);
+        Optional<NodeRank> nodeCFailedServer = nodeCAdvisor.failedServer(nodeCClusterState);
         assertFalse(nodeCFailedServer.isPresent());
     }
 
@@ -160,15 +162,13 @@ public class CompleteGraphAdvisorTest {
 
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
+                ImmutableList.of(localEndpoint),
                 nodeState("a", epoch, OK, FAILED, OK),
                 nodeState("b", epoch, FAILED, OK, OK),
                 nodeState("c", epoch, OK, OK, OK)
         );
 
-        List<String> unresponsiveServers = new ArrayList<>();
-        unresponsiveServers.add(localEndpoint);
-
-        Optional<NodeRank> healedServer = advisor.healedServer(clusterState, unresponsiveServers);
+        Optional<NodeRank> healedServer = advisor.healedServer(clusterState);
         assertTrue(healedServer.isPresent());
         assertEquals(new NodeRank(localEndpoint, clusterState.size()), healedServer.get());
     }

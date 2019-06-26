@@ -174,9 +174,14 @@ public class FailureDetector implements IDetector {
                 .map(PollReport::getClusterState)
                 .collect(Collectors.toList());
 
+        Set<String> unresponsiveServers = Sets.difference(
+                allServers, new HashSet<>(responsiveServers)
+        );
+
         ClusterStateAggregator aggregator = ClusterStateAggregator.builder()
                 .localEndpoint(localEndpoint)
                 .clusterStates(clusterStates)
+                .unresponsiveNodes(ImmutableList.copyOf(unresponsiveServers))
                 .build();
 
         Duration totalElapsedTime = reports.stream()
@@ -246,8 +251,14 @@ public class FailureDetector implements IDetector {
                 .heartbeatCounter(heartbeatCounter)
                 .build();
 
+        Set<String> unresponsiveServers = Sets.difference(
+                allServers, new HashSet<>(responsiveServers)
+        );
+
         //Cluster state internal map.
-        ClusterState clusterState = clusterCollector.collectClusterState(epoch, sequencerMetrics);
+        ClusterState clusterState = clusterCollector.collectClusterState(
+                epoch, unresponsiveServers, sequencerMetrics
+        );
 
         Duration elapsedTime = Duration.ofMillis(System.currentTimeMillis() - start);
 
