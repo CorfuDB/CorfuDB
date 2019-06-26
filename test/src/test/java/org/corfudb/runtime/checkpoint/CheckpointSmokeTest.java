@@ -464,6 +464,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 l, l, true, true, true);
     }
 
+    long addr1;
+    long startAddress;
+
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
@@ -485,7 +488,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
-            sv.append(cp1, null, null);
+            startAddress = sv.append(cp1, null, null);
         }
 
         // Interleaving opportunity #1
