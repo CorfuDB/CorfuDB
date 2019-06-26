@@ -147,7 +147,6 @@ public abstract class AbstractQueuedStreamView extends
                     getCurrentContext().getGcTrimMark());
             // Remove all the entries that are strictly less than
             // the trim mark
-            getCurrentContext().readCpQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
             getCurrentContext().readQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
             getCurrentContext().resolvedQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
 

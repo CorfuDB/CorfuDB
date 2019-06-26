@@ -176,46 +176,6 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getTotalUpdates()).isEqualTo(1L);
     }
 
-    @Ignore
-    @Test
-    public void testStreamGC() throws Exception {
-        CorfuRuntime runtime = getDefaultRuntime();
-
-        IStreamView svA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-        IStreamView svB = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-
-        // Since both steam views open the same stream, a write to one stream
-        // should be reflected in the other
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            svA.append(String.valueOf(i).getBytes());
-        }
-
-        // Make sure that the stream is built in-memory
-        IStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        IStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        assertThat(svA.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(svB.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(((AbstractQueuedStreamView) bpsvB).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        TokenResponse tail = runtime.getSequencerView().query();
-        runtime.getAddressSpaceView().prefixTrim(tail.getToken());
-        // First Runtime GC
-        runtime.getGarbageCollector().runRuntimeGC();
-
-        // Additional append to move the pointer
-        svA.append(String.valueOf(PARAMETERS.NUM_ITERATIONS_LOW).getBytes());
-        bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        assertThat(svA.remaining()).hasSize(1);
-        assertThat(svB.remaining()).hasSize(1);
-
-        // Second Runtime GC
-        runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(1);
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readQueue).isEmpty();
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readCpQueue).isEmpty();
-    }
-
     final int trimMark = PARAMETERS.NUM_ITERATIONS_LOW / 2;
     final int traverseMark = PARAMETERS.NUM_ITERATIONS_LOW / 4;
 
