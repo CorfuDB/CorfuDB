@@ -36,6 +36,7 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
+
 import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -94,13 +95,20 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     /** Test Endpoint hostname. */
     private final static String testHostname = "tcp://test";
 
+    private boolean followBackpointers = false;
+
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
+        this(false);
+    }
+
+    public AbstractViewTest(boolean followBackpointers) {
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-            .nettyEventLoop(NETTY_EVENT_LOOP)
-            .build());
+                .followBackpointersEnabled(followBackpointers)
+                .nettyEventLoop(NETTY_EVENT_LOOP)
+                .build());
         // Default number of times to read before hole filling to 0
         // (most aggressive, to surface concurrency issues).
         runtime.getParameters().setHoleFillRetry(0);

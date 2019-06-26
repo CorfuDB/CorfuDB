@@ -1,4 +1,4 @@
-package org.corfudb.util.result;
+package org.corfudb.common.result;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;

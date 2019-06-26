@@ -7,7 +7,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
-import org.corfudb.universe.util.ClassUtils;
+import org.corfudb.common.util.ClassUtils;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
