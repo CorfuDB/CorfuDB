@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -127,7 +128,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(stream1Name)).getToken();
             runtime.getLayoutView().getRuntimeLayout()
                     .getLogUnitClient("tcp://localhost:9000")
-                    .fillHole(token);
+                    .write(LogData.getHole(token));
 
 
             // Write 100 more entries for S1
