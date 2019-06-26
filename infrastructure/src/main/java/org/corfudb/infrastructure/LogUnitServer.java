@@ -12,7 +12,6 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -211,9 +210,9 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log write: global: {}, streams: {}", msg.getPayload().getToken(),
-                msg.getPayload().getData().getBackpointerMap());
         LogData logData = (LogData) msg.getPayload().getData();
+        log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
+                logData.getToken(), logData.getBackpointerMap());
 
         batchWriter.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
@@ -238,29 +237,6 @@ public class LogUnitServer extends AbstractServer {
         batchWriter.addTask(RANGE_WRITE, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
-                    handleException(ex, ctx, msg, r);
-                    return null;
-                });
-    }
-
-    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx,
-                          IServerRouter r) {
-        Token address = msg.getPayload().getAddress();
-        log.debug("fillHole: filling address at {}, epoch {}", address, msg.getEpoch());
-
-        // A hole fill is converted to a regular write in order to reuse the same
-        // write-path.
-        LogData hole = LogData.getHole(address.getSequence());
-        hole.setEpoch(address.getEpoch());
-        CorfuPayloadMsg<WriteRequest> writeReq = new CorfuPayloadMsg<>(CorfuMsgType.WRITE, new WriteRequest(hole));
-        writeReq.copyBaseFields(msg);
-
-        batchWriter.addTask(WRITE, writeReq)
-                .thenRunAsync(() -> {
-                    dataCache.put(address.getSequence(), writeReq.getPayload().getData());
-                    r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
                 });

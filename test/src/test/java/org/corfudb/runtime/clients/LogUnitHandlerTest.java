@@ -321,7 +321,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         final long address0 = 0;
         Token token = new Token(0, address0);
-        client.fillHole(token).get();
+        client.write(LogData.getHole(token)).get();
         LogData r = client.read(address0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.HOLE);
@@ -351,7 +351,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             }
         }, "Expected overwrite cause to be DIFF_DATA");
         Token token = new Token(0, 0);
-        assertThatThrownBy(() -> client.fillHole(token).get())
+        assertThatThrownBy(() -> client.write(LogData.getHole(token)).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class)
                 .has(conditionOverwrite);
