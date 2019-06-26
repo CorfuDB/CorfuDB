@@ -49,45 +49,23 @@ public class LogMetadata {
     }
 
     public void update(LogData entry) {
-        update(entry, false, Address.NON_ADDRESS);
-    }
-
-    public void update(LogData entry, boolean initialize, long globalTrimMark) {
         long entryAddress = entry.getGlobalAddress();
         updateGlobalTail(entryAddress);
         for (UUID streamId : entry.getStreams()) {
             // Update stream tails
             long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
             streamTails.put(streamId, Math.max(currentStreamTail, entryAddress));
-
             // Update stream address map (used for sequencer recovery)
             // Since entries might have been written in random order
             // We update the trim mark to be the min of all backpointer addresses.
-            streamsAddressSpaceMap.computeIfAbsent(streamId, k ->
-                    new StreamAddressSpace(Address.NON_EXIST, new Roaring64NavigableMap()));
-
             streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
                 // If restarting the log unit, i.e., scanning all records in the log for initialization,
-                // update the stream trim mark as we read (as entries might not be ordered).
-                // Otherwise, i.e., on log updates (writes) we should not consider this data point for setting
-                // the stream trim mark, as data might not be written in order, hence, we could have invalid
-                // states of the actual address map. In the case of log updates, the trim mark will be set
-                // as prefix trims are performed.
+                // we build the address space for each stream. Trim mark will be set after scanning the
+                // complete log, based on the observed entries on the regular stream and its checkpoint.
                 if (addressSpace == null) {
-                    long streamTrimMark = Address.NON_EXIST;
-                    if (initialize) {
-                        streamTrimMark = getStreamTrimMark(Long.MAX_VALUE,
-                                entry.getBackpointer(streamId), globalTrimMark);
-                    }
                     Roaring64NavigableMap addressMap = new Roaring64NavigableMap();
                     addressMap.addLong(entryAddress);
-                    return new StreamAddressSpace(streamTrimMark, addressMap);
-                }
-
-                if (initialize) {
-                    long streamTrimMark = getStreamTrimMark(addressSpace.getTrimMark(),
-                            entry.getBackpointer(streamId), globalTrimMark);
-                    addressSpace.setTrimMark(streamTrimMark);
+                    return new StreamAddressSpace(Address.NON_EXIST, addressMap);
                 }
 
                 addressSpace.addAddress(entryAddress);
@@ -118,18 +96,13 @@ public class LogMetadata {
                 // so clients can observe updates to streams that have been completely checkpointed.
                 // If we hit a checkpoint and the stream is not present in the map, the checkpointed
                 // address is the last trimmed address for this stream.
+
+                // Though the trim mark will be recomputed at the end, this guarantees that every stream
+                // (even those with no updates to the regular stream) are present in the streams address space map.
                 streamsAddressSpaceMap.putIfAbsent(streamId,
                         new StreamAddressSpace(streamTailAtCP, new Roaring64NavigableMap()));
             }
         }
-    }
-
-    private long getStreamTrimMark(long currentTrimMark, long backpointer, long globalTrimMark) {
-        long streamTrimMark = Long.min(currentTrimMark, backpointer);
-        if (streamTrimMark > globalTrimMark) {
-            streamTrimMark = globalTrimMark;
-        }
-        return streamTrimMark;
     }
 
     public void updateGlobalTail(long newTail) {

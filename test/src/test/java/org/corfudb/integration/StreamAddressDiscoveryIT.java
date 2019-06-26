@@ -2,11 +2,14 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -677,5 +680,271 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             readRuntime.shutdown();
             shutdownCorfuServer(server);
         }
+    }
+
+    /**
+     *
+     * In this test we want to verify stream's address space rebuilt from log unit given that a valid checkpoint
+     * appears after entries to the regular stream. We aim to validate trim mark is properly set despite ordering.
+     *
+     * Test Case 0:
+     *
+     *         S1  S1  S1      S1  S2  S2        S1  S1  S1  S1    S1    S1   S1   S1  CP-S1 snapshot @9
+     *       +---------------------------    +-----------------------------------------------+-------+
+     *       | 0 | 1 | 2 | ..| 7 | 8 | 9 |    | 10 | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 | ...
+     *       +---------------------------    +-----------------------------------------------+-------+
+     *                                   ^
+     *                                  TRIM
+     **/
+    @Test
+    public void testStreamRebuilt() throws Exception {
+
+        final int insertions = 10;
+        final int insertionsB = 2;
+        final String stream1 = "mapA";
+        final String stream2 = "mapB";
+        final int snapshotAddress = 9;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+        runtime = createDefaultRuntime();
+
+        // Open mapA (S1) and mapB (S2)
+        Map<String, Integer> mapA = createMap(runtime, stream1);
+        Map<String, Integer> mapB = createMap(runtime, stream2);
+
+        // Write 8 entries to mapA
+        for (int i = 0; i < insertions-insertionsB; i++) {
+            mapA.put(String.valueOf(i), i);
+        }
+
+        // Write 2 entries to mapB
+        for (int i = 0; i < insertionsB; i++) {
+            mapB.put(String.valueOf(i), i);
+        }
+
+        // Write 10 more entries to streamA (emulating writes that came in between the time a snapshot was taken
+        // for a checkpoint and actual checkpoint entries were written)
+        for (int i = insertions; i < insertions*2; i++) {
+            mapA.put(String.valueOf(i), i);
+        }
+
+        // Start checkpoint with snapshot time 9 for mapA
+        CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream1),
+                "checkpointer-test", mapA);
+        Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
+
+        // Start checkpoint with snapshot time 9 for mapB
+        CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream2),
+                "checkpointer-test", mapB);
+        cpwB.appendCheckpoint(new Token(0, snapshotAddress));
+
+        // Trim the log
+        runtime.getAddressSpaceView().prefixTrim(cpAddress);
+        runtime.getAddressSpaceView().gc();
+        runtime.getAddressSpaceView().invalidateServerCaches();
+        runtime.getAddressSpaceView().invalidateClientCache();
+
+        // Restart the server
+        assertThat(shutdownCorfuServer(server)).isTrue();
+        runDefaultServer();
+
+        // Start new runtime
+        CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        // Fetch Address Space for the given stream S1
+        StreamAddressSpace addressSpaceA = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+                .getAddressMap()
+                .get(CorfuRuntime.getStreamID(stream1));
+
+        // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
+        // for the existing checkpoint)
+        assertThat(addressSpaceA.getTrimMark()).isEqualTo(cpAddress.getSequence()-insertionsB);
+        assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+
+        // Fetch Address Space for the given stream S2
+        StreamAddressSpace addressSpaceB = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+                .getAddressMap()
+                .get(CorfuRuntime.getStreamID(stream2));
+
+        // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
+        // for the existing checkpoint)
+        assertThat(addressSpaceB.getTrimMark()).isEqualTo(snapshotAddress);
+        assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(0);
+
+        // Open mapB after restart (verify it loads from checkpoint)
+        Map<String, Integer> mapBRestart = createMap(runtimeRestart, stream2);
+        assertThat(mapBRestart).hasSize(insertionsB);
+    }
+
+
+    /**
+     *
+     *  In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
+     *  valid address for a stream after a trim (i.e., backpointer is lost) and a checkpoint is present.
+     *
+     * Test Case 1:
+     *
+     *         S1  S1  S1   S1   S1  S2        S1       S1  S1  S1    S1    S1   S1   S1     CP-S1 snapshot @9
+     *       +-------------------------    +-----------------------------------------------+--------------+
+     *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 |
+     *       +-------------------------    +-----------------------------------------------+--------------+
+     *                                ^
+     *                              TRIM
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStreamRebuiltWithHoleAsFirstEntryAfterTrim() throws Exception {
+
+        final int insertions = 10;
+        final String streamNameA = "mapA";
+        final String streamNameB = "mapB";
+        final int snapshotAddress = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+        runtime = createDefaultRuntime();
+
+        // Open mapA
+        Map<String, Integer> mapA = createMap(runtime, streamNameA);
+        Map<String, Integer> mapB = createMap(runtime, streamNameB);
+
+        // Write 9 entries to mapA
+        for (int i = 0; i < insertions-1; i++) {
+            mapA.put(String.valueOf(i), i);
+        }
+
+        mapB.put("a", 0);
+
+        // Force a hole for streamA
+        Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(streamNameA)).getToken();
+        runtime.getLayoutView().getRuntimeLayout()
+                .getLogUnitClient("tcp://localhost:9000")
+                .fillHole(token);
+
+        // Write 10 more entries to streamA (emulating writes that came in between the time a snapshot was taken
+        // for a checkpoint and actual checkpoint entries were written)
+        for (int i = insertions; i < insertions*2; i++) {
+            mapA.put(String.valueOf(i), i);
+        }
+
+        // Start checkpoint with snapshot time (right before the hole) - Ignore the fact the entry from streamB is lost
+        // we're interested in verifying the behaviour of streamA with end address != trim address.
+        CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
+                "checkpoint-test", mapA);
+        Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
+
+        // Trim the log
+        runtime.getAddressSpaceView().prefixTrim(cpAddress);
+        runtime.getAddressSpaceView().gc();
+        runtime.getAddressSpaceView().invalidateServerCaches();
+        runtime.getAddressSpaceView().invalidateClientCache();
+
+        // Restart the server
+        assertThat(shutdownCorfuServer(server)).isTrue();
+        runDefaultServer();
+
+        // Start NEW runtime
+        CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        // Fetch Address Space for the given stream
+        StreamAddressSpace addressSpaceA = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+                .getAddressMap()
+                .get(CorfuRuntime.getStreamID(streamNameA));
+
+        // Verify address space and trim mark is properly set for the given stream.
+        assertThat(addressSpaceA.getTrimMark()).isEqualTo(cpAddress.getSequence()-1);
+        assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+
+        // Open mapA after restart (verify it loads from checkpoint)
+        Map<String, Integer> mapARestart = createMap(runtimeRestart, streamNameA);
+        assertThat(mapARestart).hasSize(insertions*2-1);
+    }
+
+
+    /**
+     *
+     *   In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
+     *   valid address for a stream after a trim (i.e., backpointer is lost) and no checkpoint is present, i.e.,
+     *   S2 was never written to before the checkpoint.
+     *
+     * Test Case 2:
+     *
+     *         S1  S1  S1   S1   S1  S1        S2       S2   S2  S2    S2    S2   S2
+     *       +-------------------------     +---------------------------------------+
+     *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 11 | 12 | 13 | ..... | 19 |
+     *       +-------------------------     +---------------------------------------+
+     *                                ^
+     *                              TRIM
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStreamRebuiltWithHoleAsFirstEntryAfterTrimNoCP() throws Exception {
+
+        final int insertions = 10;
+        final String streamNameA = "mapA";
+        final String streamNameB = "mapB";
+        final int snapshotAddress = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+        runtime = createDefaultRuntime();
+
+        // Open mapA
+        Map<String, Integer> mapA = createMap(runtime, streamNameA);
+        Map<String, Integer> mapB = createMap(runtime, streamNameB);
+
+        // Write 9 entries to mapA
+        for (int i = 0; i < insertions; i++) {
+            mapA.put(String.valueOf(i), i);
+        }
+
+        // Force a hole for streamB
+        Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(streamNameB)).getToken();
+        runtime.getLayoutView().getRuntimeLayout()
+                .getLogUnitClient("tcp://localhost:9000")
+                .fillHole(token);
+
+        // Write 10 entries to stream B
+        for (int i = 0; i < insertions; i++) {
+            mapB.put(String.valueOf(i), i);
+        }
+
+        // Checkpoint A with snapshot @ 9
+        CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
+                "checkpointer-test", mapA);
+        Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
+
+        // Trim the log
+        runtime.getAddressSpaceView().prefixTrim(cpAddress);
+        runtime.getAddressSpaceView().gc();
+        runtime.getAddressSpaceView().invalidateServerCaches();
+        runtime.getAddressSpaceView().invalidateClientCache();
+
+        // Restart the server
+        assertThat(shutdownCorfuServer(server)).isTrue();
+        runDefaultServer();
+
+        // Start NEW runtime
+        CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        // Fetch Address Space for the given stream
+        StreamAddressSpace addressSpaceB = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+                .getAddressMap()
+                .get(CorfuRuntime.getStreamID(streamNameB));
+
+        // Verify address space and trim mark is properly set for the given stream.
+        assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
+        assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+
+        // Open mapB after restart
+        Map<String, Integer> mapBRestart = createMap(runtimeRestart, streamNameB);
+        assertThat(mapBRestart).hasSize(insertions);
+
+        // Open mapA after restart
+        Map<String, Integer> mapARestart = createMap(runtimeRestart, streamNameA);
+        assertThat(mapARestart).hasSize(insertions);
     }
 }

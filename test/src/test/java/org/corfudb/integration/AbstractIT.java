@@ -405,7 +405,9 @@ public class AbstractIT extends AbstractCorfuTest {
          * @throws IOException
          */
         public Process runServer() throws IOException {
-            final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
+            //final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
+
+            final String serverConsoleLogPath = "/Users/amartinezman/Desktop" + File.separator + host + "_" + port + "_consolelog";
 
             File logPath = new File(getCorfuServerLogPath(host, port));
             if (!logPath.exists()) {

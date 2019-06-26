@@ -23,10 +23,14 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -49,6 +53,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -176,6 +181,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
+        List<SegmentHandle> segments = new ArrayList<>();
         for (long currentSegment = startingSegment; currentSegment <= tailSegment; currentSegment++) {
             // TODO(Maithem): factor out getSegmentHandleForAddress to allow getting segments by segment number
             SegmentHandle segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
@@ -186,17 +192,97 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         continue;
                     }
                     LogData logEntry = read(address);
-                    logMetadata.update(logEntry, true, getTrimMark());
+                    logMetadata.update(logEntry);
                 }
             } finally {
-                segment.close();
+                segments.add(segment);
             }
         }
+
+        // Set stream trim mark for each discovered stream.
+        setStreamsTrimMark(logMetadata.getStreamsAddressSpaceMap());
+
+        // Close segments
+        segments.forEach(SegmentHandle::close);
 
         // Open segment will add entries to the writeChannels map, therefore we need to clear it
         writeChannels.clear();
         long end = System.currentTimeMillis();
         log.info("initializeStreamTails: took {} ms to load {}", end - start, logMetadata);
+    }
+
+    private void setStreamsTrimMark(Map<UUID, StreamAddressSpace> streamAddressSpaceMap) {
+        log.info("setStreamsTrimMark: start setting stream's trim mark for {} streams", streamAddressSpaceMap.size());
+
+        for (Map.Entry<UUID, StreamAddressSpace> addressSpaceEntry : streamAddressSpaceMap.entrySet()) {
+            long trimMark;
+            UUID streamId = addressSpaceEntry.getKey();
+            StreamAddressSpace streamAddressSpace = addressSpaceEntry.getValue();
+
+            // Retrieve lowest address of this stream - to resolve backpointer
+            long lowestAddress = streamAddressSpace.getLowestAddress();
+
+            if (!Address.isAddress(lowestAddress)) {
+                log.trace("Stream {} is empty, no addresses registered.", Utils.toReadableId(streamId));
+                // This is the case when a stream has no updates (no address on regular
+                // stream - all subsumed by checkpoint)
+
+                // Note: if no addresses are registered for this stream we are sure
+                // this is a regular stream (as empty streams are added upon checkpoint
+                // streams discovery).
+                trimMark = getTrimMarkFromCheckpoint(streamId, streamAddressSpaceMap);
+            } else {
+                LogData entry = read(lowestAddress);
+
+                // If this entry corresponds to a checkpoint stream; skip (trim marks do not need to be resolved for
+                // checkpoint streams)
+                if (entry.hasCheckpointMetadata()) {
+                    log.trace("setStreamsTrimMark: skipping stream trim mark computation for {} " +
+                            "as it is a checkpoint stream.", Utils.toReadableId(streamId));
+                    continue;
+                }
+
+                long backpointer = entry.getBackpointer(streamId);
+                // If backpointer for the current stream falls within the trimmed space,
+                // we can set it as the latest trimmed address for this stream.
+                if (backpointer < getTrimMark()) {
+                    trimMark = backpointer;
+                } else {
+                    log.trace("Stream's {} trim mark falls above the global trim mark (hole).",
+                            Utils.toReadableId(streamId));
+                    // If backpointer falls above the trimmed space, we need to verify if a checkpoint is present
+                    trimMark = getTrimMarkFromCheckpoint(streamId, streamAddressSpaceMap);
+                }
+            }
+
+            log.trace("setStreamsTrimMark: set trim mark {} for stream {}", trimMark, Utils.toReadableId(streamId));
+            streamAddressSpace.setTrimMark(trimMark);
+        }
+
+        log.info("setStreamsTrimMark: complete setting stream's trim mark.");
+    }
+
+    private long getTrimMarkFromCheckpoint(UUID streamId, Map<UUID, StreamAddressSpace> streamAddressSpaceMap) {
+        UUID checkpointStreamId = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
+
+        if (!streamAddressSpaceMap.containsKey(checkpointStreamId)) {
+            // Checkpoint for this stream does not exist
+            log.warn("getTrimMarkFromCheckpoint: checkpoint {} for stream {} not found in log scan.",
+                    checkpointStreamId, streamId);
+            return Address.NON_EXIST;
+        }
+
+        StreamAddressSpace checkpointAddressSpace = streamAddressSpaceMap.get(checkpointStreamId);
+        // Scan all checkpoint entries and search for checkpoint with the highest start address
+        // Because multiple checkpointers could be running, checkpoint occurrence does not guarantee ordering.
+        NavigableSet<Long> cpAddresses = checkpointAddressSpace.copyAddressesToSet(Long.MAX_VALUE);
+        long maxCheckpointAddress = Address.NON_EXIST;
+        for (Long address: cpAddresses) {
+            LogData logEntry = read(address);
+            maxCheckpointAddress = Long.max(maxCheckpointAddress, logEntry.getCheckpointedStreamStartLogAddress());
+        }
+
+        return maxCheckpointAddress;
     }
 
     /**

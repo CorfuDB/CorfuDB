@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,6 +40,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -882,6 +884,74 @@ public class ServerRestartIT extends AbstractIT {
         rt3.getObjectsView().TXEnd();
 
         assertThat(corfuTable3.size()).isEqualTo(numEntries + 2);
+
+        // Fetch Address Space for the given stream
+        StreamAddressSpace addressSpace = rt3.getAddressSpaceView().getLogAddressSpace()
+                .getAddressMap()
+                .get(CorfuRuntime.getStreamID("test"));
+
+        // Verify address space and trim mark is properly set for the given stream.
+        assertThat(addressSpace.getTrimMark()).isEqualTo(cp2Token.getSequence());
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(snapshotAddress1 + 2);
     }
 
+    /**
+     * Check streamAddressSpace rebuilt from log unit
+     * when stream has been previously checkpointed and trimmed.
+     **/
+    @Test
+    public void checkStreamAddressSpaceRebuiltWithTrim() throws Exception {
+        final int numEntries = 10;
+
+        final List<Long> expectedAddresses = new ArrayList<>(
+                Arrays.asList(13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L));
+
+        // Start server
+        Process corfuProcess = runCorfuServer();
+
+        // Start runtime
+        CorfuRuntime r = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        // Open map
+        CorfuTable<String, String> mapTest = createTable(r, new StringMultiIndexer());
+
+        // Write numEntries to map
+        for (int i = 0; i < numEntries; i++) {
+            mapTest.put(String.valueOf(i), String.valueOf(i));
+        }
+
+        // Checkpoint
+        MultiCheckpointWriter cpw = new MultiCheckpointWriter();
+        cpw.addMap(mapTest);
+        Token cpAddress = cpw.appendCheckpoints(r, "cp-test");
+
+        // Trim the log
+        r.getAddressSpaceView().prefixTrim(cpAddress);
+        r.getAddressSpaceView().gc();
+        r.getAddressSpaceView().invalidateServerCaches();
+        r.getAddressSpaceView().invalidateClientCache();
+
+        // Write another numEntries to map
+        for (int i = numEntries; i < numEntries*2; i++) {
+            mapTest.put(String.valueOf(i), String.valueOf(i));
+        }
+
+        //Restart the corfu server
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+        corfuProcess = runCorfuServer();
+
+        // Start NEW runtime
+        CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        // Fetch Address Space for the given stream
+        StreamAddressSpace addressSpace = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+                .getAddressMap()
+                .get(CorfuRuntime.getStreamID("test"));
+
+        // Verify address space and trim mark is properly set for the given stream.
+        assertThat(addressSpace.getTrimMark()).isEqualTo(cpAddress.getSequence());
+
+        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(expectedAddresses.size());
+        expectedAddresses.forEach(address -> assertThat(addressSpace.getAddressMap().contains(address)).isTrue());
+    }
 }
