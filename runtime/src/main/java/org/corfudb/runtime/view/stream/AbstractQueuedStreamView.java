@@ -167,6 +167,9 @@ public abstract class AbstractQueuedStreamView extends
         // Validate if the  size of the log data is under max write size.
         ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
+        // Tag the requests with the priority level of the runtime.
+        ld.setWritePriority(runtime.getParameters().getWritePriority());
+
         // First, we get a token from the sequencer.
         TokenResponse tokenResponse = runtime.getSequencerView()
                 .next(id);

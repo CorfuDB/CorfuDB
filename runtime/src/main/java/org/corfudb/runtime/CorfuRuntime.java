@@ -35,6 +35,7 @@ import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.OrderedGuidGenerator;
+import org.corfudb.runtime.view.Priority;
 import org.corfudb.runtime.view.SnowflakeGuidGenerator;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
@@ -126,6 +127,13 @@ public class CorfuRuntime {
          */
         @Default
         Duration fastLoaderTimeout = Duration.ofMinutes(30);
+
+        /**
+         * The priority of the writes of this Runtime.
+         */
+        @Default
+        Priority writePriority = Priority.NORMAL;
+
         // endregion
 
         // region Address Space Parameters

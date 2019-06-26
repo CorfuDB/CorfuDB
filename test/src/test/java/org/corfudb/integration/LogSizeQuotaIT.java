@@ -99,4 +99,58 @@ public class LogSizeQuotaIT extends AbstractIT {
         assertThat(map2.get("k4")).isEqualTo(map.get("k4"));
         shutdownCorfuServer(server_1);
     }
+
+    @Test
+    public void testLogSizeQuotaViaRuntime() throws Exception {
+
+        final int numWrites = 1000;
+        final int payloadSize = 100;
+
+        Process server_1 = new CorfuServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(DEFAULT_PORT)
+                .setSingle(true)
+                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
+                .setLogSizeQuota(Long.toString(numWrites * payloadSize))
+                .runServer();
+
+        byte[] payload = new byte[payloadSize];
+
+        // Configure a client with a max write limit
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .writePriority(Priority.HIGH)
+                .build();
+
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
+        rt.parseConfigurationString(DEFAULT_ENDPOINT);
+        rt.connect();
+
+        Map<String, String> map = rt.getObjectsView()
+                .build()
+                .setStreamName("s1")
+                .setType(CorfuTable.class)
+                .open();
+
+        // Create a map
+        map.put("k1", "v1");
+        map.put("k2", "v2");
+
+        // Fill the log with data till the quota is reached
+        IStreamView sv = rt.getStreamsView().get(UUID.randomUUID());
+
+        boolean quotaReached = false;
+        for (int x = 0; x < numWrites; x++) {
+            try {
+                sv.append(payload);
+            } catch (QuotaExceededException e) {
+                quotaReached = true;
+                break;
+            }
+        }
+
+        assertThat(quotaReached).isFalse();
+
+        shutdownCorfuServer(server_1);
+    }
 }

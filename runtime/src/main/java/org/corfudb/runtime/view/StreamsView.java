@@ -50,9 +50,15 @@ public class StreamsView extends AbstractView {
      */
     final int maxWrite;
 
+    /**
+     * Priority to tag all writes with
+     */
+    final Priority writePriority;
+
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
         maxWrite = runtime.getParameters().getMaxWriteSize();
+        writePriority = runtime.getParameters().getWritePriority();
     }
 
     /**
@@ -227,7 +233,7 @@ public class StreamsView extends AbstractView {
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull UUID ... streamIDs) {
-       return append(object, conflictInfo, CacheOption.WRITE_THROUGH, Priority.NORMAL, streamIDs);
+       return append(object, conflictInfo, CacheOption.WRITE_THROUGH, writePriority, streamIDs);
     }
 
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
