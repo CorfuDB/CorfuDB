@@ -282,8 +282,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @param data  The entry to use to update the pointer.
      */
     private void updatePointer(final ILogData data) {
-        // Update the global pointer, if it is non-checkpoint data.
-        if (data.getType() == DataType.DATA && !data.hasCheckpointMetadata()) {
+        // Update the global pointer
+        if (data.getType() == DataType.DATA) {
             // Note: here we only set the global pointer and do not validate its position with respect to the trim mark,
             // as the pointer is expected to be moving step by step (for instance when syncing a stream up to maxGlobal)
             // The validation is deferred to these methods which call it in advance based on the expected final position
