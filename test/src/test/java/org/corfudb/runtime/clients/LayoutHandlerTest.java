@@ -120,7 +120,7 @@ public class LayoutHandlerTest extends AbstractClientTest {
     }
 
     @Test
-    public void proposeRejectsAlreadyProposed()
+    public void proposeAcceptsAlreadyProposed()
             throws Exception {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
@@ -136,9 +136,7 @@ public class LayoutHandlerTest extends AbstractClientTest {
             client.propose(epoch, RANK_LOW, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
-        assertThatThrownBy(() -> {
-            client.propose(epoch, RANK_HIGH, layout).get();
-        }).hasCauseInstanceOf(OutrankedException.class);
+        client.propose(epoch, RANK_HIGH, layout).get();
     }
 
     @Test

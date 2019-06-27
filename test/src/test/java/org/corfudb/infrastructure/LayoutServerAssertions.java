@@ -38,9 +38,9 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
     public LayoutServerAssertions isPhase1Rank(Rank phase1Rank) {
         isNotNull();
         final long serverEpoch = actual.getServerContext().getServerEpoch();
-        if (!actual.getPhase1Rank(serverEpoch).equals(phase1Rank)) {
+        if (!actual.getProposedRank(serverEpoch).equals(phase1Rank)) {
             failWithMessage("Expected server to be in phase1Rank <%s> but it was in phase1Rank <%s>", phase1Rank,
-                    actual.getPhase1Rank(serverEpoch));
+                    actual.getProposedRank(serverEpoch));
         }
         return this;
     }
@@ -48,9 +48,9 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
     public LayoutServerAssertions isPhase2Rank(Rank phase2Rank) {
         isNotNull();
         final long serverEpoch = actual.getServerContext().getServerEpoch();
-        if (!actual.getPhase2Rank(serverEpoch).equals(phase2Rank)) {
+        if (!actual.getAcceptedRank(serverEpoch).equals(phase2Rank)) {
             failWithMessage("Expected server to be in phase2Rank <%s> but it was in phase2Rank <%s>", phase2Rank,
-                    actual.getPhase2Rank(serverEpoch));
+                    actual.getAcceptedRank(serverEpoch));
         }
         return this;
     }
@@ -58,9 +58,9 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
     public LayoutServerAssertions isProposedLayout(Layout layout) {
         isNotNull();
         final long serverEpoch = actual.getServerContext().getServerEpoch();
-        if (!actual.getProposedLayout(serverEpoch).asJSONString().equals(layout.asJSONString())) {
+        if (!actual.getAcceptedLayout(serverEpoch).asJSONString().equals(layout.asJSONString())) {
             failWithMessage("Expected server to have proposedLayout  <%s> but it is <%s>", layout,
-                    actual.getProposedLayout(serverEpoch));
+                    actual.getAcceptedLayout(serverEpoch));
 
         }
         return this;

@@ -108,7 +108,7 @@ public class LayoutServerTest extends AbstractServerTest {
      * Note: This is in the scope of same epoch.
      */
     @Test
-    public void proposeRejectsAlreadyProposed() {
+    public void proposeAcceptsAlreadyProposed() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
@@ -117,7 +117,7 @@ public class LayoutServerTest extends AbstractServerTest {
         sendPropose(epoch, LOW_RANK, layout);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendPropose(epoch, LOW_RANK, layout);
-        Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
+        Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
     }
 
     /**
@@ -497,7 +497,7 @@ public class LayoutServerTest extends AbstractServerTest {
         Mockito.doAnswer(invocation -> {
             spyLayoutServer.getServerContext().setServerEpoch(newSealEpoch, router);
             return invocation.callRealMethod();
-        }).when(spyLayoutServer).setPhase2Data(Mockito.any(), Mockito.anyLong());
+        }).when(spyLayoutServer).setAcceptedData(Mockito.any(), Mockito.anyLong());
 
         final long msgRank = 0L;
 

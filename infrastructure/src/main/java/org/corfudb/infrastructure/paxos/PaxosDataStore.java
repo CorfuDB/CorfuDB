@@ -2,8 +2,9 @@ package org.corfudb.infrastructure.paxos;
 
 import lombok.Builder;
 import lombok.NonNull;
+import org.corfudb.infrastructure.AcceptedData;
 import org.corfudb.infrastructure.DataStore;
-import org.corfudb.infrastructure.Phase2Data;
+import org.corfudb.infrastructure.AcceptedData;
 import org.corfudb.infrastructure.Rank;
 
 import java.util.Optional;
@@ -46,27 +47,27 @@ public class PaxosDataStore {
      * @param serverEpoch server epoch
      * @return phase2 data
      */
-    public Optional<Phase2Data> getPhase2Data(long serverEpoch) {
-        Phase2Data rank = dataStore.get(
-                Phase2Data.class,
+    public Optional<AcceptedData> getPhase2Data(long serverEpoch) {
+        AcceptedData acceptedData = dataStore.get(
+                AcceptedData.class,
                 PREFIX_PHASE_2,
                 serverEpoch + KEY_SUFFIX_PHASE_2
         );
 
-        return Optional.ofNullable(rank);
+        return Optional.ofNullable(acceptedData);
     }
 
     /**
      * Saves phase2 data
-     * @param phase2Data phase2 data
+     * @param acceptedData accepted data
      * @param serverEpoch current server epoch
      */
-    public void setPhase2Data(Phase2Data phase2Data, long serverEpoch) {
+    public void setAcceptedData(AcceptedData acceptedData, long serverEpoch) {
         dataStore.put(
-                Phase2Data.class,
+                AcceptedData.class,
                 PREFIX_PHASE_2,
                 serverEpoch + KEY_SUFFIX_PHASE_2,
-                phase2Data
+                acceptedData
         );
     }
 }

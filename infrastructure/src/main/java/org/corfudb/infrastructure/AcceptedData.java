@@ -13,7 +13,7 @@ import org.corfudb.runtime.view.Layout;
 @Data
 @ToString
 @AllArgsConstructor
-public class Phase2Data {
+public class AcceptedData {
     Rank rank;
     Layout layout;
 }
