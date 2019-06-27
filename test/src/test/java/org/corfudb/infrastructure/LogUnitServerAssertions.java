@@ -75,7 +75,7 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
         return this;
     }
 
-    public LogUnitServerAssertions hasCorrectCacheSize(double ratio) {
+    public LogUnitServerAssertions hasMaxCorrectCacheSize(double ratio) {
         long maxHeapSize = Runtime.getRuntime().maxMemory();
         if(actual.getMaxCacheSize() != (long) (maxHeapSize * ratio)) {
             failWithMessage("Expected cache size <%d> doesn't match allocated cache size <%d>",

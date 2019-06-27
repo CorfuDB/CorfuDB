@@ -90,13 +90,15 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * @param runtimeLayout runtime layout.
      * @param addresses     list of addresses to read.
      * @param waitForWrite  flag whether wait for write is required or hole fill directly.
+     * @param cacheOnServer flag whether the fetch results should be cached on log unit server.
      * @return Map of read addresses.
      */
     @Override
     @Nonnull
     public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
                                        List<Long> addresses,
-                                       boolean waitForWrite) {
+                                       boolean waitForWrite,
+                                       boolean cacheOnServer) {
 
         // A map of log unit server endpoint to addresses it's responsible for
         Map<String, List<Long>> serverAddressMap = new HashMap<>();
@@ -110,7 +112,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
         // Send read requests to log unit servers in parallel
         List<CompletableFuture<ReadResponse>> futures = serverAddressMap.entrySet().stream()
-                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey()).readAll(entry.getValue()))
+                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey())
+                        .readAll(entry.getValue(), cacheOnServer))
                 .collect(Collectors.toList());
 
         // Merge the read responses from different log unit servers

@@ -2,10 +2,10 @@ package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -76,6 +76,16 @@ public interface StreamLog {
      * Get the first untrimmed address in the address space.
      */
     long getTrimMark();
+
+    /**
+     * Returns the known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd);
 
     /**
      * Sync the stream log file to secondary storage.

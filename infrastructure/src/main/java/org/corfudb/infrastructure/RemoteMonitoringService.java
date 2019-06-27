@@ -7,18 +7,18 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
-import org.corfudb.infrastructure.management.IDetector;
+import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
@@ -70,7 +70,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * Detectors to be used to detect failures and healing.
      */
     @Getter
-    private final IDetector failureDetector;
+    private final FailureDetector failureDetector;
 
     /**
      * Detection Task Scheduler Service
@@ -150,7 +150,7 @@ public class RemoteMonitoringService implements MonitoringService {
     RemoteMonitoringService(@NonNull ServerContext serverContext,
                             @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                             @NonNull ClusterStateContext clusterContext,
-                            @NonNull IDetector failureDetector,
+                            @NonNull FailureDetector failureDetector,
                             @NonNull LocalMonitoringService localMonitoringService) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
@@ -285,22 +285,23 @@ public class RemoteMonitoringService implements MonitoringService {
         failureDetectorFuture =
                 //Get metrics from local monitoring service (local monitoring works in it's own thread)
                 localMonitoringService.getMetrics()
-                //Poll report asynchronously using failureDetectorWorker executor
-                .thenCompose(this::pollReport)
-                //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
-                .thenApply(pollReport -> {
-                    log.trace("Update cluster view: {}", pollReport.getClusterState());
-                    clusterContext.refreshClusterView(layout, pollReport);
-                    return pollReport;
-                })
-                //Execute failure detector task using failureDetectorWorker executor
-                .thenCompose(this::runFailureDetectorTask)
-                //Print exceptions to log
-                .whenComplete((taskResult, ex) -> {
-                    if (ex != null) {
-                        log.error("Failure detection task finished with error", ex);
-                    }
-                });
+                        //Poll report asynchronously using failureDetectorWorker executor
+                        .thenCompose(this::pollReport)
+                        //Update cluster view by latest cluster state given by the poll report.
+                        // No need to be asynchronous
+                        .thenApply(pollReport -> {
+                            log.trace("Update cluster view: {}", pollReport.getClusterState());
+                            clusterContext.refreshClusterView(layout, pollReport);
+                            return pollReport;
+                        })
+                        //Execute failure detector task using failureDetectorWorker executor
+                        .thenCompose(this::runFailureDetectorTask)
+                        //Print exceptions to log
+                        .whenComplete((taskResult, ex) -> {
+                            if (ex != null) {
+                                log.error("Failure detection task finished with error", ex);
+                            }
+                        });
     }
 
     private CompletableFuture<PollReport> pollReport(SequencerMetrics sequencerMetrics) {
@@ -341,9 +342,9 @@ public class RemoteMonitoringService implements MonitoringService {
             // the current state.
             correctWrongEpochs(pollReport);
 
-            try {
+            Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
                 if (pollReport.isCurrentLayoutSlotUnFilled()) {
-                    detectFailure(Collections.emptySet(), pollReport).get();
+                    detectFailure(Collections.emptySet(), pollReport).join();
                     return DetectorTask.COMPLETED;
                 }
 
@@ -353,8 +354,14 @@ public class RemoteMonitoringService implements MonitoringService {
                     );
                     return DetectorTask.COMPLETED;
                 }
-            } catch (Exception ex) {
-                log.error("Can't fill slot. Poll report: {}", pollReport, ex);
+
+                return DetectorTask.NOT_COMPLETED;
+            });
+
+            failure.ifError(err -> log.error("Can't fill slot. Poll report: {}", pollReport, err));
+
+            if (failure.isValue() && failure.get() == DetectorTask.COMPLETED) {
+                return DetectorTask.COMPLETED;
             }
 
             DetectorTask healing = detectHealing(pollReport, serverContext.copyManagementLayout());
@@ -362,7 +369,7 @@ public class RemoteMonitoringService implements MonitoringService {
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
             //behave according to latest cluster state.
-            if (healing == DetectorTask.COMPLETED){
+            if (healing == DetectorTask.COMPLETED) {
                 return DetectorTask.COMPLETED;
             }
 
@@ -528,7 +535,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 return detectFailure(failedNodes, pollReport).get();
             }
         } catch (Exception e) {
-            log.error("Exception invoking failure handler : {}", e);
+            log.error("Exception invoking failure handler", e);
         }
 
         return DetectorTask.NOT_COMPLETED;
@@ -651,7 +658,7 @@ public class RemoteMonitoringService implements MonitoringService {
             // abort the epoch correction phase.
             Optional<Layout> latestLayout = fetchLatestLayout(layoutCompletableFutureMap);
 
-            if (!latestLayout.isPresent()){
+            if (!latestLayout.isPresent()) {
                 log.error("Can't get a layout from any server in the cluster. Layout servers: {}, wrong epochs: {}",
                         layout.getLayoutServers(), wrongEpochs
                 );
@@ -681,7 +688,7 @@ public class RemoteMonitoringService implements MonitoringService {
             updateTrailingLayoutServers(layoutCompletableFutureMap);
 
         } catch (QuorumUnreachableException e) {
-            log.error("Error in correcting server epochs: {}", e);
+            log.error("Error in correcting server epochs", e);
         }
     }
 
@@ -763,9 +770,9 @@ public class RemoteMonitoringService implements MonitoringService {
                     log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);
                 }
             } catch (ExecutionException ee) {
-                log.error("Updating layout servers failed due to : {}", ee);
+                log.error("Updating layout servers failed due to", ee);
             } catch (InterruptedException ie) {
-                log.error("Updating layout servers failed due to : {}", ie);
+                log.error("Updating layout servers failed due to", ie);
                 throw new UnrecoverableCorfuInterruptedError(ie);
             }
         });
