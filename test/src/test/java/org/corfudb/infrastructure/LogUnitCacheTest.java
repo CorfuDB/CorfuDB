@@ -1,11 +1,14 @@
 package org.corfudb.infrastructure;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -52,7 +55,9 @@ public class LogUnitCacheTest extends AbstractServerTest {
         List<LogData> payloads = new ArrayList<>();
 
         for (long i = start; i < end; i++) {
-            LogData logData = new LogData(DataType.DATA, new Object());
+            ByteBuf payload = Unpooled.buffer();
+            Serializers.CORFU.serialize("hello".getBytes(), payload);
+            LogData logData = new LogData(DataType.DATA, payload);
             logData.setGlobalAddress(i);
             payloads.add(logData);
         }
@@ -79,9 +84,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
     private void checkReadResponse(ReadResponse readResponse, int size) {
         assertThat(readResponse.getAddresses().size()).isEqualTo(size);
 
-        readResponse.getAddresses().forEach((addr, ld) -> {
-            assertThat(ld).isNotNull();
-        });
+        readResponse.getAddresses().forEach((addr, ld) -> assertThat(ld.getType()).isEqualTo(DataType.DATA));
     }
 
     /**
