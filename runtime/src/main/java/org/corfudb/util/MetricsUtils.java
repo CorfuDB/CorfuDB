@@ -75,7 +75,7 @@ public class MetricsUtils {
     private static boolean metricsSlf4jReportingEnabled = false;
     private static String mpTrigger = "filter-trigger"; // internal use only
 
-    private static final SizeOf sizeOf = SizeOf.newInstance();
+    public static final SizeOf sizeOf = SizeOf.newInstance();
 
     /**
      * Load metrics properties.
