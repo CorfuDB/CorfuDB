@@ -70,9 +70,15 @@ public class TransactionStreamIT extends AbstractIT {
 
         // A thread that starts and consumes transaction updates via the Transaction Stream.
         Future<Map<UUID, Integer>> consumerState = consumer.submit(() -> {
-            CorfuRuntime consumerRt = new CorfuRuntime(DEFAULT_ENDPOINT)
+
+            CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                    .builder()
+                    .maxCacheEntries(runtimeCacheSize)
+                    .build();
+
+            CorfuRuntime consumerRt = CorfuRuntime.fromParameters(params)
+                    .parseConfigurationString(DEFAULT_ENDPOINT)
                     .setTransactionLogging(true)
-                    .setNumCacheEntries(runtimeCacheSize)
                     .connect();
 
             IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
@@ -99,9 +105,14 @@ public class TransactionStreamIT extends AbstractIT {
 
         ExecutorService producers = Executors.newFixedThreadPool(numWriters);
 
-        CorfuRuntime producersRt = new CorfuRuntime(DEFAULT_ENDPOINT)
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .maxCacheEntries(runtimeCacheSize)
+                .build();
+
+        CorfuRuntime producersRt = CorfuRuntime.fromParameters(params)
+                .parseConfigurationString(DEFAULT_ENDPOINT)
                 .setTransactionLogging(true)
-                .setNumCacheEntries(runtimeCacheSize)
                 .connect();
 
         // Spawn writers, where each thread creates a table and starts
