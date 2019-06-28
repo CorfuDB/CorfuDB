@@ -44,6 +44,10 @@
                                         <argument>
                                             corfudb/corfu-server:${project.version}
                                         </argument>
+                                        <argument>-t</argument>
+                                        <argument>
+                                            corfudb-universe/corfu-server:${project.version}
+                                        </argument>
                                         <argument>.</argument>
                                     </arguments>
                                 </configuration>
