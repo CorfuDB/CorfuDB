@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
@@ -9,12 +7,9 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.format.Types;
@@ -23,6 +18,7 @@ import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -32,6 +28,7 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
@@ -59,7 +56,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nullable;
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -364,9 +361,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private void trimPrefix() {
         // Trim all segments up till the segment that contains the starting address
         // (i.e. trim only complete segments)
-        long endSegment = dataStore.getStartingAddress() / RECORDS_PER_LOG_FILE - 1;
+        long endSegment = getStartingSegment() - 1;
 
-        if (endSegment <= 0) {
+        if (endSegment < 0) {
             log.debug("Only one segment detected, ignoring trim");
             return;
         }
@@ -377,7 +374,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         deleteFilesMatchingFilter(file -> {
             try {
                 String segmentStr = file.getName().split("\\.")[0];
-                return Long.parseLong(segmentStr) < endSegment;
+                return Long.parseLong(segmentStr) <= endSegment;
             } catch (Exception e) {
                 log.warn("trimPrefix: ignoring file {}", file.getName());
                 return false;
@@ -687,8 +684,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try {
             EnumSet<StandardOpenOption> options = EnumSet.of(
-                    StandardOpenOption.READ, StandardOpenOption.WRITE,
-                    StandardOpenOption.CREATE_NEW, StandardOpenOption.SPARSE
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.CREATE_NEW
             );
             FileChannel channel = FileChannel.open(FileSystems.getDefault().getPath(filePath), options);
 
@@ -711,8 +709,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param address The address to open.
      * @return The FileChannel for that address.
      */
-    @VisibleForTesting
-    synchronized SegmentHandle getSegmentHandleForAddress(long address) {
+    SegmentHandle getSegmentHandleForAddress(long address) {
         long segment = address / RECORDS_PER_LOG_FILE;
 
         String filePath = logDir + File.separator;
@@ -1064,13 +1061,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         // Extract all addresses associated with the provided write range.
         Set<Long> pendingWrites = range.stream()
-                .map(entry -> entry.getGlobalAddress()).collect(Collectors.toSet());
-
-        // Input validation.
-        if (pendingWrites.size() != range.size()) {
-            log.error("Input validation failed! Received entries are not unique.");
-            throw new OverwriteException(OverwriteCause.SAME_DATA);
-        }
+                .map(ILogData::getGlobalAddress).collect(Collectors.toSet());
 
         // See if the provided range overlaps with any of the previously written entries.
         Set<Long> segOneOverlap = Sets.intersection(pendingWrites,
@@ -1195,6 +1186,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         sh.getSegment(), sh.getRefCount()
                 );
             }
+            channelsToSync.remove(sh.getWriteChannel());
             sh.close();
             writeChannels.remove(sh.getFileName());
         }
@@ -1267,7 +1259,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @VisibleForTesting
-    Collection<SegmentHandle> getSegmentHandles() {
+    Collection<SegmentHandle> getOpenSegmentHandles() {
         return writeChannels.values();
     }
 

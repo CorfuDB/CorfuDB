@@ -49,6 +49,12 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return logData;
     }
 
+    public static LogData getHole(Token token) {
+        LogData logData = new LogData(DataType.HOLE);
+        logData.useToken(token);
+        return logData;
+    }
+
     public static LogData getEmpty(long address) {
         LogData logData = new LogData(DataType.EMPTY);
         logData.setGlobalAddress(address);
