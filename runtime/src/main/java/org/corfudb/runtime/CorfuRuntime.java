@@ -149,10 +149,16 @@ public class CorfuRuntime {
         boolean cacheDisabled = false;
 
         /**
-         * The maximum size of the cache, in bytes.
+         * The maximum number of entries in the cache.
          */
         @Default
-        long numCacheEntries = 5000;
+        long maxCacheEntries;
+
+        /**
+         * The max in-memory size of the cache in bytes
+         */
+        @Default
+        long maxCacheWeight;
 
         /**
          * Sets expireAfterAccess and expireAfterWrite in seconds.
@@ -1164,19 +1170,6 @@ public class CorfuRuntime {
     public CorfuRuntime setHoleFillingDisabled(boolean disable) {
         log.warn("setHoleFillingDisabled: Deprecated, please set parameters instead");
         parameters.setHoleFillingDisabled(disable);
-        return this;
-    }
-
-    /**
-     * Set the number of cache entries.
-     *
-     * @param numCacheEntries The number of cache entries.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setNumCacheEntries(long numCacheEntries) {
-        log.warn("setNumCacheEntries: Deprecated, please set parameters instead");
-        parameters.setNumCacheEntries(numCacheEntries);
         return this;
     }
 
