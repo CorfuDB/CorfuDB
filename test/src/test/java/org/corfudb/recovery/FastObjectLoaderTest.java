@@ -5,6 +5,7 @@ import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
@@ -191,12 +192,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
-        luc.fillHole(getDefaultRuntime().getSequencerView().next().getToken());
+        LogData hole1 = LogData.getHole(getDefaultRuntime().getSequencerView().next().getToken());
+        luc.write(hole1);
 
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
         seq.nextToken(null, 1);
-        luc.fillHole(getDefaultRuntime().getSequencerView().next().getToken());
+        LogData hole2 = LogData.getHole(getDefaultRuntime().getSequencerView().next().getToken());
+        luc.write(hole2);
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
