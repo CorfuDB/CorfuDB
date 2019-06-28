@@ -2,12 +2,8 @@ package org.corfudb.generator;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
-import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -34,14 +30,6 @@ public class Generator {
         CorfuRuntime rt = new CorfuRuntime(endPoint).connect();
 
         State state = new State(numStreams, numKeys, rt);
-
-        Runnable cpTrimTask = () -> {
-            Operation op = new CheckpointOperation(state);
-            op.execute();
-        };
-
-        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        scheduler.scheduleAtFixedRate(cpTrimTask, 30, cpPeriod, TimeUnit.SECONDS);
 
         ExecutorService appWorkers = newWorkStealingPool(numThreads);
 
