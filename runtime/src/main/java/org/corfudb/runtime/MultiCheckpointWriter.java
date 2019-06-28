@@ -84,12 +84,8 @@ public class MultiCheckpointWriter<T extends Map> {
                     minSnapshot = minCPSnapshot;
                 }
             }
-        } finally {
-            // TODO(Maithem): print cp id?
-            log.trace("appendCheckpoints: finished, author '{}' at min globalAddress {}",
-                    author, minSnapshot);
-            rt.getObjectsView().TXEnd();
         }
+
         final long cpStop = System.currentTimeMillis();
 
         log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,

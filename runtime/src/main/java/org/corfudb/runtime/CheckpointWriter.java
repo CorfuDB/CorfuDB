@@ -10,7 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -131,14 +133,14 @@ public class CheckpointWriter<T extends Map> {
         // Queries the sequencer for the global log tail. We then read the global log tail to
         // persist the entry on the logunit in turn preventing from a new sequencer from
         // regressing tokens.
-        Token markerToken = rt.getSequencerView().query().getToken();
-        if (Address.nonAddress(markerToken.getSequence())) {
-            return markerToken;
+        TokenResponse tokenResponse = rt.getSequencerView().next();
+        if (Address.nonAddress(tokenResponse.getSequence())) {
+            return tokenResponse.getToken();
         }
-        rt.getAddressSpaceView().read(markerToken.getSequence());
+        ILogData marker = rt.getAddressSpaceView().read(tokenResponse.getSequence());
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
-                .snapshot(markerToken)
+                .snapshot(marker.getToken())
                 .build()
                 .begin();
         try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
@@ -152,8 +154,10 @@ public class CheckpointWriter<T extends Map> {
             startCheckpoint(snapshot, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
-            log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
-                    streamId, entries.size(), snapshot, System.currentTimeMillis() - start);
+
+            log.info("appendCheckpoint: completed checkpoint for {}, entries({}), memorySize({}) bytes, " +
+                            "cpSize({}) bytes at snapshot {} in {} ms", streamId, entries.size(),
+                    MetricsUtils.sizeOf.deepSizeOf(entries), numBytes, snapshot, System.currentTimeMillis() - start);
             return snapshot;
         } finally {
             rt.getObjectsView().TXEnd();
