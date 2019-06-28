@@ -187,7 +187,14 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 setCheckpointedStreamId(cp.getStreamId());
                 setCheckpointedStreamStartLogAddress(
                         Long.parseLong(cp.getDict()
-                                .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)));
+                                .get(CheckpointEntry.CheckpointDictKey.VLO_VERSION)));
+                if (cp.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
+                    setCheckpointSnapshotAddress(
+                            Long.parseLong(cp.getDict()
+                                    .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS)));
+                    setCheckpointStartAddress(Long.parseLong(cp.getDict()
+                            .get(CheckpointEntry.CheckpointDictKey.START_ADDRESS)));
+                }
             }
         }
     }

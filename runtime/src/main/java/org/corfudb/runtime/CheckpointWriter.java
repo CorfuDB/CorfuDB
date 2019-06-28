@@ -151,7 +151,7 @@ public class CheckpointWriter<T extends Map> {
             long vloVersion = corfuObject.getCorfuSMRProxy().getVersion();
             startCheckpoint(snapshot, vloVersion);
             appendObjectState(entries);
-            finishCheckpoint();
+            finishCheckpoint(snapshot, vloVersion);
             log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
                     streamId, entries.size(), snapshot, System.currentTimeMillis() - start);
             return snapshot;
@@ -171,7 +171,7 @@ public class CheckpointWriter<T extends Map> {
         startTime = LocalDateTime.now();
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // VLO version at time of snapshot
-        this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(vloVersion));
+        this.mdkv.put(CheckpointEntry.CheckpointDictKey.VLO_VERSION, Long.toString(vloVersion));
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
                 Long.toString(txnSnapshot.getSequence()));
 
@@ -249,13 +249,18 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Global log address of the END record.
      */
-    public void finishCheckpoint() {
+    public void finishCheckpoint(Token txnSnapshot, long vloVersion) {
         LocalDateTime endTime = LocalDateTime.now();
         mdkv.put(CheckpointEntry.CheckpointDictKey.END_TIME, endTime.toString());
         numEntries++;
         numBytes++;
         mdkv.put(CheckpointEntry.CheckpointDictKey.ENTRY_COUNT, Long.toString(numEntries));
         mdkv.put(CheckpointEntry.CheckpointDictKey.BYTE_COUNT, Long.toString(numBytes));
+        mdkv.put(CheckpointEntry.CheckpointDictKey.VLO_VERSION, Long.toString(vloVersion));
+        mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
+                Long.toString(txnSnapshot.getSequence()));
+        mdkv.put(CheckpointEntry.CheckpointDictKey.START_ADDRESS,
+                Long.toString(startAddress));
 
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointId, streamId, mdkv, null);

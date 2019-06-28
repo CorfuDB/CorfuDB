@@ -24,10 +24,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.*;
 
 /**
  * Created by mwei on 9/18/15.
@@ -218,6 +215,32 @@ public interface IMetadata {
         getMetadataMap().put(CHECKPOINTED_STREAM_START_LOG_ADDRESS, startLogAddress);
     }
 
+    /**
+     * Returns the address for the start record of this checkpoint.
+     */
+    default Long getCheckpointStartAddress() {
+        return (Long) getMetadataMap()
+                .getOrDefault(LogUnitMetadataType.CHECKPOINT_START_ADDRESS,
+                        Address.NON_EXIST);
+    }
+
+    default void setCheckpointStartAddress(Long startAddress) {
+        getMetadataMap().put(CHECKPOINT_START_ADDRESS, startAddress);
+    }
+
+    /**
+     * Returns the snapshot address at which this checkpoint was taken.
+     */
+    default Long getCheckpointSnapshotAddress() {
+        return (Long) getMetadataMap()
+                .getOrDefault(CHECKPOINT_SNAPSHOT_ADDRESS,
+                        Address.NON_ADDRESS);
+    }
+
+    default void setCheckpointSnapshotAddress(Long snapshotAddress) {
+        getMetadataMap().put(CHECKPOINT_SNAPSHOT_ADDRESS, snapshotAddress);
+    }
+
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
@@ -228,6 +251,8 @@ public interface IMetadata {
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),
+        CHECKPOINT_START_ADDRESS(13, TypeToken.of(Long.class)),
+        CHECKPOINT_SNAPSHOT_ADDRESS(14, TypeToken.of(Long.class)),
         CLIENT_ID(10, TypeToken.of(UUID.class)),
         THREAD_ID(11, TypeToken.of(Long.class)),
         EPOCH(12, TypeToken.of(Long.class))

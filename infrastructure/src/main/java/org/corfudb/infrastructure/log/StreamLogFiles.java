@@ -425,6 +425,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
             logData.setCheckpointedStreamStartLogAddress(
                     entry.getCheckpointedStreamStartLogAddress());
+
+           logData.setCheckpointStartAddress(entry.getCheckpointStartAddress());
+           logData.setCheckpointSnapshotAddress(entry.getCheckpointSnapshotAddress());
         }
 
         return logData;

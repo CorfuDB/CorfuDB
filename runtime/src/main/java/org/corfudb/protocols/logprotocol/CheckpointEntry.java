@@ -47,10 +47,11 @@ public class CheckpointEntry extends LogEntry {
     public enum CheckpointDictKey {
         START_TIME(0),
         END_TIME(1),
-        START_LOG_ADDRESS(2),
+        VLO_VERSION(2),
         ENTRY_COUNT(3),
         BYTE_COUNT(4),
-        SNAPSHOT_ADDRESS(5);
+        SNAPSHOT_ADDRESS(5),
+        START_ADDRESS(6);
 
         public final int type;
 
@@ -80,6 +81,9 @@ public class CheckpointEntry extends LogEntry {
 
     @Getter
     UUID streamId;
+
+    @Getter
+    long startAddress;
 
     /** Author/cause/trigger of this checkpoint
      */
@@ -164,8 +168,8 @@ public class CheckpointEntry extends LogEntry {
         super.serialize(b);
 
         if (cpType == CheckpointEntryType.END
-                && getDict().get(CheckpointDictKey.START_LOG_ADDRESS) == null) {
-            throw new IllegalArgumentException(dict.get(CheckpointDictKey.START_LOG_ADDRESS));
+                && getDict().get(CheckpointDictKey.VLO_VERSION) == null) {
+            throw new IllegalArgumentException(dict.get(CheckpointDictKey.VLO_VERSION));
         }
 
         b.writeByte(cpType.asByte());

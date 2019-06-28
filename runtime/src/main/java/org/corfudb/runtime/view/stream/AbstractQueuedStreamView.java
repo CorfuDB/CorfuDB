@@ -637,7 +637,7 @@ public abstract class AbstractQueuedStreamView extends
             if (context.checkpointSuccessId == null &&
                     cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END
                     && Long.decode(cpEntry.getDict()
-                    .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)) <= maxGlobal) {
+                    .get(CheckpointEntry.CheckpointDictKey.VLO_VERSION)) <= maxGlobal) {
                 log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
                         this, data.getGlobalAddress(), cpEntry.getCpType(),
                         Utils.toReadableId(cpEntry.getCheckpointId()),
@@ -653,7 +653,7 @@ public abstract class AbstractQueuedStreamView extends
                 context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
                 if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
                     context.checkpointSuccessStartAddr = Long.decode(cpEntry.getDict()
-                            .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
+                            .get(CheckpointEntry.CheckpointDictKey.VLO_VERSION));
                     if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
                             .SNAPSHOT_ADDRESS) != null) {
                         context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()

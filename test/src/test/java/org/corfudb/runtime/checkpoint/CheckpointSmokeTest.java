@@ -269,7 +269,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         try {
             cpw.startCheckpoint(snapshot, streamTail.getSequence());
             cpw.appendObjectState(m.entrySet());
-            cpw.finishCheckpoint();
+            cpw.finishCheckpoint(snapshot, streamTail.getSequence());
 
             // Instantiate new runtime & map.  All map entries (except 'just one more')
             // should have fudgeFactor added.
@@ -464,6 +464,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 l, l, true, true, true);
     }
 
+    long addr1;
+    long startAddress;
+
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
@@ -481,11 +484,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Write cp #1 of 3
         if (write1) {
             TokenResponse tokResp1 = r.getSequencerView().query(streamId);
-            long addr1 = tokResp1.getToken().getSequence();
-            mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
+            addr1 = tokResp1.getToken().getSequence();
+            mdKV.put(CheckpointEntry.CheckpointDictKey.VLO_VERSION, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
-            sv.append(cp1, null, null);
+            startAddress = sv.append(cp1, null, null);
         }
 
         // Interleaving opportunity #1
@@ -511,6 +514,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         if (write3) {
             CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
+            mdKV.put(CheckpointEntry.CheckpointDictKey.VLO_VERSION, Long.toString(addr1 + 1));
+            mdKV.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS, Long.toString(addr1 + 1));
+            mdKV.put(CheckpointEntry.CheckpointDictKey.START_ADDRESS, Long.toString(startAddress));
             sv.append(cp3, null, null);
         }
     }
