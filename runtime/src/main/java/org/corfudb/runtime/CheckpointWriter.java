@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import lombok.Getter;
@@ -123,38 +124,60 @@ public class CheckpointWriter<T extends Map> {
     }
 
     /**
+     * Append a checkpoint, i.e., coalesce the state of the log. The snapshot
+     * of this checkpoint will be internally computed as to the current tail of the log.
+     *
      * @return Token at which the snapshot for this checkpoint was taken.
      */
     public Token appendCheckpoint() {
+        // Queries the sequencer for the global log tail. We then read the global log tail to
+        // persist the entry on the log unit in turn preventing from a new sequencer from
+        // regressing tokens.
+        Token snapshot = rt.getSequencerView().query().getToken();
+        if (Address.isAddress(snapshot.getSequence())) {
+            appendCheckpointOnSnapshot(snapshot);
+        }
+        return snapshot;
+    }
+
+    /**
+     * Append checkpoint at a specific snapshot. This is visible only for testing.
+     *
+     * @param snapshotTimestamp snapshot at which to take a checkpoint.
+     * @return snapshot time for this checkpoint.
+     */
+    @VisibleForTesting
+    public Token appendCheckpoint(Token snapshotTimestamp) {
+        appendCheckpointOnSnapshot(snapshotTimestamp);
+        return snapshotTimestamp;
+    }
+
+    /**
+     * Write a checkpoint which reflects the state at snapshot.
+     *
+     * @param snapshotTimestamp snapshot at which the checkpoint is taken.
+     */
+    private void appendCheckpointOnSnapshot(Token snapshotTimestamp) {
         long start = System.currentTimeMillis();
 
-        // Queries the sequencer for the global log tail. We then read the global log tail to
-        // persist the entry on the logunit in turn preventing from a new sequencer from
-        // regressing tokens.
-        Token markerToken = rt.getSequencerView().query().getToken();
-        if (Address.nonAddress(markerToken.getSequence())) {
-            return markerToken;
-        }
-        rt.getAddressSpaceView().read(markerToken.getSequence());
+        rt.getAddressSpaceView().read(snapshotTimestamp.getSequence());
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
-                .snapshot(markerToken)
+                .snapshot(snapshotTimestamp)
                 .build()
                 .begin();
         try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
-            Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
-            log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshot);
+            log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
             ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
             Set<Map.Entry> entries = this.map.entrySet();
             long vloVersion = corfuObject.getCorfuSMRProxy().getVersion();
-            startCheckpoint(snapshot, vloVersion);
+            startCheckpoint(snapshotTimestamp, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
             log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
-                    streamId, entries.size(), snapshot, System.currentTimeMillis() - start);
-            return snapshot;
+                    streamId, entries.size(), snapshotTimestamp, System.currentTimeMillis() - start);
         } finally {
             rt.getObjectsView().TXEnd();
         }
