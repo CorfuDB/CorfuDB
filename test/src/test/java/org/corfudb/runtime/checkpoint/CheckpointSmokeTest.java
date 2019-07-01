@@ -619,5 +619,62 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mA2.put("a", 2l);
         rt2.getObjectsView().TXEnd();
     }
+
+
+    /**
+     * This test verifies that a stream is rebuilt from a checkpoint, whenever two valid checkpoints exist, but the
+     * latest checkpoint is performed on an earlier snapshot, while the log is trimmed on the snapshot of the earliest
+     * checkpoint.
+     *
+     * 1. Write 25 entries to stream A.
+     * 2. Start a checkpoint (CP2) at snapshot 15, complete it.
+     * 3. Start a checkpoint (CP1) at snapshot 10, complete it.
+     * 4. Trim on token for CP2 (snapshot = 15).
+     * 5. New runtime instantiate stream A (do a mutation to force to load from checkpoint).
+     */
+    @Test
+    public void testUnorderedCheckpoints() throws Exception {
+        final int numEntries = 25;
+        final int snapshotAddress1 = 10;
+        final int snapshotAddress2 = 15;
+
+        // Open map.
+        final String streamA = "streamA";
+        Map<String, Long> mA = instantiateMap(streamA);
+
+        // (1) Write 25 Entries
+        for (int i = 0; i < numEntries; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        // Checkpoint Writer 2 @15
+        CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+
+        // Checkpoint Writer 1 @10
+        CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+
+        // Trim @snapshotAddress=15
+        r.getAddressSpaceView().prefixTrim(cp2Token);
+
+        // New Runtime
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+        Map<String, Long> mA2 = rt2.getObjectsView()
+                .build()
+                .setStreamName(streamA)
+                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                })
+                .setSerializer(serializer)
+                .open();
+
+        // Access / Mutate map - It should be built from the earliest checkpoint (CP2)
+        // without throwing a TransactionAbortedException - Cause TRIM
+        rt2.getObjectsView().TXBegin();
+        mA2.put("a", 1l);
+        rt2.getObjectsView().TXEnd();
+
+        assertThat(mA2).hasSize(numEntries + 1);
+    }
 }
 

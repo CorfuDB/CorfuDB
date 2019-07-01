@@ -74,10 +74,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                            final NavigableSet<Long> queue,
                                            final long startAddress,
                                            final long stopAddress,
-                                           final Function<ILogData, BackpointerOp> filter,
+                                           final Function<ILogData, Boolean> filter,
                                            final boolean checkpoint,
                                            final long maxGlobal) {
-
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
         // log pointer -or- the checkpoint snapshot address, because all
@@ -88,8 +87,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         log.trace("followBackpointers: streamId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
                 "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
         long readStartTime = System.currentTimeMillis();
-        // Whether or not we added entries to the queue.
-        boolean entryAdded = false;
+
         // The current address which we are reading from.
         long currentAddress = startAddress;
 
@@ -108,7 +106,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 if (options.ignoreTrimmed) {
                     log.warn("followBackpointers: Ignoring trimmed exception for address[{}]," +
                             " stream[{}]", currentAddress, id);
-                    return entryAdded;
+                    return !queue.isEmpty();
                 } else {
                     throw e;
                 }
@@ -118,17 +116,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             if (d.containsStream(streamId)) {
                 log.trace("followBackpointers: address[{}] contains streamId[{}], apply filter", currentAddress,
                         streamId);
+
                 // Check whether we should include the address
-                BackpointerOp op = filter.apply(d);
-                if (op == BackpointerOp.INCLUDE
-                        || op == BackpointerOp.INCLUDE_STOP) {
+                filter.apply(d);
+
+                if (!checkpoint) {
                     log.trace("followBackpointers: Adding backpointer to address[{}] to queue", currentAddress);
                     queue.add(currentAddress);
-                    entryAdded = true;
-                    // Check if we need to stop
-                    if (op == BackpointerOp.INCLUDE_STOP) {
-                        return entryAdded;
-                    }
                 }
             }
 
@@ -168,7 +162,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
         }
 
-        return entryAdded;
+        if (checkpoint) {
+            queue.addAll(resolveCheckpoint(getCurrentContext()));
+        }
+
+        return !queue.isEmpty();
     }
 }
 
