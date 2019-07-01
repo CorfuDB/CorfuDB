@@ -12,6 +12,7 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.codehaus.groovy.runtime.ReverseListIterator;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
@@ -23,10 +24,14 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -44,13 +49,17 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -176,22 +185,31 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
-        for (long currentSegment = startingSegment; currentSegment <= tailSegment; currentSegment++) {
-            // TODO(Maithem): factor out getSegmentHandleForAddress to allow getting segments by segment number
+        // Scan the log in reverse, this will ease stream trim mark resolution (as we require the
+        // END records of a checkpoint which are always the last entry in this stream)
+        // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
+        // for stream trim mark computation.
+        for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
             SegmentHandle segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
             try {
-                for (Long address : segment.getKnownAddresses().keySet()) {
+                List<Long> segmentAddresses = new ArrayList<>(segment.getKnownAddresses().keySet());
+                ReverseListIterator<Long> reverseIterator = new ReverseListIterator<>(segmentAddresses);
+                while(reverseIterator.hasNext()) {
+                    long address = reverseIterator.next();
                     // skip trimmed entries
                     if (address < dataStore.getStartingAddress()) {
                         continue;
                     }
                     LogData logEntry = read(address);
-                    logMetadata.update(logEntry, true, getTrimMark());
+                    logMetadata.update(logEntry, true);
                 }
             } finally {
                 segment.close();
             }
         }
+
+        // Set Stream Trim Marks after all the log has been scanned.
+        logMetadata.updateStreamTrimMarks();
 
         // Open segment will add entries to the writeChannels map, therefore we need to clear it
         writeChannels.clear();
@@ -948,7 +966,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             safeWrite(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
             syncTailSegment(address);
-            logMetadata.update(entry);
+            logMetadata.update(entry, false);
         }
 
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
