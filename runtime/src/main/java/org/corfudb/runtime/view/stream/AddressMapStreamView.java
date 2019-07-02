@@ -161,11 +161,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     String message = String.format("getStreamAddressMap[{%s}] stream has been " +
                                     "trimmed at address %s and this space is not covered by the " +
                                     "loaded checkpoint with start address %s, while accessing the " +
-                                    "stream at version %s", this, streamAddressSpace.getTrimMark(),
+                                    "stream at version %s. Looking for a new checkpoint.", this,
+                            streamAddressSpace.getTrimMark(),
                             getCurrentContext().checkpoint.startAddress, maxGlobal);
-                    log.warn(message);
+                    log.info(message);
                     if (options.ignoreTrimmed) {
-                        log.warn("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
+                        log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
                                 this, streamAddressSpace.getTrimMark());
                     } else {
                         throw new TrimmedException(message);
@@ -251,7 +252,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         } catch (TrimmedException ste) {
             // The valid checkpoint has been trimmed.
             if (options.ignoreTrimmed) {
-                log.warn("processCheckpoint[{}]: Ignoring trimmed exception for address[{}]," +
+                log.debug("processCheckpoint[{}]: Ignoring trimmed exception for address[{}]," +
                         " stream[{}]", this, lastReadAddress, id);
             } else {
                 throw ste;
@@ -290,7 +291,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             d = read(startAddress);
         } catch (TrimmedException e) {
             if (options.ignoreTrimmed) {
-                log.warn("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}]," +
+                log.debug("isAddressToBackpointerResolved[{}]: Ignoring trimmed exception for address[{}]," +
                         " stream[{}]", this, startAddress, streamId);
                 return false;
             } else {
