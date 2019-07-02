@@ -411,7 +411,7 @@ public abstract class AbstractQueuedStreamView extends
                     return true;
                 }
             } catch (TrimmedException te) {
-                log.warn("Fill_Read_Queue[{}] Trim encountered.", this);
+                log.warn("Fill_Read_Queue[{}] Trim encountered.", this, te);
                 throw te;
             }
         }
