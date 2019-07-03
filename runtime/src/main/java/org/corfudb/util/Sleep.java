@@ -10,28 +10,21 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
  *
  *  Use these methods rather than {@link Thread#sleep(long)} or {@link TimeUnit#sleep(long)}
  *  because they handle {@linbk InterruptedException} properly.
+ *
+ *  @deprecated Sleep doesn't have any advantages over TimeUnit. Please always use TimeUnit.
  */
+@Deprecated
 public enum Sleep {
     NANOSECONDS {
         @Override
         long toMillis(long duration) {
             return TimeUnit.NANOSECONDS.toMillis(duration);
         }
-
-        @Override
-        int excessNanos(long duration, long milliseconds) {
-            return (int)(duration - (milliseconds * (1000L * 1000L)));
-        }
     },
     MICROSECONDS {
         @Override
         long toMillis(long duration) {
             return TimeUnit.MICROSECONDS.toMillis(duration);
-        }
-
-        @Override
-        int excessNanos(long duration, long milliseconds) {
-            return (int)((duration * 1000L) - (milliseconds * (1000L * 1000L)));
         }
     },
     MILLISECONDS {
@@ -72,18 +65,6 @@ public enum Sleep {
      */
     abstract long toMillis(long duration);
 
-
-    /** Convert this duration to the excess nanoseconds parameter used for sleep. Only
-     *  applicable for units less than a millisecond.
-     * @param duration      The duration to convert.
-     * @param milliseconds  The amount of milliseconds.
-     * @return              The number of nanoseconds leftover by subtracting milliseconds
-     *                      from duration.
-     */
-    int excessNanos(long duration, long milliseconds) {
-        return 0;
-    }
-
     /**
      * Sleep, without recovery logic in case the sleep is interrupted.
      *
@@ -96,9 +77,9 @@ public enum Sleep {
     public static void sleepUninterruptibly(Duration duration) {
         final long milliseconds = duration.toMillis();
         if (milliseconds == 0) {
-            NANOSECONDS.sleepUninterruptibly(duration.toNanos());
+            sleepUninterruptibly(duration.toNanos(), TimeUnit.NANOSECONDS);
         } else {
-            MILLISECONDS.sleepUninterruptibly(duration.toMillis());
+            sleepUninterruptibly(duration.toMillis(), TimeUnit.MILLISECONDS);
         }
     }
 
@@ -112,33 +93,11 @@ public enum Sleep {
      * @param duration      The duration to sleep.
      */
     @SuppressWarnings("checkstyle:ThreadSleep")
-    public void sleepUninterruptibly(long duration) {
+    private static void sleepUninterruptibly(long duration, TimeUnit timeUnit) {
         try {
-            final long ms = toMillis(duration);
-            Thread.sleep(ms, excessNanos(duration, ms));
+            timeUnit.sleep(duration);
         } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(
-                "Uninterruptible sleep interrupted", ie);
-        }
-    }
-
-    /**
-     * Sleep, throwing an {@link InterruptedException}
-     * if the sleep is interrupted, re-setting the interrupted flag. If you call this method,
-     * you should cleanup state and exit the method you are currently running in, returning to
-     * the caller, by rethrowing the exception.
-     *
-     * @param duration      The duration to sleep.
-     */
-    @SuppressWarnings("checkstyle:ThreadSleep")
-    public void sleepRecoverably(long duration)
-        throws InterruptedException {
-        try {
-            final long ms = toMillis(duration);
-            Thread.sleep(ms, excessNanos(duration, ms));
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw ie;
+            throw new UnrecoverableCorfuInterruptedError("Uninterruptible sleep interrupted", ie);
         }
     }
 }

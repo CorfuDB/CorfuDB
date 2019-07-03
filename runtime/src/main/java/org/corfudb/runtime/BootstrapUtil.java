@@ -19,6 +19,7 @@ import org.corfudb.util.Sleep;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Utility to bootstrap a cluster.
@@ -131,7 +132,7 @@ public class BootstrapUtil {
                         throw new RetryExhaustedException("Bootstrapping node: retry exhausted");
                     }
                     log.warn("Retrying bootstrap {} times in {}ms.", retry, retryDuration.toMillis());
-                    Sleep.MILLISECONDS.sleepUninterruptibly(retryDuration.toMillis());
+                    Sleep.sleepUninterruptibly(retryDuration);
                 }
             }
 
