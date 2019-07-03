@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 
+import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,8 +26,6 @@ public class SMRGarbageEntry extends LogEntry {
     @Getter
     private final Map<UUID, Map<Integer, SMRGarbageRecord>> streamIdToGarbageMap = new ConcurrentHashMap<>();
 
-    private static final Map<Integer, SMRGarbageRecord> EMPTY_GARBAGE_MAP = new ConcurrentHashMap<>();
-
     public SMRGarbageEntry() {
         super(LogEntryType.SMRGARBAGE);
     }
@@ -38,12 +37,13 @@ public class SMRGarbageEntry extends LogEntry {
      * @param index    per-stream index of the interested SMREntry.
      * @return if the SMREntry is identified as garbage, return the garbage information; otherwise return null.
      */
-    public Optional<SMRGarbageRecord> getGarbageRecord(UUID streamId, int index) {
+    @Nullable
+    public SMRGarbageRecord getGarbageRecord(UUID streamId, int index) {
         if (!streamIdToGarbageMap.containsKey(streamId)) {
-            return Optional.empty();
+            return null;
         }
 
-        return Optional.ofNullable(streamIdToGarbageMap.get(streamId).get(index));
+        return streamIdToGarbageMap.get(streamId).get(index);
     }
 
     /**
@@ -52,8 +52,9 @@ public class SMRGarbageEntry extends LogEntry {
      * @param streamId stream ID.
      * @return a map whose key is the per-stream index of garbage-identified SMREntries.
      */
+    @Nullable
     public Map<Integer, SMRGarbageRecord> getGarbageRecords(UUID streamId) {
-        return streamIdToGarbageMap.getOrDefault(streamId, EMPTY_GARBAGE_MAP);
+        return streamIdToGarbageMap.get(streamId);
     }
 
     /**
