@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.Serializers;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,6 +31,8 @@ import static com.google.common.base.Preconditions.checkState;
 @Slf4j
 public class SMRLogEntry extends LogEntry {
 
+    public final static SMRLogEntry TRIMMED_ENTRY = new SMRLogEntry();
+
     // Map from stream-ID to a list of SMR updates to this stream.
     @Getter
     public Map<UUID, List<SMRRecord>> streamUpdates = new ConcurrentHashMap<>();
@@ -41,6 +42,13 @@ public class SMRLogEntry extends LogEntry {
      * This is required to support lazy stream deserialization.
      */
     private final Map<UUID, byte[]> streamBuffers = new ConcurrentHashMap<>();
+
+    /**
+     * If this entry is trimmed because of compaction.
+     */
+    public boolean isTrimmed() {
+        return this == TRIMMED_ENTRY;
+    }
 
     public SMRLogEntry() {
         this.type = LogEntryType.SMRLOG;
