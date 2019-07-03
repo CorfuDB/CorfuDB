@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Created by Xin at 06/05/2019.
  */
 @ToString(callSuper = true)
-public class MultiSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInfo{
+public class MultiSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInfo {
 
     /**
      * A map to maintain information about garbage-identified SMREntry inside MultiSMREntry. The key of the map is
@@ -43,10 +43,8 @@ public class MultiSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInf
         return Optional.ofNullable(garbageMap.get(index));
     }
 
-
-
     /**
-     * {@inheritDoc}
+     *
      */
     @Override
     public Map<Integer, SMREntryGarbageInfo> getAllGarbageInfo(UUID streamId) {
@@ -58,9 +56,24 @@ public class MultiSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInf
      * {@inheritDoc}
      */
     @Override
+    public boolean isEmpty() {
+        return garbageMap.isEmpty();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public int getGarbageSize() {
+        return getGarbageSizeUpTo(Long.MAX_VALUE);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public int getGarbageSizeUpTo(long addressUpTo) {
         return garbageMap.values().stream()
-                .map(SMREntryGarbageInfo::getGarbageSize)
+                .map(smr -> smr.getGarbageSizeUpTo(addressUpTo))
                 .reduce(0, (a, b) -> a + b);
     }
 
@@ -78,14 +91,14 @@ public class MultiSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInf
     @Override
     public ISMRGarbageInfo merge(ISMRGarbageInfo other) {
         if (other instanceof MultiSMREntryGarbageInfo) {
-            MultiSMREntryGarbageInfo deduplicatedGCInfo = new MultiSMREntryGarbageInfo();
+            MultiSMREntryGarbageInfo uniqueGarbageInfo = new MultiSMREntryGarbageInfo();
             ((MultiSMREntryGarbageInfo) other).getGarbageMap().forEach((index, smrEntryGarbageInfo) -> {
                 if (!garbageMap.containsKey(index)) {
                     garbageMap.put(index, smrEntryGarbageInfo);
-                    deduplicatedGCInfo.add(index, smrEntryGarbageInfo);
+                    uniqueGarbageInfo.add(index, smrEntryGarbageInfo);
                 }
             });
-            return deduplicatedGCInfo;
+            return uniqueGarbageInfo;
         } else {
             throw new IllegalArgumentException("Different types of ISMRGarbageInfo cannot merge.");
         }
