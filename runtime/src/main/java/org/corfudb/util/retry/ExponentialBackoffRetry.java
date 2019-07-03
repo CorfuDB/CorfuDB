@@ -2,6 +2,7 @@ package org.corfudb.util.retry;
 
 import java.time.Duration;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -80,7 +81,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
             sleepTime = base + extraWait;
             sleepTime -= sleepTime * randomPart;
         }
-        Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
+        Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));
     }
 
 }
