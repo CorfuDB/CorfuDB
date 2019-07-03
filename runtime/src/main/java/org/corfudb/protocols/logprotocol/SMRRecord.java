@@ -1,11 +1,15 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.Getter;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.Setter;
 import lombok.ToString;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.NonNull;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.ISerializer;
@@ -19,7 +23,11 @@ import java.util.Arrays;
 @SuppressWarnings("checkstyle:abbreviation")
 @ToString(callSuper = true)
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class SMRRecord {
+
+    public final static SMRRecord TRIMMED_RECORD = SMRRecord.builder().build();
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -74,6 +82,19 @@ public class SMRRecord {
     long globalAddress = Address.NON_ADDRESS;
 
     /**
+     * The size in bytes of this SMREntry when serialized.
+     */
+    @Getter
+    private int serializedSize = 0;
+
+    /**
+     * If this record is trimmed because of compaction.
+     */
+    public boolean isTrimmed() {
+        return this == TRIMMED_RECORD;
+    }
+
+    /**
      * Set the upcall result for this entry.
      */
     public void setUpcallResult(Object result) {
@@ -114,6 +135,10 @@ public class SMRRecord {
      * @return an {@code SMRRecord} deserialized from buffer.
      */
     static SMRRecord deserializeFromBuffer(ByteBuf b, CorfuRuntime rt) {
+        boolean trimmed = b.readBoolean();
+        if (trimmed) {
+            return TRIMMED_RECORD;
+        }
         SMRRecord record = new SMRRecord();
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
@@ -129,7 +154,7 @@ public class SMRRecord {
             b.skipBytes(len);
         }
         record.SMRArguments = arguments;
-
+        record.serializedSize = b.readInt();
         return record;
     }
 
@@ -140,6 +165,12 @@ public class SMRRecord {
      * @param b byte buffer to serialize to.
      */
     void serialize(ByteBuf b) {
+        b.writeBoolean(isTrimmed());
+        if (isTrimmed()) {
+            // A trimmed record does not need serializedSize;
+            return;
+        }
+
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
         b.writeByte(serializerType.getType());
@@ -154,5 +185,8 @@ public class SMRRecord {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
+        // including the size of serializedSize itself.
+        serializedSize = b.readableBytes() + 4;
+        b.writeInt(serializedSize);
     }
 }
