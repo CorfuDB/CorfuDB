@@ -1,6 +1,8 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,8 @@ import java.util.UUID;
 @Slf4j
 public class SMRLogEntry extends LogEntry {
 
+    public final static SMRLogEntry TRIMMED_ENTRY = new SMRLogEntry();
+
     // Map from stream-ID to a list of SMR updates to this stream.
     @Getter
     public Map<UUID, List<SMRRecord>> entryMap = Collections.synchronizedMap(new HashMap<>());
@@ -34,6 +38,13 @@ public class SMRLogEntry extends LogEntry {
     public SMRLogEntry(Map<UUID, List<SMRRecord>> entryMap) {
         this.type = LogEntryType.SMRLOG;
         this.entryMap = entryMap;
+    }
+
+    /**
+     * If this entry is trimmed because of compaction.
+     */
+    public boolean isTrimmed() {
+        return this == TRIMMED_ENTRY;
     }
 
     /**
@@ -79,7 +90,6 @@ public class SMRLogEntry extends LogEntry {
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
         int numStreams = b.readInt();
-        entryMap = new HashMap<>();
 
         for (int i = 0; i < numStreams; i++) {
             UUID streamId = new UUID(b.readLong(), b.readLong());
