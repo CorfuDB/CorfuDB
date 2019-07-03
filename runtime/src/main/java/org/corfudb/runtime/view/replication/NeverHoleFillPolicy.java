@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +43,7 @@ public class NeverHoleFillPolicy implements IHoleFillPolicy {
         do {
             if (tryNum != 0) {
                 log.trace("Peek[{}] Retrying read {}", address, tryNum);
-                Sleep.MILLISECONDS.sleepUninterruptibly(waitMs);
+                Sleep.sleepUninterruptibly(Duration.ofMillis(waitMs));
             }
             data = peekFunction.apply(address);
             tryNum++;

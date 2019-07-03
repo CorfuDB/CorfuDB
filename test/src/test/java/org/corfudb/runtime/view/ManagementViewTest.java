@@ -64,13 +64,13 @@ public class ManagementViewTest extends AbstractViewTest {
     @Getter
     protected CorfuRuntime corfuRuntime = null;
 
-    private void waitForSequencerToBootstrap(int primarySequencerPort) {
+    private void waitForSequencerToBootstrap(int primarySequencerPort) throws InterruptedException {
         // Waiting for sequencer to be bootstrapped
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             if (getSequencer(primarySequencerPort).getSequencerEpoch() != Layout.INVALID_EPOCH) {
                 return;
             }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
         Assert.fail();
     }
@@ -190,7 +190,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(l2.getUnresponsiveServers()).contains(SERVERS.ENDPOINT_1);
     }
 
-    private Layout getManagementTestLayout() {
+    private Layout getManagementTestLayout() throws InterruptedException {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -227,7 +227,7 @@ public class ManagementViewTest extends AbstractViewTest {
         return l;
     }
 
-    private Layout get3NodeLayout() {
+    private Layout get3NodeLayout() throws InterruptedException {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -309,7 +309,7 @@ public class ManagementViewTest extends AbstractViewTest {
                     && !nodeState.getConnectivity().getConnectedNodes().isEmpty()) {
                 break;
             }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         assertThat(nodeState).isNotNull();
         assertThat(nodeState.getConnectivity()).isNotNull();
@@ -501,7 +501,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * and made the primary.
      */
     @Test
-    public void testSequencerFailover() {
+    public void testSequencerFailover() throws Exception {
         getManagementTestLayout();
 
         final long beforeFailure = 5L;
@@ -573,7 +573,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * Check that transaction conflict resolution works properly in face of sequencer failover
      */
     @Test
-    public void ckSequencerFailoverTXResolution() {
+    public void ckSequencerFailoverTXResolution() throws Exception {
         // setup 3-Corfu node cluster
         getManagementTestLayout();
 
@@ -644,7 +644,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * small variant on the above : don't start the first TX at the start of the log.
      */
     @Test
-    public void ckSequencerFailoverTXResolution1() {
+    public void ckSequencerFailoverTXResolution1() throws Exception {
         getManagementTestLayout();
 
         Map<Integer, String> map = getMap();
@@ -729,7 +729,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * <p>
      */
     @Test
-    public void sequencerFailoverBackpointerCheck() {
+    public void sequencerFailoverBackpointerCheck() throws Exception {
         getManagementTestLayout();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -826,7 +826,7 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void sealDoesNotModifyClientEpoch() {
+    public void sealDoesNotModifyClientEpoch() throws Exception {
         Layout l = getManagementTestLayout();
 
         // Seal
@@ -896,7 +896,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * We ensure that no layout is committed other than the Paxos path.
      */
     @Test
-    public void blockLayoutUpdateAfterSeal() {
+    public void blockLayoutUpdateAfterSeal() throws InterruptedException {
 
         Layout layout = new Layout(getManagementTestLayout());
 
@@ -915,7 +915,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Wait for the cluster to move the layout with epoch 2 without the Paxos round.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {
                 fail();
             }
@@ -1484,7 +1484,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 break;
             }
             corfuRuntime.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
         // Assert that the DetectionWorker threads are freed from the deadlock and are able to fill
         // up the layout slot and stabilize the cluster.
@@ -1538,7 +1538,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * The fault detectors detect this and fills the epoch 3 with a layout.
      */
     @Test
-    public void testSealedDegradedClusterHealing() {
+    public void testSealedDegradedClusterHealing() throws Exception {
         get3NodeLayout();
         CorfuRuntime corfuRuntime = getDefaultRuntime();
 
@@ -1549,7 +1549,7 @@ public class ManagementViewTest extends AbstractViewTest {
             if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
                 break;
             }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
 
         Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
@@ -1561,7 +1561,7 @@ public class ManagementViewTest extends AbstractViewTest {
             if (corfuRuntime.getLayoutView().getLayout().getEpoch() == layout.getEpoch()) {
                 break;
             }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
 
         assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(layout);
@@ -1615,7 +1615,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Clear rules to now allow sequencer bootstrap.
         clearClientRules(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
         while (getSequencer(SERVERS.PORT_0).getSequencerEpoch() != layout.getEpoch()) {
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         clearClientRules(corfuRuntime);
 
