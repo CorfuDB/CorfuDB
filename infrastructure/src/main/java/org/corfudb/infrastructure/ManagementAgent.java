@@ -13,6 +13,7 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
 
@@ -148,7 +149,7 @@ public class ManagementAgent {
         try {
             while (!shutdown && serverContext.getManagementLayout() == null) {
                 log.warn("initializationTask: Management Server waiting to be bootstrapped");
-                Sleep.MILLISECONDS.sleepRecoverably(CHECK_BOOTSTRAP_INTERVAL.toMillis());
+                TimeUnit.MILLISECONDS.sleep(CHECK_BOOTSTRAP_INTERVAL.toMillis());
             }
         } catch (InterruptedException e) {
             // Due to shutdown, which interrupts this thread
@@ -173,7 +174,7 @@ public class ManagementAgent {
 
                 log.error("initializationTask: Recovery failed {} times. Retrying in {}s.",
                         ++recoveryAttempts, RECOVERY_RETRY_INTERVAL);
-                Sleep.MILLISECONDS.sleepRecoverably(RECOVERY_RETRY_INTERVAL.toMillis());
+                TimeUnit.MILLISECONDS.sleep(RECOVERY_RETRY_INTERVAL.toMillis());
             } catch (InterruptedException e) {
                 // Due to shutdown, which interrupts this thread
                 log.debug("initializationTask: Initialization task interrupted without being recovered");

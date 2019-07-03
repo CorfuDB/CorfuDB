@@ -5,6 +5,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.util.Sleep;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * This class implements a basic interval-based retry.
  *
@@ -33,7 +35,7 @@ public class IntervalRetry<E extends Exception, F extends Exception,
      */
     @Override
     public void nextWait() throws InterruptedException {
-        Sleep.MILLISECONDS.sleepUninterruptibly(retryInterval);
+        TimeUnit.MILLISECONDS.sleep(retryInterval);
     }
 
 }
