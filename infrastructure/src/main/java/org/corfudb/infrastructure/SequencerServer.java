@@ -354,6 +354,8 @@ public class SequencerServer extends AbstractServer {
             }
         }
 
+        log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark, streamsAddressMap);
+
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 

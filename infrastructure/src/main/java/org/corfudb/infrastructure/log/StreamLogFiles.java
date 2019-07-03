@@ -179,8 +179,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
-        for (long currentSegment = startingSegment; currentSegment <= tailSegment; currentSegment++) {
-            // TODO(Maithem): factor out getSegmentHandleForAddress to allow getting segments by segment number
+        // Scan the log in reverse, this will ease stream trim mark resolution (as we require the
+        // END records of a checkpoint which are always the last entry in this stream)
+        // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
+        // for stream trim mark computation.
+        for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
             SegmentHandle segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
             try {
                 for (Long address : segment.getKnownAddresses().keySet()) {
@@ -189,7 +192,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         continue;
                     }
                     LogData logEntry = read(address);
-                    logMetadata.update(logEntry, true, getTrimMark());
+                    logMetadata.update(logEntry, true);
                 }
             } finally {
                 segment.close();
@@ -199,7 +202,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // Open segment will add entries to the writeChannels map, therefore we need to clear it
         writeChannels.clear();
         long end = System.currentTimeMillis();
-        log.info("initializeStreamTails: took {} ms to load {}", end - start, logMetadata);
+        log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
     }
 
     /**
@@ -951,7 +954,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             safeWrite(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
             syncTailSegment(address);
-            logMetadata.update(entry);
+            logMetadata.update(entry, false);
         }
 
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
