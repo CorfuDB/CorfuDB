@@ -30,6 +30,7 @@ public class SMREntryGarbageInfo extends LogEntry implements ISMRGarbageInfo {
     /**
      * The size of the associated SMREntry in Byte.
      */
+    @Getter
     private int smrEntrySize;
 
     /**
@@ -67,8 +68,23 @@ public class SMREntryGarbageInfo extends LogEntry implements ISMRGarbageInfo {
      * {@inheritDoc}
      */
     @Override
+    public boolean isEmpty() {
+        return false;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public int getGarbageSize() {
         return smrEntrySize;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public int getGarbageSizeUpTo(long addressUpTo) {
+        return detectorAddress < addressUpTo ? smrEntrySize : 0;
     }
 
     /**
