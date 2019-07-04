@@ -210,26 +210,6 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         }
     }
 
-    /**
-     * This test verifies that we can traverse a trimmed stream when
-     * the ignore trimmed flag is set. Steps to reproduce this test are:
-     * (1) Append 100 entries to stream.
-     * (2) Traverse stream to a given point (up to address 24 using the 'next' api)
-     * (3) Trim the stream at prefix 50.
-     * (4) Traverse the remaining of the stream (up to 99)
-     *
-     * TrimmedException should be ignored and step (4) should retrieve only 49 entries (as 25-50 are trimmed).
-     */
-    @Test(expected = TrimmedException.class)
-    public void traverseTrimmedStreamDontIgnoreTrim() throws Exception {
-        // Append entries to stream and traverse to some point before the trim mark
-        // leaving a gap between the traversed point and the trim mark.
-        IStreamView sv = traverseStreamBeforeTrimMark(false);
-
-        // Attempt to traverse remaining of the stream
-        sv.remaining();
-    }
-
     private IStreamView traverseStreamBeforeTrimMark(boolean ignoreTrimmed)
             throws InterruptedException {
 

@@ -169,7 +169,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // We've resolved up to maxGlobal, so remember it. (if it wasn't max)
             if (maxGlobal != Address.MAX) {
                 // Set Global Pointer and check that it is not pointing to an address in the trimmed space.
-                getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
+                getCurrentContext().setGlobalPointer(maxGlobal);
             }
             return entries;
         }
@@ -194,11 +194,10 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         // Otherwise update the pointer
         if (maxGlobal != Address.MAX) {
             // Set Global Pointer and check that it is not pointing to an address in the trimmed space.
-            getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
+            getCurrentContext().setGlobalPointer(maxGlobal);
         } else {
             // Update pointer from log data and then validate final position of the pointer against GC trim mark.
             updatePointer(entries.get(entries.size() - 1));
-            getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
         }
 
         // And return the entries.
