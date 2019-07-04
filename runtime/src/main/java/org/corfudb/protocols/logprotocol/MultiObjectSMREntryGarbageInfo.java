@@ -15,11 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * Created by Xin at 06/05/2019.
  */
-public class MultiObjectSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInfo{
+public class MultiObjectSMREntryGarbageInfo extends LogEntry implements ISMRGarbageInfo {
 
     /**
-     * A map to maintain information about garbage-identified SMREntry inside MultiObjectSMREntry. The key of the map
-     * is the stream id.
+     * A map to maintain information about garbage-identified SMREntry inside MultiObjectSMREntry.
+     * The key of the map is the stream id.
      */
     @Getter
     private final Map<UUID, MultiSMREntryGarbageInfo> streamIdToGarbageMap = new ConcurrentHashMap<>();
@@ -56,9 +56,24 @@ public class MultiObjectSMREntryGarbageInfo extends LogEntry implements ISMRGarb
      * {@inheritDoc}
      */
     @Override
+    public boolean isEmpty() {
+        return streamIdToGarbageMap.isEmpty();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public int getGarbageSize() {
+        return getGarbageSizeUpTo(Long.MAX_VALUE);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public int getGarbageSizeUpTo(long addressUpTo) {
         return streamIdToGarbageMap.values().stream()
-                .map(MultiSMREntryGarbageInfo::getGarbageSize)
+                .map(multiSmr -> multiSmr.getGarbageSizeUpTo(addressUpTo))
                 .reduce(0, (a, b) -> a + b);
     }
 
@@ -78,26 +93,26 @@ public class MultiObjectSMREntryGarbageInfo extends LogEntry implements ISMRGarb
     @Override
     public ISMRGarbageInfo merge(ISMRGarbageInfo other) {
         if (other instanceof MultiObjectSMREntryGarbageInfo) {
-            MultiObjectSMREntryGarbageInfo deduplicatedGCInfo = new MultiObjectSMREntryGarbageInfo();
+            MultiObjectSMREntryGarbageInfo uniqueGarbageInfo = new MultiObjectSMREntryGarbageInfo();
 
             ((MultiObjectSMREntryGarbageInfo) other).getStreamIdToGarbageMap().forEach((streamId, garbageMap) -> {
                 // disregard empty gc info
                 if (garbageMap.getAllGarbageInfo(streamId).size() > 0) {
                     if (streamIdToGarbageMap.containsKey(streamId)) {
-                        MultiSMREntryGarbageInfo perStreamDeduplicatedGCInfo =
+                        MultiSMREntryGarbageInfo perStreamDeUniqueGCInfo =
                                 (MultiSMREntryGarbageInfo) streamIdToGarbageMap.get(streamId).merge(garbageMap);
                         // disregard if on new gc info is merged
-                        if (perStreamDeduplicatedGCInfo.getGarbageMap().size() > 0) {
-                            deduplicatedGCInfo.add(streamId, perStreamDeduplicatedGCInfo);
+                        if (!perStreamDeUniqueGCInfo.isEmpty()) {
+                            uniqueGarbageInfo.add(streamId, perStreamDeUniqueGCInfo);
                         }
                     } else {
-                        deduplicatedGCInfo.add(streamId, garbageMap);
+                        uniqueGarbageInfo.add(streamId, garbageMap);
                         this.add(streamId, garbageMap);
                     }
                 }
             });
 
-            return deduplicatedGCInfo;
+            return uniqueGarbageInfo;
         } else {
             throw new IllegalArgumentException("Different types of ISMRGarbageInfo cannot merge.");
         }
