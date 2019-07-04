@@ -41,7 +41,9 @@ public class CmdletIT extends AbstractIT {
                         Collections.singletonList(new Layout.LayoutStripe(Collections.singletonList(ENDPOINT))))),
                 Collections.EMPTY_LIST,
                 0L,
-                UUID.randomUUID());
+                UUID.randomUUID(),
+                System.currentTimeMillis()
+        );
     }
 
     static public String runCmdletGetOutput(String command) throws Exception {

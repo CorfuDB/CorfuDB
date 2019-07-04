@@ -304,7 +304,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Wait until a stable and merged layout is observed
         waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
-                        layout.segments.size() == 1,
+                        layout.getSegments().size() == 1,
                 rt);
 
         final String[] expectedNodes = new String[]{SERVERS.ENDPOINT_0,

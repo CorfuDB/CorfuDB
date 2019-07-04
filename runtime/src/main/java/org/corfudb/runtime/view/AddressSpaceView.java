@@ -411,7 +411,7 @@ public class AddressSpaceView extends AbstractView {
     public Token getTrimMark() {
         return layoutHelper(
                 e -> {
-                    long trimMark = e.getLayout().segments.stream()
+                    long trimMark = e.getLayout().getSegments().stream()
                             .flatMap(seg -> seg.getStripes().stream())
                             .flatMap(stripe -> stripe.getLogServers().stream())
                             .map(e::getLogUnitClient)
@@ -525,7 +525,7 @@ public class AddressSpaceView extends AbstractView {
     public void gc() {
         log.debug("GarbageCollect");
         layoutHelper(e -> {
-            e.getLayout().segments.stream()
+            e.getLayout().getSegments().stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
                     .map(e::getLogUnitClient)
@@ -541,7 +541,7 @@ public class AddressSpaceView extends AbstractView {
     public void invalidateServerCaches() {
         log.debug("InvalidateServerCaches");
         layoutHelper(e -> {
-            e.getLayout().segments.stream()
+            e.getLayout().getSegments().stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
                     .map(e::getLogUnitClient)

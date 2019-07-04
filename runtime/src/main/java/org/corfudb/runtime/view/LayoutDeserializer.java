@@ -25,18 +25,22 @@ public class LayoutDeserializer implements JsonDeserializer {
         /* Unresponsive servers is an optional field in the json, if it is not present
          * we need to create an empty list (by default gson will set it to null)
          */
-        if (unsafeLayout.unresponsiveServers == null) {
-            unsafeLayout.unresponsiveServers = new ArrayList<>();
+        if (unsafeLayout.getUnresponsiveServers() == null) {
+            unsafeLayout.setUnresponsiveServers(new ArrayList<>());
         }
 
         /* Similar to a copy constructor. This constructor holds all the validation for
         constructing a layout. */
-        Layout safeLayout = new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
-                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch,
-                unsafeLayout.clusterId);
 
-        return safeLayout;
-
+        return new Layout(
+                unsafeLayout.getLayoutServers(),
+                unsafeLayout.getSequencers(),
+                unsafeLayout.getSegments(),
+                unsafeLayout.getUnresponsiveServers(),
+                unsafeLayout.getEpoch(),
+                unsafeLayout.getClusterId(),
+                unsafeLayout.getTimestamp()
+        );
     }
 }
 

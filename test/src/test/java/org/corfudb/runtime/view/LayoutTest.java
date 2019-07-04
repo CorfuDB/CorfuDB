@@ -20,25 +20,28 @@ import java.nio.file.Paths;
 public class LayoutTest {
 
     /* Helper */
-    private String getResourceJSONFileAsString(String fileName)
-            throws IOException{
-
+    private String getResourceJSONFileAsString(String fileName) throws IOException{
         return new String(Files.readAllBytes(Paths.get("src/test/resources/JSONLayouts", fileName)));
     }
 
     @Test(expected = NullPointerException.class)
-    public void shouldNotDeserializeEmptyLayout()
-            throws Exception {
-
+    public void shouldNotDeserializeEmptyLayout() throws Exception {
         String JSONEmptyLayout = getResourceJSONFileAsString("EmptyLayout.json");
         Layout shouldYieldException = Layout.fromJSONString(JSONEmptyLayout);
+    }
+
+    @Test
+    public void checkTimestamp() throws IOException {
+        String JSONEmptyLayout = getResourceJSONFileAsString("DefaultLayout.json");
+        Layout layout = Layout.fromJSONString(JSONEmptyLayout);
+        assertThat(layout.getTimestamp()).isEqualTo(0);
     }
 
     @Test
     public void checkAllActiveLayoutServers() throws IOException {
         String JSONEmptyLayout = getResourceJSONFileAsString("DefaultLayout.json");
         Layout layout = Layout.fromJSONString(JSONEmptyLayout);
-        layout.unresponsiveServers.add("localhost:9001");
+        layout.getUnresponsiveServers().add("localhost:9001");
 
         assertThat(layout.getActiveLayoutServers()).containsExactly("localhost:9000", "localhost:9002");
     }

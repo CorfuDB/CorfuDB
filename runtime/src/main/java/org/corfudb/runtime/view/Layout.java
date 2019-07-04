@@ -38,47 +38,7 @@ import java.util.stream.Collectors;
  * This class represents the layout of a Corfu instance.
  * Created by mwei on 12/8/15.
  */
-@Data
 public class Layout {
-
-    /**
-     * Sorting layouts according to epochs in descending order
-     */
-    public static final Comparator<Layout> LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();
-
-    /**
-     * A Gson parser.
-     */
-    @Getter
-    static final Gson parser = new GsonBuilder()
-            .registerTypeAdapter(Layout.class, new LayoutDeserializer())
-            .create();
-    /**
-     * A list of layout servers in the layout.
-     */
-    @Getter
-    List<String> layoutServers;
-    /**
-     * A list of sequencers in the layout.
-     */
-    @Getter
-    List<String> sequencers;
-    /**
-     * A list of the segments in the layout.
-     */
-    @Getter
-    List<LayoutSegment> segments;
-    /**
-     * A list of unresponsive nodes in the layout.
-     */
-    @Getter
-    List<String> unresponsiveServers;
-    /**
-     * The epoch of this layout.
-     */
-    @Getter
-    @Setter
-    long epoch;
 
     /**
      * Invalid epoch value.
@@ -86,12 +46,64 @@ public class Layout {
      */
     public static final long INVALID_EPOCH = -1L;
 
+    /**
+     * A Gson parser.
+     */
+    @Getter
+    private static final Gson PARSER = new GsonBuilder()
+            .registerTypeAdapter(Layout.class, new LayoutDeserializer())
+            .create();
+
+    /**
+     * Sorting layouts according to epochs in descending order
+     */
+    public static final Comparator<Layout> LAYOUT_COMPARATOR = Comparator
+            .comparing(Layout::getEpoch)
+            .reversed();
+
+    /**
+     * The epoch of this layout.
+     */
+    @Getter
+    @Setter
+    private long epoch;
+
+    @Getter
+    private long timestamp;
+
+    /**
+     * A list of layout servers in the layout.
+     */
+    @Getter
+    private List<String> layoutServers;
+
+    /**
+     * A list of sequencers in the layout.
+     */
+
+    @Getter
+    @Setter
+    private List<String> sequencers;
+
+    /**
+     * A list of the segments in the layout.
+     */
+    @Getter
+    private List<LayoutSegment> segments;
+
+    /**
+     * A list of unresponsive nodes in the layout.
+     */
+    @Getter
+    @Setter
+    private List<String> unresponsiveServers;
+
     /** The unique Id for the Corfu cluster represented by this layout.
      *  Should remain consistent for the lifetime of the layout. May be
      *  {@code null} in a legacy layout.
      */
     @Getter
-    UUID clusterId;
+    private UUID clusterId;
 
     /**
      * Defensive constructor since we can create a Layout from a JSON file.
@@ -99,7 +111,7 @@ public class Layout {
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  long epoch, @Nullable UUID clusterId) {
+                  long epoch, @Nullable UUID clusterId, long timestamp) {
 
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
@@ -107,20 +119,21 @@ public class Layout {
         this.unresponsiveServers = unresponsiveServers;
         this.epoch = epoch;
         this.clusterId = clusterId;
+        this.timestamp = timestamp;
 
         /* Assert that we constructed a valid Layout */
-        if (this.layoutServers.size() == 0) {
+        if (this.layoutServers.isEmpty()) {
             throw new IllegalArgumentException("Empty list of LayoutServers");
         }
-        if (this.sequencers.size() == 0) {
+        if (this.sequencers.isEmpty()) {
             throw new IllegalArgumentException("Empty list of Sequencers");
         }
-        if (this.segments.size() == 0) {
+        if (this.segments.isEmpty()) {
             throw new IllegalArgumentException("Empty list of segments");
         }
         for (Layout.LayoutSegment segment : segments) {
             requireNonNull(segment.stripes);
-            if (segment.stripes.size() == 0) {
+            if (segment.stripes.isEmpty()) {
                 throw new IllegalArgumentException("One segment has an empty list of stripes");
             }
         }
@@ -128,7 +141,32 @@ public class Layout {
 
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
                   long epoch, UUID clusterId) {
-        this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch, clusterId);
+        this(
+                layoutServers,
+                sequencers,
+                segments,
+                new ArrayList<>(),
+                epoch,
+                clusterId,
+                System.currentTimeMillis()
+        );
+    }
+
+    /**
+     *
+     * Layout copy constructor.
+     *
+     * @param layout layout to copy
+     */
+    public Layout(@Nonnull Layout layout) {
+        Layout layoutCopy = PARSER.fromJson(layout.asJSONString(), Layout.class);
+        this.layoutServers = layoutCopy.getLayoutServers();
+        this.sequencers = layoutCopy.getSequencers();
+        this.segments = layoutCopy.getSegments();
+        this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
+        this.epoch = layoutCopy.getEpoch();
+        this.clusterId = layoutCopy.clusterId;
+        this.timestamp = layoutCopy.timestamp;
     }
 
     /**
@@ -137,7 +175,7 @@ public class Layout {
     @SuppressWarnings({"checkstyle:abbreviation"})
     public static Layout fromJSONString(String json) {
         /* Empty Json file creates an null Layout */
-        return requireNonNull(parser.fromJson(json, Layout.class));
+        return requireNonNull(PARSER.fromJson(json, Layout.class));
     }
 
     /**
@@ -330,23 +368,7 @@ public class Layout {
      */
     @SuppressWarnings({"checkstyle:abbreviation"})
     public String asJSONString() {
-        return parser.toJson(this);
-    }
-
-    /**
-     *
-     * Layout copy constructor.
-     *
-     * @param layout layout to copy
-     */
-    public Layout(@Nonnull Layout layout) {
-        Layout layoutCopy = parser.fromJson(layout.asJSONString(), Layout.class);
-        this.layoutServers = layoutCopy.getLayoutServers();
-        this.sequencers = layoutCopy.getSequencers();
-        this.segments = layoutCopy.getSegments();
-        this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
-        this.epoch = layoutCopy.getEpoch();
-        this.clusterId = layoutCopy.clusterId;
+        return PARSER.toJson(this);
     }
 
     public void nextEpoch() {

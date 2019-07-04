@@ -1,18 +1,16 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.Sets;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 /**
  * A builder that allows us to make modifications to a layout and construct
@@ -489,6 +487,8 @@ public class LayoutBuilder {
                 layout.getSegments(),
                 layout.getUnresponsiveServers(),
                 this.epoch,
-                layout.getClusterId());
+                layout.getClusterId(),
+                System.currentTimeMillis()
+        );
     }
 }

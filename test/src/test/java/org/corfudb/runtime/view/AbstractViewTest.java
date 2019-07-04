@@ -400,7 +400,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             .nettyEventLoop(NETTY_EVENT_LOOP)
             .build();
         CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
-        runtime.parseConfigurationString(l.layoutServers.stream()
+        runtime.parseConfigurationString(l.getLayoutServers().stream()
             .collect(Collectors.joining(",")));
         return runtime;
     }

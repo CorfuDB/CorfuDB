@@ -82,11 +82,15 @@ public class TestLayoutBuilder {
                 .map(TestSegmentBuilder::build)
                 .collect(Collectors.toList());
 
-        return new Layout(layoutServers,
+        return new Layout(
+                layoutServers,
                 sequencerServers,
                 segmentList,
                 unresponsiveServers,
-                epoch, clusterId);
+                epoch,
+                clusterId,
+                System.currentTimeMillis()
+        );
     }
 
     @Accessors(chain = true)

@@ -72,7 +72,7 @@ public class LayoutViewTest extends AbstractViewTest {
         r.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
-        assertThat(r.getLayoutView().getLayout().epoch)
+        assertThat(r.getLayoutView().getLayout().getEpoch())
                 .isEqualTo(1L);
     }
 
