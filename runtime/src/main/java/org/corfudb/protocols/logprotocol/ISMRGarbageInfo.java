@@ -15,43 +15,65 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>One log data contains one or multiple SMREntries, depending on the type of {@link ISMRConsumable} instance
  * wrapped in the log data. Each concrete implementation of ISMRGarbageInfo corresponds to one concrete
  * implementation of ISMRConsumable. <p/>
- *
+ * <p>
  * Created by Xin Li at 06/03/19.
  */
 public interface ISMRGarbageInfo {
+
     Map<Integer, SMREntryGarbageInfo> EMPTY = new ConcurrentHashMap<>();
 
     /**
      * Get the garbage information about a specified SMREntry.
+     *
      * @param streamId stream ID that the interested SMREntry is from.
      * @param index    per-stream index of the interested SMREntry.
-     * @return         if the SMREntry is identified as garbage, return the garbage information; otherwise return null.
+     * @return if the SMREntry is identified as garbage, return the garbage information; otherwise return null.
      */
     Optional<SMREntryGarbageInfo> getGarbageInfo(UUID streamId, int index);
 
     /**
      * Get all the garbage information of a stream.
+     *
      * @param streamId stream ID.
-     * @return         a map whose key is the per-stream index of garbage-identified SMREntries.
+     * @return a map whose key is the per-stream index of garbage-identified SMREntries.
      */
     Map<Integer, SMREntryGarbageInfo> getAllGarbageInfo(UUID streamId);
 
     /**
+     * Check if there is no garbage information.
+     *
+     * @return true if there is no garbage information, false otherwise.
+     */
+    boolean isEmpty();
+
+    /**
      * Get the total serialized size of all garbage-identified SMREntries in the associated log data.
+     *
      * @return size in Byte.
      */
     int getGarbageSize();
 
     /**
+     * Get the serialized size of garbage-identified SMREntries that has detector address
+     * up to addressUpTo.
+     *
+     * @param addressUpTo detector address up to which garbage sizes are counted
+     * @return size in Byte.
+     */
+    int getGarbageSizeUpTo(long addressUpTo);
+
+    /**
      * Add information about one garbage-identified SMREntry.
-     * @param streamId             stream ID the SMREntry belongs to.
-     * @param index                per-stream index of the SMREntry in the associated log data.
-     * @param smrEntryGarbageInfo  garbage information about the SMREntry.
+     *
+     * @param streamId            stream ID the SMREntry belongs to.
+     * @param index               per-stream index of the SMREntry in the associated log data.
+     * @param smrEntryGarbageInfo garbage information about the SMREntry.
      */
     void add(UUID streamId, int index, SMREntryGarbageInfo smrEntryGarbageInfo);
 
     /**
      * Remove information about one garbage-identified SMREntry.
+     *
      * @param streamId stream ID the SMREntry belongs to.
      * @param index    per-stream index of the SMREntry in the associated log data.
      */
@@ -59,13 +81,15 @@ public interface ISMRGarbageInfo {
 
     /**
      * Merge garbage information from another ISMRGarbageInfo instance.
+     *
      * @param other another ISMRGarbageInfo instance.
-     * @return deduplicated garbage information.
+     * @return de-duplicated garbage information.
      */
     ISMRGarbageInfo merge(ISMRGarbageInfo other);
 
     /**
      * Test if the other object instance equals this instance.
+     *
      * @param other another object.
      * @return true if equals
      */
