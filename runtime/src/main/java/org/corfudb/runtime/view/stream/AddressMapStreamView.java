@@ -62,57 +62,62 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
     @Override
     protected ILogData removeFromQueue(NavigableSet<Long> queue) {
-        // Because the discovery mechanism implemented by this class
-        // does not require to read log entries in advance (requests
-        // full address map in a single call), entries can be read in
-        // batches whenever we have a cache miss. This allows next reads
-        // to be serviced immediately, rather than reading one entry at a time.
-        Long thisRead = queue.pollFirst();
+        boolean readNext;
+        ILogData ld = null;
+        Long currentRead;
 
-        if (thisRead != null) {
-            // In the case that the immediately requested address (thisRead) is not available,
-            // read it along with a batch of subsequent addresses.
+        do {
+            currentRead = queue.pollFirst();
 
-            ILogData ld;
+            if (currentRead == null) {
+                // no more entries, empty queue.
+                return null;
+            }
 
             try {
-                // The read range has a special behaviour, it attempts to read the address of interest,
-                // and in the case it is not in the cache, it reads a batch of addresses
-                // that will be further required, returning only the data for the address of interest.
+                // Because the discovery mechanism implemented by this class
+                // does not require to read log entries in advance (only requests
+                // the stream's full address map, without reading the actual data), entries can be read in
+                // batches whenever we have a cache miss. This allows next reads
+                // to be serviced immediately, rather than reading one entry at a time.
+                ld = read(currentRead, queue);
 
+                if (queue == getCurrentContext().readQueue && ld != null) {
+                    // Validate that the data entry belongs to this stream, otherwise, skip.
+                    // This verification protects from sequencer regression (tokens assigned in an older epoch
+                    // that were never written to, and reassigned on a newer epoch)
+                    if (ld.containsStream(this.id)) {
+                        addToResolvedQueue(getCurrentContext(), currentRead, ld);
+                        readNext = false;
+                    } else {
+                        log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
+                                this, currentRead);
+                        // Invalid entry (does not belong to this stream). Read next.
+                        readNext = true;
+                    }
+                } else {
+                    readNext = false;
+                }
+            } catch (TrimmedException te) {
                 // Because addresses are requested in increasing order and system relies on prefix trim,
                 // we force trimmedExceptions to be thrown by lower layers, and handle ignoreTrimmed at this layer.
                 // Note that lower layers will cache the valid entries, to optimize read performance.
-                ld = read(thisRead, queue);
-            } catch (TrimmedException te) {
+
                 if (!options.ignoreTrimmed) {
                     throw te;
                 }
 
-                log.warn("removeFromQueue[{}]: ignoring trimmed addresses {}", this, te.getTrimmedAddresses());
+                log.debug("removeFromQueue[{}]: ignoring trimmed addresses {}", this, te.getTrimmedAddresses());
                 // Ignore trimmed address, remove trimmed addresses and get next from queue
                 te.getTrimmedAddresses().forEach(address -> queue.remove(address));
-                return removeFromQueue(queue);
+
+                // If a TrimmedException was caught, the requested address (nextRead) is trimmed (lower of all),
+                // we need to continue reading to retrieve the next valid entry for this stream.
+                readNext = true;
             }
+        } while (readNext);
 
-            if (queue == getCurrentContext().readQueue && ld != null) {
-                // Validate that the data entry belongs to this stream, otherwise, skip.
-                // This verification protects from sequencer regression (tokens assigned in an older epoch
-                // that were never written to, and reassigned on a newer epoch)
-                if (ld.containsStream(this.id)) {
-                    addToResolvedQueue(getCurrentContext(), thisRead, ld);
-                    return ld;
-                } else {
-                    log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
-                            this, thisRead);
-                    return removeFromQueue(queue);
-                }
-            }
-
-            return ld;
-        }
-
-        return null;
+        return ld;
     }
 
     /**
