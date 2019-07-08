@@ -211,11 +211,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     filter.apply(data);
                 }
             } catch (TrimmedException te) {
+                log.warn("processCheckpoint: trimmed addresses {}", te.getTrimmedAddresses());
                 // Read one entry at a time for the last failed batch, this way we might load
                 // the required checkpoint entries until the stop condition is fulfilled
                 // without hitting a trimmed position. If we do hit a trim it is an actual
                 // TrimmedException
-                checkpointResolved = processCheckpointBatchByEntry(batch, filter, queue);
+                checkpointResolved = processCheckpointBatchByEntry(batch, filter);
             }
         }
 
@@ -229,14 +230,13 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      *
      * @param batch list of addresses to read.
      * @param filter filter to apply to checkpoint data.
-     * @param queue read queue.
      *
      * @return True, resolved checkpoint (reached end of valid checkpoint).
      *         False, otherwise.
      */
     private boolean processCheckpointBatchByEntry(List<Long> batch,
-                                                  Function<ILogData, Boolean> filter,
-                                                  NavigableSet<Long> queue) {
+                                                  Function<ILogData, Boolean> filter) {
+        log.debug("processCheckpointBatchByEntry[{}]: single step across {}", this, batch);
         long lastReadAddress = Address.NON_ADDRESS;
         try {
             boolean checkpointResolved;
@@ -252,9 +252,10 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         } catch (TrimmedException ste) {
             // The valid checkpoint has been trimmed.
             if (options.ignoreTrimmed) {
-                log.debug("processCheckpoint[{}]: Ignoring trimmed exception for address[{}]," +
+                log.debug("processCheckpointBatchByEntry[{}]: Ignoring trimmed exception for address[{}]," +
                         " stream[{}]", this, lastReadAddress, id);
             } else {
+                log.warn("processCheckpointBatchByEntry[{}]: trim exception.", this, ste);
                 throw ste;
             }
         }
@@ -295,6 +296,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                         " stream[{}]", this, startAddress, streamId);
                 return false;
             } else {
+                log.warn("getStreamAddressMap[{}]; Attempting to resolve backpointer for {} but address is trimmed.",
+                        this, startAddress, e);
                 throw e;
             }
         }

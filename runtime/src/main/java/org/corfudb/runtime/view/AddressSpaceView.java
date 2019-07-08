@@ -674,7 +674,7 @@ public class AddressSpaceView extends AbstractView {
 
         if (logData.isTrimmed()) {
             if (throwException) {
-                throw new TrimmedException();
+                throw new TrimmedException(String.format("Trimmed address %s", address));
             }
             return false;
         }

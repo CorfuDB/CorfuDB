@@ -364,6 +364,7 @@ public class CorfuServer {
     @SuppressWarnings("checkstyle:printLine")
     private static void println(Object line) {
         System.out.println(line);
+        log.info(line.toString());
     }
 
     /**
