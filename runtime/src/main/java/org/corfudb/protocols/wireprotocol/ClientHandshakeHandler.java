@@ -95,7 +95,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler. " +
-                    "Send upstream only if handshake succeeded.");
+                    "Send upstream only if handshake succeeded.", e);
             if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);

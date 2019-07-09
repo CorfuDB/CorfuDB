@@ -57,6 +57,12 @@ public class CorfuMsg {
     CorfuMsgType msgType;
 
     /**
+     * Message Priority Level
+     */
+    PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+
+    /**
      * Constructor which generates a message based only the message type.
      * Typically used for generating error messages, since sendmessage
      * will populate the rest of the fields.
@@ -85,12 +91,14 @@ public class CorfuMsg {
         UUID clientId = new UUID(buffer.readLong(), buffer.readLong());
         long requestId = buffer.readLong();
         long epoch = buffer.readLong();
+        PriorityLevel priority = PriorityLevel.typeMap.get(buffer.readByte());
         CorfuMsgType message = typeMap.get(buffer.readByte());
         CorfuMsg msg = message.getConstructor().construct();
 
         msg.clientID = clientId;
         msg.requestID = requestId;
         msg.epoch = epoch;
+        msg.priorityLevel = priority;
         msg.msgType = message;
         msg.fromBuffer(buffer);
         msg.buf = buffer;
@@ -113,6 +121,7 @@ public class CorfuMsg {
         }
         buffer.writeLong(requestID);
         buffer.writeLong(epoch);
+        buffer.writeByte(priorityLevel.asByte());
         buffer.writeByte(msgType.asByte());
     }
 
@@ -131,6 +140,7 @@ public class CorfuMsg {
         this.clientID = msg.clientID;
         this.epoch = msg.epoch;
         this.requestID = msg.requestID;
+        this.priorityLevel = msg.priorityLevel;
     }
 
     /**

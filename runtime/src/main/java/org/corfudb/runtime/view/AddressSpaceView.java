@@ -23,6 +23,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
@@ -187,8 +188,9 @@ public class AddressSpaceView extends AbstractView {
                     // Large writes are also rejected right away.
                     throw ex;
                 }
-            } catch (WriteSizeException we) {
-                throw we;
+            } catch (WriteSizeException | QuotaExceededException ie) {
+                log.warn("write: write failed", ie);
+                throw ie;
             } catch (RuntimeException re) {
                 log.error("write: Got exception during replication protocol write with token: {}", token, re);
                 validateStateOfWrittenEntry(token.getSequence(), ld);
@@ -579,23 +581,18 @@ public class AddressSpaceView extends AbstractView {
                 runtime.getParameters().getBulkReadSize());
 
         for (List<Long> batch : batches) {
-            try {
-                // Doesn't handle the case where some address have a different replication mode
-                Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
-                        .getReplicationMode(batch.iterator().next())
-                        .getReplicationProtocol(runtime)
-                        .readAll(e, batch, waitForWrite, cacheOnServer));
-                // Sanity check for returned addresses
-                if (batchResult.size() != batch.size()) {
-                    log.error("fetchAll: Requested number of addresses not equal to the read result" +
-                            "from server, requested: {}, returned: {}", batch, batchResult.keySet());
-                    throw new UnrecoverableCorfuError("Requested number of addresses not equal to the read result");
-                }
-                result.putAll(batchResult);
-            } catch (Exception e) {
-                log.error("fetchAll: Couldn't read addresses {}", batch, e);
-                throw new UnrecoverableCorfuError("Unexpected error during fetchAll", e);
+            // Doesn't handle the case where some address have a different replication mode
+            Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
+                    .getReplicationMode(batch.iterator().next())
+                    .getReplicationProtocol(runtime)
+                    .readAll(e, batch, waitForWrite, cacheOnServer));
+            // Sanity check for returned addresses
+            if (batchResult.size() != batch.size()) {
+                log.error("fetchAll: Requested number of addresses not equal to the read result" +
+                        "from server, requested: {}, returned: {}", batch, batchResult.keySet());
+                throw new IllegalStateException("Requested number of addresses not equal to the read result");
             }
+            result.putAll(batchResult);
         }
 
         return result;
