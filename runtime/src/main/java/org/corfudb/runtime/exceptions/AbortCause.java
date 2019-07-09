@@ -18,6 +18,7 @@ public enum AbortCause {
     TRIM, /** Aborted because an access to this snapshot resulted in a trim exception. */
     SEQUENCER_OVERFLOW,
     SEQUENCER_TRIM,
+    QUOTA_EXCEEDED,
     UNSUPPORTED,
     UNDEFINED;
 }

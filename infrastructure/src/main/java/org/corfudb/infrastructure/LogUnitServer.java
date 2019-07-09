@@ -12,17 +12,18 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -201,6 +202,7 @@ public class LogUnitServer extends AbstractServer {
         } else if (ex.getCause() instanceof TrimmedException) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } else {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
             throw new LogUnitException(ex);
         }
     }
@@ -213,6 +215,13 @@ public class LogUnitServer extends AbstractServer {
         LogData logData = (LogData) msg.getPayload().getData();
         log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
                 logData.getToken(), logData.getBackpointerMap());
+
+        // Its not clear that making all holes high priority is the right thing to do, but since
+        // some reads will block until a hole is filled this is required (i.e. bypass quota checks)
+        // because the requirement is to allow reads, but only block writes once the quota is exhausted
+        if (logData.isHole()) {
+            msg.setPriorityLevel(PriorityLevel.HIGH);
+        }
 
         batchWriter.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
@@ -346,6 +355,7 @@ public class LogUnitServer extends AbstractServer {
     public void sealServerWithEpoch(long epoch) {
         CorfuPayloadMsg<Long> msg = new CorfuPayloadMsg<>();
         msg.setEpoch(epoch);
+        msg.setPriorityLevel(PriorityLevel.HIGH);
         try {
             batchWriter.addTask(SEAL, msg).join();
         } catch (CompletionException ce) {
