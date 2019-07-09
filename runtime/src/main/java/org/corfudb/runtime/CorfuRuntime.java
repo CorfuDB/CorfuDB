@@ -165,6 +165,15 @@ public class CorfuRuntime {
         long maxCacheWeight;
 
         /**
+         * This is a hint to size the AddressSpaceView cache, a higher concurrency
+         * level allows for less lock contention at the cost of more memory overhead.
+         * The default value of zero will result in using the cache's internal default
+         * concurrency level (i.e. 4). 
+         */
+        @Default
+        int cacheConcurrencyLevel = 0;
+
+        /**
          * Sets expireAfterAccess and expireAfterWrite in seconds.
          */
         @Default

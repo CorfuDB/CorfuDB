@@ -103,6 +103,10 @@ public class AddressSpaceView extends AbstractView {
             cacheBuilder.maximumSize(defaultMaxCacheEntries);
         }
 
+        if (runtime.getParameters().getCacheConcurrencyLevel() != 0) {
+            cacheBuilder.concurrencyLevel(runtime.getParameters().getCacheConcurrencyLevel());
+        }
+
         readCache = cacheBuilder.expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
                 .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
