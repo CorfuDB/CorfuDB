@@ -265,7 +265,7 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses, options.ignoreTrimmed);
+                    runtime.getAddressSpaceView().read(addresses, options.isIgnoreTrimmed());
             // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
             // to all requested addresses, for this reason we must filter out data entries not included (null).
             // Also, we need to preserve ordering for checkpoint logic.
