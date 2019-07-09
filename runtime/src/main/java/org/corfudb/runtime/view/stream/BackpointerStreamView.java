@@ -56,7 +56,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             try {
                 ld = read(thisRead);
             } catch (TrimmedException te) {
-                if (!options.ignoreTrimmed) {
+                if (!getReadOptions().isIgnoreTrim()) {
                     throw te;
                 }
 
@@ -113,7 +113,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 log.trace("followBackpointers: readAddress[{}]", currentAddress);
                 d = read(currentAddress, readStartTime);
             } catch (TrimmedException e) {
-                if (options.ignoreTrimmed) {
+                if (getReadOptions().isIgnoreTrim()) {
                     log.warn("followBackpointers: Ignoring trimmed exception for address[{}]," +
                             " stream[{}]", currentAddress, id);
                     return !queue.isEmpty();

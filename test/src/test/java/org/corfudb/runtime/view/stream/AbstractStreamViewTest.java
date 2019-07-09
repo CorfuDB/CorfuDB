@@ -271,7 +271,9 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
 
     private IStreamView traverseStreamBeforeTrimMark(boolean ignoreTrimmed) {
         CorfuRuntime runtime = getDefaultRuntime();
-        StreamOptions options = new StreamOptions(ignoreTrimmed);
+        StreamOptions options = StreamOptions.builder()
+                .ignoreTrimmed(ignoreTrimmed)
+                .build();
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"), options);
         final long epoch = 0L;
         final int waitForTrim = 5;
