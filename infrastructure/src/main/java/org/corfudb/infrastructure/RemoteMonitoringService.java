@@ -266,8 +266,7 @@ public class RemoteMonitoringService implements MonitoringService {
         CorfuRuntime corfuRuntime = getCorfuRuntime();
         getCorfuRuntime().invalidateLayout();
 
-        serverContext.saveManagementLayout(corfuRuntime.getLayoutView().getLayout());
-        Layout layout = serverContext.copyManagementLayout();
+        Layout layout = serverContext.saveManagementLayout(corfuRuntime.getLayoutView().getLayout());
 
         if (!canHandleReconfigurations()) {
             log.error("Can't run failure detector. This Server: {}, is not a part of the active layout: {}",
@@ -672,10 +671,9 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Update local layout copy.
-            Layout newManagementLayout = latestLayout.get();
-            serverContext.saveManagementLayout(newManagementLayout);
+            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());
 
-            sealMinServerSet(wrongEpochs, newManagementLayout);
+            sealWithLatestLayout(wrongEpochs, newManagementLayout);
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
@@ -689,7 +687,7 @@ public class RemoteMonitoringService implements MonitoringService {
         return serverContext.copyManagementLayout();
     }
 
-    private void sealMinServerSet(Map<String, Long> wrongEpochs, Layout managementLayout) {
+    private void sealWithLatestLayout(Map<String, Long> wrongEpochs, Layout managementLayout) {
         // We should utilize only the unmodified management layout as it has already been
         // committed to the layout servers via Paxos round.
         // Committing any other modified layout is extremely dangerous and can cause

@@ -41,9 +41,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     @Override
     protected ILogData removeFromQueue(NavigableSet<Long> queue) {
-        if (!queue.isEmpty()) {
-            final long thisRead = queue.pollFirst();
-            ILogData ld;
+        boolean readNext;
+        Long thisRead;
+        ILogData ld;
+
+        do {
+            if (queue.isEmpty()) {
+                // nothing to read, return.
+                readNext = false;
+                continue;
+            }
+
+            thisRead = queue.pollFirst();
             try {
                 ld = read(thisRead);
             } catch (TrimmedException te) {
@@ -51,14 +60,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     throw te;
                 }
 
-                return removeFromQueue(queue);
+                readNext = true;
+                continue;
             }
 
             if (queue == getCurrentContext().readQueue && ld != null) {
                 addToResolvedQueue(getCurrentContext(), thisRead, ld);
             }
             return ld;
-        }
+        } while (readNext);
 
         return null;
     }
