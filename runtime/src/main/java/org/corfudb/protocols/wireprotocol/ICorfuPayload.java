@@ -245,57 +245,17 @@ public interface ICorfuPayload<T> {
     }
 
     /**
-     * A really simple flat set implementation. The first entry is the size of the set as an int,
-     * and the next entries are each value.
-     *
-     * @param buf        The buffer to deserialize.
-     * @param valueClass The class of the values.
-     * @param <V>        The type of the values.
-     * @return Set of values type
-     */
-    static <V extends Comparable<V>> RangeSet<V> rangeSetFromBuffer(ByteBuf buf, Class<V> valueClass) {
-        int numEntries = buf.readInt();
-        ImmutableRangeSet.Builder<V> rs = ImmutableRangeSet.builder();
-        for (int i = 0; i < numEntries; i++) {
-            BoundType upperType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-            V upper = fromBuffer(buf, valueClass);
-            BoundType lowerType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-            V lower = fromBuffer(buf, valueClass);
-            rs.add(Range.range(lower, lowerType, upper, upperType));
-        }
-        return rs.build();
-    }
-
-    /**
-     * A really simple flat set implementation. The first entry is the size of the set as an int,
-     * and the next entries are each value.
-     *
-     * @param buf        The buffer to deserialize.
-     * @param valueClass The class of the values.
-     * @param <V>        The type of the values.
-     * @return Set of values type
-     */
-    static <V extends Comparable<V>> Range<V> rangeFromBuffer(ByteBuf buf, Class<V> valueClass) {
-        BoundType upperType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-        V upper = fromBuffer(buf, valueClass);
-        BoundType lowerType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-        V lower = fromBuffer(buf, valueClass);
-        return Range.range(lower, lowerType, upper, upperType);
-    }
-
-    /**
      * A really simple flat map implementation. The first entry is the size of the map as an int,
      * and the next entries are each value.
      *
      * @param buf      The buffer to deserialize.
      * @param keyClass The class of the keys.
-     * @param objClass The class of the values.
      * @param <K>      The type of the keys
      * @param <V>      The type of the values.
      * @return Map for use with enum type keys
      */
     static <K extends Enum<K> & ITypedEnum<K>, V> EnumMap<K, V> enumMapFromBuffer(
-            ByteBuf buf, Class<K> keyClass, Class<V> objClass) {
+            ByteBuf buf, Class<K> keyClass) {
 
         EnumMap<K, V> metadataMap = new EnumMap<>(keyClass);
         byte numEntries = buf.readByte();
@@ -401,6 +361,8 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntryType) payload).asByte());
+        } else if (payload instanceof PriorityLevel) {
+            buffer.writeByte(((PriorityLevel) payload).asByte());
         } else if (payload instanceof StreamAddressSpace) {
             StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
             buffer.writeLong(streamAddressSpace.getTrimMark());

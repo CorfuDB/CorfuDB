@@ -6,6 +6,7 @@ import java.util.Set;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 
 /**
  * This is an interface which all clients to a ClientRouter must implement.
@@ -19,6 +20,14 @@ public interface IClient {
      * @param router The router to be used by the Netty client.
      */
     void setRouter(IClientRouter router);
+
+    /**
+     * Set the priority level of messages sent by this client
+     * @param level
+     */
+    default void setPriorityLevel(PriorityLevel level) {
+        //no-op
+    }
 
     /**
      * Get the router used by the Netty client.

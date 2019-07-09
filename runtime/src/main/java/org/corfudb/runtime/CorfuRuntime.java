@@ -10,10 +10,12 @@ import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Singular;
+import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
@@ -75,6 +77,7 @@ public class CorfuRuntime {
      */
     @Builder
     @Data
+    @ToString
     public static class CorfuRuntimeParameters {
         @Default
         private final long nettyShutdownQuitePeriod = 100;
@@ -451,6 +454,14 @@ public class CorfuRuntime {
         volatile Runnable beforeRpcHandler = () -> {
         };
         //endregion
+
+        /**
+         * The default priority of the requests made by this client.
+         * Under resource constraints non-high priority requests
+         * are dropped.
+         */
+        @Default
+        PriorityLevel priorityLevel = PriorityLevel.NORMAL;
     }
 
     /**
@@ -1023,6 +1034,9 @@ public class CorfuRuntime {
      * When this function returns, the Corfu server is ready to be accessed.
      */
     public synchronized CorfuRuntime connect() {
+
+        log.info("connect: runtime parameters {}", getParameters());
+
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
             // Fetch the current layout and save the future.
