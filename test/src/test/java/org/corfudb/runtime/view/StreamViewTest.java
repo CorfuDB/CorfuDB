@@ -29,14 +29,77 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class StreamViewTest extends AbstractViewTest {
 
-    @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
-
     public CorfuRuntime r;
 
     @Before
     public void setRuntime() throws Exception {
         r = getDefaultRuntime().connect();
+    }
+
+    @Test
+    public void nonCacheableStream() {
+        // Create a producer/consumer, where the consumer client opens two streams, one that is
+        // suppose to be cached and the other shouldn't and verify that the address space cache
+        // only contains entries for one stream
+        UUID id1 = UUID.randomUUID();
+        UUID id2 = UUID.randomUUID();
+
+        CorfuRuntime producer = getNewRuntime(getDefaultNode())
+                .connect();
+
+        IStreamView sv1 = producer.getStreamsView().get(id1);
+        IStreamView sv2 = producer.getStreamsView().get(id2);
+
+        final int numWrites = 300;
+        final int payloadSize = 100;
+        final byte[] payload = new byte[payloadSize];
+
+        for (int x = 0; x < numWrites; x++) {
+            sv1.append(payload);
+            sv2.append(payload);
+        }
+
+        CorfuRuntime consumer = getNewRuntime(getDefaultNode())
+                .connect();
+
+        StreamOptions cacheStreamOption = StreamOptions.builder()
+                .cacheEntries(true)
+                .build();
+
+        StreamOptions noCacheStreamOption = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+
+        IStreamView cachedStream = consumer.getStreamsView().get(id1, cacheStreamOption);
+        IStreamView nonCacheableStream = consumer.getStreamsView().get(id2, noCacheStreamOption);
+
+        cachedStream.next();
+        nonCacheableStream.next();
+
+        final long syncAddress1 = 5;
+        final long syncAddress2 = 100;
+        final long syncAddress3 = 200;
+
+
+        cachedStream.nextUpTo(syncAddress1);
+        nonCacheableStream.nextUpTo(syncAddress1);
+
+        cachedStream.remainingUpTo(syncAddress2);
+        nonCacheableStream.remainingUpTo(syncAddress2);
+
+        cachedStream.streamUpTo(syncAddress3);
+        nonCacheableStream.streamUpTo(syncAddress3);
+
+        cachedStream.remaining();
+        nonCacheableStream.remaining();
+
+        // After syncing to the tail verify that the cache only contains stream entries from the cached stream
+        assertThat(consumer.getAddressSpaceView().getReadCache().size()).isEqualTo(numWrites);
+
+        for (ILogData ld : consumer.getAddressSpaceView().getReadCache().asMap().values()) {
+            assertThat(ld.hasBackpointer(id1)).isTrue();
+            assertThat(ld.getBackpointerMap()).hasSize(1);
+        }
     }
 
     @Test

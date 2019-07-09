@@ -45,14 +45,8 @@ public class StreamsView extends AbstractView {
     @Getter
     Multimap<UUID, IStreamView> streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());
 
-    /**
-     * Max write size.
-     */
-    final int maxWrite;
-
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
-        maxWrite = runtime.getParameters().getMaxWriteSize();
     }
 
     /**
@@ -125,7 +119,7 @@ public class StreamsView extends AbstractView {
                        @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
 
         final LogData ld = new LogData(DataType.DATA, object);
-        ld.checkMaxWriteSize(maxWrite);
+        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null

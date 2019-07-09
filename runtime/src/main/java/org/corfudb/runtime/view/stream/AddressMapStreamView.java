@@ -103,7 +103,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // we force trimmedExceptions to be thrown by lower layers, and handle ignoreTrimmed at this layer.
                 // Note that lower layers will cache the valid entries, to optimize read performance.
 
-                if (!options.ignoreTrimmed) {
+                if (!getReadOptions().isIgnoreTrim()) {
                     throw te;
                 }
 
@@ -170,7 +170,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                             streamAddressSpace.getTrimMark(),
                             getCurrentContext().checkpoint.startAddress, maxGlobal);
                     log.info(message);
-                    if (options.ignoreTrimmed) {
+                    if (getReadOptions().isIgnoreTrim()) {
                         log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
                                 this, streamAddressSpace.getTrimMark());
                     } else {
@@ -256,7 +256,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             }
         } catch (TrimmedException ste) {
             // The valid checkpoint has been trimmed.
-            if (options.ignoreTrimmed) {
+            if (getReadOptions().isIgnoreTrim()) {
                 log.debug("processCheckpointBatchByEntry[{}]: Ignoring trimmed exception for address[{}]," +
                         " stream[{}]", this, lastReadAddress, id);
             } else {
@@ -296,7 +296,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         try {
             d = read(startAddress);
         } catch (TrimmedException e) {
-            if (options.ignoreTrimmed) {
+            if (getReadOptions().isIgnoreTrim()) {
                 log.debug("isAddressToBackpointerResolved[{}]: Ignoring trimmed exception for address[{}]," +
                         " stream[{}]", this, startAddress, streamId);
                 return false;
