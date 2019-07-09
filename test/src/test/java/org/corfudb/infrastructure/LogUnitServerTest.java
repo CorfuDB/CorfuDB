@@ -2,25 +2,24 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
+import org.corfudb.format.Types;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.time.Duration;
-import java.util.Collection;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.Collections;
-import java.util.Random;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -96,6 +95,55 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     }
 
+    /**
+     * Test that corfu refuses to start if the filesystem/directory is/becomes read-only
+     *
+     * @throws Exception
+     */
+    @Test
+    public void cantOpenReadOnlyLogFiles() throws Exception {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        final long LOW_ADDRESS = 0L; final String low_payload = "0";
+        final long MID_ADDRESS = 100L; final String mid_payload = "100";
+        final long HIGH_ADDRESS = 10000000L; final String high_payload = "100000";
+        final String streamName = "a";
+        //write at 0, 100 & 10_000_000
+        rawWrite(LOW_ADDRESS, low_payload, streamName);
+        rawWrite(MID_ADDRESS, mid_payload, streamName);
+        rawWrite(HIGH_ADDRESS, high_payload, streamName);
+
+        s1.shutdown();
+
+        try {
+            File serviceDirectory = new File(serviceDir);
+            serviceDirectory.setWritable(false);
+        } catch(SecurityException e) {
+            fail("Should not hit security exception"+e.toString());
+        }
+
+        try {
+            LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+                    .setLogPath(serviceDir)
+                    .setMemory(false)
+                    .build());
+            fail("Should have failed to startup in read-only mode");
+        } catch (LogUnitException e) {
+            // Correctly failed to open on read-only directory
+        }
+        // In case the directory is re-used for other tests, restore its write permissions.
+        File serviceDirectory = new File(serviceDir);
+        serviceDirectory.setWritable(true);
+    }
+
     @Test
     public void checkThatWritesArePersisted()
             throws Exception {
@@ -143,55 +191,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(LOW_ADDRESS, low_payload.getBytes())
                 .matchesDataAtAddress(MID_ADDRESS, mid_payload.getBytes())
                 .matchesDataAtAddress(HIGH_ADDRESS, high_payload.getBytes());
-    }
-
-    /**
-     * Test that corfu refuses to start if the filesystem/directory is/becomes read-only
-     *
-     * @throws Exception
-     */
-    @Test
-    public void cantOpenReadOnlyLogFiles() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .build());
-
-        this.router.reset();
-        this.router.addServer(s1);
-
-        final long LOW_ADDRESS = 0L; final String low_payload = "0";
-        final long MID_ADDRESS = 100L; final String mid_payload = "100";
-        final long HIGH_ADDRESS = 10000000L; final String high_payload = "100000";
-        final String streamName = "a";
-        //write at 0, 100 & 10_000_000
-        rawWrite(LOW_ADDRESS, low_payload, streamName);
-        rawWrite(MID_ADDRESS, mid_payload, streamName);
-        rawWrite(HIGH_ADDRESS, high_payload, streamName);
-
-        s1.shutdown();
-
-        try {
-            File serviceDirectory = new File(serviceDir);
-            serviceDirectory.setWritable(false);
-        } catch(SecurityException e) {
-            fail("Should not hit security exception"+e.toString());
-        }
-
-        try {
-            LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
-                    .setLogPath(serviceDir)
-                    .setMemory(false)
-                    .build());
-            fail("Should have failed to startup in read-only mode");
-        } catch (UnrecoverableCorfuError e) {
-            // Correctly failed to open on read-only directory
-        }
-        // In case the directory is re-used for other tests, restore its write permissions.
-        File serviceDirectory = new File(serviceDir);
-        serviceDirectory.setWritable(true);
     }
 
     protected void rawWrite(long addr, String s, String streamName) {
@@ -421,10 +420,24 @@ public class LogUnitServerTest extends AbstractServerTest {
         File logFile = new File(logFilePath);
         logFile.createNewFile();
         RandomAccessFile file = new RandomAccessFile(logFile, "rw");
-        StreamLogFiles.writeHeader(file.getChannel(), version, noVerify);
+        writeHeader(file.getChannel(), version, noVerify);
         file.close();
 
         return logFile.getAbsolutePath();
+    }
+
+    public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
+
+        Types.LogHeader header = Types.LogHeader.newBuilder()
+                .setVersion(version)
+                .setVerifyChecksum(verify)
+                .build();
+
+        ByteBuffer buf = StreamLogFiles.getByteBufferWithMetaData(header);
+        do {
+            fileChannel.write(buf);
+        } while (buf.hasRemaining());
+        fileChannel.force(true);
     }
 
     @Test (expected = RuntimeException.class)

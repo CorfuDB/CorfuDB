@@ -158,14 +158,6 @@ public interface IMetadata {
         return new Token(getEpoch(), getGlobalAddress());
     }
 
-    default void clearCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
-    }
-
-    default void setCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
-    }
-
     default boolean hasCheckpointMetadata() {
         return getCheckpointType() != null && getCheckpointId() != null;
     }
@@ -219,11 +211,10 @@ public interface IMetadata {
     }
 
     @RequiredArgsConstructor
-    public enum LogUnitMetadataType implements ITypedEnum {
+    enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
-        COMMIT(5, TypeToken.of(Boolean.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),

@@ -153,7 +153,7 @@ public class ManagementServer extends AbstractServer {
      */
     private CorfuRuntime getNewCorfuRuntime() {
         final CorfuRuntime.CorfuRuntimeParameters params =
-                serverContext.getDefaultRuntimeParameters();
+                serverContext.getManagementRuntimeParameters();
         params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
         final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
         final Layout managementLayout = serverContext.copyManagementLayout();

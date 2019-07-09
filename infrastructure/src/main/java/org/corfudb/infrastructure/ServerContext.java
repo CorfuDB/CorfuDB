@@ -31,6 +31,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -246,8 +247,9 @@ public class ServerContext implements AutoCloseable {
      *
      * @return an instance of {@link CorfuRuntimeParameters}
      */
-    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+    public CorfuRuntimeParameters getManagementRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
@@ -670,7 +672,7 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
-        CorfuRuntimeParameters params = getDefaultRuntimeParameters();
+        CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
             clientGroup.shutdownGracefully(

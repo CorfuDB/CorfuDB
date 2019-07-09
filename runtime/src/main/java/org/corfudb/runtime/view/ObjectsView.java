@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -163,7 +164,7 @@ public class ObjectsView extends AbstractView {
             log.warn("TXEnd[{}] Aborted Exception {}", context, e);
             TransactionalContext.getCurrentContext().abortTransaction(e);
             throw e;
-        } catch (NetworkException | WriteSizeException e) {
+        } catch (NetworkException | WriteSizeException | QuotaExceededException e) {
 
             Token snapshotTimestamp;
             try {
@@ -181,6 +182,9 @@ public class ObjectsView extends AbstractView {
             } else if (e instanceof WriteSizeException) {
                 log.error("TXEnd[{}] transaction size limit exceeded {}", context, e);
                 cause = AbortCause.SIZE_EXCEEDED;
+            } else if (e instanceof QuotaExceededException){
+                log.error("TXEnd[{}] server quota exceeded {}", context, e);
+                cause = AbortCause.QUOTA_EXCEEDED;
             }
 
             TransactionAbortedException tae = new TransactionAbortedException(
