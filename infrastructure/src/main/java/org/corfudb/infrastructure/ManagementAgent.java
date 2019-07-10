@@ -89,12 +89,12 @@ public class ManagementAgent {
     ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
                     @NonNull ClusterStateContext clusterContext,
-                    @NonNull FailureDetector failureDetector) {
+                    @NonNull FailureDetector failureDetector,
+                    Layout managementLayout) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
         this.localMonitoringService = new LocalMonitoringService(serverContext, runtimeSingletonResource);
 
-        Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.
         if (managementLayout == null) {
             recovered = true;
@@ -161,13 +161,16 @@ public class ManagementAgent {
         long recoveryAttempts = 0;
         while (!shutdown && !recovered) {
             try {
-                Layout layout = serverContext.copyManagementLayout();
-                if (runRecoveryReconfiguration(layout, getCorfuRuntime())) {
+                boolean recoveredSuccesfully = runRecoveryReconfiguration(
+                        serverContext.copyManagementLayout(), getCorfuRuntime()
+                );
+
+                if (recoveredSuccesfully) {
                     // If recovery succeeds, reconfiguration was successful.
                     // Save the latest management layout.
                     serverContext.saveManagementLayout(getCorfuRuntime().getLayoutView().getLayout());
                     log.info("initializationTask: Recovery completed");
-                    recovered = true;
+                    this.recovered = true;
                     continue;
                 }
 

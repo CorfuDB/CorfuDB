@@ -24,7 +24,7 @@ public class PollReportTest {
         final String localEndpoint = "a";
 
         ClusterState clusterState = ClusterState.buildClusterState(
-                localEndpoint, nodeState("a", epoch, OK)
+                localEndpoint, ImmutableList.of(), nodeState("a", epoch, OK)
         );
 
         final long epoch = 1;
@@ -45,6 +45,7 @@ public class PollReportTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
                 NodeState.getUnavailableNodeState("b"),
                 NodeState.getUnavailableNodeState("c")
@@ -73,6 +74,7 @@ public class PollReportTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
@@ -97,6 +99,7 @@ public class PollReportTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")

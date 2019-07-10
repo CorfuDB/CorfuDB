@@ -467,26 +467,27 @@ public class ServerContext implements AutoCloseable {
     /**
      * Sets the management layout in the persistent datastore.
      *
-     * @param layout Layout to be persisted
+     * @param newLayout Layout to be persisted
      */
-    public synchronized void saveManagementLayout(Layout layout) {
+    public synchronized Layout saveManagementLayout(Layout newLayout) {
+        Layout currentLayout = copyManagementLayout();
+
         // Cannot update with a null layout.
-        if (layout == null) {
-            log.warn("saveManagementLayout: Attempted to update with null layout");
-            return;
+        if (newLayout == null) {
+            log.warn("Attempted to update with null. Current layout: {}", currentLayout);
+            return currentLayout;
         }
-        Layout currentLayout = getManagementLayout();
+
         // Update only if new layout has a higher epoch than the existing layout.
-        if (currentLayout == null || layout.getEpoch() > currentLayout.getEpoch()) {
-            // Persisting this new updated layout
-            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
-            log.info("saveManagementLayout: Updated to new layout at epoch {}",
-                    getManagementLayout().getEpoch());
-        } else {
-            log.trace("saveManagementLayout: "
-                            + "Ignoring layout because new epoch {} <= old epoch {}",
-                    layout.getEpoch(), currentLayout.getEpoch());
+        if (currentLayout == null || newLayout.getEpoch() > currentLayout.getEpoch()) {
+            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, newLayout);
+            currentLayout = copyManagementLayout();
+            log.info("Update to new layout at epoch {}", currentLayout.getEpoch());
+            return currentLayout;
         }
+
+        return currentLayout;
+
     }
 
     /**
