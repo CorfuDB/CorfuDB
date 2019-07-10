@@ -4,6 +4,8 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
+ * Options for the stream layer to configure a stream's caching/read behavior.
+ *
  * Created by maithem on 6/20/17.
  */
 @Builder
@@ -17,11 +19,13 @@ public class StreamOptions {
      * Ignore trimmed exceptions encountered while syncing
      */
     @Getter
-    final boolean ignoreTrimmed;
+    @Builder.Default
+    private final boolean ignoreTrimmed = false;
 
     /**
      * Cache this stream's entries
      */
     @Getter
-    final boolean cacheEntries;
+    @Builder.Default
+    private final boolean cacheEntries = true;
 }
