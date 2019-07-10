@@ -188,4 +188,9 @@ public class StreamAddressSpace {
 
         return addressMap.getReverseLongIterator().next();
     }
+
+    @Override
+    public String toString() {
+        return String.format("[%s, %s]@%s", getLowestAddress(), getHighestAddress(), trimMark);
+    }
 }

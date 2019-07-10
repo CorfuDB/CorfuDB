@@ -8,6 +8,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import lombok.val;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 import java.util.HashMap;
@@ -102,11 +103,18 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
      */
     public ConnectionStatus getConnectionStatus(String node) {
         if (type == NodeConnectivityType.UNAVAILABLE) {
-            throw new IllegalStateException("Incorrect configuration");
+
+            String error = String.format(
+                    "%s: failed to get connection status for %s. Connectivity: %s",
+                    endpoint, node, connectivity);
+            throw new IllegalStateException(error);
         }
 
         if (!connectivity.containsKey(node)) {
-            throw new IllegalStateException("Opposite node not found");
+            String error = String.format(
+                    "%s: opposite node not found for %s. Connectivity: %s",
+                    endpoint, node, connectivity);
+            throw new IllegalStateException(error);
         }
 
         return connectivity.get(node);

@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -48,7 +49,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             }
 
             logCache.put(entry.getGlobalAddress(), entry);
-            logMetadata.update(entry);
+            logMetadata.update(entry, false);
         }
     }
 
@@ -62,7 +63,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
-        logMetadata.update(entry);
+        logMetadata.update(entry, false);
     }
 
     private boolean isTrimmed(long address) {

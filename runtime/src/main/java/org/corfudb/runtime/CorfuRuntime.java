@@ -34,8 +34,6 @@ import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.OrderedGuidGenerator;
-import org.corfudb.runtime.view.SnowflakeGuidGenerator;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.CFUtils;
@@ -536,9 +534,6 @@ public class CorfuRuntime {
     public volatile UUID clusterId;
 
     @Getter
-    private volatile OrderedGuidGenerator guidGenerator;
-
-    @Getter
     final ViewsGarbageCollector garbageCollector = new ViewsGarbageCollector(this);
 
     /**
@@ -663,9 +658,6 @@ public class CorfuRuntime {
 
         // Set the initial cluster Id
         clusterId = parameters.getClusterId();
-
-        // Initialize the Guid Generator
-        guidGenerator = new SnowflakeGuidGenerator(System.identityHashCode(this));
 
         // Generate or set the NettyEventLoop
         nettyEventLoop = parameters.nettyEventLoop == null ? getNewEventLoopGroup()

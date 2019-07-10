@@ -11,7 +11,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.corfudb.universe.util.ClassUtils;
+import org.corfudb.common.util.ClassUtils;
 
 import java.time.Duration;
 import java.util.List;

@@ -233,8 +233,8 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     /**
      * A helper function that ends a transaction.
      */
-    protected void TXEnd() {
-        getRuntime().getObjectsView().TXEnd();
+    protected long TXEnd() {
+        return getRuntime().getObjectsView().TXEnd();
     }
 
     protected <T> T instantiateCorfuObject(Class<T> tClass, String name) {

@@ -15,6 +15,7 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Tests the BackpointerStreamView
@@ -229,7 +230,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
      * TrimmedException should be thrown.
      */
     @Test
-    public void traverseTrimmedStreamIgnoreTrim() {
+    public void traverseTrimmedStreamIgnoreTrim() throws Exception {
 
         // Append entries to stream and traverse to some point before the trim mark
         // leaving a gap between the traversed point and the trim mark.
@@ -260,7 +261,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
      * TrimmedException should be ignored and step (4) should retrieve only 49 entries (as 25-50 are trimmed).
      */
     @Test(expected = TrimmedException.class)
-    public void traverseTrimmedStreamDontIgnoreTrim() {
+    public void traverseTrimmedStreamDontIgnoreTrim() throws Exception {
         // Append entries to stream and traverse to some point before the trim mark
         // leaving a gap between the traversed point and the trim mark.
         IStreamView sv = traverseStreamBeforeTrimMark(false);
@@ -269,12 +270,14 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         sv.remaining();
     }
 
-    private IStreamView traverseStreamBeforeTrimMark(boolean ignoreTrimmed) {
+    private IStreamView traverseStreamBeforeTrimMark(boolean ignoreTrimmed)
+            throws InterruptedException {
+
         CorfuRuntime runtime = getDefaultRuntime();
         StreamOptions options = new StreamOptions(ignoreTrimmed);
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"), options);
         final long epoch = 0L;
-        final int waitForTrim = 5;
+        final Duration waitForTrim = Duration.ofSeconds(5);
 
         // Populate stream with NUM_ITERATIONS_LOW entries
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
@@ -294,7 +297,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         runtime.getAddressSpaceView().prefixTrim(new Token(epoch, trimMark));
 
         // Wait until log is trimmed
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(waitForTrim));
+        TimeUnit.MILLISECONDS.sleep(waitForTrim.toMillis());
         runtime.getAddressSpaceView().invalidateServerCaches();
         runtime.getAddressSpaceView().invalidateClientCache();
 

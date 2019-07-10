@@ -15,7 +15,6 @@ import lombok.Getter;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -264,20 +263,6 @@ public class LogUnitClient extends AbstractClient {
         return sendMessageWithFuture(CorfuMsgType.FLUSH_CACHE.msg());
     }
 
-    /**
-     * Fill a hole at a given address.
-     *
-     * @param address the address to fill a hole at.
-     */
-    public CompletableFuture<Boolean> fillHole(Token address) {
-        Timer.Context context = getTimerContext("fillHole");
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(
-                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(address)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
-    }
 
     /**
      * Send a reset request.

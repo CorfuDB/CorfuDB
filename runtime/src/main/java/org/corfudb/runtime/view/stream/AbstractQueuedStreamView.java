@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -74,7 +76,6 @@ public abstract class AbstractQueuedStreamView extends
                                       long globalAddress,
                                       ILogData ld) {
         context.resolvedQueue.add(globalAddress);
-        context.resolvedEstBytes += ld.getSizeEstimate();
 
         if (context.maxResolution < globalAddress) {
             context.maxResolution = globalAddress;
@@ -96,7 +97,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (maxGlobal < context.checkpoint.startAddress) {
             throw new TrimmedException();
         }
 
@@ -106,7 +107,7 @@ public abstract class AbstractQueuedStreamView extends
             getFrom = context.readCpQueue;
             // Note: this is a checkpoint, we do not need to verify it is before the trim mark, it actually should be
             // cause this is the last address of the trimmed range.
-            context.setGlobalPointer(context.checkpointSuccessStartAddr);
+            context.setGlobalPointer(context.checkpoint.startAddress);
         } else {
             getFrom = context.readQueue;
         }
@@ -280,7 +281,7 @@ public abstract class AbstractQueuedStreamView extends
     private void processTrimmedException(TrimmedException te) {
         if (TransactionalContext.getCurrentContext() != null
                 && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()
-                < getCurrentContext().checkpointSnapshotAddress) {
+                < getCurrentContext().checkpoint.snapshot) {
             te.setRetriable(false);
         }
     }
@@ -303,7 +304,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (maxGlobal < context.checkpoint.startAddress) {
             throw new TrimmedException();
         }
 
@@ -393,7 +394,7 @@ public abstract class AbstractQueuedStreamView extends
         // any checkpoint entries, we should consult
         // a checkpoint first.
         if (context.getGlobalPointer() == Address.NEVER_READ &&
-                context.checkpointSuccessId == null) {
+                context.checkpoint.id == null) {
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
                     .getCheckpointStreamIdFromId(context.id);
@@ -402,7 +403,7 @@ public abstract class AbstractQueuedStreamView extends
                 if (discoverAddressSpace(checkpointId, context.readCpQueue,
                         runtime.getSequencerView()
                                 .query(checkpointId).getToken().getSequence(),
-                        Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal),
+                        Address.NEVER_READ, d -> scanCheckpointStream(context, d, maxGlobal),
                         true, maxGlobal)) {
                     log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
                             this, context.readCpQueue.size());
@@ -410,7 +411,7 @@ public abstract class AbstractQueuedStreamView extends
                     return true;
                 }
             } catch (TrimmedException te) {
-                log.warn("Fill_Read_Queue[{}] Trim encountered.", this);
+                log.warn("Fill_Read_Queue[{}] Trim encountered.", this, te);
                 throw te;
             }
         }
@@ -473,7 +474,7 @@ public abstract class AbstractQueuedStreamView extends
             return fillFromResolved(latestTokenValue, context);
         }
 
-        long stopAddress = Long.max(context.globalPointer, context.checkpointSnapshotAddress);
+        long stopAddress = Long.max(context.globalPointer, context.checkpoint.snapshot);
 
         // We check if we can fill partially from the resolved queue
         // This is a requirement for the getStreamAddressMaps as it considers the content of the resolved queue
@@ -492,7 +493,7 @@ public abstract class AbstractQueuedStreamView extends
         discoverAddressSpace(context.id, context.readQueue,
                 latestTokenValue,
                 stopAddress,
-                d -> BackpointerOp.INCLUDE, false, maxGlobal);
+                d -> true, false, maxGlobal);
 
         return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
     }
@@ -519,7 +520,7 @@ public abstract class AbstractQueuedStreamView extends
                                                     final NavigableSet<Long> queue,
                                                     final long startAddress,
                                                     final long stopAddress,
-                                                    final Function<ILogData, BackpointerOp> filter,
+                                                    final Function<ILogData, Boolean> filter,
                                                     final boolean checkpoint,
                                                     final long maxGlobal);
 
@@ -626,52 +627,120 @@ public abstract class AbstractQueuedStreamView extends
         return result == null ? Address.NOT_FOUND : result;
     }
 
-    protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
-                                              long maxGlobal) {
-        if (data.hasCheckpointMetadata()) {
-            CheckpointEntry cpEntry = (CheckpointEntry)
-                    data.getPayload(runtime);
+    // Keeps the latest valid checkpoint (based on the snapshot it covers)
+    private StreamCheckpoint latestValidCheckpoint = new StreamCheckpoint();
 
-            // Select the latest cp that has a snapshot address
-            // which is less than maxGlobal
-            if (context.checkpointSuccessId == null &&
+    /**
+     * Resolve all potential checkpoints for the given max global.
+     *
+     * Note that, the position of checkpoint entries in the log does not correspond
+     * to logical checkpoint ordering. For this reason, we must traverse all valid
+     * checkpoints and only after scanning all, pick the checkpoint with the highest coverage.
+     *
+     * For instance, the fact that CP2.entriesGlobalAddress > CP1.entriesGlobalAddress, does not imply
+     * that CP2.logicalCheckpointedSpace > CP1.logicalCheckpointedSpace.
+     * Consider the case where, CP2 snapshot was taken before CP1, however, CP1 read/write is faster
+     * and commits its entries to the log first.
+     *
+     * +------------------------------------------------+
+     * | CP1 (snapshot 15) |  |  |  | CP2 (snapshot 10) |
+     * +------------------------------------------------+
+     *
+     * @param context this stream's current context
+     * @param data checkpoint log data entry
+     * @param maxGlobal maximum global address to resolve this stream up to.
+     *
+     * @return true, if the checkpoint was completely resolved (from end to start markers of a checkpoint)
+     *         false, otherwise.
+     */
+    protected boolean scanCheckpointStream(final QueuedStreamContext context, ILogData data,
+                                           long maxGlobal) {
+        if (data.hasCheckpointMetadata()) {
+            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload(runtime);
+
+            // Consider only checkpoints that are less than maxGlobal
+            // Because we are traversing in reverse order END marker of a checkpoint should be found first.
+            if (context.checkpoint.id == null &&
                     cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END
                     && Long.decode(cpEntry.getDict()
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)) <= maxGlobal) {
                 log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
                         this, data.getGlobalAddress(), cpEntry.getCpType(),
-                        Utils.toReadableId(cpEntry.getCheckpointId()),
-                        cpEntry.getCheckpointAuthorId());
-                context.checkpointSuccessId = cpEntry.getCheckpointId();
+                        Utils.toReadableId(cpEntry.getCheckpointId()), cpEntry.getCheckpointAuthorId());
 
-                context.checkpointSuccessNumEntries = 1L;
-                context.checkpointSuccessBytes = (long) data.getSizeEstimate();
-                context.checkpointSuccessEndAddr = data.getGlobalAddress();
-            }
-            else if (data.getCheckpointId().equals(context.checkpointSuccessId)) {
-                context.checkpointSuccessNumEntries++;
-                context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
-                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
-                    context.checkpointSuccessStartAddr = Long.decode(cpEntry.getDict()
-                            .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
+                // Because checkpoint ordering is not guaranteed, i.e., a checkpoint for a lower snapshot
+                // could appear in the log after a checkpoint for a higher snapshot (case of multiple
+                // checkpointers running in parallel). We need to inspect all checkpoints and keep the one
+                // with the highest VLO version.
+                UUID checkpointId = cpEntry.getCheckpointId();
+                long checkpointVLOVersion = Long.decode(cpEntry.getDict()
+                        .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
+                boolean isCheckpointForHighestVLOVersion = latestValidCheckpoint.validateHigher(checkpointId,
+                        checkpointVLOVersion);
+
+                // If the entry being inspected represents a checkpoint for a higher VLO
+                // take this as our latest valid checkpoint, and accumulate relevant info
+                // (addresses, numEntries).
+                if (isCheckpointForHighestVLOVersion) {
+                    // We found a highest checkpoint, set this as our valid checkpoint.
+                    latestValidCheckpoint = new StreamCheckpoint(checkpointId);
+                    latestValidCheckpoint.setStartAddress(data.getCheckpointedStreamStartLogAddress());
+                    latestValidCheckpoint.setNumEntries(1);
+                    latestValidCheckpoint.setTotalBytes((long) data.getSizeEstimate());
+                    latestValidCheckpoint.addAddress(data.getGlobalAddress());
+
                     if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
                             .SNAPSHOT_ADDRESS) != null) {
-                        context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
-                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+                        latestValidCheckpoint.setSnapshot(Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS)));
                     }
-                    log.trace("Checkpoint[{}] HALT due to START at address {} startAddr"
-                                    + " {} type {} id {} author {}",
-                            this, data.getGlobalAddress(), context.checkpointSuccessStartAddr,
-                            cpEntry.getCpType(),
+                }
+            } else if (latestValidCheckpoint.getId() != null &&
+                    latestValidCheckpoint.getId().equals(cpEntry.getCheckpointId())) {
+                // Case: all other markers other than END of a checkpoint.
+
+                // Add checkpoint entry data to the summarized state of the checkpoint, which will be used
+                // when the definite checkpoint is selected.
+                latestValidCheckpoint.addBytes((long) data.getSizeEstimate());
+                latestValidCheckpoint.addNumEntries(1);
+                latestValidCheckpoint.addAddress(data.getGlobalAddress());
+
+                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                    // Only for the case of START markers add some extra information.
+                    log.trace("Checkpoint[{}] START found at address {} type {} id {} author {}",
+                            this, data.getGlobalAddress(), cpEntry.getCpType(),
                             Utils.toReadableId(cpEntry.getCheckpointId()),
                             cpEntry.getCheckpointAuthorId());
-                    return BackpointerOp.INCLUDE_STOP;
+                    return true;
                 }
-            } else {
-                return BackpointerOp.EXCLUDE;
             }
         }
-        return BackpointerOp.INCLUDE;
+        return false;
+    }
+
+    /**
+     * Resolves the valid checkpoint for the current view of the stream and returns
+     * addresses belonging to this checkpoint.
+     *
+     * @param context current stream context.
+     *
+     * @return addresses for the valid checkpoint.
+     */
+    public List<Long> resolveCheckpoint(final QueuedStreamContext context) {
+
+        List<Long> checkpointAddresses = new ArrayList<>();
+
+        if (latestValidCheckpoint != null && latestValidCheckpoint.getId() != null) {
+            // Select checkpoint with the highest start address
+            log.trace("resolveCheckpoint[{}]: selecting checkpoint {} with start address {}", this,
+                    latestValidCheckpoint.getId(), latestValidCheckpoint.getStartAddress());
+            context.checkpoint = latestValidCheckpoint;
+            checkpointAddresses.addAll(latestValidCheckpoint.getCheckpointAddresses());
+        }
+
+        // Checkpoint has been resolved, reset latest valid checkpoint.
+        latestValidCheckpoint = new StreamCheckpoint();
+        return checkpointAddresses;
     }
 
     /**
@@ -693,7 +762,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // If we're attempt to go prior to most recent checkpoint, we
         // throw a TrimmedException.
-        if (context.getGlobalPointer() - 1 < context.checkpointSuccessStartAddr) {
+        if (context.getGlobalPointer() - 1 < context.checkpoint.startAddress) {
             throw new TrimmedException();
         }
 
@@ -725,7 +794,7 @@ public abstract class AbstractQueuedStreamView extends
             return read(prevAddress);
         }
 
-        if (context.checkpointSuccessId == null) {
+        if (context.checkpoint.id == null) {
             // The stream hasn't been checkpointed and we need to
             // move the stream pointer to an address before the first
             // entry
@@ -737,10 +806,10 @@ public abstract class AbstractQueuedStreamView extends
 
         if (context.resolvedQueue.first() == context.getGlobalPointer()) {
             log.trace("previous[{}]: reached the beginning of the stream resetting" +
-                    " the stream pointer to checkpoint version {}", this, context.checkpointSuccessStartAddr);
+                    " the stream pointer to checkpoint version {}", this, context.checkpoint.startAddress);
             // Note: this is a checkpoint, we do not need to verify it is before the trim mark, it actually should be
             // cause this is the last address of the trimmed range.
-            context.setGlobalPointer(context.checkpointSuccessStartAddr);
+            context.setGlobalPointer(context.checkpoint.startAddress);
             return null;
         }
 
@@ -774,12 +843,6 @@ public abstract class AbstractQueuedStreamView extends
         return this.baseContext;
     }
 
-    protected enum BackpointerOp {
-        INCLUDE,    /** Include this address. */
-        EXCLUDE,    /** Exclude this address. */
-        INCLUDE_STOP    /** Stop, but also include this address. */
-    }
-
     /** {@inheritDoc}
      *
      * <p>For the queued stream context, we include just a queue of potential
@@ -787,7 +850,6 @@ public abstract class AbstractQueuedStreamView extends
      */
     @ToString
     static class QueuedStreamContext extends AbstractStreamContext {
-
 
         /** A queue of addresses which have already been resolved. */
         final NavigableSet<Long> resolvedQueue
@@ -814,20 +876,9 @@ public abstract class AbstractQueuedStreamView extends
         final NavigableSet<Long> readCpQueue = new TreeSet<>();
 
         /** Info on checkpoint we used for initial stream replay,
-         *  other checkpoint-related info & stats.  Hodgepodge, clarify.
+         *  other checkpoint-related info & stats.
          */
-        UUID checkpointSuccessId = null;
-        long checkpointSuccessStartAddr = Address.NEVER_READ;
-        long checkpointSuccessEndAddr = Address.NEVER_READ;
-        long checkpointSuccessNumEntries = 0L;
-        long checkpointSuccessBytes = 0L;
-        // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
-        long resolvedEstBytes = 0L;
-        /** The address the current checkpoint snapshot was taken at.
-         *  The checkpoint guarantees for this stream there are no entries
-         *  between checkpointSuccessStartAddr and checkpointSnapshotAddress.
-         */
-        long checkpointSnapshotAddress = Address.NEVER_READ;
+        StreamCheckpoint checkpoint = new StreamCheckpoint();
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -837,7 +888,6 @@ public abstract class AbstractQueuedStreamView extends
         public QueuedStreamContext(UUID id, long maxGlobalAddress) {
             super(id, maxGlobalAddress);
         }
-
 
         /**
          * {@inheritDoc}
@@ -851,13 +901,7 @@ public abstract class AbstractQueuedStreamView extends
             minResolution = Address.NON_ADDRESS;
             maxResolution = Address.NON_ADDRESS;
 
-            checkpointSuccessId = null;
-            checkpointSuccessStartAddr = Address.NEVER_READ;
-            checkpointSuccessEndAddr = Address.NEVER_READ;
-            checkpointSnapshotAddress = Address.NEVER_READ;
-            checkpointSuccessNumEntries = 0;
-            checkpointSuccessBytes = 0;
-            resolvedEstBytes = 0;
+            checkpoint.reset();
         }
 
         /**
@@ -884,6 +928,80 @@ public abstract class AbstractQueuedStreamView extends
             // greater than the global address
             readQueue.addAll(resolvedQueue.tailSet(globalAddress, true));
             super.seek(globalAddress);
+        }
+    }
+
+    /**
+     * Represents a contained form of a stream's checkpoint.
+     * Only with relevant information for the stream view.
+     */
+    @Data
+    static class StreamCheckpoint {
+
+        UUID id = null;
+        // Represents the VLO version at the time of checkpoint, i.e., last update observed
+        // on the checkpointed stream at the snapshot this checkpoint was taken.
+        long startAddress = Address.NEVER_READ;
+        // Total number of entries in this checkpoint
+        long numEntries = 0L;
+        // Total number of Bytes in this checkpoint
+        long totalBytes = 0L;
+
+        /** The address the current checkpoint snapshot was taken at.
+         *  The checkpoint guarantees for this stream there are no entries
+         *  between startAddress and snapshot.
+         */
+        long snapshot = Address.NEVER_READ;
+        // List of addresses belonging to this checkpoint
+        List<Long> checkpointAddresses = new ArrayList<>();
+
+        /**
+         * Create a new stream checkpoint to contain basic checkpoint information.
+         */
+        public StreamCheckpoint(UUID id) {
+            this.id = id;
+        }
+
+        public StreamCheckpoint() {
+        }
+
+        public void addAddress(long address) {
+            checkpointAddresses.add(address);
+        }
+
+        /**
+         * Validates current checkpoint against the proposed and keeps the higher,
+         * i.e., the latest checkpoint based on the snapshot it covers.
+         *
+         * @param id checkpoint id
+         * @param startAddress checkpoint VLO version (last update observed for this stream at the time of checkpoint)
+         * @return true, if this checkpoint if higher.
+         *         false, otherwise.
+         */
+        public boolean validateHigher(UUID id, long startAddress) {
+            if (Address.isAddress(startAddress) && startAddress > this.startAddress) {
+                log.trace("validateHigher[{}]: valid checkpoint {} with start address {}", this, id, startAddress);
+                return true;
+            }
+
+            return false;
+        }
+
+        public void reset() {
+            id = null;
+            startAddress = Address.NEVER_READ;
+            snapshot = Address.NEVER_READ;
+            numEntries = 0;
+            totalBytes = 0;
+            checkpointAddresses = new ArrayList<>();
+        }
+
+        public void addBytes(long bytes) {
+            totalBytes += bytes;
+        }
+
+        public void addNumEntries(int entries) {
+            numEntries += entries;
         }
     }
 
