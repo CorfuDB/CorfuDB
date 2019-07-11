@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -39,4 +40,19 @@ public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
         }
     }
 
+    public static class FailingIndex extends StringIndexer {
+        public static final CorfuTable.IndexName FAILING = () -> "FAILING";
+
+        private static final CorfuTable.Index<String, String, ? extends Comparable<?>> FAILING_INDEX =
+                new CorfuTable.Index<>(
+                        FAILING,
+                        (CorfuTable.IndexFunction<String, String, String>) (key, value) -> {
+                            throw new ConcurrentModificationException();
+                        });
+
+        @Override
+        public Iterator<CorfuTable.Index<String, String, ? extends Comparable<?>>> iterator() {
+            return Stream.of(FAILING_INDEX, FAILING_INDEX).iterator();
+        }
+    }
 }
