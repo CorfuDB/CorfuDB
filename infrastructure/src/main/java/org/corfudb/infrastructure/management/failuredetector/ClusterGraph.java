@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.NonNull;
@@ -48,10 +49,15 @@ import java.util.stream.Collectors;
 @ToString
 @Slf4j
 public class ClusterGraph {
-    private ImmutableMap<String, NodeConnectivity> graph;
+
+    @NonNull
+    private final ImmutableMap<String, NodeConnectivity> graph;
+
     @NonNull
     private final String localNode;
 
+    @NonNull
+    private final ImmutableList<String> unresponsiveNodes;
     /**
      * Transform a cluster state to the cluster graph.
      * ClusterState contains some extra information, cluster graph is a pure representation of a graph of nodes.
@@ -61,7 +67,7 @@ public class ClusterGraph {
      * @param cluster cluster state
      * @return cluster graph
      */
-    public static ClusterGraph toClusterGraph(ClusterState cluster, String localNode) {
+    public static ClusterGraph toClusterGraph(ClusterState cluster) {
         Map<String, NodeConnectivity> graph = cluster.getNodes()
                 .values()
                 .stream()
@@ -69,7 +75,8 @@ public class ClusterGraph {
                 .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));
 
         return ClusterGraph.builder()
-                .localNode(localNode)
+                .localNode(cluster.getLocalEndpoint())
+                .unresponsiveNodes(cluster.getUnresponsiveNodes())
                 .graph(ImmutableMap.copyOf(graph))
                 .build();
     }
@@ -143,6 +150,7 @@ public class ClusterGraph {
         //Provide a new graph with symmetric failures
         return ClusterGraph.builder()
                 .localNode(localNode)
+                .unresponsiveNodes(unresponsiveNodes)
                 .graph(ImmutableMap.copyOf(symmetric))
                 .build();
     }
@@ -197,10 +205,9 @@ public class ClusterGraph {
      * Collect all node ranks in a graph and choose the node with smallest number of successful connections and
      * with highest name (sorted alphabetically)
      *
-     * @param unresponsiveServers list of unresponsive nodes in the layout
      * @return failed node
      */
-    public Optional<NodeRank> findFailedNode(List<String> unresponsiveServers) {
+    public Optional<NodeRank> findFailedNode() {
         log.trace("Looking for failed node");
 
         NavigableSet<NodeRank> nodes = getNodeRanks();
@@ -217,10 +224,7 @@ public class ClusterGraph {
         //If the node is connected to all alive nodes (nodes not in unresponsive list)
         // in the cluster, that node can't be a failed node.
         // We can't rely on information from nodes in unresponsive list.
-        Optional<NodeRank> fullyConnected = findFullyConnectedNode(
-                last.getEndpoint(),
-                unresponsiveServers
-        );
+        Optional<NodeRank> fullyConnected = findFullyConnectedNode(last.getEndpoint());
 
         //check if failed node is fully connected
         boolean isFailedNodeFullyConnected = fullyConnected
@@ -239,10 +243,9 @@ public class ClusterGraph {
      * See if the node is fully connected.
      *
      * @param endpoint          local node name
-     * @param unresponsiveNodes list of unresponsive nodes in the layout
      * @return local node rank
      */
-    public Optional<NodeRank> findFullyConnectedNode(String endpoint, List<String> unresponsiveNodes) {
+    public Optional<NodeRank> findFullyConnectedNode(String endpoint) {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 
         NodeConnectivity node = getNodeConnectivity(endpoint);
@@ -370,12 +373,15 @@ public class ClusterGraph {
             //prevent creating instances
         }
 
-        public static ClusterGraph cluster(String localNode, NodeConnectivity... nodes) {
+        public static ClusterGraph cluster(String localNode,
+                                           ImmutableList<String> unresponsiveNodes,
+                                           NodeConnectivity... nodes) {
             Map<String, NodeConnectivity> graph = Arrays.stream(nodes)
                     .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));
 
             return ClusterGraph.builder()
                     .localNode(localNode)
+                    .unresponsiveNodes(unresponsiveNodes)
                     .graph(ImmutableMap.copyOf(graph))
                     .build();
         }
