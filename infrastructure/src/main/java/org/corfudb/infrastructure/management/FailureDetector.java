@@ -99,7 +99,7 @@ public class FailureDetector implements IDetector {
         // Perform polling of all responsive servers.
         return pollRound(
                 layout.getEpoch(), allServers, routerMap, sequencerMetrics,
-                layout.getActiveLayoutServers()
+                ImmutableList.copyOf(layout.getUnresponsiveServers())
         );
     }
 
@@ -122,7 +122,7 @@ public class FailureDetector implements IDetector {
     @VisibleForTesting
     PollReport pollRound(
             long epoch, Set<String> allServers, Map<String, IClientRouter> router,
-            SequencerMetrics sequencerMetrics, ImmutableList<String> responsiveServers) {
+            SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes) {
 
         if (failureThreshold < 1) {
             throw new IllegalStateException("Invalid failure threshold");
@@ -131,7 +131,7 @@ public class FailureDetector implements IDetector {
         List<PollReport> reports = new ArrayList<>();
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
             PollReport currReport = pollIteration(
-                    allServers, router, epoch, sequencerMetrics, responsiveServers
+                    allServers, router, epoch, sequencerMetrics, layoutUnresponsiveNodes
             );
             reports.add(currReport);
 
@@ -174,26 +174,23 @@ public class FailureDetector implements IDetector {
                 .map(PollReport::getClusterState)
                 .collect(Collectors.toList());
 
-        Set<String> unresponsiveServers = Sets.difference(
-                allServers, new HashSet<>(responsiveServers)
-        );
-
         ClusterStateAggregator aggregator = ClusterStateAggregator.builder()
                 .localEndpoint(localEndpoint)
                 .clusterStates(clusterStates)
-                .unresponsiveNodes(ImmutableList.copyOf(unresponsiveServers))
+                .unresponsiveNodes(layoutUnresponsiveNodes)
                 .build();
 
         Duration totalElapsedTime = reports.stream()
                 .map(PollReport::getElapsedTime)
                 .reduce(Duration.ZERO, Duration::plus);
 
+        final ClusterState aggregatedClusterState = aggregator.getAggregatedState();
         return PollReport.builder()
                 .pollEpoch(epoch)
                 .elapsedTime(totalElapsedTime)
-                .responsiveServers(responsiveServers)
+                .pingResponsiveServers(aggregatedClusterState.getPingResponsiveNodes())
                 .wrongEpochs(ImmutableMap.copyOf(wrongEpochsAggregated))
-                .clusterState(aggregator.getAggregatedState())
+                .clusterState(aggregatedClusterState)
                 .build();
     }
 
@@ -230,16 +227,16 @@ public class FailureDetector implements IDetector {
      * - calculate if current layout slot is unfilled
      * - build poll report
      *
-     * @param allServers        all servers in the cluster
-     * @param clientRouters     client clientRouters
-     * @param epoch             current epoch
-     * @param sequencerMetrics  metrics
-     * @param responsiveServers all responsive servers in a cluster
+     * @param allServers              all servers in the cluster
+     * @param clientRouters           client clientRouters
+     * @param epoch                   current epoch
+     * @param sequencerMetrics        metrics
+     * @param layoutUnresponsiveNodes all unresponsive servers in a cluster
      * @return a poll report
      */
     private PollReport pollIteration(
             Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch,
-            SequencerMetrics sequencerMetrics, ImmutableList<String> responsiveServers) {
+            SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes) {
 
         log.trace("Poll iteration. Epoch: {}", epoch);
 
@@ -251,20 +248,16 @@ public class FailureDetector implements IDetector {
                 .heartbeatCounter(heartbeatCounter)
                 .build();
 
-        Set<String> unresponsiveServers = Sets.difference(
-                allServers, new HashSet<>(responsiveServers)
-        );
-
         //Cluster state internal map.
         ClusterState clusterState = clusterCollector.collectClusterState(
-                epoch, unresponsiveServers, sequencerMetrics
+                epoch, layoutUnresponsiveNodes, sequencerMetrics
         );
 
         Duration elapsedTime = Duration.ofMillis(System.currentTimeMillis() - start);
 
         return PollReport.builder()
                 .pollEpoch(epoch)
-                .responsiveServers(responsiveServers)
+                .pingResponsiveServers(clusterState.getPingResponsiveNodes())
                 .wrongEpochs(clusterCollector.collectWrongEpochs())
                 .clusterState(clusterState)
                 .elapsedTime(elapsedTime)
