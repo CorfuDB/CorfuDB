@@ -6,7 +6,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.SMRRecord;
+import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
@@ -115,6 +117,11 @@ public class VersionLockedObject<T> {
     private final Map<String, IGarbageIdentificationFunction> garbageIdentifyFunctionMap;
 
     /**
+     * The garbage identification decisions are exposed outside runtime via garbageInformer.
+     */
+    private final GarbageInformer garbageInformer;
+
+    /**
      * The reset set for this object.
      */
     private final Set<String> resetSet;
@@ -146,6 +153,7 @@ public class VersionLockedObject<T> {
      * @param garbageTargets    Garbage identification function map for this object.
      * @param undoTargets       Undo functions map.
      * @param resetSet          Reset set for this object.
+     * @param garbageInformer   The hub to disseminate garbage information.
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
@@ -153,13 +161,15 @@ public class VersionLockedObject<T> {
                                Map<String, IUndoRecordFunction<T>> undoRecordTargets,
                                Map<String, IUndoFunction<T>> undoTargets,
                                Map<String, IGarbageIdentificationFunction> garbageTargets,
-                               Set<String> resetSet) {
+                               Set<String> resetSet,
+                               GarbageInformer garbageInformer) {
         this.smrStream = smrStream;
 
         this.upcallTargetMap = upcallTargets;
         this.undoRecordFunctionMap = undoRecordTargets;
         this.undoFunctionMap = undoTargets;
         this.garbageIdentifyFunctionMap = garbageTargets;
+        this.garbageInformer = garbageInformer;
         this.resetSet = resetSet;
 
         this.newObjectFn = newObjectFn;
@@ -562,9 +572,9 @@ public class VersionLockedObject<T> {
                 log.trace("Apply[{}] Undo->RESET", this);
             }
         }
-
         // now invoke the upcall
         return target.upcall(object, record.getSMRArguments());
+
     }
 
     /**
@@ -670,7 +680,9 @@ public class VersionLockedObject<T> {
                                 if (garbageIdentifyFunction != null) {
                                     List<Object> garbage =
                                             garbageIdentifyFunction.identify(record.locator, record.getSMRArguments());
-                                    // TODO(xin): handle garbage
+                                    //handle garbage
+                                    garbage.stream().forEach(o ->
+                                            garbageInformer.add(record.getGlobalAddress(), (SMRRecordLocator) o));
                                 }
 
                                 lastSyncAddress.set(record.getGlobalAddress());

@@ -514,6 +514,12 @@ public class CorfuRuntime {
     private final ManagementView managementView = new ManagementView(this);
 
     /**
+     * The hub to disseminate garbage information.
+     */
+    @Getter
+    final GarbageInformer garbageInformer = new GarbageInformer();
+
+    /**
      * List of initial set of layout servers, i.e., servers specified in
      * connection string on bootstrap.
      */

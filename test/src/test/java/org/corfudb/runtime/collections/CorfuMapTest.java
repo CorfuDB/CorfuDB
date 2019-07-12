@@ -24,10 +24,12 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
@@ -783,6 +785,85 @@ public class CorfuMapTest extends AbstractViewTest {
         testStatus += "Time to sync whole stream=" + String.format("%d us",
                 (endTime - startTime) / MILLISECONDS_TO_MICROSECONDS);
     }
+
+    /**
+     * +----------------------------------+
+     * | 0  | 1  | 2  | 3  | 4  | 5  | 6  |
+     * +----------------------------------+
+     * | a=0| a=1| a=2| C  | a=4| a=5| a=6|
+     * +----------------------------------+
+     *    ^
+     * SNAPSHOT
+     */
+    @Test
+    public void garbageIdentify()
+            throws Exception{
+        UUID stream = UUID.randomUUID();
+
+        Map<String, String> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamID(stream)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                })
+                .open();
+
+        // no garbage is formed for a new key.
+        testMap.put("a", "0");
+        long garbageCount = getRuntime().getGarbageInformer().getAddressToGarbage().values().stream().map(garbageInfo ->
+            garbageInfo.getGarbageRecords(stream).values()).flatMap(x -> x.stream()).count();
+
+        assertThat(garbageCount).isZero();
+
+
+        // garbage identified for existing key.
+        testMap.put("a", "1");
+        garbageCount = getRuntime().getGarbageInformer().getAddressToGarbage().values().stream().map(garbageInfo ->
+                garbageInfo.getGarbageRecords(stream).values()).count();
+
+        assertThat(garbageCount).isEqualTo(1L);
+
+        // no garbage is formed for already identified garbage.
+        // rewind the position to global address 0
+        Token timestamp = new Token(0L, 0);
+        getRuntime().getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(timestamp)
+                .build()
+                .begin();
+
+        testMap.get("a");
+
+        getRuntime().getObjectsView().TXEnd();
+
+        garbageCount = getRuntime().getGarbageInformer().getAddressToGarbage().values().stream().map(garbageInfo ->
+                garbageInfo.getGarbageRecords(stream).values()).count();
+        assertThat(garbageCount).isEqualTo(1L); // no duplicated garbage is identified
+
+
+        String value = testMap.put("a", "2");
+        garbageCount = getRuntime().getGarbageInformer().getAddressToGarbage().values().stream().map(garbageInfo ->
+                garbageInfo.getGarbageRecords(stream).values()).count();
+        assertThat(garbageCount).isEqualTo(2L);
+        assertThat(getRuntime().getGarbageInformer().getAddressToGarbage().get(1L).getGarbageRecord(stream, 0)
+                .getMarkerAddress()).isEqualTo(2L);
+
+        // Test for NO_CACHE map
+        Map<String, String> testMap2 = getRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                })
+                .setStreamID(stream)
+                .addOption(ObjectOpenOptions.NO_CACHE)
+                .open();
+
+
+        testMap2.get("a"); // duplicated garbage is identified.
+        garbageCount = getRuntime().getGarbageInformer().getAddressToGarbage().values().stream().map(garbageInfo ->
+                garbageInfo.getGarbageRecords(stream).values()).count();
+
+        assertThat(garbageCount).isEqualTo(2L);
+    }
+
 
     @Data
     @ToString
