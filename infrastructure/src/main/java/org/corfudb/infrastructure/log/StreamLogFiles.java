@@ -1231,7 +1231,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
         logSizeQuota.release(freedBytes);
-        log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
+        log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes, quota {}",
+                numFiles, freedBytes, logSizeQuota);
     }
 
     /**

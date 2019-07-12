@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import lombok.Getter;
+import lombok.ToString;
 
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -9,6 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * Created by Maithem on 6/20/19.
  */
+@ToString
 public class ResourceQuota {
 
     @Getter

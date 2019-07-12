@@ -93,7 +93,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         assertThat(txnAborted).isTrue();
 
         // bump up the sequencer counter to create multiple empty segments
-        final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE;
+        final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE * 2;
         for (int x = 0; x < emptySlots; x++) {
             rt.getSequencerView().next();
         }
