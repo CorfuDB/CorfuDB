@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -131,6 +132,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @param garbageFunctionMap  garbageFunctionMap
      * @param undoRecordTargetMap undoRecordTargetMap
      * @param resetSet            resetSet
+     * @param garbageInformer   The hub to disseminate garbage information.
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
@@ -140,7 +142,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
                              Map<String, IGarbageIdentificationFunction> garbageFunctionMap,
-                             Set<String> resetSet
+                             Set<String> resetSet,
+                             GarbageInformer garbageInformer
     ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -153,7 +156,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 upcallTargetMap, undoRecordTargetMap, undoTargetMap,
-                garbageFunctionMap, resetSet);
+                garbageFunctionMap, resetSet, garbageInformer);
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();

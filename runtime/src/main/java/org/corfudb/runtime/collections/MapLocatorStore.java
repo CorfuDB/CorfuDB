@@ -15,7 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 class MapLocatorStore<T> implements ILocatorStore<T> {
     // Keys have 1:1 mapping to SMRRecord
-    final private Map<T, SMRRecordLocator> keyToSMRRecordLocator = new ConcurrentHashMap<>();
+    private final Map<T, SMRRecordLocator> keyToSMRRecordLocator = new ConcurrentHashMap<>();
+
+    public static final List<SMRRecordLocator> EMPTY_LIST = new ArrayList<>();
 
     /**
      * {@inheritDoc}
@@ -23,6 +25,9 @@ class MapLocatorStore<T> implements ILocatorStore<T> {
     @Override
     public List<SMRRecordLocator> addUnsafe(@NonNull T key, @NonNull SMRRecordLocator smrRecordLocator) {
         SMRRecordLocator oldSMRRecord = keyToSMRRecordLocator.put(key, smrRecordLocator);
+        if (oldSMRRecord == null) {
+            return EMPTY_LIST;
+        }
         return Arrays.asList(oldSMRRecord);
     }
 

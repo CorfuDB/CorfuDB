@@ -514,6 +514,12 @@ public class CorfuRuntime {
     private final ManagementView managementView = new ManagementView(this);
 
     /**
+     * The hub to disseminate garbage information.
+     */
+    @Getter
+    private final GarbageInformer garbageInformer = new GarbageInformer(this);
+
+    /**
      * List of initial set of layout servers, i.e., servers specified in
      * connection string on bootstrap.
      */
@@ -722,6 +728,7 @@ public class CorfuRuntime {
         // Stopping async task from fetching layout.
         isShutdown = true;
         runtimeExecutor.shutdownNow();
+        garbageInformer.stop();
         if (layout != null) {
             try {
                 layout.cancel(true);
@@ -1057,6 +1064,8 @@ public class CorfuRuntime {
                     .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());
             fastLoader.loadMaps();
         }
+
+        garbageInformer.start();
 
         return this;
     }
