@@ -657,17 +657,23 @@ public class FastObjectLoader {
             for (Map.Entry<UUID, StreamMetaData> entry : streamsMetaData.entrySet()) {
                 cfs[i++] = CompletableFuture.runAsync(() -> {
                     CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();
-                    if (checkPoint == null) {
-                        log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
-                                Utils.toReadableId(entry.getKey()));
-                        return;
-                    }
 
-                    // For now one by one read and apply
-                    for (long address : checkPoint.getAddresses()) {
-                        updateCorfuObject(getLogData(runtime, loadInCache, address));
-                    }
-                }, executorService);
+                    try {
+                        if (checkPoint == null) {
+                            log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
+                                    Utils.toReadableId(entry.getKey()));
+                            return;
+                        }
+
+                        // For now one by one read and apply
+                        for (long address : checkPoint.getAddresses()) {
+                            updateCorfuObject(getLogData(runtime, loadInCache, address));
+                        }
+                    } catch (Throwable t) {
+                        log.error("resurrectCheckpoints[{}]: error on addresses {}", checkPoint.getCheckPointId(),
+                                checkPoint.getAddresses(), t);
+                        throw t;
+                    } }, executorService);
             }
 
             executorService.shutdown();
