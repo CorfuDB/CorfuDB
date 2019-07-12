@@ -45,7 +45,8 @@ public class ClusterStateCollector {
      * @return cluster state
      */
     public ClusterState collectClusterState(
-            long epoch, Set<String> unresponsiveNodes, SequencerMetrics sequencerMetrics) {
+            long epoch, ImmutableList<String> unresponsiveNodes,
+            SequencerMetrics sequencerMetrics) {
 
         Map<String, NodeState> nodeStates = new HashMap<>();
 
@@ -55,7 +56,7 @@ public class ClusterStateCollector {
         return ClusterState.builder()
                 .localEndpoint(localEndpoint)
                 .nodes(ImmutableMap.copyOf(nodeStates))
-                .unresponsiveNodes(ImmutableList.copyOf(unresponsiveNodes))
+                .unresponsiveNodes(unresponsiveNodes)
                 .build();
     }
 

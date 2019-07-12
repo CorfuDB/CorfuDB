@@ -240,7 +240,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(l2.getUnresponsiveServers()).contains(SERVERS.ENDPOINT_1);
     }
 
-    private void setAggressiveDetectorTimeouts(int... managementServersPorts) {
+    void setAggressiveDetectorTimeouts(int... managementServersPorts) {
         Arrays.stream(managementServersPorts).forEach(port -> {
             NetworkStretcher stretcher = NetworkStretcher.builder()
                     .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)

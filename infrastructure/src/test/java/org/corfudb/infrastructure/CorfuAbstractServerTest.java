@@ -52,7 +52,5 @@ public class CorfuAbstractServerTest {
                 mock(ChannelHandlerContext.class),
                 mock(IServerRouter.class)
         );
-
-        verify(handler, times(0));
     }
 }
