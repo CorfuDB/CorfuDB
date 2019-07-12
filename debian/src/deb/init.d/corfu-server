@@ -103,14 +103,16 @@ generate_key_trust_artifacts () {
     KEYSTORE_PASS=$CBM_ENTITY_PRIVATE_DIR/keystore.password
     KEYSTORE=$CBM_ENTITY_PRIVATE_DIR/keystore.jks
 
-
+    TRUST_BARRIER_FILE=$CBM_ENTITY_PUBLIC_DIR/BARRIER
 
     log_daemon_msg "Generating keystore/truststore for ENTITY_NAME=$ENTITY_NAME, ENTITY_USER=$ENTITY_USER."
 
-    if [ -e $CERT_PEM ]; then
-        log_daemon_msg "Certificate already exists."
+    if [ -e $TRUST_BARRIER_FILE ]; then
+        log_daemon_msg "$TRUST_BARRIER_FILE already exists."
         return
     fi
+
+    rm -rf $CBM_ENTITY_DIR
 
     # create directories
     mkdir -p $CBM_ENTITY_PUBLIC_DIR
@@ -121,6 +123,8 @@ generate_key_trust_artifacts () {
 
     # modify user and permission
     modify_user_and_permission
+
+    touch $TRUST_BARRIER_FILE
 }
 
 modify_user_and_permission () {
