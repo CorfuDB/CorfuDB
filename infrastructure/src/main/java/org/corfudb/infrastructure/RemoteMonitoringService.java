@@ -263,10 +263,10 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private synchronized void runDetectionTasks() {
 
-        CorfuRuntime corfuRuntime = getCorfuRuntime();
-        getCorfuRuntime().invalidateLayout();
-
-        Layout layout = serverContext.saveManagementLayout(corfuRuntime.getLayoutView().getLayout());
+        Layout layout = getCorfuRuntime()
+                .invalidateLayout()
+                .thenApply(serverContext::saveManagementLayout)
+                .join();
 
         if (!canHandleReconfigurations()) {
             log.error("Can't run failure detector. This Server: {}, is not a part of the active layout: {}",

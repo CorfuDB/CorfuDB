@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -845,14 +846,17 @@ public class CorfuRuntime {
      * If the layout has been previously invalidated and a new layout has not yet been retrieved,
      * this function does nothing.
      */
-    public synchronized void invalidateLayout() {
+    public synchronized CompletableFuture<Layout> invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layout.isDone()) {
-            // Don't create a new request for a layout if there is one pending.
-            return;
+        if (layout.isDone()) {
+            List<String> servers = Optional.ofNullable(latestLayout)
+                    .map(Layout::getLayoutServers)
+                    .orElse(bootstrapLayoutServers);
+
+            layout = fetchLayout(servers);
         }
-        layout = fetchLayout(latestLayout == null
-                ? bootstrapLayoutServers : latestLayout.getLayoutServers());
+
+        return layout;
     }
 
     /**
