@@ -34,7 +34,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
@@ -124,12 +123,6 @@ public class LogUnitServer extends AbstractServer {
                 new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
 
         if (config.isMemoryMode()) {
-            log.warn("Log unit opened in-memory mode (Maximum size={}). "
-                    + "This should be run for testing purposes only. "
-                    + "If you exceed the maximum size of the unit, old entries will be "
-                    + "AUTOMATICALLY trimmed. "
-                    + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
             streamLog = new InMemoryStreamLog();
         } else {
             streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
@@ -225,7 +218,9 @@ public class LogUnitServer extends AbstractServer {
 
         batchWriter.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
-                    dataCache.put(msg.getPayload().getGlobalAddress(), logData);
+                    if (!config.isMemoryMode()) {
+                        dataCache.put(msg.getPayload().getGlobalAddress(), logData);
+                    }
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 }, executor).exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -278,7 +273,13 @@ public class LogUnitServer extends AbstractServer {
 
         ReadResponse rr = new ReadResponse();
         try {
-            ILogData logData = dataCache.get(address, cacheable);
+            ILogData logData;
+            if (config.isMemoryMode()) {
+                logData = dataCache.get(address, false);
+            } else {
+                logData = dataCache.get(address, cacheable);
+            }
+
             if (logData == null) {
                 rr.put(address, LogData.getEmpty(address));
             } else {
@@ -299,7 +300,12 @@ public class LogUnitServer extends AbstractServer {
         ReadResponse rr = new ReadResponse();
         try {
             for (Long address : msg.getPayload().getAddresses()) {
-                ILogData logData = dataCache.get(address, cacheable);
+                ILogData logData;
+                if (config.isMemoryMode()) {
+                    logData = dataCache.get(address, false);
+                } else {
+                    logData = dataCache.get(address, cacheable);
+                }
                 if (logData == null) {
                     rr.put(address, LogData.getEmpty(address));
                 } else {
