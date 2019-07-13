@@ -336,7 +336,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         final int offset = METADATA_SIZE + metadata.getLength() + OVERWRITE_BYTES;
 
-        // Corrupt metadata in the second segment
+        // Corrupt metadata in the second segmentNumber
         file2.seek(offset);
         file2.writeInt(OVERWRITE_BYTES);
         file2.close();
@@ -347,7 +347,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void multiThreadedReadWrite() throws Exception {
-        String logDir = getDirPath();
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         ByteBuf b = Unpooled.buffer();
@@ -391,11 +390,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(seg2, new LogData(DataType.DATA, b));
         log.append(seg3, new LogData(DataType.DATA, b));
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(3);
+        assertThat(log.getDirtySegments().size()).isEqualTo(3);
 
         log.sync(true);
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+        assertThat(log.getDirtySegments().size()).isEqualTo(0);
     }
 
     private void writeToLog(StreamLog log, long address) {
@@ -468,7 +467,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Get references to the segments that will be trimmed
         Set<SegmentHandle> trimmedHandles = new HashSet<>();
         for (SegmentHandle sh : log.getOpenSegmentHandles()) {
-            if (sh.getSegment() < endSegment) {
+            if (sh.getSegmentNumber() < endSegment) {
                 trimmedHandles.add(sh);
             }
         }
@@ -503,7 +502,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             }
         }
 
-        // Verify that the trimmed segment channels are closed
+        // Verify that the trimmed segmentNumber channels are closed
         for (SegmentHandle sh : trimmedHandles) {
             assertThat(sh.getWriteChannel().isOpen()).isFalse();
         }
@@ -605,7 +604,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         logFile.getChannel().write(buf);
         logFile.close();
 
-        // Open a StreamLog and write an entry in the segment that has the partial metadata write
+        // Open a StreamLog and write an entry in the segmentNumber that has the partial metadata write
         StreamLog log = new StreamLogFiles(getContext(), false);
         long address0 = 0;
         assertThat(log.read(address0)).isNull();
@@ -636,12 +635,12 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        // Write to segment 0
+        // Write to segmentNumber 0
         long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
         log.close();
 
-        // Open the segment again and verify that the entry write can be read (i.e. log file can be
+        // Open the segmentNumber again and verify that the entry write can be read (i.e. log file can be
         // parsed correctly).
         log = new StreamLogFiles(getContext(), false);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
@@ -651,7 +650,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void partialEntryTest() throws Exception {
         StreamLog log = new StreamLogFiles(getContext(), false);
 
-        // Force the creation of segment 0
+        // Force the creation of segmentNumber 0
         long address0 = 0;
         log.read(address0);
         log.close();
@@ -688,7 +687,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         System.out.println("position " + logFile.getChannel().position());
         logFile.close();
 
-        // Verify that the segment address space can be parsed and that the partial write is ignored
+        // Verify that the segmentNumber address space can be parsed and that the partial write is ignored
         log = new StreamLogFiles(getContext(), false);
         assertThat(log.read(address0)).isNull();
 

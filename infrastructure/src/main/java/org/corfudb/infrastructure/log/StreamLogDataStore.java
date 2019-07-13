@@ -41,14 +41,14 @@ public class StreamLogDataStore {
      */
     private final AtomicLong startingAddress = new AtomicLong(Address.NON_ADDRESS);
     /**
-     * Cached tail segment
+     * Cached tail segmentNumber
      */
     private final AtomicLong tailSegment = new AtomicLong(Address.NON_ADDRESS);
 
     /**
-     * Return current cached tail segment or get the segment from the data store if not initialized
+     * Return current cached tail segmentNumber or get the segmentNumber from the data store if not initialized
      *
-     * @return tail segment
+     * @return tail segmentNumber
      */
     public long getTailSegment() {
         if (tailSegment.get() == Address.NON_ADDRESS) {
@@ -59,17 +59,17 @@ public class StreamLogDataStore {
     }
 
     /**
-     * Update current tail segment in the data store
+     * Update current tail segmentNumber in the data store
      *
-     * @param newTailSegment updated tail segment
+     * @param newTailSegment updated tail segmentNumber
      */
     public void updateTailSegment(long newTailSegment) {
         if (tailSegment.get() >= newTailSegment) {
-            log.trace("New tail segment less than or equals to the old one: {}. Ignore", newTailSegment);
+            log.trace("New tail segmentNumber less than or equals to the old one: {}. Ignore", newTailSegment);
             return;
         }
 
-        log.debug("Update tail segment to: {}", newTailSegment);
+        log.debug("Update tail segmentNumber to: {}", newTailSegment);
         dataStore.put(TAIL_SEGMENT_RECORD, newTailSegment);
         tailSegment.set(newTailSegment);
     }
@@ -100,10 +100,10 @@ public class StreamLogDataStore {
     }
 
     /**
-     * Reset tail segment
+     * Reset tail segmentNumber
      */
     public void resetTailSegment() {
-        log.info("Reset tail segment. Current segment: {}", tailSegment.get());
+        log.info("Reset tail segmentNumber. Current segmentNumber: {}", tailSegment.get());
         dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
         tailSegment.set(ZERO_ADDRESS);
     }

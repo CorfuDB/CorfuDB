@@ -100,7 +100,7 @@ public interface StreamLog {
     void close();
 
     /**
-     * Clears all data and resets all segment handlers.
+     * Clears all data and resets all segmentNumber handlers.
      */
     void reset();
 
