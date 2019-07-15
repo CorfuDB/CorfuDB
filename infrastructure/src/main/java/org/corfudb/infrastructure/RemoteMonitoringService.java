@@ -44,6 +44,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -262,11 +263,10 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private synchronized void runDetectionTasks() {
 
-        CorfuRuntime corfuRuntime = getCorfuRuntime();
-        getCorfuRuntime().invalidateLayout();
-
-        Layout layout = corfuRuntime.getLayoutView().getLayout();
-        serverContext.saveManagementLayout(layout);
+        Layout layout = getCorfuRuntime()
+                .invalidateLayout()
+                .thenApply(serverContext::saveManagementLayout)
+                .join();
 
         if (!canHandleReconfigurations()) {
             log.error("Can't run failure detector. This Server: {}, is not a part of the active layout: {}",
@@ -286,16 +286,15 @@ public class RemoteMonitoringService implements MonitoringService {
                 //Get metrics from local monitoring service (local monitoring works in it's own thread)
                 localMonitoringService.getMetrics()
                         //Poll report asynchronously using failureDetectorWorker executor
-                        .thenCompose(this::pollReport)
-                        //Update cluster view by latest cluster state given by the poll report.
-                        // No need to be asynchronous
+                        .thenCompose(metrics -> pollReport(layout, metrics))
+                        //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
                         .thenApply(pollReport -> {
                             log.trace("Update cluster view: {}", pollReport.getClusterState());
                             clusterContext.refreshClusterView(layout, pollReport);
                             return pollReport;
                         })
                         //Execute failure detector task using failureDetectorWorker executor
-                        .thenCompose(this::runFailureDetectorTask)
+                        .thenCompose(pollReport -> runFailureDetectorTask(pollReport, layout))
                         //Print exceptions to log
                         .whenComplete((taskResult, ex) -> {
                             if (ex != null) {
@@ -304,9 +303,8 @@ public class RemoteMonitoringService implements MonitoringService {
                         });
     }
 
-    private CompletableFuture<PollReport> pollReport(SequencerMetrics sequencerMetrics) {
+    private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
         return CompletableFuture.supplyAsync(() -> {
-            Layout layout = serverContext.copyManagementLayout();
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
             return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);
@@ -328,7 +326,8 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param pollReport cluster status
      * @return async detection task
      */
-    private CompletableFuture<DetectorTask> runFailureDetectorTask(PollReport pollReport) {
+    private CompletableFuture<DetectorTask> runFailureDetectorTask(
+            PollReport pollReport, Layout layout) {
 
         if (!pollReport.getClusterState().isReady()) {
             log.info("Cluster state is not ready: {}", pollReport.getClusterState());
@@ -340,11 +339,11 @@ public class RemoteMonitoringService implements MonitoringService {
             // Corrects out of phase epoch issues if present in the report. This method
             // performs re-sealing of all nodes if required and catchup of a layout server to
             // the current state.
-            correctWrongEpochs(pollReport);
+            Layout updatedLayout = correctWrongEpochs(pollReport, layout);
 
             Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
                 if (pollReport.isCurrentLayoutSlotUnFilled()) {
-                    detectFailure(Collections.emptySet(), pollReport).join();
+                    detectFailure(updatedLayout, Collections.emptySet(), pollReport).join();
                     return DetectorTask.COMPLETED;
                 }
 
@@ -352,6 +351,16 @@ public class RemoteMonitoringService implements MonitoringService {
                     log.debug("Wait for next iteration. Poll report contains wrong epochs: {}",
                             pollReport.getWrongEpochs()
                     );
+                    return DetectorTask.COMPLETED;
+                }
+
+
+                // If layout was updated by correcting wrong epochs,
+                // we can't continue with failure detection,
+                // as the cluster state have changed.
+                if (!updatedLayout.equals(layout)){
+                    log.warn("Layout was updated by correcting wrong epochs. " +
+                            "Cancel current round of failure detection.");
                     return DetectorTask.COMPLETED;
                 }
 
@@ -364,7 +373,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 return DetectorTask.COMPLETED;
             }
 
-            DetectorTask healing = detectHealing(pollReport, serverContext.copyManagementLayout());
+            DetectorTask healing = detectHealing(pollReport, layout);
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
@@ -374,7 +383,7 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-            DetectorTask handleFailure = detectFailure(pollReport);
+            DetectorTask handleFailure = detectFailure(pollReport, layout);
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
@@ -383,9 +392,9 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Restores redundancy and merges multiple segments if present.
-            restoreRedundancyAndMergeSegments();
+            restoreRedundancyAndMergeSegments(layout);
 
-            handleSequencer(serverContext.copyManagementLayout());
+            handleSequencer(layout);
 
             return DetectorTask.COMPLETED;
         }, failureDetectorWorker);
@@ -398,8 +407,7 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @return Detector task.
      */
-    private DetectorTask restoreRedundancyAndMergeSegments() {
-        Layout layout = serverContext.copyManagementLayout();
+    private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
         int segmentsCount = layout.getSegments().size();
 
         if (segmentsCount == 1) {
@@ -411,10 +419,12 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         log.debug("Number of segments present: {}. Spawning task to merge segments.", segmentsCount);
-        mergeSegmentsTask = CompletableFuture.supplyAsync(() ->
-                        ReconfigurationEventHandler
-                                .handleMergeSegments(getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT),
-                failureDetectorWorker);
+
+        Supplier<Boolean> redundancyAction = () ->
+                ReconfigurationEventHandler.handleMergeSegments(
+                        getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+                );
+        mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
 
         return DetectorTask.COMPLETED;
     }
@@ -431,10 +441,7 @@ public class RemoteMonitoringService implements MonitoringService {
     private DetectorTask detectHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing, layout: {}", layout);
 
-        Optional<NodeRank> healed = advisor.healedServer(
-                pollReport.getClusterState(),
-                layout.getUnresponsiveServers()
-        );
+        Optional<NodeRank> healed = advisor.healedServer(pollReport.getClusterState());
 
         //Transform Optional value to a Set
         Set<String> healedNodes = healed
@@ -496,10 +503,8 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param pollReport Poll report obtained from failure detection policy.
      * @return boolean result if failure was handled. False if there is no failure
      */
-    private DetectorTask detectFailure(PollReport pollReport) {
+    private DetectorTask detectFailure(PollReport pollReport, Layout layout) {
         log.trace("Handle failures for the report: {}", pollReport);
-
-        Layout layout = serverContext.copyManagementLayout();
 
         try {
             ClusterState clusterState = pollReport.getClusterState();
@@ -512,7 +517,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 throw new IllegalStateException(err);
             }
 
-            Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState, layout.getUnresponsiveServers());
+            Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState);
 
             if (maybeFailedNode.isPresent()) {
                 NodeRank failedNode = maybeFailedNode.get();
@@ -532,7 +537,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
-                return detectFailure(failedNodes, pollReport).get();
+                return detectFailure(layout, failedNodes, pollReport).get();
             }
         } catch (Exception e) {
             log.error("Exception invoking failure handler", e);
@@ -579,7 +584,7 @@ public class RemoteMonitoringService implements MonitoringService {
         // If it fails, we detect this again and retry in the next polling cycle.
         return getCorfuRuntime()
                 .getLayoutManagementView()
-                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker)
+                .asyncSequencerBootstrap(layout, failureDetectorWorker)
                 .thenApply(DetectorTask::fromBool);
     }
 
@@ -589,15 +594,14 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param failedNodes list of failed nodes
      * @param pollReport  poll report
      */
-    private CompletableFuture<DetectorTask> detectFailure(Set<String> failedNodes, PollReport pollReport) {
+    private CompletableFuture<DetectorTask> detectFailure(
+            Layout layout, Set<String> failedNodes, PollReport pollReport) {
 
         ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());
 
         log.info("Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}",
                 failedNodes, pollReport.isCurrentLayoutSlotUnFilled(), graph.toJson()
         );
-
-        Layout layout = serverContext.copyManagementLayout();
 
         return getCorfuRuntime()
                 .getLayoutView()
@@ -635,23 +639,24 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param pollReport Poll Report from running the failure detection policy.
      */
-    private void correctWrongEpochs(PollReport pollReport) {
+    private Layout correctWrongEpochs(PollReport pollReport, Layout layout) {
 
         Map<String, Long> wrongEpochs = pollReport.getWrongEpochs();
         if (wrongEpochs.isEmpty()) {
-            return;
+            return layout;
         }
 
         log.debug("Correct wrong epochs. Poll report: {}", pollReport);
 
         try {
-            Layout layout = serverContext.copyManagementLayout();
-            final Layout layout1 = layout;
+            final Layout oldLayout = layout;
             // Query all layout servers to get quorum Layout.
             Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = layout
                     .getLayoutServers()
                     .stream()
-                    .collect(Collectors.toMap(Function.identity(), server -> getLayoutFromServer(layout1, server)));
+                    .collect(Collectors.toMap(Function.identity(),
+                            server -> getLayoutFromServer(oldLayout, server))
+                    );
 
             // Retrieve the correct layout from quorum of members to reseal servers.
             // If we are unable to reach a consensus from a quorum we get an exception and
@@ -666,30 +671,42 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Update local layout copy.
-            serverContext.saveManagementLayout(latestLayout.get());
-            layout = serverContext.copyManagementLayout();
+            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());
 
-            // In case of a partial seal, a set of servers can be sealed with a higher epoch.
-            // We should be able to detect this and bring the rest of the servers to this epoch.
-            long maxOutOfPhaseEpoch = Collections.max(wrongEpochs.values());
-            if (maxOutOfPhaseEpoch > layout.getEpoch()) {
-                layout.setEpoch(maxOutOfPhaseEpoch);
-            }
-
-            // Re-seal all servers with the latestLayout epoch.
-            // This has no effect on up-to-date servers. Only the trailing servers are caught up.
-            getCorfuRuntime()
-                    .getLayoutView()
-                    .getRuntimeLayout(layout)
-                    .sealMinServerSet();
+            sealWithLatestLayout(wrongEpochs, newManagementLayout);
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
-            updateTrailingLayoutServers(layoutCompletableFutureMap);
+            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);
+            return newManagementLayout;
 
         } catch (QuorumUnreachableException e) {
             log.error("Error in correcting server epochs", e);
         }
+
+        return serverContext.copyManagementLayout();
+    }
+
+    private void sealWithLatestLayout(Map<String, Long> wrongEpochs, Layout managementLayout) {
+        // We should utilize only the unmodified management layout as it has already been
+        // committed to the layout servers via Paxos round.
+        // Committing any other modified layout is extremely dangerous and can cause
+        // inconsistencies. This latestLayout should not be modified.
+        Layout sealingLayout = new Layout(managementLayout);
+
+        // In case of a partial seal, a set of servers can be sealed with a higher epoch.
+        // We should be able to detect this and bring the rest of the servers to this epoch.
+        long maxOutOfPhaseEpoch = Collections.max(wrongEpochs.values());
+        if (maxOutOfPhaseEpoch > sealingLayout.getEpoch()) {
+            sealingLayout.setEpoch(maxOutOfPhaseEpoch);
+        }
+
+        // Re-seal all servers with the latestLayout epoch.
+        // This has no effect on up-to-date servers. Only the trailing servers are caught up.
+        getCorfuRuntime()
+                .getLayoutView()
+                .getRuntimeLayout(sealingLayout)
+                .sealMinServerSet();
     }
 
     /**
@@ -727,12 +744,9 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param layoutCompletableFutureMap Map of layout server endpoints to their layout requests.
      */
-    private void updateTrailingLayoutServers(Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
+    private void updateTrailingLayoutServers(
+            Layout latestLayout, Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
 
-        // We should utilize only the unmodified management layout as it has already been committed to the layout
-        // servers via Paxos round. Committing any other modified layout is extremely dangerous and can cause
-        // inconsistencies. This latestLayout should not be modified.
-        final Layout latestLayout = serverContext.copyManagementLayout();
         // Patch trailing layout servers with latestLayout.
         layoutCompletableFutureMap.keySet().forEach(layoutServer -> {
             Layout layout = null;

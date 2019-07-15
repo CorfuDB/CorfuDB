@@ -221,7 +221,7 @@ public class Orchestrator {
             // only be used to execute this workflow, it doesn't need a cache and has
             // the default authentication config parameters as the ManagementServer's
             // runtime
-            CorfuRuntimeParameters params = serverContext.getDefaultRuntimeParameters();
+            CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();
             params.setCacheDisabled(true);
             params.setUseFastLoader(false);
             params.setLayoutServers(servers);

@@ -133,4 +133,11 @@ public interface StreamLog {
         }
         return cause;
     }
+
+    /**
+     * Query if the StreamLog has enough quota to accept writes
+     */
+    default boolean quotaExceeded() {
+        return false;
+    }
 }

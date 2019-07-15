@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.junit.Test;
 
@@ -17,6 +18,7 @@ public class ClusterStateTest {
 
         ClusterState invalidClusterState = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch1, OK),
                 nodeState("b", epoch2, OK)
         );
@@ -24,6 +26,7 @@ public class ClusterStateTest {
 
         ClusterState validClusterState = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch1, OK),
                 nodeState("b", epoch1, OK)
         );

@@ -5,10 +5,17 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
@@ -140,6 +147,51 @@ public class CorfuTableTest extends AbstractViewTest {
                 .isEmpty();
     }
 
+
+    /**
+     * Ensure that issues that arise due to incorrect index function implementations are
+     * percolated all the way to the client.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void problematicIndexFunction() {
+
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer.FailingIndex())
+                .setStreamName("failing-index")
+                .open();
+
+        Assertions.assertThatExceptionOfType(UnrecoverableCorfuError.class)
+                .isThrownBy(() -> corfuTable.put(this.getClass().getCanonicalName(),
+                        this.getClass().getCanonicalName()))
+                .withCauseInstanceOf(ConcurrentModificationException.class);
+    }
+
+    /**
+     * Ensure that issues that arise due to incorrect index function implementations are
+     * percolated all the way to the client (TX flavour).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void problematicIndexFunctionTx() {
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer.FailingIndex())
+                .setStreamName("failing-index")
+                .open();
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+
+        Assertions.assertThatExceptionOfType(UnrecoverableCorfuError.class)
+                .isThrownBy(() -> corfuTable.put(this.getClass().getCanonicalName(),
+                        this.getClass().getCanonicalName()))
+                .withCauseInstanceOf(ConcurrentModificationException.class);
+
+        Assertions.assertThat(getDefaultRuntime().getObjectsView().TXActive()).isTrue();
+    }
 
     @Test
     @SuppressWarnings("unchecked")

@@ -142,9 +142,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             data = null;
         }
         if (type.isMetadataAware()) {
-            metadataMap =
-                    ICorfuPayload.enumMapFromBuffer(buf,
-                            IMetadata.LogUnitMetadataType.class, Object.class);
+            metadataMap = ICorfuPayload.enumMapFromBuffer(buf, IMetadata.LogUnitMetadataType.class);
         } else {
             metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
         }
