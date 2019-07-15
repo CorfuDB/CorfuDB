@@ -21,8 +21,7 @@ import org.corfudb.util.serializer.Serializers;
  * A log entry structure which contains a collection of multiSMRentries,
  * each one contains a list of updates for one object.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 @ToString
 @Slf4j
 public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {

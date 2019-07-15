@@ -26,8 +26,7 @@ import org.corfudb.annotations.TransactionalMethod;
  * Created by mwei on 1/7/16.
  */
 @CorfuObject
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
     /**
