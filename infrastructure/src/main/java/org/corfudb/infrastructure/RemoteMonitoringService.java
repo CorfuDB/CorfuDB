@@ -275,7 +275,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         if (!failureDetectorFuture.isDone()) {
-            log.debug("Cannot initiate new failure detection task. Polling in progress. Counter: {}", counter.get());
+            log.trace("Cannot initiate new failure detection task. Polling in progress. Counter: {}", counter.get());
             counter.incrementAndGet();
             return;
         }
