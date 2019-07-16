@@ -31,6 +31,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
@@ -66,10 +67,6 @@ public class ServerContext implements AutoCloseable {
     private static final String KEY_EPOCH = "CURRENT";
     private static final String PREFIX_LAYOUT = "LAYOUT";
     private static final String KEY_LAYOUT = "CURRENT";
-    private static final String PREFIX_PHASE_1 = "PHASE_1";
-    private static final String KEY_SUFFIX_PHASE_1 = "RANK";
-    private static final String PREFIX_PHASE_2 = "PHASE_2";
-    private static final String KEY_SUFFIX_PHASE_2 = "DATA";
     private static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
@@ -130,7 +127,7 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
-            Sets.newHashSet(PREFIX_PHASE_1, PREFIX_PHASE_2, PREFIX_LAYOUTS);
+            Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
     /**
      * Returns a new ServerContext.
@@ -418,26 +415,6 @@ public class ServerContext implements AutoCloseable {
             // Regressing, throw an exception.
             throw new WrongEpochException(lastEpoch);
         }
-    }
-
-    public Rank getPhase1Rank() {
-        return dataStore.get(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1);
-    }
-
-    public void setPhase1Rank(Rank rank) {
-        dataStore.put(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
-    }
-
-    public Phase2Data getPhase2Data() {
-        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2);
-    }
-
-    public void setPhase2Data(Phase2Data phase2Data) {
-        dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
     }
 
     public void setLayoutInHistory(Layout layout) {
