@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -26,7 +27,6 @@ import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 //TODO Discard TransactionStream for building maps but not for constructing tails
 
@@ -52,13 +52,15 @@ public class VersionLockedObject<T> {
     /**
      * The actual underlying object.
      */
-    T object;
+    @Getter
+    private T object;
 
     /**
      * A list of upcalls pending in the system. The proxy keeps this set so it can remember to
      * save the upcalls for pending requests.
      */
-    final Set<Long> pendingUpcalls;
+    @Getter
+    private final Set<Long> pendingUpcalls;
 
     // This enum is necessary because null cannot be inserted
     // into a ConcurrentHashMap.
@@ -69,7 +71,8 @@ public class VersionLockedObject<T> {
     /**
      * A list of upcall results, keyed by the address they were requested.
      */
-    final Map<Long, Object> upcallResults;
+    @Getter
+    private final Map<Long, Object> upcallResults;
 
 
     /**
@@ -395,14 +398,6 @@ public class VersionLockedObject<T> {
     }
 
     /**
-     * Drop the optimistic stream, effectively making optimistic updates
-     * to this object permanent.
-     */
-    public void optimisticCommitUnsafe() {
-        optimisticStream = null;
-    }
-
-    /**
      * Check whether or not this object was modified by this thread.
      *
      * @return True, if the object was modified by this thread. False otherwise.
@@ -457,8 +452,7 @@ public class VersionLockedObject<T> {
      *
      * @return The ID of the stream backing this object.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     public UUID getID() {
         return smrStream.getID();
     }
@@ -582,7 +576,7 @@ public class VersionLockedObject<T> {
         List<SMREntry> entries = stream.current();
 
         while (entries != null) {
-            if (entries.stream().allMatch(x -> x.isUndoable())) {
+            if (entries.stream().allMatch(SMREntry::isUndoable)) {
                 // start from the end, process one at a time
                 ListIterator<SMREntry> it =
                         entries.listIterator(entries.size());
@@ -594,7 +588,7 @@ public class VersionLockedObject<T> {
                 if (log.isTraceEnabled()) {
                     log.trace("rollbackStreamUnsafe: one or more stream entries in address @{} are not undoable. " +
                                     "Undoable entries: {}/{}", stream.pos(),
-                            entries.stream().filter(x -> x.isUndoable()).collect(Collectors.toList()).size(),
+                            (int) entries.stream().filter(SMREntry::isUndoable).count(),
                             entries.size());
                 }
                 throw new NoRollbackException(entry, stream.pos(), rollbackVersion);
@@ -669,7 +663,7 @@ public class VersionLockedObject<T> {
     /** Apply an SMREntry to the version object, while
      * doing bookkeeping for the underlying stream.
      *
-     * @param entry
+     * @param entry smr entry
      */
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry);

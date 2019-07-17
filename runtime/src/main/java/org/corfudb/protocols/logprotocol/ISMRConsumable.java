@@ -10,8 +10,7 @@ import java.util.UUID;
  *
  * <p>Created by mwei on 9/20/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 public interface ISMRConsumable {
     List<SMREntry> getSMRUpdates(UUID id);
 }

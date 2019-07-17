@@ -27,8 +27,7 @@ public class CorfuCompileWrapperBuilder {
      * @throws IllegalAccessException Illegal Access to the Object.
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
                                    UUID streamID, Object[] args,
                                    ISerializer serializer)

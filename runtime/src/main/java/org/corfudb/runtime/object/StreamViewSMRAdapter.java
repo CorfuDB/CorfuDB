@@ -30,8 +30,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
  *
  * <p>Created by mwei on 3/10/17.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 public class StreamViewSMRAdapter implements ISMRStream {
 
     /**

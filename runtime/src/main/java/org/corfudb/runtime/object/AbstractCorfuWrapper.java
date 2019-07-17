@@ -27,8 +27,7 @@ public abstract class AbstractCorfuWrapper<T> implements ICorfuSMRProxyWrapper<T
      *
      * @return Returns the StreamID of this Corfu Wrapper.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     protected UUID getStreamID() {
         return proxy.getStreamID();
     }
