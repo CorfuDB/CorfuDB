@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -58,22 +59,25 @@ import org.corfudb.util.Utils;
  *
  */
 @Slf4j
-@Deprecated
 @SuppressWarnings("checkstyle:abbreviationaswordinname")
 public class WriteSetSMRStream implements ISMRStream {
 
-    List<AbstractTransactionalContext> contexts;
+    private List<AbstractTransactionalContext> contexts;
 
     int currentContext = 0;
 
-    // TODO add comment
-    long currentContextPos;
+    /**
+     * Current position in {@link WriteSetSMRStream#contexts}
+     */
+    private long currentContextPos;
 
-    // TODO add comment
-    long writePos;
+    /**
+     * Current write position in an SMREntry
+     */
+    private long writePos;
 
     // the specific stream-id for which this SMRstream wraps the write-set
-    final UUID id;
+    private final UUID id;
 
     /**
      * Returns a new WriteSetSMRStream containing transactional contexts and stream id.
@@ -167,7 +171,7 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public List<SMREntry> current() {
         if (Address.nonAddress(writePos)) {
-            return null;
+            return new ArrayList<>();
         }
         if (Address.nonAddress(currentContextPos)) {
             currentContextPos = -1;
@@ -184,7 +188,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
         if (writePos <= Address.maxNonAddress()) {
             writePos = Address.maxNonAddress();
-            return null;
+            return new ArrayList<>();
         }
 
         currentContextPos--;

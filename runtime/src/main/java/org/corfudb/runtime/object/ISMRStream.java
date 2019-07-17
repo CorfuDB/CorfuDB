@@ -20,8 +20,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
  *
  * <p>Created by mwei on 3/13/17.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 public interface ISMRStream {
 
 
@@ -71,8 +70,7 @@ public interface ISMRStream {
      *
      * @return The UUID for this stream.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     default UUID getID() {
         return new UUID(0L, 0L);
     }

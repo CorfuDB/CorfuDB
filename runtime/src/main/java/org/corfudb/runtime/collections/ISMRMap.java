@@ -12,8 +12,7 @@ import org.corfudb.annotations.MutatorAccessor;
 /**
  * Created by mwei on 1/9/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
 
     /**
