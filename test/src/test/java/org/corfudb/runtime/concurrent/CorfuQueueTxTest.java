@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class CorfuQueueTxTest extends AbstractTransactionsTest {
     @Override
     public void TXBegin() {
-        OptimisticTXBegin();
+        TXBegin(TransactionType.OPTIMISTIC);
     }
 
     public void TXBegin(TransactionType type) {
@@ -38,7 +38,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                 OptimisticTXBegin();
                 return;
             default:
-                throw new IllegalArgumentException("Unsupported TXN type");
+                throw new IllegalArgumentException("Unsupported TXN type:"+type.toString());
         }
     }
 
