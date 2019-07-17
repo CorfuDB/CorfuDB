@@ -1,13 +1,5 @@
 package org.corfudb.runtime.object;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -17,6 +9,14 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * StreamViewSMRAdapter wraps a stream and implements the ISMRStream API over
@@ -97,14 +97,13 @@ public class StreamViewSMRAdapter implements ISMRStream {
      */
     public List<SMREntry> current() {
         ILogData data = streamView.current();
-        if (data != null) {
-            if (data.getType() == DataType.DATA
-                    && data.getPayload(runtime) instanceof ISMRConsumable) {
-                return ((ISMRConsumable) data.getPayload(runtime))
-                        .getSMRUpdates(streamView.getId());
-            }
+        if (data == null
+                || data.getType() != DataType.DATA
+                || !(data.getPayload(runtime) instanceof ISMRConsumable)) {
+            return new ArrayList<>();
         }
-        return null;
+
+        return ((ISMRConsumable) data.getPayload(runtime)).getSMRUpdates(streamView.getId());
     }
 
     /**
@@ -124,7 +123,8 @@ public class StreamViewSMRAdapter implements ISMRStream {
             }
             data = streamView.previous();
         }
-        return null;
+
+        return new ArrayList<>();
     }
 
     public long pos() {
