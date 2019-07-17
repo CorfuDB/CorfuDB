@@ -10,7 +10,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -100,7 +99,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
         if (data == null
                 || data.getType() != DataType.DATA
                 || !(data.getPayload(runtime) instanceof ISMRConsumable)) {
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
 
         return ((ISMRConsumable) data.getPayload(runtime)).getSMRUpdates(streamView.getId());
@@ -124,7 +123,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
             data = streamView.previous();
         }
 
-        return new ArrayList<>();
+        return Collections.emptyList();
     }
 
     public long pos() {
