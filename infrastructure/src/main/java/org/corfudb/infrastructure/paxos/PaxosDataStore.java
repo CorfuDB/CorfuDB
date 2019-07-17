@@ -23,7 +23,7 @@ public class PaxosDataStore {
     private final DataStore dataStore;
 
     /**
-     * Retuurns phase1 rank for current epoch
+     * Returns phase1 rank for current epoch
      * @param serverEpoch current server epoch
      * @return phase1 rank
      */

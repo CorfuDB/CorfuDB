@@ -70,7 +70,10 @@ public class LayoutServer extends AbstractServer {
     private final CorfuMsgHandler handler =
             CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
+    @NonNull
     private final ExecutorService executor;
+
+    @NonNull
     private final PaxosDataStore paxosDataStore;
 
     @Override
