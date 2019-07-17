@@ -38,7 +38,7 @@ class LocalMonitoringService implements MonitoringService {
                            @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
-        sequencerMetricsHolder = new AtomicReference<>();
+        sequencerMetricsHolder = new AtomicReference<>(UNKNOWN);
 
         this.pollingService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
