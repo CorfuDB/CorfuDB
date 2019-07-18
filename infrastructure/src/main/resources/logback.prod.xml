@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="true" scanPeriod="30 seconds">
 
+    <!-- https://logback.qos.ch/manual/configuration.html#stopContext -->
+    <shutdownHook/>
+
     <property name="LOG_DIRECTORY" value="/var/log/corfu" />
 
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
@@ -20,7 +23,13 @@
         </encoder>
     </appender>
 
+    <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
+    <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="file" />
+        <queueSize>1024</queueSize>
+    </appender>
+
     <root level="info">
-        <appender-ref ref="file"/>
+        <appender-ref ref="async_file"/>
     </root>
 </configuration>
