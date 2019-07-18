@@ -70,7 +70,6 @@ public class CorfuQueue<E> {
 
         /**
          * @return Return only the unique part of the id without the ordering
-         * (should only be used for testing or validation of CorfuQueue)
          */
         public long getEntryId() {
             return id.getLeastSignificantBits();
@@ -78,7 +77,6 @@ public class CorfuQueue<E> {
 
         /**
          * @return Return only the ordering part of the entry without the id.
-         * (should only be used for testing or validation of CorfuQueue)
          */
         public long getOrdering() {
             return id.getMostSignificantBits();
