@@ -5,6 +5,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import java.util.UUID;
 
@@ -48,11 +49,19 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     }
 
     private long updateInstanceId() {
-        long nextInstanceId = 0L;
+        long nextInstanceId;
         while(true) {
             try {
+                TransactionType txnType;
+                if (TransactionalContext.isInTransaction()) {
+                    txnType = TransactionalContext.getCurrentContext()
+                            .getTransaction().getType();
+                } else { // Pick default type as OPTIMISTIC
+                    txnType = TransactionType.OPTIMISTIC;
+
+                }
                 runtime.getObjectsView().TXBuild()
-                        .type(TransactionType.OPTIMISTIC)
+                        .type(txnType)
                         .build()
                         .begin();
 
