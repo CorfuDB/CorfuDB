@@ -66,7 +66,7 @@ public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
                 server2.reconnect(Arrays.asList(server0, server1));
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
-                waitUninterruptibly(Duration.ofSeconds(20));
+                waitUninterruptibly(Duration.ofSeconds(30));
 
                 // Verify cluster status is STABLE
                 corfuClient.invalidateLayout();

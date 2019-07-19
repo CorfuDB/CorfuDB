@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
@@ -136,13 +137,18 @@ public class ManagementServer extends AbstractServer {
         ClusterState defaultView = ClusterState.builder()
                 .localEndpoint(serverContext.getLocalEndpoint())
                 .nodes(ImmutableMap.of())
+                .unresponsiveNodes(ImmutableList.of())
                 .build();
         clusterContext =  ClusterStateContext.builder()
                 .counter(counter)
                 .clusterView(new AtomicReference<>(defaultView))
                 .build();
 
-        managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterContext, failureDetector);
+        Layout managementLayout = serverContext.copyManagementLayout();
+        managementAgent = new ManagementAgent(
+                corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
+        );
+
         orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 

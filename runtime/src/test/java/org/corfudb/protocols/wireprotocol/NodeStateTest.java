@@ -15,10 +15,13 @@ public class NodeStateTest {
 
     @Test
     public void testSerializeDeserialize() {
+        final long epoch = 1;
+
         NodeConnectivity co = NodeConnectivity.builder()
                 .type(NodeConnectivityType.CONNECTED)
                 .endpoint("localhost:9000")
                 .connectivity(ImmutableMap.of())
+                .epoch(epoch)
                 .build();
 
         NodeState nodeState = NodeState.builder()

@@ -70,7 +70,7 @@ public class NodeDownAndPartitionedIT extends GenericIntegrationTest {
 
                 // Verify cluster status is STABLE
                 corfuClient.invalidateLayout();
-                waitUninterruptibly(Duration.ofSeconds(5));
+                waitUninterruptibly(Duration.ofSeconds(20));
                 clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 

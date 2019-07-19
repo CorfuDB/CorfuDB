@@ -6,13 +6,16 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import lombok.Builder;
 import lombok.Builder.Default;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 
+import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -21,9 +24,10 @@ import java.util.Set;
  * take appropriate action.
  * Created by zlokhandwala on 3/21/17.
  */
-@Data
 @Builder
 @Slf4j
+@Getter
+@ToString
 public class PollReport {
 
     @Default
@@ -42,10 +46,16 @@ public class PollReport {
     private final ClusterState clusterState;
 
     /**
-     * List of responsive servers in a current layout
+     * List of responsive servers that successfully responded to our ping
      */
     @NonNull
-    private final ImmutableList<String> responsiveServers;
+    private final ImmutableList<String> pingResponsiveServers;
+
+    /**
+     * Time spent on collecting this report
+     */
+    @NonNull
+    private final Duration elapsedTime;
 
     /**
      * Returns all connected nodes to the current node including nodes with higher epoch.
@@ -76,23 +86,34 @@ public class PollReport {
     }
 
     /**
-     * All active Layout servers have been sealed but there is no client to take this forward and
-     * fill the slot by proposing a new layout. This is determined by the outOfPhaseEpochNodes map.
+     * Check to see if the current epoch/register has been decided/filled. We do this by
+     * comparing the epoch of the latest committed layout and the epoch associated with the
+     * {@link WrongEpochException}.
      *
-     * @return True if latest layout slot is vacant.
+     * @return Optional.of(epoch) if latest layout slot is vacant, Optional.none() otherwise.
      */
-    public boolean isCurrentLayoutSlotUnFilled() {
-        log.trace("isCurrentLayoutSlotUnFilled. Wrong epochs: {}, active servers: {}",
-                wrongEpochs, responsiveServers
+    public Optional<Long> getLayoutSlotUnFilled(@NonNull Layout latestCommittedLayout) {
+        log.trace("getLayoutSlotUnFilled. Wrong epochs: {}, latest layout epoch: {}",
+                wrongEpochs, latestCommittedLayout.getEpoch()
         );
 
-        // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
-        boolean result = wrongEpochs.keySet().containsAll(responsiveServers);
-
-        if (result) {
-            log.info("Current layout slot is empty. Filling slot with current layout. " +
-                    "Wrong epochs: {}, active layout servers: {}", wrongEpochs, responsiveServers);
+        long maxOutOfPhaseEpoch = wrongEpochs.values().stream()
+                .max(Long::compare)
+                .orElse(latestCommittedLayout.getEpoch());
+        if (maxOutOfPhaseEpoch > latestCommittedLayout.getEpoch()) {
+            return Optional.of(maxOutOfPhaseEpoch);
         }
-        return result;
+
+        return Optional.empty();
+    }
+
+
+    /**
+     * Check to see if all responsive servers from this {@link PollReport} have been sealed.
+     *
+     * @return true if all responsive servers have been sealed.
+     */
+    public boolean areAllResponsiveServersSealed() {
+        return wrongEpochs.isEmpty() || wrongEpochs.size() == pingResponsiveServers.size();
     }
 }
