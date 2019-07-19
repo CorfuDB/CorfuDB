@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -171,11 +170,13 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public List<SMREntry> current() {
         if (Address.nonAddress(writePos)) {
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
+
         if (Address.nonAddress(currentContextPos)) {
             currentContextPos = -1;
         }
+
         return Collections.singletonList(contexts
                 .get(currentContext)
                 .getWriteSetEntryList(id)
@@ -188,7 +189,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
         if (writePos <= Address.maxNonAddress()) {
             writePos = Address.maxNonAddress();
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
 
         currentContextPos--;
