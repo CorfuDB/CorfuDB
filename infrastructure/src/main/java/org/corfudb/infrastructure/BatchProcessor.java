@@ -194,8 +194,8 @@ public class BatchProcessor implements AutoCloseable {
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
-                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}, tails: {}].",
-                                operationsQueue.size(), streamLog.getTrimMark(), streamLog.getAllTails(), e);
+                        log.debug("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}].",
+                                operationsQueue.size(), streamLog.getTrimMark(), e);
                         currOp.getFutureResult().completeExceptionally(e);
                     }
                     res.add(currOp);

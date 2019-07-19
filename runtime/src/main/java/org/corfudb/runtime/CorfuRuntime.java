@@ -939,7 +939,7 @@ public class CorfuRuntime {
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
+                    log.trace("Trying connection to layout server {}", s);
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
