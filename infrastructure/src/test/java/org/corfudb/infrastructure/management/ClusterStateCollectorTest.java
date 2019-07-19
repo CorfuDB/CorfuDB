@@ -72,7 +72,7 @@ public class ClusterStateCollectorTest {
                 .build();
 
         ClusterState clusterState = collector.collectClusterState(
-                1, Collections.emptySet(), SequencerMetrics.UNKNOWN
+                1, ImmutableList.of(), SequencerMetrics.UNKNOWN
         );
 
         NodeState localNodeState = clusterState.getNode(localEndpoint).get();

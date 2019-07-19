@@ -176,8 +176,11 @@ public class CheckpointWriter<T extends Map> {
             startCheckpoint(snapshotTimestamp, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
-            log.info("appendCheckpoint: completed checkpoint for {}, num of entries {} at snapshot {} in {} ms",
-                    streamId, entries.size(), snapshotTimestamp, System.currentTimeMillis() - start);
+            long cpDuration = System.currentTimeMillis() - start;
+            log.info("appendCheckpoint: completed checkpoint for {}, entries({}), tableSize({}) bytes, " +
+                            "cpSize({}) bytes at snapshot {} in {} ms",
+                    streamId, entries.size(), MetricsUtils.sizeOf.deepSizeOf(entries),
+                    numBytes, snapshotTimestamp, cpDuration);
         } finally {
             rt.getObjectsView().TXEnd();
         }

@@ -575,11 +575,10 @@ public class VersionLockedObject<T> {
 
         List<SMREntry> entries = stream.current();
 
-        while (entries != null) {
+        while (!entries.isEmpty()) {
             if (entries.stream().allMatch(SMREntry::isUndoable)) {
                 // start from the end, process one at a time
-                ListIterator<SMREntry> it =
-                        entries.listIterator(entries.size());
+                ListIterator<SMREntry> it = entries.listIterator(entries.size());
                 while (it.hasPrevious()) {
                     applyUndoRecordUnsafe(it.previous());
                 }
