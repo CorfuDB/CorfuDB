@@ -64,8 +64,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 continue;
             }
 
-            if (queue == getCurrentContext().readQueue && ld != null) {
-                addToResolvedQueue(getCurrentContext(), thisRead, ld);
+            if (queue == getContext().readQueue && ld != null) {
+                addToResolvedQueue(getContext(), thisRead, ld);
             }
             return ld;
         } while (readNext);
@@ -173,7 +173,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         if (checkpoint) {
-            queue.addAll(resolveCheckpoint(getCurrentContext()));
+            queue.addAll(resolveCheckpoint(getContext()));
         }
 
         return !queue.isEmpty();

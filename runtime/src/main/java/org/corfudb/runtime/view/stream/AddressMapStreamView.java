@@ -82,12 +82,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // to be serviced immediately, rather than reading one entry at a time.
                 ld = read(currentRead, queue);
 
-                if (queue == getCurrentContext().readQueue && ld != null) {
+                if (queue == getContext().readQueue && ld != null) {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
                     if (ld.containsStream(this.id)) {
-                        addToResolvedQueue(getCurrentContext(), currentRead, ld);
+                        addToResolvedQueue(getContext(), currentRead, ld);
                         readNext = false;
                     } else {
                         log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
@@ -168,7 +168,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                                     "loaded checkpoint with start address %s, while accessing the " +
                                     "stream at version %s. Looking for a new checkpoint.", this,
                             streamAddressSpace.getTrimMark(),
-                            getCurrentContext().checkpoint.startAddress, maxGlobal);
+                            getContext().checkpoint.startAddress, maxGlobal);
                     log.info(message);
                     if (options.ignoreTrimmed) {
                         log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
@@ -226,7 +226,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         }
 
         // Select correct checkpoint - Highest
-        List<Long> checkpointEntries = resolveCheckpoint(getCurrentContext());
+        List<Long> checkpointEntries = resolveCheckpoint(getContext());
         queue.addAll(checkpointEntries);
     }
 
@@ -313,7 +313,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     streamId, startAddress, previousAddress);
             // if backpointer is a valid log address or Address.NON_EXIST (beginning of the stream)
             if ((Address.isAddress(previousAddress) &&
-                    getCurrentContext().resolvedQueue.contains(previousAddress))
+                    getContext().resolvedQueue.contains(previousAddress))
                     || previousAddress == Address.NON_EXIST) {
                 log.trace("getStreamAddressMap[{}]: backpointer {} is locally present, do not request " +
                         "stream address map.", streamId, previousAddress);
@@ -339,13 +339,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     }
 
     private boolean isTrimResolvedLocally(long trimMark) {
-        return getCurrentContext().checkpoint.id == null
-                && getCurrentContext().resolvedQueue.contains(trimMark);
+        return getContext().checkpoint.id == null
+                && getContext().resolvedQueue.contains(trimMark);
     }
 
     private boolean isTrimCoveredByCheckpoint(long trimMark) {
-        return getCurrentContext().checkpoint.id != null &&
-                getCurrentContext().checkpoint.startAddress >= trimMark;
+        return getContext().checkpoint.id != null && getContext().checkpoint.startAddress >= trimMark;
     }
 
     @Override

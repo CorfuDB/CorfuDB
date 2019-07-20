@@ -55,11 +55,6 @@ public class Address {
     /** The maximum address. */
     public static final long MAX = Long.MAX_VALUE;
 
-    /** Aborted request constant. Used to indicate an attempted read, but
-     * was rejected at the request of the client.
-     */
-    public static final long ABORTED = -2L;
-
     /** Not found constant. Used to indicate that a search for an entry
      * did not result in a entry.
      */
@@ -84,9 +79,4 @@ public class Address {
      * to be consistent, a initial position already "consumed" is -1L
      */
     public static final long NEVER_READ = -1L;
-
-    /** Indicates that the previous entry in the stream belongs
-     * to another stream.
-     */
-    public static final long COW_BACKPOINTER = -7L;
 }
