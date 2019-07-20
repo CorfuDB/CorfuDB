@@ -86,7 +86,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
-                    if (ld.containsStream(this.id)) {
+                    if (ld.containsStream(this.getId())) {
                         addToResolvedQueue(getContext(), currentRead, ld);
                         readNext = false;
                     } else {
@@ -201,7 +201,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // (causing unnecessary TrimmedExceptions--as this checkpoint is not even
         // needed in the first place).
         Iterable<List<Long>> batches = Iterables.partition(checkpointAddresses,
-                runtime.getParameters().getCheckpointReadBatchSize());
+                getRuntime().getParameters().getCheckpointReadBatchSize());
 
         boolean checkpointResolved = false;
         for (List<Long> batch : batches) {
@@ -258,7 +258,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // The valid checkpoint has been trimmed.
             if (options.ignoreTrimmed) {
                 log.debug("processCheckpointBatchByEntry[{}]: Ignoring trimmed exception for address[{}]," +
-                        " stream[{}]", this, lastReadAddress, id);
+                        " stream[{}]", this, lastReadAddress, getId());
             } else {
                 log.warn("processCheckpointBatchByEntry[{}]: trim exception.", this, ste);
                 throw ste;
@@ -282,7 +282,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
             log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.",
                         streamId, startAddress, stopAddress);
-            return runtime.getSequencerView()
+            return getRuntime().getSequencerView()
                     .getStreamAddressSpace(new StreamAddressRange(streamId, startAddress, stopAddress));
         }
 
@@ -307,7 +307,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             }
         }
 
-        if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+        if (!getRuntime().getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
             long previousAddress = d.getBackpointer(streamId);
             log.trace("getStreamAddressMap[{}]: backpointer for {} points to {}",
                     streamId, startAddress, previousAddress);

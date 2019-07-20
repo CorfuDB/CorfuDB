@@ -115,7 +115,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             } catch (TrimmedException e) {
                 if (options.ignoreTrimmed) {
                     log.warn("followBackpointers: Ignoring trimmed exception for address[{}]," +
-                            " stream[{}]", currentAddress, id);
+                            " stream[{}]", currentAddress, getId());
                     return !queue.isEmpty();
                 } else {
                     throw e;
@@ -142,7 +142,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             log.trace("followBackpointers: calculate the next address");
 
-            if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+            if (!getRuntime().getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
                 long tmp = d.getBackpointer(streamId);
                 log.trace("followBackpointers: backpointer points to {}", tmp);
                 // if backpointer is a valid log address or Address.NON_EXIST
