@@ -10,10 +10,12 @@ import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Singular;
+import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
@@ -51,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -75,6 +78,7 @@ public class CorfuRuntime {
      */
     @Builder
     @Data
+    @ToString
     public static class CorfuRuntimeParameters {
         @Default
         private final long nettyShutdownQuitePeriod = 100;
@@ -149,10 +153,16 @@ public class CorfuRuntime {
         boolean cacheDisabled = false;
 
         /**
-         * The maximum size of the cache, in bytes.
+         * The maximum number of entries in the cache.
          */
         @Default
-        long numCacheEntries = 5000;
+        long maxCacheEntries;
+
+        /**
+         * The max in-memory size of the cache in bytes
+         */
+        @Default
+        long maxCacheWeight;
 
         /**
          * Sets expireAfterAccess and expireAfterWrite in seconds.
@@ -209,6 +219,13 @@ public class CorfuRuntime {
          */
         @Default
         int streamBatchSize = 10;
+
+        /**
+         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
+         * address discovery mechanism relies on address maps instead of follow backpointers;
+         */
+        @Default
+        int checkpointReadBatchSize = 5;
         // endregion
 
         //region        Security parameters
@@ -444,6 +461,14 @@ public class CorfuRuntime {
         volatile Runnable beforeRpcHandler = () -> {
         };
         //endregion
+
+        /**
+         * The default priority of the requests made by this client.
+         * Under resource constraints non-high priority requests
+         * are dropped.
+         */
+        @Default
+        PriorityLevel priorityLevel = PriorityLevel.NORMAL;
     }
 
     /**
@@ -827,14 +852,17 @@ public class CorfuRuntime {
      * If the layout has been previously invalidated and a new layout has not yet been retrieved,
      * this function does nothing.
      */
-    public synchronized void invalidateLayout() {
+    public synchronized CompletableFuture<Layout> invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layout.isDone()) {
-            // Don't create a new request for a layout if there is one pending.
-            return;
+        if (layout.isDone()) {
+            List<String> servers = Optional.ofNullable(latestLayout)
+                    .map(Layout::getLayoutServers)
+                    .orElse(bootstrapLayoutServers);
+
+            layout = fetchLayout(servers);
         }
-        layout = fetchLayout(latestLayout == null
-                ? bootstrapLayoutServers : latestLayout.getLayoutServers());
+
+        return layout;
     }
 
     /**
@@ -874,7 +902,7 @@ public class CorfuRuntime {
                 .filter(endpoint -> !layout.getAllServers()
                         // Converting to legacy endpoint format as the layout only contains
                         // legacy format - host:port.
-                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
+                        .contains(endpoint.toEndpointUrl()))
                 .forEach(endpoint -> {
                     try {
                         IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);
@@ -911,7 +939,7 @@ public class CorfuRuntime {
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
+                    log.trace("Trying connection to layout server {}", s);
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
@@ -1016,6 +1044,9 @@ public class CorfuRuntime {
      * When this function returns, the Corfu server is ready to be accessed.
      */
     public synchronized CorfuRuntime connect() {
+
+        log.info("connect: runtime parameters {}", getParameters());
+
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
             // Fetch the current layout and save the future.
@@ -1157,19 +1188,6 @@ public class CorfuRuntime {
     public CorfuRuntime setHoleFillingDisabled(boolean disable) {
         log.warn("setHoleFillingDisabled: Deprecated, please set parameters instead");
         parameters.setHoleFillingDisabled(disable);
-        return this;
-    }
-
-    /**
-     * Set the number of cache entries.
-     *
-     * @param numCacheEntries The number of cache entries.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setNumCacheEntries(long numCacheEntries) {
-        log.warn("setNumCacheEntries: Deprecated, please set parameters instead");
-        parameters.setNumCacheEntries(numCacheEntries);
         return this;
     }
 

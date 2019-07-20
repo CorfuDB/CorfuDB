@@ -38,7 +38,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -658,17 +657,23 @@ public class FastObjectLoader {
             for (Map.Entry<UUID, StreamMetaData> entry : streamsMetaData.entrySet()) {
                 cfs[i++] = CompletableFuture.runAsync(() -> {
                     CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();
-                    if (checkPoint == null) {
-                        log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
-                                Utils.toReadableId(entry.getKey()));
-                        return;
-                    }
 
-                    // For now one by one read and apply
-                    for (long address : checkPoint.getAddresses()) {
-                        updateCorfuObject(getLogData(runtime, loadInCache, address));
-                    }
-                }, executorService);
+                    try {
+                        if (checkPoint == null) {
+                            log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
+                                    Utils.toReadableId(entry.getKey()));
+                            return;
+                        }
+
+                        // For now one by one read and apply
+                        for (long address : checkPoint.getAddresses()) {
+                            updateCorfuObject(getLogData(runtime, loadInCache, address));
+                        }
+                    } catch (Throwable t) {
+                        log.error("resurrectCheckpoints[{}]: error on addresses {}", checkPoint.getCheckPointId(),
+                                checkPoint.getAddresses(), t);
+                        throw t;
+                    } }, executorService);
             }
 
             executorService.shutdown();
@@ -743,9 +748,11 @@ public class FastObjectLoader {
                 final long lower = nextRead;
                 final long upper = Math.min(lower + batchReadSize - 1, logTail);
                 nextRead = upper + 1;
-                Map<Long, ILogData> range =
-                        runtime.getAddressSpaceView().fetchAll(ContiguousSet.create(
-                                Range.closed(lower, upper), DiscreteDomain.longs()), true);
+
+                // Don't cache the read results on server for fast loader
+                ContiguousSet<Long> addresses = ContiguousSet.create(
+                        Range.closed(lower, upper), DiscreteDomain.longs());
+                Map<Long, ILogData> range = runtime.getAddressSpaceView().nonCacheFetchAll(addresses, true);
 
                 // Sanity
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.NonNull;
@@ -16,11 +17,15 @@ import java.util.Map;
  */
 @Builder
 public class ClusterStateAggregator {
+
     @NonNull
     private final String localEndpoint;
 
     @NonNull
     private final List<ClusterState> clusterStates;
+
+    @NonNull
+    private final ImmutableList<String> unresponsiveNodes;
 
     /**
      * Aggregates state from a list of poll reports.
@@ -69,6 +74,7 @@ public class ClusterStateAggregator {
 
         return ClusterState.builder()
                 .localEndpoint(localEndpoint)
+                .unresponsiveNodes(unresponsiveNodes)
                 .nodes(stateMap)
                 .build();
     }

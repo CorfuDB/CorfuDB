@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.NonNull;
@@ -13,7 +14,9 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.Conne
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -41,7 +44,10 @@ public class ClusterStateCollector {
      * @param sequencerMetrics sequencer metrics
      * @return cluster state
      */
-    public ClusterState collectClusterState(long epoch, SequencerMetrics sequencerMetrics) {
+    public ClusterState collectClusterState(
+            long epoch, ImmutableList<String> unresponsiveNodes,
+            SequencerMetrics sequencerMetrics) {
+
         Map<String, NodeState> nodeStates = new HashMap<>();
 
         nodeStates.put(localEndpoint, collectLocalNodeState(epoch, sequencerMetrics));
@@ -50,6 +56,7 @@ public class ClusterStateCollector {
         return ClusterState.builder()
                 .localEndpoint(localEndpoint)
                 .nodes(ImmutableMap.copyOf(nodeStates))
+                .unresponsiveNodes(unresponsiveNodes)
                 .build();
     }
 

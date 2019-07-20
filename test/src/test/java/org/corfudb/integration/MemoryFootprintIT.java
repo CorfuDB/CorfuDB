@@ -63,7 +63,7 @@ public class MemoryFootprintIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create CorfuTable
         CorfuTable testTable = runtime
@@ -72,6 +72,9 @@ public class MemoryFootprintIT extends AbstractIT {
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
                 .setStreamName("volbeat")
                 .open();
+
+        // Force GC first to prevent it from interfering with the size estimates after.
+        System.gc();
 
         // Register memory footprint tracking
         final Gauge<Long> corfuTableSizeGauge = MetricsUtils.addMemoryMeasurerFor(

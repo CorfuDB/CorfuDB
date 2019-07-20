@@ -11,11 +11,11 @@
             <maxIndex>30</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
+            <maxFileSize>700MB</maxFileSize>
         </triggeringPolicy>
         <encoder>
             <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %highlight(%-5level) | %30.30thread | %30.30logger{30} | %msg%n%xException
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %30.30thread | %30.30logger{30} | %msg%n%xException
             </pattern>
         </encoder>
     </appender>

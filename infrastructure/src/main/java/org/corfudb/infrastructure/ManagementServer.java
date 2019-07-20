@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
@@ -26,6 +27,7 @@ import org.corfudb.util.concurrent.SingletonResource;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -90,6 +92,7 @@ public class ManagementServer extends AbstractServer {
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     private final ExecutorService executor;
+    private final ExecutorService heartbeatThread;
 
     private final Lock healingLock = new ReentrantLock();
 
@@ -99,8 +102,16 @@ public class ManagementServer extends AbstractServer {
     }
 
     @Override
-    public ExecutorService getExecutor() {
+    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
+        if (corfuMsgType.equals(CorfuMsgType.NODE_STATE_REQUEST)) {
+            return heartbeatThread;
+        }
         return executor;
+    }
+
+    @Override
+    public List<ExecutorService> getExecutors() {
+        return Arrays.asList(executor, heartbeatThread);
     }
 
     /**
@@ -113,6 +124,8 @@ public class ManagementServer extends AbstractServer {
 
         this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
                 new ServerThreadFactory("management-", new ServerThreadFactory.ExceptionHandler()));
+        this.heartbeatThread = Executors.newSingleThreadExecutor(
+                new ServerThreadFactory("heartbeat-", new ServerThreadFactory.ExceptionHandler()));
 
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
 
@@ -124,13 +137,18 @@ public class ManagementServer extends AbstractServer {
         ClusterState defaultView = ClusterState.builder()
                 .localEndpoint(serverContext.getLocalEndpoint())
                 .nodes(ImmutableMap.of())
+                .unresponsiveNodes(ImmutableList.of())
                 .build();
         clusterContext =  ClusterStateContext.builder()
                 .counter(counter)
                 .clusterView(new AtomicReference<>(defaultView))
                 .build();
 
-        managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterContext, failureDetector);
+        Layout managementLayout = serverContext.copyManagementLayout();
+        managementAgent = new ManagementAgent(
+                corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
+        );
+
         orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 
@@ -141,7 +159,7 @@ public class ManagementServer extends AbstractServer {
      */
     private CorfuRuntime getNewCorfuRuntime() {
         final CorfuRuntime.CorfuRuntimeParameters params =
-                serverContext.getDefaultRuntimeParameters();
+                serverContext.getManagementRuntimeParameters();
         params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
         final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
         final Layout managementLayout = serverContext.copyManagementLayout();

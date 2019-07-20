@@ -3,8 +3,8 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
@@ -21,7 +21,7 @@ import org.corfudb.runtime.view.Layout;
  * <p>
  * Created by zlokhandwala on 11/2/18.
  */
-@Data
+@Getter
 @Builder
 @AllArgsConstructor
 @EqualsAndHashCode

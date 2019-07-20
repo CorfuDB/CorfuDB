@@ -228,6 +228,6 @@ public class SecurityIT extends AbstractIT {
                 .build();
 
         // Connecting to runtime
-        CorfuRuntime.fromParameters(runtimeParameters).connect();
+        runtime = CorfuRuntime.fromParameters(runtimeParameters).connect();
     }
 }

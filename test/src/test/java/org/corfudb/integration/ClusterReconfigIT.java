@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -20,11 +21,13 @@ import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -56,6 +59,13 @@ public class ClusterReconfigIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
+    }
+
+    @After
+    public void tearDown() {
+        if (runtime != null) {
+            runtime.shutdown();
+        }
     }
 
     private Random getRandomNumberGenerator() {
@@ -95,7 +105,9 @@ public class ClusterReconfigIT extends AbstractIT {
      * @param epochVerifier Predicate to test the refreshed epoch value.
      * @param corfuRuntime  Runtime.
      */
-    private void waitForEpochChange(Predicate<Long> epochVerifier, CorfuRuntime corfuRuntime) {
+    private void waitForEpochChange(Predicate<Long> epochVerifier, CorfuRuntime corfuRuntime)
+            throws InterruptedException {
+
         corfuRuntime.invalidateLayout();
         Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
@@ -104,7 +116,7 @@ public class ClusterReconfigIT extends AbstractIT {
             }
             corfuRuntime.invalidateLayout();
             refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
         assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
     }
@@ -144,6 +156,7 @@ public class ClusterReconfigIT extends AbstractIT {
                     } catch (TransactionAbortedException e) {
                         // A transaction aborted exception is expected during
                         // some reconfiguration cases.
+                        e.printStackTrace();
                     }
                 }).doesNotThrowAnyException();
             }
@@ -377,8 +390,7 @@ public class ClusterReconfigIT extends AbstractIT {
      * @param killNode Index of the node to be killed.
      * @throws Exception
      */
-    private void killNodeAndVerifyDataPath(int killNode)
-            throws Exception {
+    private void killNodeAndVerifyDataPath(int killNode) throws Exception {
 
         // Set up cluster of 3 nodes.
         final int PORT_0 = 9000;
@@ -390,6 +402,7 @@ public class ClusterReconfigIT extends AbstractIT {
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
         final Layout layout = getLayout(3);
         final int retries = 3;
+        TimeUnit.SECONDS.sleep(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
@@ -499,7 +512,7 @@ public class ClusterReconfigIT extends AbstractIT {
         shutdownCorfuServer(corfuServer_3);
     }
 
-    private void retryBootstrapOperation(Runnable bootstrapOperation) {
+    private void retryBootstrapOperation(Runnable bootstrapOperation) throws InterruptedException {
         final int retries = 5;
         int retry = retries;
         while (retry-- > 0) {
@@ -507,7 +520,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 bootstrapOperation.run();
                 return;
             } catch (Exception e) {
-                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             }
         }
         fail();
@@ -571,6 +584,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
 
         shutdownCorfuServer(corfuServer_1);
+        router.stop();
     }
 
     /**
@@ -603,6 +617,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
 
         shutdownCorfuServer(corfuServer_1);
+        router.stop();
     }
 
 
@@ -677,7 +692,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 // A transaction aborted exception is expected during
                 // some reconfiguration cases.
             }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
         assertThat(writeAfterKillNode).isTrue();
 
@@ -891,7 +906,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 break;
             }
             runtime.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
 
         assertThat(runtime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
@@ -997,5 +1012,84 @@ public class ClusterReconfigIT extends AbstractIT {
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
         shutdownCorfuServer(corfuServer_3);
+    }
+
+    /**
+     * Tests a force remove after 2 nodes have been shutdown and the remaining one node
+     * has sealed itself.
+     * Setup: 3 node cluster.
+     * 2 nodes PORT_1 and PORT_2 are shutdown.
+     * A runtime attempts to write data into the cluster with a registered systemDownHandler.
+     * Once the systemDownHandler is invoked, we can be assured that the 2 nodes are shutdown.
+     * We verify that the remaining one node PORT_0 has sealed itself by sending a
+     * NodeStatusRequest. This is responded by a WrongEpochException.
+     * Finally we attempt to force remove the 2 shutdown nodes.
+     */
+    @Test
+    public void forceRemoveAfterSeal() throws Exception {
+
+        // Set up cluster of 3 nodes.
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
+        final Layout layout = getLayout(3);
+        final int retries = 3;
+        TimeUnit.SECONDS.sleep(1);
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
+
+        final int systemDownHandlerLimit = 10;
+        runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+                .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
+                .systemDownHandler(() -> {
+                    throw new RuntimeException();
+                })
+                .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
+                .build())
+                .connect();
+        IStreamView stream = runtime.getStreamsView().get(CorfuRuntime.getStreamID("testStream"));
+
+        shutdownCorfuServer(corfuServer_2);
+        shutdownCorfuServer(corfuServer_3);
+
+        // Wait for systemDownHandler to be invoked.
+        while (true) {
+            try {
+                stream.append("test".getBytes());
+                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            } catch (RuntimeException re) {
+                break;
+            }
+        }
+
+        // Assert that the live node has been sealed.
+        assertThatThrownBy(
+                () -> CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout()
+                        .getManagementClient(corfuSingleNodeHost + ":" + PORT_0)
+                        .sendNodeStateRequest(), WrongEpochException.class))
+                .isInstanceOf(WrongEpochException.class);
+
+        runtime.getManagementView().forceRemoveNode(
+                corfuSingleNodeHost + ":" + PORT_1,
+                retries,
+                PARAMETERS.TIMEOUT_SHORT,
+                PARAMETERS.TIMEOUT_LONG);
+        runtime.getManagementView().forceRemoveNode(
+                corfuSingleNodeHost + ":" + PORT_2,
+                retries,
+                PARAMETERS.TIMEOUT_SHORT,
+                PARAMETERS.TIMEOUT_LONG);
+        runtime.invalidateLayout();
+
+        // Assert that there is only one node in the layout.
+        assertThat(runtime.getLayoutView().getLayout().getAllServers())
+                .containsExactly(corfuSingleNodeHost + ":" + PORT_0);
+
+        for (Process corfuServer : corfuServers) {
+            shutdownCorfuServer(corfuServer);
+        }
     }
 }

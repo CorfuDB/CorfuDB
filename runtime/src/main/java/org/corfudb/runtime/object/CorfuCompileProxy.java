@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -77,8 +78,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /**
      * The ID of the stream of the log.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
             UUID streamID;
 
     /**
@@ -184,7 +184,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .access(this, accessMethod, conflictObject);
             } catch (Exception e) {
-                log.error("Access[{}] Exception: {}", this, e);
+                log.error("Access[{}]", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -237,7 +237,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .logUpdate(this, entry, conflictObject);
             } catch (Exception e) {
-                log.warn("Update[{}] Exception: {}", this, e);
+                log.warn("Update[{}]", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -295,35 +295,45 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
         // Check first if we have the upcall, if we do
         // we can service the request right away.
-        if (underlyingObject.upcallResults.containsKey(timestamp)) {
+        if (underlyingObject.getUpcallResults().containsKey(timestamp)) {
             log.trace("Upcall[{}] {} Direct", this, timestamp);
-            R ret = (R) underlyingObject.upcallResults.get(timestamp);
-            underlyingObject.upcallResults.remove(timestamp);
+            R ret = (R) underlyingObject.getUpcallResults().get(timestamp);
+            underlyingObject.getUpcallResults().remove(timestamp);
             return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
-        try {
-            return underlyingObject.update(o -> {
-                o.syncObjectUnsafe(timestamp);
-                if (o.upcallResults.containsKey(timestamp)) {
-                    log.trace("Upcall[{}] {} Sync'd", this, timestamp);
-                    R ret = (R) o.upcallResults.get(timestamp);
-                    o.upcallResults.remove(timestamp);
-                    return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-                }
+        for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
+            try {
+                return underlyingObject.update(o -> {
+                    o.syncObjectUnsafe(timestamp);
+                    if (o.getUpcallResults().containsKey(timestamp)) {
+                        log.trace("Upcall[{}] {} Sync'd", this, timestamp);
+                        R ret = (R) o.getUpcallResults().get(timestamp);
+                        o.getUpcallResults().remove(timestamp);
+                        return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
+                    }
 
-                // The version is already ahead, but we don't have the result.
-                // The only way to get the correct result
-                // of the upcall would be to rollback. For now, we throw an exception
-                // since this is generally not expected. --- and probably a bug if it happens.
-                throw new RuntimeException("Attempted to get the result "
-                        + "of an upcall@" + timestamp + " but we are @"
-                        + underlyingObject.getVersionUnsafe()
-                        + " and we don't have a copy");
-            });
-        } catch (TrimmedException ex) {
-            throw new TrimmedUpcallException(timestamp);
+                    // The version is already ahead, but we don't have the result.
+                    // The only way to get the correct result
+                    // of the upcall would be to rollback. For now, we throw an exception
+                    // since this is generally not expected. --- and probably a bug if it happens.
+                    throw new RuntimeException("Attempted to get the result "
+                            + "of an upcall@" + timestamp + " but we are @"
+                            + underlyingObject.getVersionUnsafe()
+                            + " and we don't have a copy");
+                });
+            } catch (TrimmedException ex) {
+                log.warn("getUpcallResultInner: Encountered a trim exception while accessing version {} on attempt {}",
+                        timestamp, x);
+                // We encountered a TRIM during sync, reset the object
+                underlyingObject.update(o -> {
+                    o.resetUnsafe();
+                    return null;
+                });
+            }
         }
+
+        throw new TrimmedUpcallException(timestamp);
     }
 
     /**
@@ -350,8 +360,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         }
     }
 
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
+    @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})
     private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
         // Don't nest transactions if we are already running in a transaction
         if (TransactionalContext.isInTransaction()) {
@@ -392,7 +401,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
-                Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
+                Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));
                 sleepTime = min(sleepTime * 2L, maxSleepTime);
                 retries++;
             } catch (Exception e) {

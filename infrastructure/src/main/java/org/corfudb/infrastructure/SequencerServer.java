@@ -176,8 +176,13 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
-    public ExecutorService getExecutor() {
+    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
         return executor;
+    }
+
+    @Override
+    public List<ExecutorService> getExecutors() {
+        return Collections.singletonList(executor);
     }
 
     /**
@@ -342,12 +347,14 @@ public class SequencerServer extends AbstractServer {
             // Advance the trim mark, if the new trim request has a higher trim mark.
             trimMark = msg.getPayload();
             cache.invalidateUpTo(trimMark);
+
+            // Remove trimmed addresses from each address map and set new trim mark
+            for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
+                streamAddressSpace.trim(trimMark);
+            }
         }
 
-        // Remove trimmed addresses from each address map and set new trim mark
-        for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
-            streamAddressSpace.trim(trimMark);
-        }
+        log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark, streamsAddressMap);
 
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
@@ -419,6 +426,20 @@ public class SequencerServer extends AbstractServer {
             // Reset streams address map
             this.streamsAddressMap = new HashMap<>();
             this.streamsAddressMap.putAll(addressSpaceMap);
+
+            for (Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : this.streamsAddressMap.entrySet()) {
+                log.info("Stream[{}] set to last trimmed address {} and {} addresses in the range [{}-{}], " +
+                                "on sequencer reset.",
+                        Utils.toReadableId(streamAddressSpace.getKey()),
+                        streamAddressSpace.getValue().getTrimMark(),
+                        streamAddressSpace.getValue().getAddressMap().getLongCardinality(),
+                        streamAddressSpace.getValue().getLowestAddress(),
+                        streamAddressSpace.getValue().getHighestAddress());
+                if (log.isTraceEnabled()) {
+                    log.trace("Stream[{}] address map on sequencer reset: {}",
+                            Utils.toReadableId(streamAddressSpace.getKey()), streamAddressSpace.getValue().getAddressMap());
+                }
+            }
         }
 
         // Update epochRangeLowerBound if the bootstrap epoch is not consecutive.
@@ -432,6 +453,7 @@ public class SequencerServer extends AbstractServer {
 
         log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}, sequencerEpoch = {}",
                 globalLogTail, streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
+
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 

@@ -109,10 +109,10 @@ public class SequencerView extends AbstractView {
      * @return address space for each stream in the request.
      */
     public Map<UUID, StreamAddressSpace> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)){
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
             StreamsAddressResponse streamsAddressResponse = layoutHelper(e ->
                     CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .getStreamsAddressSpace(streamsAddressesRange)), true);
+                            .getStreamsAddressSpace(streamsAddressesRange)));
             return streamsAddressResponse.getAddressMap();
         }
     }

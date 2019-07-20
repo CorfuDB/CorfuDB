@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,6 +28,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
@@ -38,6 +40,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -252,7 +255,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(corfuServerProcess.isAlive()).isTrue();
 
         // Initialize Client: Create Runtime (Client)
-        CorfuRuntime runtime = createDefaultRuntime();
+        runtime = createDefaultRuntime();
 
         // Create Maps
         List<Map<String, Integer>> smrMapList = new ArrayList<>();
@@ -809,5 +812,161 @@ public class ServerRestartIT extends AbstractIT {
         runtime1.shutdown();
         runtime2.shutdown();
         runtime3.shutdown();
+    }
+
+    /**
+     * This test verifies that a stream is rebuilt from the latest checkpoint (based on the snapshot it covers)
+     * even though an older checkpoint (lowest snapshot) appears later in the stream.
+     *
+     * It also verifies that behaviour is kept the same after the node is restarted and both checkpoints
+     * still exist.
+     *
+     * 1. Write 25 entries to stream A.
+     * 2. Start a checkpoint (CP2) at snapshot 15, complete it.
+     * 3. Start a checkpoint (CP1) at snapshot 10, complete it.
+     * 4. Trim on token for CP2 (snapshot = 15).
+     * 5. New runtime instantiate stream A (do a mutation to force to load from checkpoint).
+     * 6. Restart the server
+     * 7. Instantiate map again.
+     *
+     * It is expected in all cases that maps are successfully rebuilt, all entries present
+     * and no TrimmedException is thrown on access.
+     */
+    @Test
+    public void testUnorderedCheckpointsAndRestartServer() throws Exception {
+        final int numEntries = 25;
+        final int snapshotAddress1 = 10;
+        final int snapshotAddress2 = 15;
+
+        CorfuRuntime r = null;
+        CorfuRuntime rt2 = null;
+        CorfuRuntime rt3 = null;
+
+        // Start server
+        Process corfuProcess = runCorfuServer();
+
+        try {
+            r = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+            // Open map.
+            CorfuTable<String, String> corfuTable1 = createTable(r, new StringMultiIndexer());
+
+            // (1) Write 25 Entries
+            for (int i = 0; i < numEntries; i++) {
+                corfuTable1.put(String.valueOf(i), String.valueOf(i));
+            }
+
+            // Checkpoint Writer 2
+            CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
+                    "checkpointer-2", corfuTable1);
+            Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+
+            // Checkpoint Writer 1
+            CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
+                    "checkpointer-1", corfuTable1);
+            cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+
+            // Trim @snapshotAddress=15 (Checkpoint Writer 2)
+            r.getAddressSpaceView().prefixTrim(cp2Token);
+
+            // Start a new Runtime
+            rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            CorfuTable<String, String> corfuTable2 = createTable(rt2, new StringMultiIndexer());
+
+            rt2.getObjectsView().TXBegin();
+            corfuTable2.put("a", "a");
+            rt2.getObjectsView().TXEnd();
+
+            assertThat(corfuTable2.size()).isEqualTo(numEntries + 1);
+
+            //Restart the corfu server
+            assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+            corfuProcess = runCorfuServer();
+
+            // Start a new Runtime
+            rt3 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            CorfuTable<String, String> corfuTable3 = createTable(rt3, new StringMultiIndexer());
+
+            rt3.getObjectsView().TXBegin();
+            corfuTable3.put("b", "b");
+            rt3.getObjectsView().TXEnd();
+
+            assertThat(corfuTable3.size()).isEqualTo(numEntries + 2);
+        } finally {
+            if (r != null) r.shutdown();
+            if (rt2 != null) rt2.shutdown();
+            if (rt3 != null) rt3.shutdown();
+
+            shutdownCorfuServer(corfuProcess);
+        }
+    }
+
+    /**
+     * Check streamAddressSpace rebuilt from log unit
+     * when stream has been previously checkpointed and trimmed.
+     **/
+    @Test
+    public void checkStreamAddressSpaceRebuiltWithTrim() throws Exception {
+        final int numEntries = 10;
+
+        final List<Long> expectedAddresses = new ArrayList<>(
+                Arrays.asList(13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L));
+
+        CorfuRuntime r = null;
+        CorfuRuntime runtimeRestart = null;
+
+        // Start server
+        Process corfuProcess = runCorfuServer();
+
+        try {
+            // Start runtime
+            r = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+            // Open map
+            CorfuTable<String, String> mapTest = createTable(r, new StringMultiIndexer());
+
+            // Write numEntries to map
+            for (int i = 0; i < numEntries; i++) {
+                mapTest.put(String.valueOf(i), String.valueOf(i));
+            }
+
+            // Checkpoint
+            MultiCheckpointWriter cpw = new MultiCheckpointWriter();
+            cpw.addMap(mapTest);
+            Token cpAddress = cpw.appendCheckpoints(r, "cp-test");
+
+            // Trim the log
+            r.getAddressSpaceView().prefixTrim(cpAddress);
+            r.getAddressSpaceView().gc();
+            r.getAddressSpaceView().invalidateServerCaches();
+            r.getAddressSpaceView().invalidateClientCache();
+
+            // Write another numEntries to map
+            for (int i = numEntries; i < numEntries * 2; i++) {
+                mapTest.put(String.valueOf(i), String.valueOf(i));
+            }
+
+            //Restart the corfu server
+            assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+            corfuProcess = runCorfuServer();
+
+            // Start NEW runtime
+            runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+            // Fetch Address Space for the given stream
+            StreamAddressSpace addressSpace = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+                    .getAddressMap()
+                    .get(CorfuRuntime.getStreamID("test"));
+
+            // Verify address space and trim mark is properly set for the given stream.
+            assertThat(addressSpace.getTrimMark()).isEqualTo(cpAddress.getSequence());
+
+            assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(expectedAddresses.size());
+            expectedAddresses.forEach(address -> assertThat(addressSpace.getAddressMap().contains(address)).isTrue());
+        } finally {
+            if (r != null) r.shutdown();
+            if (runtimeRestart != null) runtimeRestart.shutdown();
+            shutdownCorfuServer(corfuProcess);
+        }
     }
 }

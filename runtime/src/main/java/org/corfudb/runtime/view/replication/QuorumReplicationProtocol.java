@@ -109,7 +109,8 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
     @Nonnull
     public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
                                        List<Long> addresses,
-                                       boolean waitForWrite) {
+                                       boolean waitForWrite,
+                                       boolean cacheOnServer) {
         // TODO: replace this naive implementation
         return addresses.stream()
                 .map(addr -> new SimpleImmutableEntry<>(addr, read(runtimeLayout, addr)))

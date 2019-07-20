@@ -21,8 +21,7 @@ import sun.misc.CRC16;
 /**
  * Created by mwei on 3/29/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 @CorfuObject(constructorType = ConstructorType.PERSISTED,
         objectType = ObjectType.STATELESS)
 public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map<K, V> {

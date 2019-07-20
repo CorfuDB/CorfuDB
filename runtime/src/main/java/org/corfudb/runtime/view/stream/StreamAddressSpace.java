@@ -1,6 +1,9 @@
 package org.corfudb.runtime.view.stream;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 import org.roaringbitmap.longlong.LongIterator;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
@@ -20,6 +23,7 @@ import java.util.TreeSet;
   *
  * Created by annym on 03/06/2019
  */
+@Slf4j
 public class StreamAddressSpace {
 
     private static final int NO_ADDRESSES = 0;
@@ -100,6 +104,8 @@ public class StreamAddressSpace {
         // Recover allocated but unused memory
         addressMap.trim();
         trimMark = Collections.max(addresses);
+
+        log.trace("removeAddresses: new trim mark set to {}", trimMark);
     }
 
     /**
@@ -108,6 +114,14 @@ public class StreamAddressSpace {
      * @param trimMark upper limit of addresses to trim
      */
     public void trim(Long trimMark) {
+        if (!Address.isAddress(trimMark)) {
+            // If not valid address return and do not attempt to trim.
+            return;
+        }
+
+        // Note: if a negative value is passed to this API the cardinality
+        // of the bitmap is returned, which would be incorrect as we would
+        // be removing all addresses upon an invalid trim mark.
         long numAddressesToTrim = addressMap.rankLong(trimMark);
 
         if (numAddressesToTrim <= NO_ADDRESSES) {
@@ -116,9 +130,11 @@ public class StreamAddressSpace {
 
         List<Long> addressesToTrim = new ArrayList<>();
         LongIterator it = addressMap.getLongIterator();
-        for (int i=0; i < numAddressesToTrim; i++) {
+        for (int i = 0; i < numAddressesToTrim; i++) {
             addressesToTrim.add(it.next());
         }
+
+        log.trace("trim: Remove {} addresses for trim mark {}", addressesToTrim.size(), trimMark);
 
         // Remove and set trim mark
         if (!addressesToTrim.isEmpty()) {
@@ -141,6 +157,11 @@ public class StreamAddressSpace {
                 }
             });
         }
+
+        log.trace("getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.",
+                Utils.toReadableId(range.getStreamID()), range.getEnd(),
+                range.getStart(), addressesInRange.getLongCardinality());
+
         return addressesInRange;
     }
 
@@ -150,5 +171,26 @@ public class StreamAddressSpace {
 
     public long getTrimMark() {
        return trimMark;
+    }
+    
+    public long getLowestAddress() {
+        if (addressMap.isEmpty()) {
+            return Address.NON_EXIST;
+        }
+
+        return addressMap.iterator().next();
+    }
+
+    public long getHighestAddress() {
+        if (addressMap.isEmpty()) {
+            return Address.NON_EXIST;
+        }
+
+        return addressMap.getReverseLongIterator().next();
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[%s, %s]@%s", getLowestAddress(), getHighestAddress(), trimMark);
     }
 }

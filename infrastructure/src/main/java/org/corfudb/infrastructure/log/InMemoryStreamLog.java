@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -47,7 +49,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             }
 
             logCache.put(entry.getGlobalAddress(), entry);
-            logMetadata.update(entry);
+            logMetadata.update(entry, false);
         }
     }
 
@@ -61,7 +63,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
-        logMetadata.update(entry);
+        logMetadata.update(entry, false);
     }
 
     private boolean isTrimmed(long address) {
@@ -74,6 +76,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             log.warn("prefixTrim: Ignoring repeated trim {}", address);
         } else {
             startingAddress = address + 1;
+
+            // Trim address space maps.
+            logMetadata.prefixTrim(address);
         }
     }
 
@@ -119,6 +124,26 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             // the method below might throw DataOutrankedException or ValueAdoptedException
             assertAppendPermittedUnsafe(address, entry);
         }
+    }
+
+    /**
+     * Returns the known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    @Override
+    public Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd) {
+
+        Set<Long> result = new HashSet<>();
+        for (long address = rangeStart; address <= rangeEnd; address++) {
+            if (logCache.containsKey(address)) {
+                result.add(address);
+            }
+        }
+        return result;
     }
 
     @Override

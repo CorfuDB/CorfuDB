@@ -2,10 +2,10 @@ package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -78,6 +78,16 @@ public interface StreamLog {
     long getTrimMark();
 
     /**
+     * Returns the known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd);
+
+    /**
      * Sync the stream log file to secondary storage.
      *
      * @param force force data to secondary storage if true
@@ -122,5 +132,12 @@ public interface StreamLog {
             cause = OverwriteCause.NONE;
         }
         return cause;
+    }
+
+    /**
+     * Query if the StreamLog has enough quota to accept writes
+     */
+    default boolean quotaExceeded() {
+        return false;
     }
 }

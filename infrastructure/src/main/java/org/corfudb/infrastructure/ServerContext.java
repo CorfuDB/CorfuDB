@@ -5,25 +5,9 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.channel.EventLoopGroup;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
-import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.NodeLocator;
-import org.corfudb.util.UuidUtils;
 
-import javax.annotation.Nonnull;
+import io.netty.channel.EventLoopGroup;
+
 import java.io.File;
 import java.nio.file.Files;
 import java.time.Duration;
@@ -38,6 +22,27 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.annotation.Nonnull;
+
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
+import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.UuidUtils;
 
 /**
  * Server Context:
@@ -88,7 +93,6 @@ public class ServerContext implements AutoCloseable {
     /**
      * various duration constants.
      */
-    public static final Duration SMALL_INTERVAL = Duration.ofMillis(60_000);
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
 
@@ -114,10 +118,6 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     private final EventLoopGroup workerGroup;
-
-    @Getter
-    @Setter
-    private boolean bindToAllInterfaces = false;
 
     @Getter (AccessLevel.PACKAGE)
     private final NodeLocator nodeLocator;
@@ -160,7 +160,7 @@ public class ServerContext implements AutoCloseable {
 
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
-        localEndpoint = NodeLocator.getLegacyEndpoint(nodeLocator);
+        localEndpoint = nodeLocator.toEndpointUrl();
 
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
@@ -247,8 +247,9 @@ public class ServerContext implements AutoCloseable {
      *
      * @return an instance of {@link CorfuRuntimeParameters}
      */
-    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+    public CorfuRuntimeParameters getManagementRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
@@ -466,26 +467,27 @@ public class ServerContext implements AutoCloseable {
     /**
      * Sets the management layout in the persistent datastore.
      *
-     * @param layout Layout to be persisted
+     * @param newLayout Layout to be persisted
      */
-    public synchronized void saveManagementLayout(Layout layout) {
+    public synchronized Layout saveManagementLayout(Layout newLayout) {
+        Layout currentLayout = copyManagementLayout();
+
         // Cannot update with a null layout.
-        if (layout == null) {
-            log.warn("saveManagementLayout: Attempted to update with null layout");
-            return;
+        if (newLayout == null) {
+            log.warn("Attempted to update with null. Current layout: {}", currentLayout);
+            return currentLayout;
         }
-        Layout currentLayout = getManagementLayout();
+
         // Update only if new layout has a higher epoch than the existing layout.
-        if (currentLayout == null || layout.getEpoch() > currentLayout.getEpoch()) {
-            // Persisting this new updated layout
-            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
-            log.info("saveManagementLayout: Updated to new layout at epoch {}",
-                    getManagementLayout().getEpoch());
-        } else {
-            log.trace("saveManagementLayout: "
-                            + "Ignoring layout because new epoch {} <= old epoch {}",
-                    layout.getEpoch(), currentLayout.getEpoch());
+        if (currentLayout == null || newLayout.getEpoch() > currentLayout.getEpoch()) {
+            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, newLayout);
+            currentLayout = copyManagementLayout();
+            log.info("Update to new layout at epoch {}", currentLayout.getEpoch());
+            return currentLayout;
         }
+
+        return currentLayout;
+
     }
 
     /**
@@ -671,7 +673,7 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
-        CorfuRuntimeParameters params = getDefaultRuntimeParameters();
+        CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
             clientGroup.shutdownGracefully(

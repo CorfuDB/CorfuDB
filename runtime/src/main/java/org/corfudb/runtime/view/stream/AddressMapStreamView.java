@@ -1,17 +1,16 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 
 import javax.annotation.Nonnull;
 
-import lombok.NonNull;
+import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -41,15 +40,9 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
 @Slf4j
 public class AddressMapStreamView extends AbstractQueuedStreamView {
 
-    private static final int COUNTER_INIT_VALUE = 0;
-
     private static final int DIFF_CONSECUTIVE_ADDRESSES = 1;
 
-    private int batchSize;
-
     private long addressCount = 0L;
-
-    final StreamOptions options;
 
     /** Create a new address map stream view.
      *
@@ -59,9 +52,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     public AddressMapStreamView(final CorfuRuntime runtime,
                                 final UUID streamId,
                                 @Nonnull final StreamOptions options) {
-        super(runtime, streamId);
-        this.options = options;
-        batchSize = runtime.getParameters().getStreamBatchSize();
+        super(runtime, streamId, options);
     }
 
     public AddressMapStreamView(final CorfuRuntime runtime,
@@ -71,59 +62,62 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
     @Override
     protected ILogData removeFromQueue(NavigableSet<Long> queue) {
-        // Because the discovery mechanism implemented by this class
-        // does not require to read log entries in advance (requests
-        // full address map in a single call), entries can be read in
-        // batches whenever we have a cache miss. This allows next reads
-        // to be serviced immediately, rather than reading one entry at a time.
-        Long thisRead = queue.pollFirst();
+        boolean readNext;
+        ILogData ld = null;
+        Long currentRead;
 
-        if (thisRead != null) {
-            // In the case that the immediately requested address (thisRead) is not available,
-            // read it along with a batch of subsequent addresses.
-            List<Long> batchRead = getBatch(thisRead, queue);
-            ILogData ld = readRange(thisRead, batchRead);
+        do {
+            currentRead = queue.pollFirst();
 
-            if (queue == getCurrentContext().readQueue) {
-                // Validate that the data entry belongs to this stream, otherwise, skip.
-                // This verification protects from sequencer regression (tokens assigned in an older epoch
-                // that were never written to, and reassigned on a newer epoch)
-                if (ld.containsStream(this.id)) {
-                    addToResolvedQueue(getCurrentContext(), thisRead, ld);
-                    return ld;
-                } else {
-                    log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
-                            this, thisRead);
-                    return removeFromQueue(queue);
-                }
+            if (currentRead == null) {
+                // no more entries, empty queue.
+                return null;
             }
 
-            return ld;
-        }
+            try {
+                // Because the discovery mechanism implemented by this class
+                // does not require to read log entries in advance (only requests
+                // the stream's full address map, without reading the actual data), entries can be read in
+                // batches whenever we have a cache miss. This allows next reads
+                // to be serviced immediately, rather than reading one entry at a time.
+                ld = read(currentRead, queue);
 
-        return null;
-    }
+                if (queue == getCurrentContext().readQueue && ld != null) {
+                    // Validate that the data entry belongs to this stream, otherwise, skip.
+                    // This verification protects from sequencer regression (tokens assigned in an older epoch
+                    // that were never written to, and reassigned on a newer epoch)
+                    if (ld.containsStream(this.id)) {
+                        addToResolvedQueue(getCurrentContext(), currentRead, ld);
+                        readNext = false;
+                    } else {
+                        log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
+                                this, currentRead);
+                        // Invalid entry (does not belong to this stream). Read next.
+                        readNext = true;
+                    }
+                } else {
+                    readNext = false;
+                }
+            } catch (TrimmedException te) {
+                // Because addresses are requested in increasing order and system relies on prefix trim,
+                // we force trimmedExceptions to be thrown by lower layers, and handle ignoreTrimmed at this layer.
+                // Note that lower layers will cache the valid entries, to optimize read performance.
 
-    /**
-     * Prepare a batch of entries to be read, including the current address to retrieve.
-     *
-     * @param currentRead current address to retrieve.
-     * @param queue queue to get entries from.
-     * @return batch of entries.
-     */
-    private List<Long> getBatch(long currentRead, @NonNull NavigableSet<Long> queue) {
-        int counter = COUNTER_INIT_VALUE;
-        List<Long> batchRead = new ArrayList<>();
-        batchRead.add(currentRead);
-        counter++;
+                if (!options.ignoreTrimmed) {
+                    throw te;
+                }
 
-        Iterator<Long> it = queue.iterator();
-        while (it.hasNext() && counter < batchSize) {
-            batchRead.add(it.next());
-            counter++;
-        }
+                log.debug("removeFromQueue[{}]: ignoring trimmed addresses {}", this, te.getTrimmedAddresses());
+                // Ignore trimmed address, remove trimmed addresses and get next from queue
+                te.getTrimmedAddresses().forEach(address -> queue.remove(address));
 
-        return batchRead;
+                // If a TrimmedException was caught, the requested address (nextRead) is trimmed (lower of all),
+                // we need to continue reading to retrieve the next valid entry for this stream.
+                readNext = true;
+            }
+        } while (readNext);
+
+        return ld;
     }
 
     /**
@@ -145,7 +139,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                                            final NavigableSet<Long> queue,
                                            final long startAddress,
                                            final long stopAddress,
-                                           final Function<ILogData, BackpointerOp> filter,
+                                           final Function<ILogData, Boolean> filter,
                                            final boolean checkpoint,
                                            final long maxGlobal) {
         // Sanity check: startAddress must be a valid address and greater than stopAddress.
@@ -169,16 +163,17 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // For this reason, in the case of a valid trim mark, we must be sure this space is
                 // already resolved or loaded by a checkpoint.
                 if (Address.isAddress(trimMark) && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
+                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
+                                    "trimmed at address %s and this space is not covered by the " +
+                                    "loaded checkpoint with start address %s, while accessing the " +
+                                    "stream at version %s. Looking for a new checkpoint.", this,
+                            streamAddressSpace.getTrimMark(),
+                            getCurrentContext().checkpoint.startAddress, maxGlobal);
+                    log.info(message);
                     if (options.ignoreTrimmed) {
-                        log.warn("getStreamAddressMap: Ignoring trimmed exception for address[{}]," +
-                                " stream[{}]", streamAddressSpace.getTrimMark(), id);
+                        log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
+                                this, streamAddressSpace.getTrimMark());
                     } else {
-                        String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                        "trimmed at address %s and this space is not covered by the " +
-                                        "loaded checkpoint with start address %s, while accessing the " +
-                                        "stream at version %s", this, streamAddressSpace.getTrimMark(),
-                                getCurrentContext().checkpointSuccessStartAddr, maxGlobal);
-                        log.warn(message);
                         throw new TrimmedException(message);
                     }
                 }
@@ -190,39 +185,87 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         return !queue.isEmpty();
     }
 
-    private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, BackpointerOp> filter,
+    private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, Boolean> filter,
                                    NavigableSet<Long> queue) {
-        List<Long> checkpointAddresses = new ArrayList<>();
-        List<ILogData> checkpointData = new ArrayList<>();
+        SortedSet<Long> checkpointAddresses = new TreeSet<>(Collections.reverseOrder());
         streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
 
-        // Read all checkpoint entries in a batch read
-        try {
-            checkpointData = readAll(checkpointAddresses);
-        } catch (TrimmedException te) {
-            if (options.ignoreTrimmed) {
-                log.warn("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}]," +
-                        " stream[{}]", this, checkpointAddresses, id);
-            } else {
-                throw te;
+        // Checkpoint entries will be read in batches of a predefined size,
+        // the reason not to read them all in a single call is that:
+        // 1. There might be more than one checkpoint and not all of them might be required.
+        // The latest checkpoint subsumes all other checkpoints (we could be reading
+        // more data than necessary).
+        // 2. Because trims are async (between sequencer and log unit), part of these
+        // addresses (for instance for the first checkpoint) might have been already
+        // trimmed from the log, but stream maps (sequencer) still do not reflect it
+        // (causing unnecessary TrimmedExceptions--as this checkpoint is not even
+        // needed in the first place).
+        Iterable<List<Long>> batches = Iterables.partition(checkpointAddresses,
+                runtime.getParameters().getCheckpointReadBatchSize());
+
+        boolean checkpointResolved = false;
+        for (List<Long> batch : batches) {
+            if (checkpointResolved) {
+                // No need to fetch next batch of addresses, checkpoint has been resolved.
+                break;
+            }
+
+            try {
+                List<ILogData> entries = readAll(batch);
+                for (ILogData data : entries) {
+                    filter.apply(data);
+                }
+            } catch (TrimmedException te) {
+                log.warn("processCheckpoint: trimmed addresses {}", te.getTrimmedAddresses());
+                // Read one entry at a time for the last failed batch, this way we might load
+                // the required checkpoint entries until the stop condition is fulfilled
+                // without hitting a trimmed position. If we do hit a trim it is an actual
+                // TrimmedException
+                checkpointResolved = processCheckpointBatchByEntry(batch, filter);
             }
         }
 
-        // Sort in reverse order (based on address) to process
-        Collections.sort(checkpointData, Comparator.comparing(ILogData::getGlobalAddress).reversed());
+        // Select correct checkpoint - Highest
+        List<Long> checkpointEntries = resolveCheckpoint(getCurrentContext());
+        queue.addAll(checkpointEntries);
+    }
 
-        for (ILogData data: checkpointData) {
-            BackpointerOp op = filter.apply(data);
-            if (op == BackpointerOp.INCLUDE || op == BackpointerOp.INCLUDE_STOP) {
-                log.trace("getStreamAddressMap[{}]: Adding checkpoint address[{}] to queue",
-                        this, data.getGlobalAddress());
-                queue.add(data.getGlobalAddress());
-                // Check if we need to stop
-                if (op == BackpointerOp.INCLUDE_STOP) {
-                    break;
+    /**
+     * Process a batch of addresses as single entries.
+     *
+     * @param batch list of addresses to read.
+     * @param filter filter to apply to checkpoint data.
+     *
+     * @return True, resolved checkpoint (reached end of valid checkpoint).
+     *         False, otherwise.
+     */
+    private boolean processCheckpointBatchByEntry(List<Long> batch,
+                                                  Function<ILogData, Boolean> filter) {
+        log.debug("processCheckpointBatchByEntry[{}]: single step across {}", this, batch);
+        long lastReadAddress = Address.NON_ADDRESS;
+        try {
+            boolean checkpointResolved;
+            for (long address : batch) {
+                lastReadAddress = address;
+                ILogData data = read(address);
+                checkpointResolved = filter.apply(data);
+                if (checkpointResolved) {
+                    // Return if checkpoint has already been resolved (reached stop).
+                    return true;
                 }
             }
+        } catch (TrimmedException ste) {
+            // The valid checkpoint has been trimmed.
+            if (options.ignoreTrimmed) {
+                log.debug("processCheckpointBatchByEntry[{}]: Ignoring trimmed exception for address[{}]," +
+                        " stream[{}]", this, lastReadAddress, id);
+            } else {
+                log.warn("processCheckpointBatchByEntry[{}]: trim exception.", this, ste);
+                throw ste;
+            }
         }
+
+        return false;
     }
 
     private StreamAddressSpace getStreamAddressMap(long startAddress, long stopAddress, UUID streamId) {
@@ -254,10 +297,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             d = read(startAddress);
         } catch (TrimmedException e) {
             if (options.ignoreTrimmed) {
-                log.warn("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}]," +
+                log.debug("isAddressToBackpointerResolved[{}]: Ignoring trimmed exception for address[{}]," +
                         " stream[{}]", this, startAddress, streamId);
                 return false;
             } else {
+                log.warn("getStreamAddressMap[{}]; Attempting to resolve backpointer for {} but address is trimmed.",
+                        this, startAddress, e);
                 throw e;
             }
         }
@@ -294,13 +339,13 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     }
 
     private boolean isTrimResolvedLocally(long trimMark) {
-        return getCurrentContext().checkpointSuccessId == null
+        return getCurrentContext().checkpoint.id == null
                 && getCurrentContext().resolvedQueue.contains(trimMark);
     }
 
     private boolean isTrimCoveredByCheckpoint(long trimMark) {
-        return getCurrentContext().checkpointSuccessId != null &&
-                getCurrentContext().checkpointSuccessStartAddr >= trimMark;
+        return getCurrentContext().checkpoint.id != null &&
+                getCurrentContext().checkpoint.startAddress >= trimMark;
     }
 
     @Override

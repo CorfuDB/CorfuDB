@@ -36,7 +36,9 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -178,6 +180,46 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
+    public void quotaExceededTest() throws Exception {
+        serverRouter.reset();
+        String dirPath = PARAMETERS.TEST_TEMP_DIR;
+        final int maxLogSizeInBytes = 1000;
+        ServerContext sc = serverContext = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(dirPath)
+                .setServerRouter(serverRouter)
+                .setLogSizeQuota(Long.toString(maxLogSizeInBytes))
+                .build();
+        LogUnitServer server = new LogUnitServer(sc);
+        serverRouter.addServer(server);
+
+        final long address0 = 0L;
+        final long address1 = 1L;
+        final long address2 = 2L;
+        final long address3 = 3L;
+        final long address4 = 4L;
+
+        byte[] payload = new byte[maxLogSizeInBytes / 2];
+
+        client.write(address0, null, payload, Collections.emptyMap()).get();
+        client.write(address1, null, payload, Collections.emptyMap()).get();
+        assertThatThrownBy(() -> client.write(address2, null, payload, Collections.emptyMap()).get())
+                .isInstanceOf(ExecutionException.class)
+                .hasRootCauseInstanceOf(QuotaExceededException.class);
+        // Before elevating the clients priority, try to write a hole and verify that it goes through
+        // even after the quota has been exceeded
+        client.write(LogData.getHole(address4)).get();
+        // After the quota has been exceeded, we bump up the client priority level and write again
+        client.setPriorityLevel(PriorityLevel.HIGH);
+        client.write(address3, null, payload, Collections.emptyMap()).get();
+        assertThat(client.read(address0).get().getAddresses().get(address0).getType()).isEqualTo(DataType.DATA);
+        assertThat(client.read(address1).get().getAddresses().get(address1).getType()).isEqualTo(DataType.DATA);
+        assertThat(client.read(address2).get().getAddresses().get(address2).getType()).isEqualTo(DataType.EMPTY);
+        assertThat(client.read(address3).get().getAddresses().get(address3).getType()).isEqualTo(DataType.DATA);
+        assertThat(client.read(address4).get().getAddresses().get(address4).getType()).isEqualTo(DataType.HOLE);
+    }
+
+    @Test
     public void readingTrimmedAddress() throws Exception {
         byte[] testString = "hello world".getBytes();
         final long address0 = 0;
@@ -191,8 +233,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
 
-        client.prefixTrim(new Token(0L, address0));
-        client.compact();
+        client.prefixTrim(new Token(0L, address0)).get();
+        client.compact().get();
 
         // For logunit cache flush
         LogUnitServer server2 = new LogUnitServer(serverContext);
@@ -211,14 +253,14 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(0);
         byte[] testString = "hello world".getBytes();
         client.write(0, null, testString, Collections.emptyMap()).get();
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(1);
         client.flushCache().get();
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(0);
         LogData r = client.read(0).get().getAddresses().get(0L);
-        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+        assertThat(server2.getDataCache().getSize()).isEqualTo(1);
     }
 
     @Test
@@ -321,7 +363,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         final long address0 = 0;
         Token token = new Token(0, address0);
-        client.fillHole(token).get();
+        client.write(LogData.getHole(token)).get();
         LogData r = client.read(address0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.HOLE);
@@ -351,7 +393,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             }
         }, "Expected overwrite cause to be DIFF_DATA");
         Token token = new Token(0, 0);
-        assertThatThrownBy(() -> client.fillHole(token).get())
+        assertThatThrownBy(() -> client.write(LogData.getHole(token)).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class)
                 .has(conditionOverwrite);
@@ -541,7 +583,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         // 1. Entry in Address 0
         LogData ldOne = getLogDataWithoutId(addressOne);
         Map<UUID, Long> backpointerMap = new HashMap<>();
-        backpointerMap.put(streamId, Address.NON_ADDRESS);
+        backpointerMap.put(streamId, Address.NON_EXIST);
         ldOne.setBackpointerMap(backpointerMap);
         client.write(ldOne);
 
@@ -555,7 +597,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         // Get Stream's Address Space
         CompletableFuture<StreamsAddressResponse> cf = client.getLogAddressSpace();
         StreamAddressSpace addressSpace = cf.get().getAddressMap().get(streamId);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
         assertThat(addressSpace.getAddressMap().contains(addressOne));
 
@@ -563,7 +605,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         CompletableFuture<StreamsAddressResponse> cfLog = client.getLogAddressSpace();
         StreamsAddressResponse response = cfLog.get();
         addressSpace = response.getAddressMap().get(streamId);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
         assertThat(addressSpace.getAddressMap().contains(addressOne));
         assertThat(response.getLogTail()).isEqualTo(addressTwo);
