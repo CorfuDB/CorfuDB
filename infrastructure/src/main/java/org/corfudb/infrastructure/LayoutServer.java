@@ -1,18 +1,11 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-
-import java.lang.invoke.MethodHandles;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
+import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -24,6 +17,13 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
 import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * The layout server serves layouts, which are used by clients to find the
@@ -70,7 +70,11 @@ public class LayoutServer extends AbstractServer {
     private final CorfuMsgHandler handler =
             CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
+    @NonNull
     private final ExecutorService executor;
+
+    @NonNull
+    private final PaxosDataStore paxosDataStore;
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
@@ -94,8 +98,15 @@ public class LayoutServer extends AbstractServer {
      */
     public LayoutServer(@Nonnull ServerContext serverContext) {
         this.serverContext = serverContext;
-        executor = Executors.newFixedThreadPool(serverContext.getLayoutServerThreadCount(),
-                new ServerThreadFactory("layoutServer-", new ServerThreadFactory.ExceptionHandler()));
+
+        this.paxosDataStore = PaxosDataStore.builder()
+                .dataStore(serverContext.getDataStore())
+                .build();
+
+        executor = Executors.newFixedThreadPool(
+                serverContext.getLayoutServerThreadCount(),
+                new ServerThreadFactory("layoutServer-", new ExceptionHandler())
+        );
 
         if (serverContext.installSingleNodeLayoutIfAbsent()) {
             setLayoutInHistory(getCurrentLayout());
@@ -374,19 +385,17 @@ public class LayoutServer extends AbstractServer {
     }
 
     public Rank getPhase1Rank() {
-        return serverContext.getPhase1Rank();
+        return paxosDataStore
+                .getPhase1Rank(getServerEpoch())
+                .orElse(null);
     }
 
     public void setPhase1Rank(Rank rank) {
-        serverContext.setPhase1Rank(rank);
-    }
-
-    public Phase2Data getPhase2Data() {
-        return serverContext.getPhase2Data();
+        paxosDataStore.setPhase1Rank(rank, getServerEpoch());
     }
 
     public void setPhase2Data(Phase2Data phase2Data) {
-        serverContext.setPhase2Data(phase2Data);
+        paxosDataStore.setPhase2Data(phase2Data, getServerEpoch());
     }
 
     public void setLayoutInHistory(Layout layout) {
@@ -403,11 +412,10 @@ public class LayoutServer extends AbstractServer {
      * @return the phase 2 rank
      */
     public Rank getPhase2Rank() {
-        Phase2Data phase2Data = getPhase2Data();
-        if (phase2Data != null) {
-            return phase2Data.getRank();
-        }
-        return null;
+        return paxosDataStore
+                .getPhase2Data(getServerEpoch())
+                .map(Phase2Data::getRank)
+                .orElse(null);
     }
 
     /**
@@ -416,10 +424,9 @@ public class LayoutServer extends AbstractServer {
      * @return the proposed layout
      */
     public Layout getProposedLayout() {
-        Phase2Data phase2Data = getPhase2Data();
-        if (phase2Data != null) {
-            return phase2Data.getLayout();
-        }
-        return null;
+        return paxosDataStore
+                .getPhase2Data(getServerEpoch())
+                .map(Phase2Data::getLayout)
+                .orElse(null);
     }
 }
