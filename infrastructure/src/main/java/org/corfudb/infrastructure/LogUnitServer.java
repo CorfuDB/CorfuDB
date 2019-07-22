@@ -12,18 +12,18 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.FillHoleRequest;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -202,6 +202,7 @@ public class LogUnitServer extends AbstractServer {
         } else if (ex.getCause() instanceof TrimmedException) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } else {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
             throw new LogUnitException(ex);
         }
     }
@@ -211,9 +212,16 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log write: global: {}, streams: {}", msg.getPayload().getToken(),
-                msg.getPayload().getData().getBackpointerMap());
         LogData logData = (LogData) msg.getPayload().getData();
+        log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
+                logData.getToken(), logData.getBackpointerMap());
+
+        // Its not clear that making all holes high priority is the right thing to do, but since
+        // some reads will block until a hole is filled this is required (i.e. bypass quota checks)
+        // because the requirement is to allow reads, but only block writes once the quota is exhausted
+        if (logData.isHole()) {
+            msg.setPriorityLevel(PriorityLevel.HIGH);
+        }
 
         batchWriter.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
@@ -238,29 +246,6 @@ public class LogUnitServer extends AbstractServer {
         batchWriter.addTask(RANGE_WRITE, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
-                    handleException(ex, ctx, msg, r);
-                    return null;
-                });
-    }
-
-    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx,
-                          IServerRouter r) {
-        Token address = msg.getPayload().getAddress();
-        log.debug("fillHole: filling address at {}, epoch {}", address, msg.getEpoch());
-
-        // A hole fill is converted to a regular write in order to reuse the same
-        // write-path.
-        LogData hole = LogData.getHole(address.getSequence());
-        hole.setEpoch(address.getEpoch());
-        CorfuPayloadMsg<WriteRequest> writeReq = new CorfuPayloadMsg<>(CorfuMsgType.WRITE, new WriteRequest(hole));
-        writeReq.copyBaseFields(msg);
-
-        batchWriter.addTask(WRITE, writeReq)
-                .thenRunAsync(() -> {
-                    dataCache.put(address.getSequence(), writeReq.getPayload().getData());
-                    r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
                 });
@@ -370,6 +355,7 @@ public class LogUnitServer extends AbstractServer {
     public void sealServerWithEpoch(long epoch) {
         CorfuPayloadMsg<Long> msg = new CorfuPayloadMsg<>();
         msg.setEpoch(epoch);
+        msg.setPriorityLevel(PriorityLevel.HIGH);
         try {
             batchWriter.addTask(SEAL, msg).join();
         } catch (CompletionException ce) {

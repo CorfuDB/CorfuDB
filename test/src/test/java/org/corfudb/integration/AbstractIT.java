@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -150,7 +151,9 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
+    public void restartServer(
+            CorfuRuntime corfuRuntime, String endpoint) throws InterruptedException {
+
         corfuRuntime.invalidateLayout();
         RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout();
         try {
@@ -167,7 +170,7 @@ public class AbstractIT extends AbstractCorfuTest {
                     == (runtimeLayout.getLayout().getEpoch() + 1)) {
                 break;
             }
-            Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             corfuRuntime.invalidateLayout();
         }
     }
@@ -179,7 +182,9 @@ public class AbstractIT extends AbstractCorfuTest {
      * @param verifier     Layout predicate to test the refreshed layout.
      * @param corfuRuntime corfu runtime.
      */
-    public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuRuntime corfuRuntime) {
+    public static void waitForLayoutChange(
+            Predicate<Layout> verifier, CorfuRuntime corfuRuntime) throws InterruptedException {
+
         corfuRuntime.invalidateLayout();
         Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
 
@@ -189,7 +194,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             corfuRuntime.invalidateLayout();
             refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         assertThat(verifier.test(refreshedLayout)).isTrue();
     }
@@ -199,9 +204,9 @@ public class AbstractIT extends AbstractCorfuTest {
      *
      * @param supplier Supplier to test condition
      */
-    public static void waitFor(Supplier<Boolean> supplier) {
+    public static void waitFor(Supplier<Boolean> supplier) throws InterruptedException {
         while (!supplier.get()) {
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
     }
 
@@ -357,6 +362,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logLevel = "INFO";
         private String logPath = null;
         private String trustStore = null;
+        private String logSizeQuota = null;
         private String trustStorePassword = null;
 
 
@@ -375,6 +381,10 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             if (single) {
                 command.append(" -s");
+            }
+
+            if (logSizeQuota != null) {
+                command.append(" --log-size-quota-bytes ").append(logSizeQuota);
             }
 
             if (tlsEnabled) {

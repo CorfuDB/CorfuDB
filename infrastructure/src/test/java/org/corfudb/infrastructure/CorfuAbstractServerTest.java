@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,6 +54,6 @@ public class CorfuAbstractServerTest {
                 mock(IServerRouter.class)
         );
 
-        verify(handler, times(0));
+        verify(handler, times(0)).handle(any(), any(), any());
     }
 }

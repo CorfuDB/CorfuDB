@@ -110,6 +110,8 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
+                Sleep.sleepUninterruptibly(Duration.ofSeconds(10));
+
                 // Verify data path is working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));

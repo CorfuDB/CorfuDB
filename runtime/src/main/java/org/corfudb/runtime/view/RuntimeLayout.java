@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClient;
@@ -110,7 +111,9 @@ public class RuntimeLayout {
                 try {
                     Constructor<? extends IClient> ctor =
                             clientClass.getDeclaredConstructor(IClientRouter.class, long.class);
-                    return ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());
+                    IClient inst = ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());
+                    inst.setPriorityLevel(getRuntime().getParameters().getPriorityLevel());
+                    return inst;
                 } catch (NoSuchMethodException | IllegalAccessException | InstantiationException
                         | InvocationTargetException e) {
                     throw new UnrecoverableCorfuError(e);

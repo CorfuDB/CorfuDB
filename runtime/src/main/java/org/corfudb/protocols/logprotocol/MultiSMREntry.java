@@ -22,8 +22,7 @@ import org.corfudb.util.serializer.Serializers;
  * Its primary use case is to allow a single log entry to
  * hold a sequence of updates made by a transaction, which are applied atomically.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 @ToString
 @Slf4j
 public class MultiSMREntry extends LogEntry implements ISMRConsumable {

@@ -28,7 +28,6 @@ import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.annotations.Accessor;
@@ -98,43 +97,29 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      */
     public static class Index<K, V, I extends Comparable<?>> {
         private final CorfuTable.IndexName name;
-        private final CorfuTable.IndexFunction<K, V, I> indexFunction;
-        private final CorfuTable.MultiValueIndexFunction<K, V, I> multiValueIndexFunction;
+        private final CorfuTable.MultiValueIndexFunction<K, V, I> indexFunction;
 
-        // A flag representing whether a single indexer or a multi indexer
-        private final boolean monoIndex;
 
         public Index(CorfuTable.IndexName name, CorfuTable.IndexFunction<K, V, I> indexFunction) {
             this.name = name;
-            this.indexFunction = indexFunction;
-            this.multiValueIndexFunction =
+            this.indexFunction =
                     (k, v) -> Collections.singletonList(indexFunction.apply(k, v));
-            monoIndex = true;
         }
 
         public Index(CorfuTable.IndexName name,
                      CorfuTable.MultiValueIndexFunction<K, V, I> indexFunction) {
             this.name = name;
-            this.indexFunction = (k, v) -> indexFunction.apply(k, v).iterator().next();
-            this.multiValueIndexFunction = indexFunction;
-            monoIndex = false;
+            this.indexFunction = indexFunction;
         }
 
         public CorfuTable.IndexName getName() {
             return name;
         }
 
-        public CorfuTable.IndexFunction<K, V, I> getIndexFunction() {
+        public CorfuTable.MultiValueIndexFunction<K, V, I> getMultiValueIndexFunction() {
             return indexFunction;
         }
 
-        public CorfuTable.MultiValueIndexFunction<K, V, I> getMultiValueIndexFunction() {
-            return multiValueIndexFunction;
-        }
-
-        private boolean isMonoIndex() {
-            return monoIndex;
-        }
 
         @Override
         public boolean equals(Object o) {
@@ -237,43 +222,10 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
                                      @Nonnull Stream<Map.Entry<K, V>> entryStream);
     }
 
-    /**
-     * The interface for a index specification, which consists of a indexing function
-     * and a projection function.
-     * @param <K>   The type of the primary key on the map.
-     * @param <V>   The type of the value on the map.
-     * @param <I>   The type of the index.
-     * @param <P>   The type returned by the projection function.
-     */
-    public interface IndexSpecification<K, V, I extends Comparable<?>, P> {
-        IndexFunction<K, V, I> getIndexFunction();
-        ProjectionFunction<K, V, I, P> getProjectionFunction();
-    }
-
-    /** An index specification enumeration which has no index specifications.
-     *  Using this enumeration effectively disables secondary indexes.
-     */
-    enum NoSecondaryIndex implements IndexSpecification {
-        ;
-
-        @Override
-        public IndexFunction getIndexFunction() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public ProjectionFunction getProjectionFunction() {
-            throw new UnsupportedOperationException();
-        }
-    }
-
     // The "main" map which contains the primary key-value mappings.
     private final Map<K,V> mainMap;
     private Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
-
-    @Getter
-    boolean indexGenerationFailed = false;
 
     /**
      * Generate a table with a given implementation for the mainMap
@@ -761,36 +713,32 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      */
     @SuppressWarnings("unchecked")
     protected void unmapSecondaryIndexes(K key, V value) {
+        if (value == null) {
+            log.warn("Attempting to build an index with a null value, skipping.");
+            return;
+        }
+
         try {
-            if (value != null) {
-                // Map entry into secondary indexes
-                for (Index<K, V, ? extends Comparable> index : indexSpec) {
-                    String indexName = index.getName().get();
-                    Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                    if (index.isMonoIndex()) {
-                        Comparable indexKey = index.indexFunction.apply(key, value);
-                        Map<K, V> slot = secondaryIndex.get(indexKey);
-                        if (slot != null) {
-                            slot.remove(key, value);
-                        }
-                    } else {
-                        for (Comparable<?> indexKey
-                                : index.getMultiValueIndexFunction().apply(key, value)) {
-                            Map<K, V> slot = secondaryIndex.get(indexKey);
-                            if (slot != null) {
-                                slot.remove(key, value);
-                            }
-                        }
+            // Map entry into secondary indexes
+            for (Index<K, V, ? extends Comparable> index : indexSpec) {
+                String indexName = index.getName().get();
+                Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
+                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
+                    Map<K, V> slot = secondaryIndex.get(indexKey);
+                    if (slot != null) {
+                        slot.remove(key, value);
                     }
                 }
             }
         } catch (Exception e) {
-            indexSpec.clear();
-            secondaryIndexes.clear();
-            indexGenerationFailed = true;
-            log.error("unmapSecondaryIndexes: Exception unmapping {}, {},"
-                            + " UNMAPPING ALL INDEXES, indexing is disabled",
-                    key, value, e);
+            log.error("Received an exception while computing the index. " +
+                    "This is most likely an issue with the client's indexing function. {}", e);
+            // The index might be corrupt, and the only way to ensure safety is to disable
+            // indexing for this table.
+            clearIndex();
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+            throw e;
         }
     }
 
@@ -802,33 +750,39 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      */
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
+        if (value == null) {
+            log.warn("Attempting to build an index with a null value, skipping.");
+            return;
+        }
+
         try {
-            if (value != null) {
-                // Map entry into secondary indexes
-                for (Index<K, V, ? extends Comparable> index : indexSpec) {
-                    String indexName = index.getName().get();
-                    Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                    if (index.isMonoIndex()) {
-                        Comparable indexKey = index.getIndexFunction().apply(key, value);
-                        Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
-                        slot.put(key, value);
-                    } else {
-                        for (Comparable<?> indexKey
-                                : index.getMultiValueIndexFunction().apply(key, value)) {
-                            Map<K, V> slot = secondaryIndex
-                                    .computeIfAbsent(indexKey, k -> new HashMap<>());
-                            slot.put(key, value);
-                        }
-                    }
+            // Map entry into secondary indexes
+            for (Index<K, V, ? extends Comparable> index : indexSpec) {
+                String indexName = index.getName().get();
+                Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
+                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
+                    Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
+                    slot.put(key, value);
                 }
             }
         } catch (Exception e) {
-            indexSpec.clear();
-            secondaryIndexes.clear();
-            indexGenerationFailed = true;
-            log.error("mapSecondaryIndexes: Exception mapping {}, {},"
-                    + " UNMAPPING ALL INDEXES, indexing is disabled", key, value, e);
+            log.error("Received an exception while computing the index. " +
+                    "This is most likely an issue with the client's indexing function.", e);
+            // The index might be corrupt, and the only way to ensure safety is to disable
+            // indexing for this table.
+            clearIndex();
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+            throw e;
         }
+    }
+
+    /**
+     *  Disable all secondary indices for this table. Only used during error-recovery.
+     */
+    protected void clearIndex() {
+        indexSpec.clear();
+        secondaryIndexes.clear();
     }
 
 }

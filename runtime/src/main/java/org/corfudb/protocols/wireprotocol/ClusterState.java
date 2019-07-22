@@ -1,10 +1,12 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.Singular;
 import lombok.ToString;
@@ -13,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -24,12 +27,12 @@ import java.util.stream.Collectors;
  *
  * <p>Created by zlokhandwala on 11/1/18.
  */
-@Data
 @Builder
 @AllArgsConstructor
 @ToString
+@Getter
 @Slf4j
-public class ClusterState implements ICorfuPayload<ClusterState> {
+public class ClusterState {
 
     /**
      * Node's view of the cluster. The node collects states from all the other nodes in the cluster.
@@ -42,18 +45,10 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
     private final ImmutableMap<String, NodeState> nodes;
 
     @NonNull
+    private final ImmutableList<String> unresponsiveNodes;
+
+    @NonNull
     private final String localEndpoint;
-
-    public ClusterState(ByteBuf buf) {
-        nodes = ImmutableMap.copyOf(ICorfuPayload.mapFromBuffer(buf, String.class, NodeState.class));
-        localEndpoint = ICorfuPayload.fromBuffer(buf, String.class);
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, nodes);
-        ICorfuPayload.serialize(buf, localEndpoint);
-    }
 
     public int size() {
         return nodes.size();
@@ -114,13 +109,23 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
         return nodeState.getConnectivity();
     }
 
-    public static ClusterState buildClusterState(String localEndpoint, NodeState... states) {
+    public ImmutableList<String> getPingResponsiveNodes(){
+        return ImmutableList.copyOf(getLocalNodeConnectivity().getConnectedNodes());
+    }
+
+    public static ClusterState buildClusterState(
+            String localEndpoint, ImmutableList<String> unresponsiveServers, NodeState... states) {
+
         Map<String, NodeState> graph = Arrays.stream(states)
-                .collect(Collectors.toMap(state -> state.getConnectivity().getEndpoint(), Function.identity()));
+                .collect(Collectors.toMap(
+                        state -> state.getConnectivity().getEndpoint(),
+                        Function.identity()
+                ));
 
         return ClusterState.builder()
                 .localEndpoint(localEndpoint)
                 .nodes(ImmutableMap.copyOf(graph))
+                .unresponsiveNodes(unresponsiveServers)
                 .build();
     }
 }

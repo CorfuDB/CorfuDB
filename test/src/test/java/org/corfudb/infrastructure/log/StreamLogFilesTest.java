@@ -9,6 +9,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -700,5 +701,39 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log = new StreamLogFiles(getContext(), false);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+    }
+
+    @Test
+    public void estimateSizeTest() throws IOException {
+        // Create two nested directories and create files in each,
+        // the estimated size should reflect the total sum of all file sizes
+        File parentDir = com.google.common.io.Files.createTempDir();
+        File childDir = new File(parentDir.getAbsolutePath() + File.separator + "logs");
+
+        childDir.mkdir();
+
+        RandomAccessFile parentDirFile = new RandomAccessFile(parentDir.getAbsolutePath()
+                + File.separator + "file1", "rw");
+
+        RandomAccessFile childDirFile = new RandomAccessFile(childDir.getAbsolutePath()
+                + File.separator + "file2", "rw");
+
+        final int parentDirFilePayloadSize = 4300;
+        final int childDirFilePayloadSize = 3200;
+
+        byte[] parentDirFilePayload = new byte[parentDirFilePayloadSize];
+        byte[] childDirFilePayload = new byte[childDirFilePayloadSize];
+
+        parentDirFile.write(parentDirFilePayload);
+        childDirFile.write(childDirFilePayload);
+
+        parentDirFile.close();
+        childDirFile.close();
+
+        long parentSize = StreamLogFiles.estimateSize(parentDir.toPath());
+        long childDirSize = StreamLogFiles.estimateSize(childDir.toPath());
+
+        assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
+        assertThat(childDirSize).isEqualTo(childDirFilePayloadSize);
     }
 }

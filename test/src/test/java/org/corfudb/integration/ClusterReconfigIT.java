@@ -105,7 +105,9 @@ public class ClusterReconfigIT extends AbstractIT {
      * @param epochVerifier Predicate to test the refreshed epoch value.
      * @param corfuRuntime  Runtime.
      */
-    private void waitForEpochChange(Predicate<Long> epochVerifier, CorfuRuntime corfuRuntime) {
+    private void waitForEpochChange(Predicate<Long> epochVerifier, CorfuRuntime corfuRuntime)
+            throws InterruptedException {
+
         corfuRuntime.invalidateLayout();
         Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
@@ -114,7 +116,7 @@ public class ClusterReconfigIT extends AbstractIT {
             }
             corfuRuntime.invalidateLayout();
             refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
         assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
     }
@@ -388,8 +390,7 @@ public class ClusterReconfigIT extends AbstractIT {
      * @param killNode Index of the node to be killed.
      * @throws Exception
      */
-    private void killNodeAndVerifyDataPath(int killNode)
-            throws Exception {
+    private void killNodeAndVerifyDataPath(int killNode) throws Exception {
 
         // Set up cluster of 3 nodes.
         final int PORT_0 = 9000;
@@ -401,7 +402,7 @@ public class ClusterReconfigIT extends AbstractIT {
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
         final Layout layout = getLayout(3);
         final int retries = 3;
-        Sleep.SECONDS.sleepUninterruptibly(1);
+        TimeUnit.SECONDS.sleep(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
@@ -511,7 +512,7 @@ public class ClusterReconfigIT extends AbstractIT {
         shutdownCorfuServer(corfuServer_3);
     }
 
-    private void retryBootstrapOperation(Runnable bootstrapOperation) {
+    private void retryBootstrapOperation(Runnable bootstrapOperation) throws InterruptedException {
         final int retries = 5;
         int retry = retries;
         while (retry-- > 0) {
@@ -519,7 +520,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 bootstrapOperation.run();
                 return;
             } catch (Exception e) {
-                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             }
         }
         fail();
@@ -691,7 +692,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 // A transaction aborted exception is expected during
                 // some reconfiguration cases.
             }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
         assertThat(writeAfterKillNode).isTrue();
 
@@ -905,7 +906,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 break;
             }
             runtime.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
 
         assertThat(runtime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
@@ -1037,7 +1038,7 @@ public class ClusterReconfigIT extends AbstractIT {
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
         final Layout layout = getLayout(3);
         final int retries = 3;
-        Sleep.SECONDS.sleepUninterruptibly(1);
+        TimeUnit.SECONDS.sleep(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         final int systemDownHandlerLimit = 10;

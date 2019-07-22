@@ -31,6 +31,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.paxos.PaxosDataStore;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -65,10 +67,6 @@ public class ServerContext implements AutoCloseable {
     private static final String KEY_EPOCH = "CURRENT";
     private static final String PREFIX_LAYOUT = "LAYOUT";
     private static final String KEY_LAYOUT = "CURRENT";
-    private static final String PREFIX_PHASE_1 = "PHASE_1";
-    private static final String KEY_SUFFIX_PHASE_1 = "RANK";
-    private static final String PREFIX_PHASE_2 = "PHASE_2";
-    private static final String KEY_SUFFIX_PHASE_2 = "DATA";
     private static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
@@ -129,7 +127,7 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
-            Sets.newHashSet(PREFIX_PHASE_1, PREFIX_PHASE_2, PREFIX_LAYOUTS);
+            Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
     /**
      * Returns a new ServerContext.
@@ -246,8 +244,9 @@ public class ServerContext implements AutoCloseable {
      *
      * @return an instance of {@link CorfuRuntimeParameters}
      */
-    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+    public CorfuRuntimeParameters getManagementRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
@@ -418,26 +417,6 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    public Rank getPhase1Rank() {
-        return dataStore.get(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1);
-    }
-
-    public void setPhase1Rank(Rank rank) {
-        dataStore.put(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
-    }
-
-    public Phase2Data getPhase2Data() {
-        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2);
-    }
-
-    public void setPhase2Data(Phase2Data phase2Data) {
-        dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
-    }
-
     public void setLayoutInHistory(Layout layout) {
         dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
     }
@@ -465,26 +444,27 @@ public class ServerContext implements AutoCloseable {
     /**
      * Sets the management layout in the persistent datastore.
      *
-     * @param layout Layout to be persisted
+     * @param newLayout Layout to be persisted
      */
-    public synchronized void saveManagementLayout(Layout layout) {
+    public synchronized Layout saveManagementLayout(Layout newLayout) {
+        Layout currentLayout = copyManagementLayout();
+
         // Cannot update with a null layout.
-        if (layout == null) {
-            log.warn("saveManagementLayout: Attempted to update with null layout");
-            return;
+        if (newLayout == null) {
+            log.warn("Attempted to update with null. Current layout: {}", currentLayout);
+            return currentLayout;
         }
-        Layout currentLayout = getManagementLayout();
+
         // Update only if new layout has a higher epoch than the existing layout.
-        if (currentLayout == null || layout.getEpoch() > currentLayout.getEpoch()) {
-            // Persisting this new updated layout
-            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
-            log.info("saveManagementLayout: Updated to new layout at epoch {}",
-                    getManagementLayout().getEpoch());
-        } else {
-            log.trace("saveManagementLayout: "
-                            + "Ignoring layout because new epoch {} <= old epoch {}",
-                    layout.getEpoch(), currentLayout.getEpoch());
+        if (currentLayout == null || newLayout.getEpoch() > currentLayout.getEpoch()) {
+            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, newLayout);
+            currentLayout = copyManagementLayout();
+            log.info("Update to new layout at epoch {}", currentLayout.getEpoch());
+            return currentLayout;
         }
+
+        return currentLayout;
+
     }
 
     /**
@@ -670,7 +650,7 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
-        CorfuRuntimeParameters params = getDefaultRuntimeParameters();
+        CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
             clientGroup.shutdownGracefully(

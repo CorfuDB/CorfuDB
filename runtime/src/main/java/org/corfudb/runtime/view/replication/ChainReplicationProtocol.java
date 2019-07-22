@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
@@ -201,9 +202,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                             OverwriteException.class);
                 } else {
                     Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);
+                    LogData hole = LogData.getHole(token);
                     CFUtils.getUninterruptibly(runtimeLayout
                             .getLogUnitClient(globalAddress, i)
-                            .fillHole(token), OverwriteException.class);
+                            .write(hole), OverwriteException.class);
                 }
             } catch (OverwriteException oe) {
                 log.info("Propagate[{}]: Completed by other writer", globalAddress);
@@ -281,9 +283,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // the chain.
         try {
             Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);
+            LogData hole = LogData.getHole(token);
             CFUtils.getUninterruptibly(runtimeLayout
                     .getLogUnitClient(globalAddress, 0)
-                    .fillHole(token), OverwriteException.class);
+                    .write(hole), OverwriteException.class);
             propagate(runtimeLayout, globalAddress, null);
         } catch (OverwriteException oe) {
             // The hole-fill failed. We must ensure the other writer's

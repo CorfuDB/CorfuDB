@@ -5,6 +5,7 @@ import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 
+import com.google.common.collect.ImmutableList;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.junit.Test;
@@ -22,6 +23,7 @@ public class ClusterStateAggregatorTest {
 
         ClusterState clusterState = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK)
         );
 
@@ -29,6 +31,7 @@ public class ClusterStateAggregatorTest {
         ClusterStateAggregator aggregator = ClusterStateAggregator.builder()
                 .localEndpoint(localEndpoint)
                 .clusterStates(clusterStates)
+                .unresponsiveNodes(ImmutableList.of())
                 .build();
 
         NodeState expectedNodeState = clusterState.getNode("a").get();
@@ -42,6 +45,7 @@ public class ClusterStateAggregatorTest {
 
         ClusterState clusterState1 = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
                 NodeState.getUnavailableNodeState("b"),
                 NodeState.getUnavailableNodeState("c")
@@ -49,6 +53,7 @@ public class ClusterStateAggregatorTest {
 
         ClusterState clusterState2 = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
@@ -58,6 +63,7 @@ public class ClusterStateAggregatorTest {
         final int counter = 123;
         ClusterState clusterState3 = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
                 NodeState.getUnavailableNodeState("b"),
                 NodeState.getNotReadyNodeState("c", epoch, counter)
@@ -70,6 +76,7 @@ public class ClusterStateAggregatorTest {
         ClusterStateAggregator aggregator = ClusterStateAggregator.builder()
                 .localEndpoint(localEndpoint)
                 .clusterStates(clusterStates)
+                .unresponsiveNodes(ImmutableList.of())
                 .build();
 
         //check [CONNECTED, CONNECTED, CONNECTED]
