@@ -102,7 +102,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // the files of the old instance
     private LogMetadata logMetadata;
 
-    private final long logSizeLimit;
+    private final double logSizeLimitPercentage;
+    private long logSizeLimit;
 
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
@@ -120,15 +121,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
-        String logSizeQuotaParam = (String) serverContext.getServerConfig().get("--log-size-quota-bytes");
+        String logSizeQuotaParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
 
-        logSizeLimit = Long.parseLong(logSizeQuotaParam);
+        logSizeLimitPercentage = Double.parseDouble(logSizeQuotaParam);
 
         initStreamLogDirectory();
 
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
-        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit == -1 ? Long.MAX_VALUE : logSizeLimit);
+        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
 
         verifyLogs();
@@ -165,11 +166,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
             }
 
-            if (logSizeLimit != -1 && logSizeLimit > corfuDirBackend.getTotalSpace()) {
-                String msg = String.format("Invalid quota: quota(%d) is greater than the file store size (%d)",
-                        logSizeLimit, corfuDirBackend.getTotalSpace());
+            if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
+                String msg = String.format("Invalid quota: quota(%d)% must be between 0-100%",
+                        logSizeLimitPercentage);
                 throw new LogUnitException(msg);
             }
+            logSizeLimit = (long)(corfuDirBackend.getTotalSpace() * logSizeLimitPercentage / 100);
 
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
