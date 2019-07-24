@@ -384,7 +384,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
 
             if (logSizeQuota != null) {
-                command.append(" --log-size-quota-bytes ").append(logSizeQuota);
+                command.append(" --log-size-quota-percentage ").append(logSizeQuota);
             }
 
             if (tlsEnabled) {
