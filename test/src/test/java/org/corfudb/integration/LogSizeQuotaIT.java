@@ -31,7 +31,8 @@ public class LogSizeQuotaIT extends AbstractIT {
         String logPath = getCorfuServerLogPath(DEFAULT_HOST, port);
         FileStore corfuDirBackend = Files.getFileStore(Paths.get(CORFU_LOG_PATH));
         long fsSize = corfuDirBackend.getTotalSpace();
-        double quotaInPerc = quota * 100.0 / fsSize;
+        final double HUNDRED = 100.0;
+        final double quotaInPerc = quota * HUNDRED / fsSize;
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
