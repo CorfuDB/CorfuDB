@@ -121,9 +121,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
-        String logSizeQuotaParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
+        String logSizeLimitPercParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
 
-        logSizeLimitPercentage = Double.parseDouble(logSizeQuotaParam);
+        logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercParam);
 
         initStreamLogDirectory();
 
