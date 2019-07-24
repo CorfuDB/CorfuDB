@@ -90,7 +90,9 @@ public interface ISMRMap<K, V> extends Map<K, V> {
      */
     @Mutator(name = "put", noUpcall = true)
     default void blindPut(@ConflictParameter K key, V value) {
-        put(key, value);
+        // This is just a stub, the annotation processor will generate an update with
+        // put(key, value), since this method doesn't require an upcall therefore no
+        // operations are needed to be executed on the internal data structure
     }
 
     /** Generate an undo record for a put, given the previous state of the map
