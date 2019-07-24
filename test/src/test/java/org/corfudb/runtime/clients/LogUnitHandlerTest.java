@@ -194,7 +194,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
-                .setLogSizeQuota(Double.toString(maxLogSizeInPercentage))
+                .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
                 .build();
         LogUnitServer server = new LogUnitServer(sc);
         serverRouter.addServer(server);
