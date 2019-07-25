@@ -99,7 +99,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // the files of the old instance
     private LogMetadata logMetadata;
 
-    private long logSizeLimit;
+    // Derived size in bytes that normal writes to the log unit are capped at.
+    // This is derived as a percentage of the log's filesystem capacity.
+    private final long logSizeLimit;
 
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
@@ -117,9 +119,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
-        String logSizeLimitPercParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
+        String logSizeLimitPercentageParam = (String)serverContext.getServerConfig().get("--log-size-quota-percentage");
+        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
+        if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
+            String msg = String.format("Invalid quota: quota(%d)% must be between 0-100%",
+                    logSizeLimitPercentage);
+            throw new LogUnitException(msg);
+        }
 
-        initStreamLogDirectory(Double.parseDouble(logSizeLimitPercParam));
+        long fileSystemCapacity = initStreamLogDirectory();
+
+        logSizeLimit = (long)(fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
@@ -145,8 +155,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     /**
      * Create stream log directory if not exists
+     * @return total capacity of the file system that owns the log files.
      */
-    private void initStreamLogDirectory(double logSizeLimitPercentage) {
+    private long initStreamLogDirectory() {
+        long fileSystemCapacity;
 
         try {
             if (!logDir.toFile().exists()) {
@@ -160,14 +172,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
             }
 
-            if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
-                String msg = String.format("Invalid quota: quota(%d)% must be between 0-100%",
-                        logSizeLimitPercentage);
-                throw new LogUnitException(msg);
-            } else {
-                logSizeLimit = (long) (corfuDirBackend.getTotalSpace() * logSizeLimitPercentage / 100);
-            }
-
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
@@ -177,11 +181,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             if (!logDirectory.canWrite()) {
                 throw new LogUnitException("Stream log directory not writable in " + corfuDir);
             }
+
+            fileSystemCapacity = corfuDirBackend.getTotalSpace();
         } catch (IOException ioe) {
             throw new LogUnitException(ioe);
         }
 
         log.info("initStreamLogDirectory: initialized {}", logDir);
+        return fileSystemCapacity;
     }
 
     /**
