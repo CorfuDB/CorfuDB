@@ -38,7 +38,7 @@ public class ServerContextBuilder {
     String address = "test";
     int port = 9000;
     String seqCache = "1000";
-    String logSizeLimitPercentage = "100";
+    String logSizeLimitPercentage = "100.0";
     String batchSize = "100";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
