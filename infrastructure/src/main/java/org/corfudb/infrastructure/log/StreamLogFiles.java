@@ -122,17 +122,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
-        String logSizeLimitPercentageParam = (String)serverContext.getServerConfig().get("--log-size-quota-percentage");
+
+        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
         final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
         if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
-            String msg = String.format("Invalid quota: quota(%d)% must be between 0-100%",
+            String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
                     logSizeLimitPercentage);
             throw new LogUnitException(msg);
         }
 
         long fileSystemCapacity = initStreamLogDirectory();
-
-        logSizeLimit = (long)(fileSystemCapacity * logSizeLimitPercentage / 100.0);
+        logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
