@@ -99,7 +99,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // the files of the old instance
     private LogMetadata logMetadata;
 
-    private final double logSizeLimitPercentage;
     private long logSizeLimit;
 
     // Resource quota to track the log size
@@ -120,9 +119,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
         String logSizeLimitPercParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
 
-        logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercParam);
-
-        initStreamLogDirectory();
+        initStreamLogDirectory(Double.parseDouble(logSizeLimitPercParam));
 
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
@@ -149,7 +146,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Create stream log directory if not exists
      */
-    private void initStreamLogDirectory() {
+    private void initStreamLogDirectory(double logSizeLimitPercentage) {
 
         try {
             if (!logDir.toFile().exists()) {
@@ -167,8 +164,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 String msg = String.format("Invalid quota: quota(%d)% must be between 0-100%",
                         logSizeLimitPercentage);
                 throw new LogUnitException(msg);
+            } else {
+                logSizeLimit = (long) (corfuDirBackend.getTotalSpace() * logSizeLimitPercentage / 100);
             }
-            logSizeLimit = (long)(corfuDirBackend.getTotalSpace() * logSizeLimitPercentage / 100);
 
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
@@ -1267,7 +1265,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
         writeChannels.clear();
-        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit == -1 ? Long.MAX_VALUE : logSizeLimit);
+        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         log.info("reset: Completed, end segment {}", endSegment);
     }
 
