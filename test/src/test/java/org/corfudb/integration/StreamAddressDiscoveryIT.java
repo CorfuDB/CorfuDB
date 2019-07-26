@@ -1,6 +1,8 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
@@ -11,6 +13,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -690,12 +693,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *
      * Test Case 0:
      *
-     *         S1  S1  S1      S1  S2  S2        S1  S1  S1  S1    S1    S1   S1   S1  CP-S1 snapshot @9
+     *         S1  S1  S1      S1  S2  S2        S1  S1  S1  S1    S1    S1   S1   S1  CP-S1 snapshot @7 (tail)
      *       +---------------------------    +-----------------------------------------------+-------+
      *       | 0 | 1 | 2 | ..| 7 | 8 | 9 |    | 10 | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 | ...
      *       +---------------------------    +-----------------------------------------------+-------+
-     *                                   ^
-     *                                  TRIM
+     *                          ^
+     *                         TRIM
      **/
     @Test
     public void testStreamRebuilt() throws Exception {
@@ -706,7 +709,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         final int insertionsB = 2;
         final String stream1 = "mapA";
         final String stream2 = "mapB";
-        final int snapshotAddress = 9;
+        final int snapshotAddress = 7;
 
         // Run Corfu Server
         Process server = runDefaultServer();
@@ -766,7 +769,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
             // for the existing checkpoint)
-            assertThat(addressSpaceA.getTrimMark()).isEqualTo(cpAddress.getSequence() - insertionsB);
+            assertThat(addressSpaceA.getTrimMark()).isEqualTo(snapshotAddress);
             assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
 
             // Fetch Address Space for the given stream S2
@@ -777,11 +780,16 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
             // for the existing checkpoint)
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(snapshotAddress);
-            assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(0);
+            assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(insertionsB);
 
             // Open mapB after restart (verify it loads from checkpoint)
             Map<String, Integer> mapBRestart = createMap(runtimeRestart, stream2);
             assertThat(mapBRestart).hasSize(insertionsB);
+
+            // Open mapA after restart (verify it loads from checkpoint)
+            Map<String, Integer> mapARestart = createMap(runtimeRestart, stream1);
+            assertThat(mapARestart).hasSize(insertions*2 - insertionsB);
+
         } finally {
             runtimes.forEach(CorfuRuntime::shutdown);
             shutdownCorfuServer(server);
@@ -796,12 +804,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *
      * Test Case 1:
      *
-     *         S1  S1  S1   S1   S1  S2        S1       S1  S1  S1    S1    S1   S1   S1     CP-S1 snapshot @9
+     *         S1  S1  S1   S1   S1  S2        S1       S1  S1  S1    S1    S1   S1   S1     CP-S1
      *       +-------------------------    +-----------------------------------------------+--------------+
      *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 |
      *       +-------------------------    +-----------------------------------------------+--------------+
-     *                                ^
-     *                              TRIM
+     *                             ^
+     *                           TRIM
      *
      * @throws Exception
      */
@@ -813,7 +821,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         final int insertions = 10;
         final String streamNameA = "mapA";
         final String streamNameB = "mapB";
-        final int snapshotAddress = 10;
+        final int snapshotAddress = 8;
+        final long checkpointStartRecord = 21L;
 
         // Run Corfu Server
         Process server = runDefaultServer();
@@ -837,7 +846,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(streamNameA)).getToken();
             LogData hole = LogData.getHole(token);
             runtime.getLayoutView().getRuntimeLayout()
-                    .getLogUnitClient("tcp://localhost:9000")
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toString())
                     .write(hole);
 
             // Write 10 more entries to streamA (emulating writes that came in between the time a snapshot was taken
@@ -850,7 +863,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // we're interested in verifying the behaviour of streamA with end address != trim address.
             CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
                     "checkpoint-test", mapA);
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
@@ -866,13 +879,19 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
             runtimes.add(runtimeRestart);
 
+            // Verify checkpoint START_LOG_ADDRESS
+            LogEntry cpStart = (CheckpointEntry) runtimeRestart.getAddressSpaceView().read(checkpointStartRecord)
+                    .getPayload(runtimeRestart);
+            assertThat(((CheckpointEntry) cpStart).getDict()
+                    .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("8");
+
             // Fetch Address Space for the given stream
             StreamAddressSpace addressSpaceA = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameA));
 
             // Verify address space and trim mark is properly set for the given stream.
-            assertThat(addressSpaceA.getTrimMark()).isEqualTo(cpAddress.getSequence() - 1);
+            assertThat(addressSpaceA.getTrimMark()).isEqualTo(snapshotAddress);
             assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
 
             // Open mapA after restart (verify it loads from checkpoint)
@@ -1000,6 +1019,169 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         } finally {
             runtimes.forEach(CorfuRuntime::shutdown);
             shutdownCorfuServer(server);
+        }
+    }
+
+    /**
+     * Test rebuilding a stream from a new runtime, whenever the last address before the checkpoint
+     * was a hole.
+     *
+     * This case is interesting to test as addresses that become holes are discarded by the streamView,
+     * while sequencer's are agnostic of this info, hence, take it into account for trim mark computation.
+     */
+    @Test
+    public void testCheckpointWhenLastAddressIsHole() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA and streamB as maps
+            final String streamA = "streamA";
+            final String streamB = "streamB";
+            Map<String, Integer> mA = createMap(runtime, streamA);
+            Map<String, Integer> mB = createMap(runtime, streamB);
+
+            // Write 10 Entries to streamA
+            for (int i = 0; i < numEntries; i++) {
+                mA.put(String.valueOf(i), i);
+            }
+
+            // Force a hole as the last update to streamA
+            Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(streamA)).getToken();
+            LogData hole = LogData.getHole(token);
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toString())
+                    .write(hole);
+
+            // Write 10 Entries to streamB
+            for (int i = 0; i < numEntries; i++) {
+                mB.put(String.valueOf(i), i);
+            }
+
+            // Start a CheckpointWriter for streamA
+            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
+                    "checkpointer-Test", mA);
+            Token cpTokenA = cpwA.appendCheckpoint();
+
+            // Start a CheckpointWriter for streamB
+            CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamB),
+                    "checkpointer-Test", mB);
+            cpwB.appendCheckpoint();
+
+            // Add an update to streamA after checkpoint
+            mA.put(String.valueOf(numEntries), numEntries);
+
+            // Trim the log at B's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpTokenA);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toString())
+                    .flushCache();
+
+            // Instantiate streamA from new Runtime, so stream is rebuilt
+            CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            Map<String, Integer> mA2 = createMap(rt2, streamA);
+
+            // By accessing the map, we ensure we are able to load from the checkpoint.
+            try {
+                rt2.getObjectsView().TXBuild()
+                        .type(TransactionType.OPTIMISTIC)
+                        .build()
+                        .begin();
+                assertThat(mA2.size()).isEqualTo(numEntries + 1);
+
+                // Check Data
+                for (int i = 0; i <= numEntries; i++) {
+                    assertThat(mA2.get(String.valueOf(i))).isEqualTo(i);
+                }
+            } finally {
+                rt2.getObjectsView().TXEnd();
+                rt2.shutdown();
+                runtime.shutdown();
+            }
+        } finally {
+            shutdownCorfuServer(server);
+        }
+    }
+
+    /**
+     * This test creates an empty checkpoint (for an empty stream) and resets the server to verify
+     * that sequencer bootstrap is correct and stream is correctly built from checkpoint.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testEmptyCheckpointRebuiltOnRestart() throws Exception {
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        // Create Runtime
+        runtime = createDefaultRuntime();
+
+        // Runtime After Restart
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Instantiate streamA as map
+            final String streamA = "streamA";
+            Map<String, Integer> map = createMap(runtime, streamA);
+
+            // Start a CheckpointWriter for streamA (empty)
+            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
+                    "checkpointer-Test", map);
+            Token cpToken = cpwA.appendCheckpoint();
+
+            // Verify Checkpoint Token
+            assertThat(cpToken.getSequence()).isEqualTo(0L);
+
+            // Verify Checkpoint START_LOG_ADDRESS (reading start record)
+            // Because the stream was empty, it should force a hole on 0, and this should be the start address
+            LogEntry cpStart = (CheckpointEntry) runtime.getAddressSpaceView().read(1L).getPayload(runtime);
+            assertThat(((CheckpointEntry) cpStart).getDict()
+                    .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("0");
+
+            // Trim the log at B's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpToken);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toString())
+                    .flushCache();
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+            // Instantiate streamA as map after restart (verify it can load from empty checkpoint)
+            Map<String, Integer> mapRestart = createMap(rtRestart, streamA);
+            assertThat(mapRestart).hasSize(0);
+
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
         }
     }
 }
