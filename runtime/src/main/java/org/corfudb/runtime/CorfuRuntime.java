@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
@@ -401,6 +402,10 @@ public class CorfuRuntime {
                 ImmutableMap.<ChannelOption, Object>builder()
                         .put(ChannelOption.TCP_NODELAY, true)
                         .put(ChannelOption.SO_REUSEADDR, true)
+                        .put(ChannelOption.SO_SNDBUF, 1024 * 1024)
+                        .put(ChannelOption.SO_RCVBUF, 1024 * 1024)
+                        .put(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(
+                                393216, 524288))
                         .build();
 
         /**

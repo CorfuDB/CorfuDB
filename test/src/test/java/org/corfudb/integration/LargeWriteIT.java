@@ -31,9 +31,9 @@ public class LargeWriteIT  {
         String connString = "localhost:9000";
         CorfuRuntime rt = new CorfuRuntime(connString).setCacheDisabled(true).connect();
 
-        final int totalNumWrites = 100_000 * 10;
+        final int totalNumWrites = 100_000 * 5;
         final int numWriters = 8;
-        final int payloadSize = 1000;
+        final int payloadSize = 4000;
         final int batchPerThread = 10;
         final int numWritesPerThread = totalNumWrites / numWriters;
         byte[] payload = new byte[payloadSize];
@@ -49,8 +49,6 @@ public class LargeWriteIT  {
                         .getLogUnitClient(connString);
                 CompletableFuture<Boolean> ft = new CompletableFuture<>();
                 ft.complete(true);
-
-
 
                 for (int x = 1; x <= numWritesPerThread; x++) {
                     LogData ld = new LogData(DataType.DATA, payload);
