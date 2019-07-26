@@ -1,13 +1,20 @@
 package org.corfudb.integration;
 
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,85 +24,57 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * large writes.
  */
 
-public class LargeWriteIT extends AbstractIT {
+public class LargeWriteIT  {
 
     @Test
     public void largeStreamWrite() throws Exception {
+        String connString = "localhost:9000";
+        CorfuRuntime rt = new CorfuRuntime(connString).setCacheDisabled(true).connect();
 
-        final String streamName = "s1";
+        final int totalNumWrites = 100_000 * 10;
+        final int numWriters = 8;
+        final int payloadSize = 1000;
+        final int batchPerThread = 10;
+        final int numWritesPerThread = totalNumWrites / numWriters;
+        byte[] payload = new byte[payloadSize];
+        Thread[] writers = new Thread[numWriters];
 
-        // Start node one and populate it with data
-        Process server_1 = new CorfuServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(DEFAULT_PORT)
-                .setSingle(true)
-                .runServer();
+        long startTs = System.currentTimeMillis();
 
-        final int maxWriteSize = 100;
-
-        // Configure a client with a max write limit
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .maxWriteSize(maxWriteSize)
-                .build();
-
-        runtime = CorfuRuntime.fromParameters(params);
-        runtime.parseConfigurationString(DEFAULT_ENDPOINT);
-        runtime.connect();
-
-        final int bufSize = maxWriteSize * 2;
-
-        // Attempt to write a payload that is greater than the configured limit.
-        assertThatThrownBy(() -> runtime.getStreamsView()
-                .get(CorfuRuntime.getStreamID(streamName))
-                .append(new byte[bufSize]))
-                .isInstanceOf(WriteSizeException.class);
-        shutdownCorfuServer(server_1);
-    }
-
-    @Test
-    public void largeTransaction() throws Exception {
-        final String tableName = "table1";
-
-        // Start node one and populate it with data
-        Process server_1 = new CorfuServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(DEFAULT_PORT)
-                .setSingle(true)
-                .runServer();
-
-        final int maxWriteSize = 100;
-
-        // Configure a client with a max write limit
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .maxWriteSize(maxWriteSize)
-                .build();
-
-        runtime = CorfuRuntime.fromParameters(params);
-        runtime.parseConfigurationString(DEFAULT_ENDPOINT);
-        runtime.connect();
-
-        String largePayload = new String(new byte[maxWriteSize * 2]);
-
-        Map<String, String> map = runtime.getObjectsView()
-                .build()
-                .setType(CorfuTable.class)
-                .setStreamName(tableName)
-                .open();
+        for (int idx = 1; idx <= numWriters; idx++) {
+            final int tId = idx;
+            writers[idx - 1] = new Thread(() -> {
+                LogUnitClient lc = rt.getLayoutView()
+                        .getRuntimeLayout()
+                        .getLogUnitClient(connString);
+                CompletableFuture<Boolean> ft = new CompletableFuture<>();
+                ft.complete(true);
 
 
-        runtime.getObjectsView().TXBegin();
-        map.put("key1", largePayload);
-        boolean aborted = false;
-        try {
-            runtime.getObjectsView().TXEnd();
-        } catch (TransactionAbortedException e) {
-            aborted = true;
-            assertThat(e.getCause()).isInstanceOf(WriteSizeException.class);
-            assertThat(e.getAbortCause()).isEqualTo(AbortCause.SIZE_EXCEEDED);
+
+                for (int x = 1; x <= numWritesPerThread; x++) {
+                    LogData ld = new LogData(DataType.DATA, payload);
+                    ld.useToken(new Token(0, ThreadLocalRandom.current().nextLong(Long.MAX_VALUE)));
+                    ft = lc.write(ld);
+                    if (x % batchPerThread == 0) {
+                        ft.join();
+                    }
+
+                }
+                ft.join();
+
+            });
+
+            writers[idx - 1].start();
         }
-        assertThat(aborted).isTrue();
-        shutdownCorfuServer(server_1);
+
+
+        for (int x = 0; x < writers.length; x++) {
+            writers[x].join();
+        }
+
+        long endTs = System.currentTimeMillis();
+        System.out.println("Expected " + totalNumWrites + " found " + rt.getSequencerView().query().getToken().getSequence());
+        System.out.println("throughput " + (1.0 * totalNumWrites) / (endTs - startTs));
     }
 }
