@@ -5,6 +5,7 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,8 +15,11 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
@@ -29,6 +33,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -60,17 +65,23 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(map);
 
-        // Verify that a CP wasn't generated
+        // Verify that a CP was generated
         long address = mcw.appendCheckpoints(r, "A1").getSequence();
-        assertThat(address).isEqualTo(-1);
+        assertThat(address).isEqualTo(0L);
 
         // Verify that nothing was written
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
         final int objSize = 100;
         long a1 = sv.append(new byte[objSize]);
-        final long cpEndAddress = 0L;
+        // 0 - Hole for Map1 - 1/2 Start/End Record for Empty Checkpoint (no continuation records)
+        final long cpEndAddress = 3L;
         // Verify that the start/end records have been written for empty maps
         assertThat(a1).isEqualTo(cpEndAddress);
+        // Verify that checkpoint start address is the enforced hole (0L)
+        LogEntry cpStart = (CheckpointEntry) r.getAddressSpaceView().read(1L)
+                .getPayload(r);
+        assertThat(((CheckpointEntry) cpStart).getDict()
+                .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("0");
     }
 
     /** First smoke test, steps:
@@ -554,7 +565,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         assertThat(firstGlobalAddress1).isGreaterThan(-1);
 
         setRuntime();
-        Map<String, Long> m2c = instantiateMap(streamNameA);
 
         // A bug was once here when 2 checkpoints were adjacent to
         // each other without any regular entries in between.
@@ -567,7 +577,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mcw2.addMap((SMRMap) mA);
         mcw2.addMap((SMRMap) mB);
         long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author).getSequence();
-        assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
+        assertThat(firstGlobalAddress2).isGreaterThanOrEqualTo(firstGlobalAddress1);
 
         setRuntime();
         Map<String, Long> m2A = instantiateMap(streamNameA);
