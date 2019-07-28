@@ -92,6 +92,8 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
 
+        log.info("ObjectBuilder: open Corfu stream {} id {}", streamName, streamID);
+
         try {
             if (options.contains(ObjectOpenOptions.NO_CACHE)) {
                 return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
