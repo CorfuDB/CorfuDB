@@ -22,4 +22,23 @@ public class SerializerException extends RuntimeException {
     public SerializerException(String message) {
         super(message);
     }
+
+    /**
+     * Constructor for SerializerException with specified message and cause.
+     *
+     * @param message exception message
+     * @param cause throwable
+     */
+    public SerializerException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    /**
+     * Constructor for SerializerException with specified cause.
+     *
+     * @param cause throwable
+     */
+    public SerializerException(Throwable cause) {
+        super(cause);
+    }
 }
