@@ -1,10 +1,10 @@
 package org.corfudb.infrastructure;
 
-
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 
 import java.util.UUID;
 
+import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
 import org.assertj.core.api.Assertions;
@@ -17,8 +17,7 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
-
-//import static org.assertj.core.api.Assertions.assertThat;
+import org.mockito.Mockito;
 
 /**
  * Created by mwei on 12/14/15.
