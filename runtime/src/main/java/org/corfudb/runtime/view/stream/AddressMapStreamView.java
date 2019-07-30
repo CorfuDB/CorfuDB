@@ -174,7 +174,6 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     log.info(message);
                     throw new TrimmedException(message);
                 }
-
                 // Address maps might have been trimmed, hence not reflecting all updates to the stream
                 // For this reason, in the case of a valid trim mark, we must be sure this space is
                 // already resolved or loaded by a checkpoint.
@@ -208,9 +207,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
         // Checkpoint entries will be read in batches of a predefined size,
         // the reason not to read them all in a single call is that:
-        // 1. There might be more than one checkpoint and not all of them might be required.
-        // The latest checkpoint subsumes all other checkpoints (we could be reading
-        // more data than necessary).
+        // 1. There might be more than one checkpoint.
         // 2. Because trims are async (between sequencer and log unit), part of these
         // addresses (for instance for the first checkpoint) might have been already
         // trimmed from the log, but stream maps (sequencer) still do not reflect it
@@ -219,13 +216,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         Iterable<List<Long>> batches = Iterables.partition(checkpointAddresses,
                 runtime.getParameters().getCheckpointReadBatchSize());
 
-        boolean checkpointResolved = false;
         for (List<Long> batch : batches) {
-            if (checkpointResolved) {
-                // No need to fetch next batch of addresses, checkpoint has been resolved.
-                break;
-            }
-
             try {
                 List<ILogData> entries = readAll(batch);
                 for (ILogData data : entries) {
@@ -235,9 +226,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 log.warn("processCheckpoint: trimmed addresses {}", te.getTrimmedAddresses());
                 // Read one entry at a time for the last failed batch, this way we might load
                 // the required checkpoint entries until the stop condition is fulfilled
-                // without hitting a trimmed position. If we do hit a trim it is an actual
-                // TrimmedException
-                checkpointResolved = processCheckpointBatchByEntry(batch, filter);
+                // without hitting a trimmed position.
+                processCheckpointBatchByEntry(batch, filter);
+
+                // Because checkpoint addresses were ordered in reverse,
+                // we don't need to continue reading entries (prefix trim).
+                break;
             }
         }
 
@@ -255,33 +249,25 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      * @return True, resolved checkpoint (reached end of valid checkpoint).
      *         False, otherwise.
      */
-    private boolean processCheckpointBatchByEntry(List<Long> batch,
+    private void processCheckpointBatchByEntry(List<Long> batch,
                                                   Function<ILogData, Boolean> filter) {
         log.debug("processCheckpointBatchByEntry[{}]: single step across {}", this, batch);
-        long lastReadAddress = Address.NON_ADDRESS;
         try {
             boolean checkpointResolved;
             for (long address : batch) {
-                lastReadAddress = address;
                 ILogData data = read(address);
                 checkpointResolved = filter.apply(data);
                 if (checkpointResolved) {
                     // Return if checkpoint has already been resolved (reached stop).
-                    return true;
+                    break;
                 }
             }
         } catch (TrimmedException ste) {
-            // The valid checkpoint has been trimmed.
-            if (getReadOptions().isIgnoreTrim()) {
-                log.debug("processCheckpointBatchByEntry[{}]: Ignoring trimmed exception for address[{}]," +
-                        " stream[{}]", this, lastReadAddress, id);
-            } else {
-                log.warn("processCheckpointBatchByEntry[{}]: trim exception.", this, ste);
-                throw ste;
-            }
+            // Even if this checkpoint was not resolved, we can safely return as previous read checkpoints
+            // might have resolved. If none was found, the stream will be rebuilt from the regular stream
+            // address space.
+            return;
         }
-
-        return false;
     }
 
     private StreamAddressSpace getStreamAddressMap(long startAddress, long stopAddress, UUID streamId) {
