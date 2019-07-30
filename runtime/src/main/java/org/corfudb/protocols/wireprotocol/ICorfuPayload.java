@@ -93,7 +93,7 @@ public interface ICorfuPayload<T> {
                             return new StreamAddressSpace(trimMark, map);
                         } catch (IOException ioe) {
                             throw new SerializerException("Exception when attempting to " +
-                                    "deserialize stream address space.");
+                                    "deserialize stream address space.", ioe);
                         }
                     })
                     .build()
