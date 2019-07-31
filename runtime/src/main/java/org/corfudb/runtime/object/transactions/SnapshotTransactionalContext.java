@@ -7,13 +7,8 @@ import java.util.Set;
 import lombok.Getter;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.view.Address;
 
 /**
  * A snapshot transactional context.
