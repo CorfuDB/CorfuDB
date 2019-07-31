@@ -428,8 +428,8 @@ public class FastObjectLoader {
 
     private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, long globalAddress) {
         MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;
-        multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -> {
-            multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -> {
+        multiObjectLogEntry.getEntryMap().forEach((streamId, smrEntryList) -> {
+            smrEntryList.forEach((smrEntry) -> {
                 applySmrEntryToStream(streamId, smrEntry, globalAddress);
             });
         });

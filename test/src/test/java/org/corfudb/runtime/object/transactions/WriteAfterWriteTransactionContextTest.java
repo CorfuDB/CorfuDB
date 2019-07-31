@@ -60,11 +60,11 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
         MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
             (getRuntime());
         assertThat(tx1.getEntryMap().size()).isEqualTo(1);
-        MultiSMREntry entryMap = tx1.getEntryMap().entrySet().iterator()
+        List<SMREntry> smrEntries = tx1.getEntryMap().entrySet().iterator()
                                                         .next().getValue();
-        assertThat(entryMap).isNotNull();
-        assertThat(entryMap.getUpdates().size()).isEqualTo(1);
-        SMREntry smrEntry = entryMap.getUpdates().get(0);
+        assertThat(smrEntries).isNotNull();
+        assertThat(smrEntries.size()).isEqualTo(1);
+        SMREntry smrEntry = smrEntries.get(0);
         Object[] args = smrEntry.getSMRArguments();
         assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
         assertThat((String) args[0]).isEqualTo("k");

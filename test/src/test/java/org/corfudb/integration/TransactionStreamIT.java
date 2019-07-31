@@ -40,8 +40,8 @@ public class TransactionStreamIT extends AbstractIT {
     private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas) {
         for (ILogData ld : deltas) {
             MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(null);
-            for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.entryMap.entrySet()) {
-                for (SMREntry update : multiSMREntry.getValue().getUpdates()) {
+            for (Map.Entry<UUID, List<SMREntry>> multiSMREntry : multiObjSmr.entryMap.entrySet()) {
+                for (SMREntry update : multiSMREntry.getValue()) {
                     int key = (int) update.getSMRArguments()[0];
                     int val = (int) update.getSMRArguments()[1];
                     assertThat(key).isEqualTo(val);

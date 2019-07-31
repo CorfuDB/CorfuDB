@@ -109,12 +109,12 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
                 (getRuntime());
-        MultiSMREntry entryMap = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
-        assertThat(entryMap).isNotNull();
+        List<SMREntry> smrEntries = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
+        assertThat(smrEntries).isNotNull();
 
-        assertThat(entryMap.getUpdates().size()).isEqualTo(1);
+        assertThat(smrEntries.size()).isEqualTo(1);
 
-        SMREntry smrEntry = entryMap.getUpdates().get(0);
+        SMREntry smrEntry = smrEntries.get(0);
         Object[] args = smrEntry.getSMRArguments();
         assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
         assertThat((String) args[0]).isEqualTo("k");
