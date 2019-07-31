@@ -120,50 +120,6 @@ public class StreamViewTest extends AbstractViewTest {
                 .isEqualTo(null);
     }
 
-    /**
-     * Test that a client can call IStreamView.remainingUpTo after a prefix trim.
-     * If remainingUpTo contains trimmed addresses, then they are ignored.
-     */
-    @Test
-    public void testRemainingUpToWithTrim() {
-        StreamOptions options = StreamOptions.builder()
-                .ignoreTrimmed(true)
-                .build();
-
-        IStreamView txStream = runtime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
-        final int firstIter = 50;
-        for (int x = 0; x < firstIter; x++) {
-            byte[] data = "Hello World!".getBytes();
-            txStream.append(data);
-        }
-
-        List<ILogData> entries = txStream.remainingUpTo((firstIter - 1) / 2);
-        assertThat(entries.size()).isEqualTo(firstIter / 2);
-
-        Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), (firstIter - 1) / 2);
-        runtime.getAddressSpaceView().prefixTrim(token);
-        runtime.getAddressSpaceView().invalidateServerCaches();
-        runtime.getAddressSpaceView().invalidateClientCache();
-
-        entries = txStream.remainingUpTo((firstIter - 1) / 2);
-        assertThat(entries.size()).isEqualTo(0);
-
-        entries = txStream.remainingUpTo(firstIter);
-        assertThat(entries.size()).isEqualTo((firstIter / 2));
-
-        // Open the stream with a new client
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
-                                        .connect();
-        IStreamView txStream2 = rt2.getStreamsView()
-                 .get(ObjectsView.TRANSACTION_STREAM_ID, options);
-        assertThatThrownBy(() -> txStream2.remaining())
-                .isInstanceOf(TrimmedException.class);
-
-        txStream2.seek(firstIter / 2);
-        entries = txStream2.remainingUpTo(Long.MAX_VALUE);
-        assertThat(entries.size()).isEqualTo((firstIter / 2));
-    }
-
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteFromStreamConcurrent()
@@ -358,30 +314,6 @@ public class StreamViewTest extends AbstractViewTest {
 
         assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo(testPayload2);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void prefixTrimThrowsException()
-            throws Exception {
-        //begin tests
-        UUID streamA = CorfuRuntime.getStreamID("stream A");
-        byte[] testPayload = "hello world".getBytes();
-
-        // Write to the stream
-        IStreamView sv = r.getStreamsView().get(streamA);
-        sv.append(testPayload);
-
-        // Trim the entry
-        Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), 0);
-        runtime.getAddressSpaceView().prefixTrim(token);
-        runtime.getAddressSpaceView().gc();
-        runtime.getAddressSpaceView().invalidateServerCaches();
-        runtime.getAddressSpaceView().invalidateClientCache();
-
-        // We should get a prefix trim exception when we try to read
-        assertThatThrownBy(() -> sv.next())
-                .isInstanceOf(TrimmedException.class);
     }
 
     @Test

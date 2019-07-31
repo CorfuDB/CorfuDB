@@ -94,9 +94,6 @@ public class StreamAddressSpace {
 
         // Recover allocated but unused memory
         addressMap.trim();
-        trimMark = Collections.max(addresses);
-
-        log.trace("removeAddresses: new trim mark set to {}", trimMark);
     }
 
     /**

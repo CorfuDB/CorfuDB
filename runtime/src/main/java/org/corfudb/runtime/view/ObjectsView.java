@@ -206,17 +206,6 @@ public class ObjectsView extends AbstractView {
         }
     }
 
-    /**
-     * Run garbage collection on all opened objects. Note that objects
-     * open with the NO_CACHE options will not be gc'd
-     */
-    public void gc(long trimMark) {
-        for (Object obj : getObjectCache().values()) {
-            ((CorfuCompileProxy) ((ICorfuSMR) obj).
-                    getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
-        }
-    }
-
     @Data
     @SuppressWarnings({"checkstyle:abbreviation"})
     public static class ObjectID<T> {
