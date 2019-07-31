@@ -42,32 +42,6 @@ public class CompileProxyTest extends AbstractViewTest {
     }
 
     @Test
-    public void testTrimmedObject() throws Exception {
-        CorfuRuntime rt = getDefaultRuntime();
-
-        // Advance the sequencer counter and trim up to the tail, so that the first
-        // read will be on a trimmed address
-        final int numOfTokens = 10;
-        String streamName = "s1";
-        rt.getSequencerView().next(CorfuRuntime.getStreamID(streamName));
-
-        // Trim all the way up to the tail
-        Token token = new Token(rt.getLayoutView().getLayout().getEpoch(), numOfTokens);
-        rt.getAddressSpaceView().prefixTrim(token);
-        rt.getAddressSpaceView().gc();
-        rt.getAddressSpaceView().invalidateServerCaches();
-
-        Map<String, String> map = rt.getObjectsView().build()
-                .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
-                .open();
-        // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
-        assertThatThrownBy(() -> {
-            map.get("key1");
-        }).isInstanceOf(TrimmedException.class);
-    }
-
-    @Test
     public void testObjectCounterSimple() throws Exception {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
