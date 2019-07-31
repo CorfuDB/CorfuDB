@@ -17,7 +17,7 @@ public class TrimmedException extends LogUnitException {
      */
     @Getter
     @Setter
-    private boolean retriable = true;
+    private boolean retriable = false;
 
     /*
      * List of trimmed addresses.
@@ -36,6 +36,6 @@ public class TrimmedException extends LogUnitException {
 
     public TrimmedException(String message) {
         super(message);
-        retriable = true;
+        retriable = false;
     }
 }
