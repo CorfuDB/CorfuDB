@@ -158,41 +158,6 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // as startAddress could be ahead of maxGlobal---in case it reflects
                 // the tail of the stream.
                 queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));
-
-                long trimMark = streamAddressSpace.getTrimMark();
-
-                // In case we are dealing with a stream that does not have the checkpoint
-                // capability, check to see if we are trying to access an address that has been
-                // previously trimmed.
-                if (!isCheckpointCapable()
-                        && Address.isAddress(trimMark)
-                        && trimMark > stopAddress) {
-                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                    "trimmed at address %s and we are trying to access the " +
-                                    "stream starting at address %s. This stream does not have " +
-                                    "the checkpoint capability.", this, trimMark, stopAddress);
-                    log.info(message);
-                    throw new TrimmedException(message);
-                }
-                // Address maps might have been trimmed, hence not reflecting all updates to the stream
-                // For this reason, in the case of a valid trim mark, we must be sure this space is
-                // already resolved or loaded by a checkpoint.
-                if (isCheckpointCapable()
-                        && Address.isAddress(trimMark)
-                        && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
-                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                    "trimmed at address %s and this space is not covered by the " +
-                                    "loaded checkpoint with start address %s, while accessing the " +
-                                    "stream at version %s. Looking for a new checkpoint.",this,
-                            trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
-                    log.info(message);
-                    if (getReadOptions().isIgnoreTrim()) {
-                        log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
-                                this, streamAddressSpace.getTrimMark());
-                    } else {
-                        throw new TrimmedException(message);
-                    }
-                }
             }
         }
 
@@ -327,39 +292,6 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         }
 
         return false;
-    }
-
-    /**
-     * Verify that a trim is covered either by a loaded checkpoint or by the locally resolved addresses.
-     *
-     * Because address maps might have been trimmed, the trim mark is a 'marker' of addresses that were
-     * removed from the map (historical) and that should be covered by a checkpoint.
-     *
-     * @param trimMark
-     * @return TRUE, trim mark contained in checkpoint, FALSE, otherwise.
-     */
-    private boolean isTrimCoveredByCheckpointOrLocalView(long trimMark) {
-        return isTrimResolvedLocally(trimMark) ||
-                isTrimCoveredByCheckpoint(trimMark);
-    }
-
-    private boolean isTrimResolvedLocally(long trimMark) {
-        return getCurrentContext().checkpoint.id == null
-                && getCurrentContext().resolvedQueue.contains(trimMark);
-    }
-
-    private boolean isTrimCoveredByCheckpoint(long trimMark) {
-        return getCurrentContext().checkpoint.id != null &&
-                getCurrentContext().checkpoint.startAddress >= trimMark;
-    }
-
-    /**
-     * Check to see if the current stream is checkpoint capable.
-     *
-     * @return whether this stream is capable of being checkpointed
-     */
-    private boolean isCheckpointCapable() {
-        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID);
     }
 
     @Override

@@ -365,7 +365,6 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Retrieve address space from current log unit server (after a prefix trim)
         addressSpace = newServer.getStreamAddressSpace(streamID);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(trimMark);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(maxAddress - trimMark);
     }
 
