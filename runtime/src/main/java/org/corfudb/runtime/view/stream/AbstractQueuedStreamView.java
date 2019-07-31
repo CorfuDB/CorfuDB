@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -100,11 +101,6 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
-        // If maxGlobal is before the checkpoint position, throw a
-        // trimmed exception
-        if (maxGlobal < context.checkpoint.startAddress) {
-            throw new TrimmedException();
-        }
 
         // If checkpoint data is available, get from readCpQueue first
         NavigableSet<Long> getFrom;
@@ -147,7 +143,6 @@ public abstract class AbstractQueuedStreamView extends
                     getCurrentContext().getGcTrimMark());
             // Remove all the entries that are strictly less than
             // the trim mark
-            getCurrentContext().readCpQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
             getCurrentContext().readQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
             getCurrentContext().resolvedQueue.headSet(getCurrentContext().getGcTrimMark()).clear();
 
@@ -264,13 +259,12 @@ public abstract class AbstractQueuedStreamView extends
                     .build();
             return runtime.getAddressSpaceView().read(address, options);
         } catch (TrimmedException te) {
-            processTrimmedException(te);
             throw te;
         }
     }
 
-    @Nonnull
-    protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
+    @NonNull
+    protected List<ILogData> readAll(@NonNull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
                     runtime.getAddressSpaceView().read(addresses, readOptions);
@@ -281,16 +275,7 @@ public abstract class AbstractQueuedStreamView extends
                     .filter(data -> data != null)
                     .collect(Collectors.toList());
         } catch (TrimmedException te) {
-            processTrimmedException(te);
             throw te;
-        }
-    }
-
-    private void processTrimmedException(TrimmedException te) {
-        if (TransactionalContext.getCurrentContext() != null
-                && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()
-                < getCurrentContext().checkpoint.snapshot) {
-            te.setRetriable(false);
         }
     }
 
@@ -309,12 +294,6 @@ public abstract class AbstractQueuedStreamView extends
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
         boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
-
-        // If maxGlobal is before the checkpoint position, throw a
-        // trimmed exception
-        if (maxGlobal < context.checkpoint.startAddress) {
-            throw new TrimmedException();
-        }
 
         // We always have to fill to the read queue to ensure we read up to
         // max global.
@@ -367,7 +346,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // Update the global pointer
         if (readFrom.size() > 0) {
-            context.setGlobalPointerCheckGCTrimMark(readFrom.get(readFrom.size() - 1)
+            context.setGlobalPointer(readFrom.get(readFrom.size() - 1)
                     .getGlobalAddress());
         }
 
@@ -558,7 +537,6 @@ public abstract class AbstractQueuedStreamView extends
         try {
             return runtime.getAddressSpaceView().read(address, readOptions);
         } catch (TrimmedException te) {
-            processTrimmedException(te);
             throw te;
         }
     }
@@ -578,7 +556,6 @@ public abstract class AbstractQueuedStreamView extends
         try {
             return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
         } catch (TrimmedException te) {
-            processTrimmedException(te);
             throw te;
         }
     }
@@ -768,12 +745,6 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
-        // If we're attempt to go prior to most recent checkpoint, we
-        // throw a TrimmedException.
-        if (context.getGlobalPointer() - 1 < context.checkpoint.startAddress) {
-            throw new TrimmedException();
-        }
-
         // Otherwise, the previous entry should be resolved, so get
         // one less than the current.
         Long prevAddress = context
@@ -782,12 +753,12 @@ public abstract class AbstractQueuedStreamView extends
         // to get the correct previous entry.
         if (prevAddress == null && Address.isAddress(context.minResolution)
                 || prevAddress != null && prevAddress <= context.minResolution) {
-            context.setGlobalPointerCheckGCTrimMark(prevAddress == null ? Address.NEVER_READ :
+            context.setGlobalPointer(prevAddress == null ? Address.NEVER_READ :
                     prevAddress - 1L);
 
             remainingUpTo(context.minResolution);
             context.minResolution = Address.NON_ADDRESS;
-            context.setGlobalPointerCheckGCTrimMark(oldPointer);
+            context.setGlobalPointer(oldPointer);
             prevAddress = context
                     .resolvedQueue.lower(context.getGlobalPointer());
             log.trace("previous[{}]: updated resolved queue {}", this, context.resolvedQueue);
@@ -798,7 +769,7 @@ public abstract class AbstractQueuedStreamView extends
 
         if (prevAddress != null) {
             log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
-            context.setGlobalPointerCheckGCTrimMark(prevAddress);
+            context.setGlobalPointer(prevAddress);
             return read(prevAddress);
         }
 
@@ -808,7 +779,7 @@ public abstract class AbstractQueuedStreamView extends
             // entry
             log.trace("previous[{}]: reached the beginning of the stream resetting" +
                     " the stream pointer to {}", this, Address.NON_ADDRESS);
-            context.setGlobalPointerCheckGCTrimMark(Address.NON_ADDRESS);
+            context.setGlobalPointer(Address.NON_ADDRESS);
             return null;
         }
 
