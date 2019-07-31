@@ -369,13 +369,10 @@ public abstract class AbstractTransactionalContext implements
     }
 
     int getWriteSetEntrySize(UUID id) {
-        List<SMREntry> entries = getWriteSetInfo().getWriteSet().getSMRUpdates(id);
-
-        if (entries == null) {
-            return 0;
-        } else {
-            return entries.size();
-        }
+        return getWriteSetInfo()
+                .getWriteSet()
+                .getSMRUpdates(id)
+                .size();
     }
 
     /**

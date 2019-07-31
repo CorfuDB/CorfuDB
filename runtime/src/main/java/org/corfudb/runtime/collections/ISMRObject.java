@@ -5,8 +5,7 @@ import org.corfudb.annotations.Accessor;
 /**
  * Created by mwei on 11/12/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 public interface ISMRObject {
 
     /**

@@ -5,6 +5,7 @@ import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -15,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -39,6 +41,7 @@ public class ClusterStateCollectorTest {
 
         ClusterState predefinedCluster = ClusterState.buildClusterState(
                 localEndpoint,
+                ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
                 NodeState.getUnavailableNodeState("c")
@@ -68,7 +71,9 @@ public class ClusterStateCollectorTest {
                 .clusterState(clusterConnectivity)
                 .build();
 
-        ClusterState clusterState = collector.collectClusterState(1, SequencerMetrics.UNKNOWN);
+        ClusterState clusterState = collector.collectClusterState(
+                1, ImmutableList.of(), SequencerMetrics.UNKNOWN
+        );
 
         NodeState localNodeState = clusterState.getNode(localEndpoint).get();
         NodeConnectivity localNodeConnectivity = localNodeState.getConnectivity();

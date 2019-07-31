@@ -23,6 +23,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
@@ -30,6 +31,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 
@@ -62,19 +64,44 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final Cache<Long, ILogData> readCache = CacheBuilder.newBuilder()
-            .maximumSize(runtime.getParameters().getNumCacheEntries())
-            .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
-            .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
-            .removalListener(this::handleEviction)
-            .recordStats()
-            .build();
+    final Cache<Long, ILogData> readCache;
+
+    final private long cacheKeySize = MetricsUtils.sizeOf.deepSizeOf(new Long(0));
+
+    final private long defaultMaxCacheEntries = 5000;
 
     /**
      * Constructor for the Address Space View.
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
+
+        CacheBuilder cacheBuilder = CacheBuilder.newBuilder();
+
+        long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
+        long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
+
+        if (maxCacheEntries != 0) {
+            cacheBuilder.maximumSize(runtime.getParameters().getMaxCacheEntries());
+        }
+
+        if (maxCacheWeight != 0) {
+            cacheBuilder.maximumWeight(runtime.getParameters().getMaxCacheWeight());
+            cacheBuilder.weigher((k, v) -> (int) (cacheKeySize + MetricsUtils.sizeOf.deepSizeOf(v)));
+        }
+
+        if (maxCacheEntries == 0 && maxCacheWeight == 0) {
+            // If cache weight/size are not set, then we default to using
+            // size based cache
+            cacheBuilder.maximumSize(defaultMaxCacheEntries);
+        }
+
+        readCache = cacheBuilder.expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+                .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+                .removalListener(this::handleEviction)
+                .recordStats()
+                .build();
+
         MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
         final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
                                          this.hashCode());
@@ -187,8 +214,9 @@ public class AddressSpaceView extends AbstractView {
                     // Large writes are also rejected right away.
                     throw ex;
                 }
-            } catch (WriteSizeException we) {
-                throw we;
+            } catch (WriteSizeException | QuotaExceededException ie) {
+                log.warn("write: write failed", ie);
+                throw ie;
             } catch (RuntimeException re) {
                 log.error("write: Got exception during replication protocol write with token: {}", token, re);
                 validateStateOfWrittenEntry(token.getSequence(), ld);
@@ -579,23 +607,18 @@ public class AddressSpaceView extends AbstractView {
                 runtime.getParameters().getBulkReadSize());
 
         for (List<Long> batch : batches) {
-            try {
-                // Doesn't handle the case where some address have a different replication mode
-                Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
-                        .getReplicationMode(batch.iterator().next())
-                        .getReplicationProtocol(runtime)
-                        .readAll(e, batch, waitForWrite, cacheOnServer));
-                // Sanity check for returned addresses
-                if (batchResult.size() != batch.size()) {
-                    log.error("fetchAll: Requested number of addresses not equal to the read result" +
-                            "from server, requested: {}, returned: {}", batch, batchResult.keySet());
-                    throw new UnrecoverableCorfuError("Requested number of addresses not equal to the read result");
-                }
-                result.putAll(batchResult);
-            } catch (Exception e) {
-                log.error("fetchAll: Couldn't read addresses {}", batch, e);
-                throw new UnrecoverableCorfuError("Unexpected error during fetchAll", e);
+            // Doesn't handle the case where some address have a different replication mode
+            Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
+                    .getReplicationMode(batch.iterator().next())
+                    .getReplicationProtocol(runtime)
+                    .readAll(e, batch, waitForWrite, cacheOnServer));
+            // Sanity check for returned addresses
+            if (batchResult.size() != batch.size()) {
+                log.error("fetchAll: Requested number of addresses not equal to the read result" +
+                        "from server, requested: {}, returned: {}", batch, batchResult.keySet());
+                throw new IllegalStateException("Requested number of addresses not equal to the read result");
             }
+            result.putAll(batchResult);
         }
 
         return result;
@@ -674,7 +697,7 @@ public class AddressSpaceView extends AbstractView {
 
         if (logData.isTrimmed()) {
             if (throwException) {
-                throw new TrimmedException();
+                throw new TrimmedException(String.format("Trimmed address %s", address));
             }
             return false;
         }

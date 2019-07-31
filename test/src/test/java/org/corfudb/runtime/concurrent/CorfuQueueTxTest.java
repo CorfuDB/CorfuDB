@@ -7,6 +7,7 @@ import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -24,7 +25,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Slf4j
 public class CorfuQueueTxTest extends AbstractTransactionsTest {
     @Override
-    public void TXBegin() { OptimisticTXBegin(); }
+    public void TXBegin() {
+        TXBegin(TransactionType.OPTIMISTIC);
+    }
+
+    public void TXBegin(TransactionType type) {
+        switch (type){
+            case WRITE_AFTER_WRITE:
+                WWTXBegin();
+                return;
+            case OPTIMISTIC:
+                OptimisticTXBegin();
+                return;
+            default:
+                throw new IllegalArgumentException("Unsupported TXN type:"+type.toString());
+        }
+    }
 
     protected final int numIterations = PARAMETERS.NUM_ITERATIONS_LOW;
     protected final Long numConflictKeys = 2L;
@@ -36,7 +52,16 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
      * @throws Exception
      */
     @Test
-    public void queueOrderedByTransaction() throws Exception {
+    public void queueOrderedByOptimisticTxn() throws Exception {
+        queueOrderedByTransaction(TransactionType.OPTIMISTIC);
+    }
+
+    @Test
+    public void queueOrderedByWWTxn() throws Exception {
+        queueOrderedByTransaction(TransactionType.WRITE_AFTER_WRITE);
+    }
+
+    public void queueOrderedByTransaction(TransactionType txnType) throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_TWO;
         Map<Long, Long> conflictMap = instantiateCorfuObject(SMRMap.class, "conflictMap");
         CorfuQueue<String>
@@ -60,7 +85,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             for (Long i = 0L; i < numIterations; i++) {
                 String queueData = t.toString() + ":" + i.toString();
                 try {
-                    TXBegin();
+                    TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;
                     conflictMap.put(coinToss, coinToss);
                     CorfuRecordId id = corfuQueue.enqueue(queueData);
@@ -68,10 +93,10 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                     final long streamOffset = TXEnd();
                     validator.add(new Record(id, queueData));
                     log.debug("ENQ:" + id + "=>" + queueData + " at " + streamOffset);
+                    lock.unlock();
                 } catch (TransactionAbortedException txException) {
                     log.debug(queueData + " ---> Abort!!! ");
                     // Half the transactions are expected to abort
-                } finally {
                     lock.unlock();
                 }
             }

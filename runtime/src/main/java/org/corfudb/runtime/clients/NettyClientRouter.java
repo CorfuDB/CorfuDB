@@ -97,8 +97,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * The current request ID.
      */
     @Getter
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     public AtomicLong requestID;
     /**
      * The handlers registered to this router.

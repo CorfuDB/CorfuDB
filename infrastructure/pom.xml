@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.3.0.20190627212059.1992</version>
+        <version>0.3.0.20190722223401.7313</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -43,6 +43,10 @@
                                         <argument>-t</argument>
                                         <argument>
                                             corfudb/corfu-server:${project.version}
+                                        </argument>
+                                        <argument>-t</argument>
+                                        <argument>
+                                            corfudb-universe/corfu-server:${project.version}
                                         </argument>
                                         <argument>.</argument>
                                     </arguments>

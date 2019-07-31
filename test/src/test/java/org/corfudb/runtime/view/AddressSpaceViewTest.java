@@ -8,11 +8,13 @@ import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.MetricsUtils;
 import org.junit.Test;
 
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 2/1/16.
@@ -41,6 +43,54 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .build());
+    }
+
+    @Test
+    public void incorrectCacheSetting() {
+        setupNodes();
+        final int oneMb = 1_000_000;
+
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .maxCacheWeight(oneMb)
+                .maxCacheEntries(oneMb)
+                .build();
+
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params)
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        assertThatThrownBy(() -> rt.getAddressSpaceView())
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    public void testAddressSpaceCache() throws Exception {
+        setupNodes();
+
+        // Set the address space cache to 1mb and try to write 2x
+        // the cache size, then verify that only of the entries are cached
+        final long oneMb = 1_000_000;
+
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .maxCacheWeight(oneMb)
+                .build();
+
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params)
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        final int payloadSize = 4000;
+        byte[] payload = new byte[payloadSize];
+
+        long maxCacheSize = oneMb / MetricsUtils.sizeOf.deepSizeOf(payload);
+
+        for (int x = 0; x < maxCacheSize * 2; x++) {
+            rt.getStreamsView().get(UUID.randomUUID()).append(payload);
+        }
+
+        assertThat(rt.getAddressSpaceView().getReadCache().size()).isLessThan(maxCacheSize);
     }
 
     @Test

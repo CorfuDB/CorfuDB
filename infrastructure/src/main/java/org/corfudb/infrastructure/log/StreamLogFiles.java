@@ -16,6 +16,7 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -24,6 +25,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -38,10 +40,13 @@ import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -54,6 +59,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
@@ -93,6 +99,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // the files of the old instance
     private LogMetadata logMetadata;
 
+    private final long logSizeLimit;
+
+    // Resource quota to track the log size
+    private ResourceQuota logSizeQuota;
 
     /**
      * Returns a file-based stream log object.
@@ -107,8 +117,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
+        String logSizeQuotaParam = (String) serverContext.getServerConfig().get("--log-size-quota-bytes");
+
+        logSizeLimit = Long.parseLong(logSizeQuotaParam);
 
         initStreamLogDirectory();
+
+        long initialLogSize = estimateSize(logDir);
+        log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
+        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit == -1 ? Long.MAX_VALUE : logSizeLimit);
+        logSizeQuota.consume(initialLogSize);
+
         verifyLogs();
         // Starting address initialization should happen before
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
@@ -130,38 +149,39 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * Create stream log directory if not exists
      */
     private void initStreamLogDirectory() {
-        if (logDir.toFile().exists()) {
-            String corfuDir = logDir.getParent().toString();
-            // If FileSystem is mounted as read-only, Corfu server cannot function.
-            try {
-                FileStore fs = Files.getFileStore(Paths.get(corfuDir));
-                if (fs.isReadOnly()) {
-                    throw new UnrecoverableCorfuError("Cannot start Corfu on a read-only filesystem:"
-                            +corfuDir);
-                }
-            } catch (IOException e) {
-                throw new UnrecoverableCorfuError("Unable to retrieve Corfu Filesystem permissions"+
-                        corfuDir);
-            }
-
-            // corfu dir in the filesystem must be writable for writing configuration files.
-            File corfuDirFile = new File(corfuDir);
-            if (!corfuDirFile.canWrite()) {
-                throw new UnrecoverableCorfuError("Corfu directory is not writable "+corfuDir);
-            }
-            File logDirectory = new File(logDir.toString());
-            if (!logDirectory.canWrite()) {
-                throw new UnrecoverableCorfuError("Stream log directory not writable in "+corfuDir);
-            }
-            log.info("Log directory already exists: {}", logDir);
-            return;
-        }
 
         try {
-            Files.createDirectories(logDir);
-        } catch (IOException e) {
-            throw new UnrecoverableCorfuError("Can't create stream log directory", e);
+            if (!logDir.toFile().exists()) {
+                Files.createDirectories(logDir);
+            }
+
+            String corfuDir = logDir.getParent().toString();
+            FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
+
+            if (corfuDirBackend.isReadOnly()) {
+                throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
+            }
+
+            if (logSizeLimit != -1 && logSizeLimit > corfuDirBackend.getTotalSpace()) {
+                String msg = String.format("Invalid quota: quota(%d) is greater than the file store size (%d)",
+                        logSizeLimit, corfuDirBackend.getTotalSpace());
+                throw new LogUnitException(msg);
+            }
+
+            File corfuDirFile = new File(corfuDir);
+            if (!corfuDirFile.canWrite()) {
+                throw new LogUnitException("Corfu directory is not writable " + corfuDir);
+            }
+
+            File logDirectory = new File(logDir.toString());
+            if (!logDirectory.canWrite()) {
+                throw new LogUnitException("Stream log directory not writable in " + corfuDir);
+            }
+        } catch (IOException ioe) {
+            throw new LogUnitException(ioe);
         }
+
+        log.info("initStreamLogDirectory: initialized {}", logDir);
     }
 
     /**
@@ -176,8 +196,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
-        for (long currentSegment = startingSegment; currentSegment <= tailSegment; currentSegment++) {
-            // TODO(Maithem): factor out getSegmentHandleForAddress to allow getting segments by segment number
+        // Scan the log in reverse, this will ease stream trim mark resolution (as we require the
+        // END records of a checkpoint which are always the last entry in this stream)
+        // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
+        // for stream trim mark computation.
+        for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
             SegmentHandle segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
             try {
                 for (Long address : segment.getKnownAddresses().keySet()) {
@@ -186,7 +209,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         continue;
                     }
                     LogData logEntry = read(address);
-                    logMetadata.update(logEntry, true, getTrimMark());
+                    logMetadata.update(logEntry, true);
                 }
             } finally {
                 segment.close();
@@ -196,7 +219,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // Open segment will add entries to the writeChannels map, therefore we need to clear it
         writeChannels.clear();
         long end = System.currentTimeMillis();
-        log.info("initializeStreamTails: took {} ms to load {}", end - start, logMetadata);
+        log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
     }
 
     /**
@@ -207,7 +230,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param verify      Checksum verify flag
      * @throws IOException I/O exception
      */
-    public static void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
+    public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
 
         LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
@@ -215,7 +238,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
-        safeWrite(fileChannel, buf);
+        writeByteBuffer(fileChannel, buf);
         fileChannel.force(true);
     }
 
@@ -235,9 +258,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return buf;
     }
 
-    static ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
+    @VisibleForTesting
+    public static ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
         Metadata metadata = getMetadata(message);
         return getByteBuffer(metadata, message);
+    }
+
+    @Override
+    public boolean quotaExceeded() {
+        return !logSizeQuota.hasAvailable();
     }
 
     @Override
@@ -882,7 +911,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
 
             allRecordsBuf.flip();
-            safeWrite(segment.getWriteChannel(), allRecordsBuf);
+            writeByteBuffer(segment.getWriteChannel(), allRecordsBuf);
             channelsToSync.add(segment.getWriteChannel());
             // Sync the global and stream tail(s)
             // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
@@ -902,27 +931,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param buf     the buffer to write
      * @throws IOException IO exception
      */
-    private static void safeWrite(FileChannel channel, ByteBuffer buf) throws IOException {
-        long prev = channel.position();
-        try {
-            do {
-                channel.write(buf);
-            } while (buf.hasRemaining());
-
-        } catch (IOException e) {
-            // Write failed restore the channels position, so the subsequent writes
-            // can overwrite the failed write.
-
-            // Note that after rewinding the channel pointer, it is important to truncate
-            // any bytes that were written. This is required to avoid an ambiguous case
-            // where a subsequent write (after a failed write) succeeds but writes less
-            // bytes than the partially written buffer. In that case, the log unit can't
-            // determine if the bytes correspond to a partially written buffer that needs
-            // to be ignored, or if the bytes correspond to a corrupted metadata field.
-            channel.position(prev);
-            channel.truncate(prev);
-            channel.force(true);
-            throw e;
+    private void writeByteBuffer(FileChannel channel, ByteBuffer buf) throws IOException {
+        // On IOExceptions this class should be reinitialized, so consuming
+        // the buffer size and failing on the write should be an issue
+        logSizeQuota.consume(buf.remaining());
+        while (buf.hasRemaining()) {
+            channel.write(buf);
         }
     }
 
@@ -945,10 +959,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
             channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
-            safeWrite(segment.getWriteChannel(), record);
+            writeByteBuffer(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
             syncTailSegment(address);
-            logMetadata.update(entry);
+            logMetadata.update(entry, false);
         }
 
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
@@ -1216,6 +1230,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 numFiles++;
             }
         }
+        logSizeQuota.release(freedBytes);
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
     }
 
@@ -1250,6 +1265,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
         writeChannels.clear();
+        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit == -1 ? Long.MAX_VALUE : logSizeLimit);
         log.info("reset: Completed, end segment {}", endSegment);
     }
 
@@ -1287,6 +1303,36 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         public static int getChecksum(int num) {
             Hasher hasher = Hashing.crc32c().newHasher();
             return hasher.putInt(num).hash().asInt();
+        }
+    }
+
+    /**
+     * Estimate the size (in bytes) of a directory.
+     * From https://stackoverflow.com/a/19869323
+     */
+    @VisibleForTesting
+    static long estimateSize(Path directoryPath) {
+        final AtomicLong size = new AtomicLong(0);
+        try {
+            Files.walkFileTree(directoryPath, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file,
+                                                 BasicFileAttributes attrs) {
+                    size.addAndGet(attrs.size());
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    // Skip folders that can't be traversed
+                    log.error("skipped: {}", file, exc);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+
+            return size.get();
+        } catch (IOException ioe) {
+            throw new IllegalStateException(ioe);
         }
     }
 }
