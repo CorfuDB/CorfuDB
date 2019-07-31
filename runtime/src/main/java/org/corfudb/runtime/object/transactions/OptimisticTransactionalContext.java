@@ -264,13 +264,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
+        if (getWriteSetInfo().getWriteSet().getAllSMRUpdates().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
+        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getAllSMRUpdates().keySet());
 
         if (this.transaction.isLoggingEnabled()) {
             affectedStreamsIds.add(TRANSACTION_STREAM_ID);

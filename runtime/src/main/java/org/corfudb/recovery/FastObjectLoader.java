@@ -76,6 +76,7 @@ import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
 
 @Slf4j
 @Accessors(chain = true)
+@Deprecated
 public class FastObjectLoader {
 
     static final long DEFAULT_BATCH_FOR_FAST_LOADER = 10;
@@ -428,8 +429,8 @@ public class FastObjectLoader {
 
     private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, long globalAddress) {
         MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;
-        multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -> {
-            multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -> {
+        multiObjectLogEntry.getAllSMRUpdates().forEach((streamId, smrEntryList) -> {
+            smrEntryList.forEach((smrEntry) -> {
                 applySmrEntryToStream(streamId, smrEntry, globalAddress);
             });
         });

@@ -1,14 +1,12 @@
 package org.corfudb.integration;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -34,14 +32,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class TransactionStreamIT extends AbstractIT {
 
     /**
-     *
      * Extract the updates from the MultiObjectSMREntry and updates the counters map
      */
     private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas) {
         for (ILogData ld : deltas) {
             MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(null);
-            for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.entryMap.entrySet()) {
-                for (SMREntry update : multiSMREntry.getValue().getUpdates()) {
+            for (Map.Entry<UUID, List<SMREntry>> multiSMREntry : multiObjSmr.getAllSMRUpdates().entrySet()) {
+                for (SMREntry update : multiSMREntry.getValue()) {
                     int key = (int) update.getSMRArguments()[0];
                     int val = (int) update.getSMRArguments()[1];
                     assertThat(key).isEqualTo(val);
