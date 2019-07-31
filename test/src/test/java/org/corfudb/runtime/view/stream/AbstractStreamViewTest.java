@@ -176,46 +176,6 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getTotalUpdates()).isEqualTo(1L);
     }
 
-    @Ignore
-    @Test
-    public void testStreamGC() throws Exception {
-        CorfuRuntime runtime = getDefaultRuntime();
-
-        IStreamView svA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-        IStreamView svB = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-
-        // Since both steam views open the same stream, a write to one stream
-        // should be reflected in the other
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            svA.append(String.valueOf(i).getBytes());
-        }
-
-        // Make sure that the stream is built in-memory
-        IStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        IStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        assertThat(svA.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(svB.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        assertThat(((AbstractQueuedStreamView) bpsvB).getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
-        TokenResponse tail = runtime.getSequencerView().query();
-        runtime.getAddressSpaceView().prefixTrim(tail.getToken());
-        // First Runtime GC
-        runtime.getGarbageCollector().runRuntimeGC();
-
-        // Additional append to move the pointer
-        svA.append(String.valueOf(PARAMETERS.NUM_ITERATIONS_LOW).getBytes());
-        bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        assertThat(svA.remaining()).hasSize(1);
-        assertThat(svB.remaining()).hasSize(1);
-
-        // Second Runtime GC
-        runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().resolvedQueue).hasSize(1);
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readQueue).isEmpty();
-        assertThat(((AbstractQueuedStreamView) bpsvA).getContext().readCpQueue).isEmpty();
-    }
-
     final int trimMark = PARAMETERS.NUM_ITERATIONS_LOW / 2;
     final int traverseMark = PARAMETERS.NUM_ITERATIONS_LOW / 4;
 
@@ -248,26 +208,6 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
             assertThat(new String(payLoad)).isEqualTo(String.valueOf(remainingCounter));
             remainingCounter++;
         }
-    }
-
-    /**
-     * This test verifies that we can traverse a trimmed stream when
-     * the ignore trimmed flag is set. Steps to reproduce this test are:
-     * (1) Append 100 entries to stream.
-     * (2) Traverse stream to a given point (up to address 24 using the 'next' api)
-     * (3) Trim the stream at prefix 50.
-     * (4) Traverse the remaining of the stream (up to 99)
-     *
-     * TrimmedException should be ignored and step (4) should retrieve only 49 entries (as 25-50 are trimmed).
-     */
-    @Test(expected = TrimmedException.class)
-    public void traverseTrimmedStreamDontIgnoreTrim() throws Exception {
-        // Append entries to stream and traverse to some point before the trim mark
-        // leaving a gap between the traversed point and the trim mark.
-        IStreamView sv = traverseStreamBeforeTrimMark(false);
-
-        // Attempt to traverse remaining of the stream
-        sv.remaining();
     }
 
     private IStreamView traverseStreamBeforeTrimMark(boolean ignoreTrimmed)
