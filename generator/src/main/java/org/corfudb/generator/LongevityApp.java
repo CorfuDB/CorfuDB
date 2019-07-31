@@ -1,7 +1,6 @@
 package org.corfudb.generator;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
@@ -195,17 +194,6 @@ public class LongevityApp {
         }
     }
 
-    /**
-     * A thread is tasked with checkpointing activity. This is a cyclic
-     * operation.
-     */
-    private void runCpTrimTask() {
-        Runnable cpTrimTask = () -> {
-            Operation op = new CheckpointOperation(state);
-            op.execute();
-        };
-        checkpointer.scheduleAtFixedRate(cpTrimTask, 30, 20, TimeUnit.SECONDS);
-    }
 
     /**
      * Try to connect the runtime and throws a SystemUnavailableError if cannot connect
@@ -226,10 +214,6 @@ public class LongevityApp {
 
     public void runLongevityTest() {
         startTime = System.currentTimeMillis();
-
-        if (checkPoint) {
-            runCpTrimTask();
-        }
 
         runTaskProducer();
         runTaskConsumers();
