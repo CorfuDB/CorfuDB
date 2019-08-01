@@ -277,7 +277,6 @@ public class CorfuMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrentMultiView()
             throws Exception {
-        r.setBackpointersDisabled(true);
         // Increasing hole fill delay to avoid intermittent AppendExceptions.
         final int longHoleFillRetryLimit = 50;
         r.getParameters().setHoleFillRetry(longHoleFillRetryLimit);
