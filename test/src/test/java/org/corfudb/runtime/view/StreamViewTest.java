@@ -189,29 +189,6 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteFromStreamWithoutBackpointers()
-            throws Exception {
-        r.setBackpointersDisabled(true);
-
-        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
-        byte[] testPayload = "hello world".getBytes();
-
-        IStreamView sv = r.getStreamsView().get(streamA);
-        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, i ->
-                sv.append(testPayload));
-        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_NORMAL);
-
-        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, i ->
-                assertThat(sv.next().getPayload(getRuntime()))
-                .isEqualTo("hello world".getBytes()));
-        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_NORMAL);
-        assertThat(sv.next())
-                .isEqualTo(null);
-    }
-
-
-    @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteFromCachedStream()
             throws Exception {
         CorfuRuntime r = getDefaultRuntime().connect()
@@ -556,10 +533,9 @@ public class StreamViewTest extends AbstractViewTest {
      * @throws InterruptedException
      */
     @Test
-    public void txLogTrim() throws InterruptedException {
+    public void txLogTrim() {
         final CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
-                .backpointersDisabled(true)
                 .build();
         final CorfuRuntime localRuntime = CorfuRuntime.fromParameters(params)
                 .setTransactionLogging(true)

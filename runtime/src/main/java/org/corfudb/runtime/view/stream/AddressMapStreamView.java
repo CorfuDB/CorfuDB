@@ -312,7 +312,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             }
         }
 
-        if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+        if (d.hasBackpointer(streamId)) {
             long previousAddress = d.getBackpointer(streamId);
             log.trace("getStreamAddressMap[{}]: backpointer for {} points to {}",
                     streamId, startAddress, previousAddress);
