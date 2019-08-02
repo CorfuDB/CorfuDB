@@ -477,28 +477,26 @@ public class VersionLockedObject<T> {
 
 
     /**
-     * Given a SMR entry with an undo record, undo the update.
+     * Given a SMR entry with an undo entry, undo the update.
      *
-     * @param record The record to undo.
+     * @param entry The entry to undo.
      */
-    protected void applyUndoRecordUnsafe(SMREntry record) {
-        log.trace("Undo[{}] of {}@{} ({})", this, record.getSMRMethod(),
-                record.getEntry() != null ? record.getEntry().getGlobalAddress() : "OPT",
-                record.getUndoRecord());
-        IUndoFunction<T> undoFunction =
-                undoFunctionMap.get(record.getSMRMethod());
+    private void applyUndoRecordUnsafe(SMREntry entry) {
+        log.trace("Undo[{}] of {}@{} ({})", this, entry.getSMRMethod(),
+                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
+                entry.getUndoRecord());
+        IUndoFunction<T> undoFunction = undoFunctionMap.get(entry.getSMRMethod());
         // If the undo function exists, apply it.
         if (undoFunction != null) {
-            undoFunction.doUndo(object, record.getUndoRecord(),
-                    record.getSMRArguments());
+            undoFunction.doUndo(object, entry.getUndoRecord(), entry.getSMRArguments());
             return;
-        } else if (resetSet.contains(record.getSMRMethod())) {
+        } else if (resetSet.contains(entry.getSMRMethod())) {
             // If this is a reset, undo by restoring the
             // previous state.
-            object = (T) record.getUndoRecord();
+            object = (T) entry.getUndoRecord();
             // clear the undo record, since it is now
             // consumed (the object may change)
-            record.clearUndoRecord();
+            entry.clearUndoRecord();
             return;
         }
         // Otherwise we don't know how to undo,
@@ -514,9 +512,9 @@ public class VersionLockedObject<T> {
      *
      * @param entry The entry to apply.
      */
-    public Object applyUpdateUnsafe(SMREntry entry) {
+    private Object applyUpdateUnsafe(SMREntry entry) {
         log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
-                entry.getEntry() != null ? entry.getEntry().getGlobalAddress() : "OPT",
+                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
                 entry.getSMRArguments());
 
         ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
@@ -524,21 +522,18 @@ public class VersionLockedObject<T> {
             throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
         }
 
-        // No undo record is present
-        // -OR- there this is an optimistic entry, calculate
-        // an undo record.
-        // (in the case of optimistic entries, the snapshot
-        // may have changed since the last time they were
-        // applied, so we need to recalculate undo) --- this
-        // is the case without snapshot isolation
-        if (!entry.isUndoable() || entry.getEntry() == null) {
+        // Calculate an undo record if no undo record is present -OR- there
+        // is an optimistic entry, (which has no valid global address).
+        // In the case of optimistic entries, the snapshot may have changed
+        // since the last time they were applied, so we need to recalculate
+        // undo -- this is the case without snapshot isolation.
+        if (!entry.isUndoable() || !Address.isAddress(entry.getGlobalAddress())) {
             // Can we generate an undo record?
             IUndoRecordFunction<T> undoRecordTarget =
-                    undoRecordFunctionMap
-                            .get(entry.getSMRMethod());
+                    undoRecordFunctionMap.get(entry.getSMRMethod());
             // If there was no previously calculated undo entry
             if (undoRecordTarget != null) {
-                // calculate the undo record
+                // Calculate the undo record.
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object, entry.getSMRArguments()));
                 log.trace("Apply[{}] Undo->{}", this, entry.getUndoRecord());
@@ -552,7 +547,7 @@ public class VersionLockedObject<T> {
             }
         }
 
-        // now invoke the upcall
+        // Now invoke the upcall
         return target.upcall(object, entry.getSMRArguments());
     }
 
@@ -628,12 +623,12 @@ public class VersionLockedObject<T> {
                         Object res = applyUpdateUnsafe(entry);
                         if (timestamp == Address.OPTIMISTIC) {
                             entry.setUpcallResult(res);
-                        } else if (pendingUpcalls.contains(entry.getEntry().getGlobalAddress())) {
+                        } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
                             log.debug("Sync[{}] Upcall Result {}",
-                                    this, entry.getEntry().getGlobalAddress());
-                            upcallResults.put(entry.getEntry().getGlobalAddress(), res == null
+                                    this, entry.getGlobalAddress());
+                            upcallResults.put(entry.getGlobalAddress(), res == null
                                     ? NullValue.NULL_VALUE : res);
-                            pendingUpcalls.remove(entry.getEntry().getGlobalAddress());
+                            pendingUpcalls.remove(entry.getGlobalAddress());
                         }
                         entry.setUpcallResult(res);
                     } catch (Exception e) {

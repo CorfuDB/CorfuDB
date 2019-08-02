@@ -73,9 +73,9 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     }
 
     @Override
-    public void setEntry(ILogData entry) {
-        super.setEntry(entry);
-        this.getUpdates().forEach(x -> x.setEntry(entry));
+    public void setGlobalAddress(long address) {
+        super.setGlobalAddress(address);
+        this.getUpdates().forEach(x -> x.setGlobalAddress(address));
     }
 
     @Override
