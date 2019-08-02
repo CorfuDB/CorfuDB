@@ -196,11 +196,11 @@ public class SequencerServerCache {
     @EqualsAndHashCode
     public static class ConflictTxStream {
         private final UUID streamId;
-        private final String conflictParam;
+        private final byte[] conflictParam;
 
         public ConflictTxStream(UUID streamId, byte[] conflictParam) {
             this.streamId = streamId;
-            this.conflictParam = Utils.bytesToHex(conflictParam);
+            this.conflictParam = conflictParam;
         }
 
         @Override

@@ -2,6 +2,7 @@ package org.corfudb.runtime.view.stream;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
+import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -16,6 +17,7 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
 
@@ -52,8 +54,8 @@ import java.util.stream.Collectors;
 public abstract class AbstractQueuedStreamView extends
         AbstractContextStreamView<AbstractQueuedStreamView
                 .QueuedStreamContext> {
-
-    final StreamOptions options;
+    @Getter
+    private final ReadOptions readOptions;
 
     /** Create a new queued stream view.
      *
@@ -62,9 +64,12 @@ public abstract class AbstractQueuedStreamView extends
      */
     public AbstractQueuedStreamView(final CorfuRuntime runtime,
                                     final UUID streamId,
-                                    StreamOptions options) {
+                                    StreamOptions streamOptions) {
         super(runtime, streamId, QueuedStreamContext::new);
-        this.options = options;
+        this.readOptions = ReadOptions.builder()
+                .clientCacheable(streamOptions.isCacheEntries())
+                .ignoreTrim(streamOptions.isIgnoreTrimmed())
+                .build();
     }
 
     /** Add the given address to the resolved queue of the
@@ -246,15 +251,18 @@ public abstract class AbstractQueuedStreamView extends
      * @param readStartTime start time of the range of reads.
      * @return log data at the address.
      */
+    @Deprecated
     protected ILogData read(final long address, long readStartTime) {
         try {
             if (System.currentTimeMillis() - readStartTime <
                     runtime.getParameters().getHoleFillTimeout().toMillis()) {
-                return runtime.getAddressSpaceView().read(address);
+                return runtime.getAddressSpaceView().read(address, readOptions);
             }
-            return runtime.getAddressSpaceView()
-                    .read(Collections.singleton(address), false, false)
-                    .get(address);
+
+            ReadOptions options = readOptions.toBuilder()
+                    .waitForHole(false)
+                    .build();
+            return runtime.getAddressSpaceView().read(address, options);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -265,7 +273,7 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses, options.ignoreTrimmed);
+                    runtime.getAddressSpaceView().read(addresses, readOptions);
             // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
             // to all requested addresses, for this reason we must filter out data entries not included (null).
             // Also, we need to preserve ordering for checkpoint logic.
@@ -548,7 +556,7 @@ public abstract class AbstractQueuedStreamView extends
      **/
     protected ILogData read(final long address) {
         try {
-            return runtime.getAddressSpaceView().read(address);
+            return runtime.getAddressSpaceView().read(address, readOptions);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -568,7 +576,7 @@ public abstract class AbstractQueuedStreamView extends
      */
     protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
         try {
-            return runtime.getAddressSpaceView().read(nextRead, addresses, false);
+            return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;

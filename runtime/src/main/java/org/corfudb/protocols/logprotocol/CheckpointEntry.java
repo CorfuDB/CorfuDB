@@ -73,8 +73,7 @@ public class CheckpointEntry extends LogEntry {
      * Unique identifier for this checkpoint.  All entries
      * for the same checkpoint state must use the same ID.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     @Getter
     UUID checkpointId;
 
@@ -83,15 +82,13 @@ public class CheckpointEntry extends LogEntry {
 
     /** Author/cause/trigger of this checkpoint
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     @Getter
     String checkpointAuthorId;
 
     /** Map of checkpoint metadata, see key constants above.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     @Getter
     Map<CheckpointDictKey, String> dict;
 

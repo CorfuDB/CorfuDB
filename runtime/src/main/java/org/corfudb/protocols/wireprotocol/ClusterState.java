@@ -109,6 +109,10 @@ public class ClusterState {
         return nodeState.getConnectivity();
     }
 
+    public ImmutableList<String> getPingResponsiveNodes(){
+        return ImmutableList.copyOf(getLocalNodeConnectivity().getConnectedNodes());
+    }
+
     public static ClusterState buildClusterState(
             String localEndpoint, ImmutableList<String> unresponsiveServers, NodeState... states) {
 

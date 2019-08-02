@@ -1,35 +1,31 @@
 package org.corfudb.runtime.view;
 
+import lombok.Builder;
+import lombok.Getter;
+
 /**
+ * Options for the stream layer to configure a stream's caching/read behavior.
+ *
  * Created by maithem on 6/20/17.
  */
+@Builder
 public class StreamOptions {
-    public static StreamOptions DEFAULT = new StreamOptions(false);
+    public static StreamOptions DEFAULT = StreamOptions.builder()
+            .ignoreTrimmed(false)
+            .cacheEntries(true)
+            .build();
 
-    public final boolean ignoreTrimmed;
+    /**
+     * Ignore trimmed exceptions encountered while syncing
+     */
+    @Getter
+    @Builder.Default
+    private final boolean ignoreTrimmed = false;
 
-    public StreamOptions(boolean ignoreTrimmed) {
-        this.ignoreTrimmed = ignoreTrimmed;
-    }
-
-    public static StreamOptionsBuilder builder() {
-        return new StreamOptionsBuilder();
-    }
-
-    public static class StreamOptionsBuilder {
-        private boolean ignoreTrimmed;
-
-        public StreamOptionsBuilder() {
-
-        }
-
-        public StreamOptionsBuilder ignoreTrimmed(boolean ignore) {
-            this.ignoreTrimmed = ignore;
-            return this;
-        }
-
-        public StreamOptions build() {
-            return new StreamOptions(ignoreTrimmed);
-        }
-    }
+    /**
+     * Cache this stream's entries
+     */
+    @Getter
+    @Builder.Default
+    private final boolean cacheEntries = true;
 }

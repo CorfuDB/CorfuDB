@@ -97,8 +97,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * The current request ID.
      */
     @Getter
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
     public AtomicLong requestID;
     /**
      * The handlers registered to this router.
@@ -591,8 +590,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * close the channel.
      */
     private void keepAlive() {
-        if (!channel.isOpen()) {
-            log.warn("keepAlive: channel not open, skipping sending keep alive.");
+        if (channel == null || !channel.isOpen()) {
+            log.info("keepAlive: channel not established or not open, skipping sending keep alive.");
             return;
         }
         // Send a keep alive message to server which ignores epoch

@@ -18,8 +18,7 @@ import org.corfudb.util.serializer.Serializers;
 /**
  * Created by mwei on 1/8/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 @ToString(callSuper = true)
 @NoArgsConstructor
 public class SMREntry extends LogEntry implements ISMRConsumable {
@@ -27,16 +26,14 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
+    @SuppressWarnings("checkstyle:MemberName")
     @Getter
     private String SMRMethod;
 
     /**
      * The arguments to the SMR method, which could be 0.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
+    @SuppressWarnings("checkstyle:MemberName")
     @Getter
     private Object[] SMRArguments;
 

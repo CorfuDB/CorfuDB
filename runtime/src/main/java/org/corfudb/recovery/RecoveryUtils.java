@@ -8,6 +8,7 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.UUID;
@@ -18,6 +19,13 @@ import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKe
  * Created by rmichoud on 6/22/17.
  */
 public class RecoveryUtils {
+
+    // Default read options used by the fast object loader logic
+    public static ReadOptions fastLoaderReadOptions = ReadOptions.builder()
+            .clientCacheable(false)
+            .serverCacheable(false)
+            .waitForHole(true)
+            .build();
 
     private RecoveryUtils() {
         // prevent instantiation of this class
@@ -70,7 +78,7 @@ public class RecoveryUtils {
         if (loadInCache) {
             return runtime.getAddressSpaceView().read(address);
         } else {
-            return runtime.getAddressSpaceView().fetch(address);
+            return runtime.getAddressSpaceView().read(address, fastLoaderReadOptions);
         }
     }
 

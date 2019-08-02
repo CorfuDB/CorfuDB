@@ -33,7 +33,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
@@ -79,8 +78,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /**
      * The ID of the stream of the log.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+    @SuppressWarnings("checkstyle:abbreviation")
             UUID streamID;
 
     /**
@@ -297,10 +295,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
         // Check first if we have the upcall, if we do
         // we can service the request right away.
-        if (underlyingObject.upcallResults.containsKey(timestamp)) {
+        if (underlyingObject.getUpcallResults().containsKey(timestamp)) {
             log.trace("Upcall[{}] {} Direct", this, timestamp);
-            R ret = (R) underlyingObject.upcallResults.get(timestamp);
-            underlyingObject.upcallResults.remove(timestamp);
+            R ret = (R) underlyingObject.getUpcallResults().get(timestamp);
+            underlyingObject.getUpcallResults().remove(timestamp);
             return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
@@ -308,10 +306,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             try {
                 return underlyingObject.update(o -> {
                     o.syncObjectUnsafe(timestamp);
-                    if (o.upcallResults.containsKey(timestamp)) {
+                    if (o.getUpcallResults().containsKey(timestamp)) {
                         log.trace("Upcall[{}] {} Sync'd", this, timestamp);
-                        R ret = (R) o.upcallResults.get(timestamp);
-                        o.upcallResults.remove(timestamp);
+                        R ret = (R) o.getUpcallResults().get(timestamp);
+                        o.getUpcallResults().remove(timestamp);
                         return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
                     }
 
@@ -362,8 +360,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         }
     }
 
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
+    @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})
     private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
         // Don't nest transactions if we are already running in a transaction
         if (TransactionalContext.isInTransaction()) {

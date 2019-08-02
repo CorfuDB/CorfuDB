@@ -274,7 +274,9 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
             throws InterruptedException {
 
         CorfuRuntime runtime = getDefaultRuntime();
-        StreamOptions options = new StreamOptions(ignoreTrimmed);
+        StreamOptions options = StreamOptions.builder()
+                .ignoreTrimmed(ignoreTrimmed)
+                .build();
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"), options);
         final long epoch = 0L;
         final Duration waitForTrim = Duration.ofSeconds(5);
