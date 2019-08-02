@@ -142,7 +142,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             log.trace("followBackpointers: calculate the next address");
 
-            if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+            if (d.hasBackpointer(streamId)) {
                 long tmp = d.getBackpointer(streamId);
                 log.trace("followBackpointers: backpointer points to {}", tmp);
                 // if backpointer is a valid log address or Address.NON_EXIST

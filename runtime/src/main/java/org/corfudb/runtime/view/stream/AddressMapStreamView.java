@@ -303,13 +303,16 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                         " stream[{}]", this, startAddress, streamId);
                 return false;
             } else {
-                log.warn("getStreamAddressMap[{}]; Attempting to resolve backpointer for {} but address is trimmed.",
-                        this, startAddress, e);
+                // Info level as trimmedExceptions are handled by upper layers, which accordingly retry
+                // and abort in the case that a stream cannot be resolved from a checkpoint.
+                log.info("getStreamAddressMap[{}]; Attempting to resolve backpointer for {} but address is trimmed. " +
+                                "Looking for a checkpoint.",
+                        this, startAddress);
                 throw e;
             }
         }
 
-        if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+        if (d.hasBackpointer(streamId)) {
             long previousAddress = d.getBackpointer(streamId);
             log.trace("getStreamAddressMap[{}]: backpointer for {} points to {}",
                     streamId, startAddress, previousAddress);
