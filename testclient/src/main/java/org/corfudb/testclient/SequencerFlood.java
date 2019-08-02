@@ -3,6 +3,7 @@ package org.corfudb.testclient;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
+import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.Sleep;
@@ -95,7 +96,15 @@ public class SequencerFlood {
                     currTs = System.currentTimeMillis();
                     currMsgCnt = requestsCompleted.intValue();
                     double throughput = (currMsgCnt - prevMsgCnt) / ((currTs - prevTs) / 1000);
-                    log.info("Throughput {} req/sec", throughput);
+                    Histogram histogram = recorder.getIntervalHistogram();
+
+                    log.info("Throughput {} req/sec Latency: mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
+                            throughput,
+                            histogram.getMean() / 1000.0,
+                            histogram.getValueAtPercentile(50) / 1000.0,
+                            histogram.getValueAtPercentile(95) / 1000.0,
+                            histogram.getValueAtPercentile(99) / 1000.0);
+
                     Sleep.sleepUninterruptibly(Duration.ofMillis(1000 * 3));
                     prevTs = currTs;
                     prevMsgCnt = currMsgCnt;
