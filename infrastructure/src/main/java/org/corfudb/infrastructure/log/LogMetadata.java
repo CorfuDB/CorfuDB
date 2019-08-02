@@ -45,7 +45,11 @@ public class LogMetadata {
 
     public void update(List<LogData> entries) {
         for (LogData entry : entries) {
-            update(entry, false);
+            // This API is only used on range writes for state transfer
+            // On state transfer we need to inspect checkpoint streams (initialize = true),
+            // to avoid losing data for streams that are completely checkpointed (no actual
+            // log entry for the regular stream is present in the log).
+            update(entry, true);
         }
     }
 
