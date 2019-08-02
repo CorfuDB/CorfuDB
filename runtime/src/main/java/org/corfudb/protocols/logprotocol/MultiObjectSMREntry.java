@@ -121,10 +121,10 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * {@inheritDoc}
      */
     @Override
-    public void setEntry(ILogData entry) {
-        super.setEntry(entry);
+    public void setGlobalAddress(long address) {
+        super.setGlobalAddress(address);
         this.getEntryMap().values().forEach(x -> {
-            x.setEntry(entry);
+            x.setGlobalAddress(address);
         });
     }
 }

@@ -13,15 +13,15 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.ICorfuSerializable;
 
 
 /**
  * Created by mwei on 1/8/16.
  */
-@ToString(exclude = {"runtime", "entry"})
+@ToString(exclude = {"runtime"})
 @NoArgsConstructor
 public class LogEntry implements ICorfuSerializable {
 
@@ -42,11 +42,11 @@ public class LogEntry implements ICorfuSerializable {
     LogEntryType type;
 
     /**
-     * An underlying log entry, if present.
+     * The global address of this log entry.
      */
     @Getter
     @Setter
-    ILogData entry;
+    long globalAddress = Address.NON_ADDRESS;
 
     /**
      * Constructor for generating LogEntries.

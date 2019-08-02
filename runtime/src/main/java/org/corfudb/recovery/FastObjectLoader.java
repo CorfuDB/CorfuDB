@@ -314,7 +314,7 @@ public class FastObjectLoader {
      * @return if the entry is already part of the checkpoint we started from.
      */
     private boolean entryAlreadyContainedInCheckpoint(UUID streamId, SMREntry entry) {
-        return streamsMetaData.containsKey(streamId) && entry.getEntry().getGlobalAddress() <
+        return streamsMetaData.containsKey(streamId) && entry.getGlobalAddress() <
                 streamsMetaData.get(streamId).getHeadAddress();
     }
 
