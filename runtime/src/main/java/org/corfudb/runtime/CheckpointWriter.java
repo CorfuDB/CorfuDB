@@ -11,10 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
@@ -130,37 +132,41 @@ public class CheckpointWriter<T extends Map> {
      * @return Token at which the snapshot for this checkpoint was taken.
      */
     public Token appendCheckpoint() {
-        // Queries the sequencer for the global log tail. We then read the global log tail to
-        // persist the entry on the log unit in turn preventing from a new sequencer from
+        // Queries the sequencer for the stream tail. We then read the stream tail to
+        // persist the entry on the log unit in turn preventing a new sequencer from
         // regressing tokens.
-        Token snapshot = rt.getSequencerView().query().getToken();
-        if (Address.isAddress(snapshot.getSequence())) {
-            appendCheckpointOnSnapshot(snapshot);
-        }
-        return snapshot;
-    }
-
-    /**
-     * Append checkpoint at a specific snapshot. This is visible only for testing.
-     *
-     * @param snapshotTimestamp snapshot at which to take a checkpoint.
-     * @return snapshot time for this checkpoint.
-     */
-    @VisibleForTesting
-    public Token appendCheckpoint(Token snapshotTimestamp) {
-        appendCheckpointOnSnapshot(snapshotTimestamp);
-        return snapshotTimestamp;
+        Token snapshot = rt.getSequencerView().query(streamId).getToken();
+        return appendCheckpoint(snapshot);
     }
 
     /**
      * Write a checkpoint which reflects the state at snapshot.
      *
-     * @param snapshotTimestamp snapshot at which the checkpoint is taken.
+     * This API should not be directly invoked.
+     *
+     *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
      */
-    private void appendCheckpointOnSnapshot(Token snapshotTimestamp) {
+    @VisibleForTesting
+    public Token appendCheckpoint(Token snapshotTimestamp) {
         long start = System.currentTimeMillis();
 
-        rt.getAddressSpaceView().read(snapshotTimestamp.getSequence());
+        // If snapshotTimestamp (stream tail) is a negative value
+        // we need to enforce a hole to ensure the start log address
+        // is not negative (as MultiCheckpointWriter will select the min of all checkpoints)
+        // Having a negative value will prevent trimming from happening.
+        if (!Address.isAddress(snapshotTimestamp.getSequence())) {
+            snapshotTimestamp = forceHole();
+        }
+
+        try {
+            rt.getAddressSpaceView().read(snapshotTimestamp.getSequence());
+        } catch (TrimmedException te) {
+            // Stream Tail was trimmed, we can just ignore this trim. This means
+            // no other update has been done to this stream since trim.
+            log.info("appendCheckpointOnSnapshot: stream tail at {} has been trimmed. Checkpoint on same state" +
+                    "as previous checkpoint.", snapshotTimestamp);
+        }
+
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
                 .snapshot(snapshotTimestamp)
@@ -172,7 +178,11 @@ public class CheckpointWriter<T extends Map> {
             log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
             ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
             Set<Map.Entry> entries = this.map.entrySet();
-            long vloVersion = corfuObject.getCorfuSMRProxy().getVersion();
+            // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
+            // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
+            // as the latter discards holes for resolution, hence if last address is a hole it would diverge
+            // from the stream address space maintained by the sequencer.
+            long vloVersion = snapshotTimestamp.getSequence();
             startCheckpoint(snapshotTimestamp, vloVersion);
             appendObjectState(entries);
             finishCheckpoint();
@@ -184,6 +194,16 @@ public class CheckpointWriter<T extends Map> {
         } finally {
             rt.getObjectsView().TXEnd();
         }
+
+        return snapshotTimestamp;
+    }
+
+    private Token forceHole() {
+        Token writeToken = rt.getSequencerView().next(streamId).getToken();
+        LogData logData = new LogData(DataType.HOLE);
+        logData.useToken(writeToken);
+        rt.getAddressSpaceView().write(writeToken, logData, CacheOption.WRITE_AROUND);
+        return writeToken;
     }
 
     /** Append a checkpoint START record to this object's stream.
