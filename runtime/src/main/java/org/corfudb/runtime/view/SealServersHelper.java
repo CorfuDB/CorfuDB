@@ -38,7 +38,7 @@ public class SealServersHelper {
         // Seal all servers
         layout.getAllServers().forEach(server -> {
             CompletableFuture<Boolean> cf =
-                    runtimeLayout.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
+                    runtimeLayout.getBaseClient(server).sealRemoteServer(layout.getEpoch());
             resultMap.put(server, cf);
         });
 

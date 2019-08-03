@@ -49,14 +49,14 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void onlyDropEpochChangeMessages() {
         tcr.rules.add(new TestRule()
-                .matches(x -> x.getMsgType().equals(CorfuMsgType.SET_EPOCH))
+                .matches(x -> x.getMsgType().equals(CorfuMsgType.SEAL))
                 .drop());
 
         assertThat(bc.pingSync())
                 .isTrue();
 
         final long NEW_EPOCH = 9L;
-        assertThatThrownBy(() -> bc.setRemoteEpoch(NEW_EPOCH).get())
+        assertThatThrownBy(() -> bc.sealRemoteServer(NEW_EPOCH).get())
                 .hasCauseInstanceOf(TimeoutException.class);
     }
 }

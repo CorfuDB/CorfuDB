@@ -41,7 +41,7 @@ public class ClusterEdgeCases extends GenericIntegrationTest {
                 // Forcefully bump up the epoch.
                 runtimeLayout.getBaseClient(
                         originalLayout.getLayoutServers().stream().findFirst().get()
-                ).setRemoteEpoch(originalLayout.getEpoch() + 10);
+                ).sealRemoteServer(originalLayout.getEpoch() + 10);
 
                 {
                     final List<Throwable> exceptions = new ArrayList();
