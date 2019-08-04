@@ -102,7 +102,7 @@ public class BaseServer extends AbstractServer {
      * @param ctx The channel context
      * @param r   The server router.
      */
-    @ServerHandler(type = CorfuMsgType.SET_EPOCH)
+    @ServerHandler(type = CorfuMsgType.SEAL)
     public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg<Long> msg,
                                                    ChannelHandlerContext ctx,
                                                    @NonNull IServerRouter r) {
@@ -114,12 +114,12 @@ public class BaseServer extends AbstractServer {
             } catch (NullPointerException e) {
                 remoteHostAddress = "unavailable";
             }
-            log.info("handleMessageSetEpoch: Received SET_EPOCH from (clientId={}:{}), moving to new epoch {}",
+            log.info("handleMessageSetEpoch: Received SEAL from (clientId={}:{}), moving to new epoch {}",
                     msg.getClientID(), remoteHostAddress, epoch);
             serverContext.setServerEpoch(epoch, r);
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (WrongEpochException e) {
-            log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
+            log.debug("handleMessageSetEpoch: Rejected SEAL current={}, requested={}",
                     e.getCorrectEpoch(), msg.getPayload());
             r.sendResponse(ctx, msg,
                     new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));

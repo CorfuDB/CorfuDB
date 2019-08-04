@@ -354,7 +354,7 @@ public class LayoutServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    // TODO If a server does not get SET_EPOCH layout commit message cannot reach it
+    // TODO If a server does not get SEAL layout commit message cannot reach it
     // TODO as this message is not set to ignore EPOCH.
     // TODO How do we handle holes in history if we let in layout commit message. Maybe we have a
     // hole filling process

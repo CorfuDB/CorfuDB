@@ -15,7 +15,7 @@ import org.corfudb.protocols.wireprotocol.VersionInfo;
  * This is a base client which sends basic messages.
  * It mainly sends PINGs, as well as the ACK/NACKs defined by
  * the Corfu protocol.
- * This is also responsible to send SET_EPOCH messages used to seal the servers with an epoch
+ * This is also responsible to send SEAL messages used to seal the servers with an epoch
  *
  * <p>Created by mwei on 12/9/15.
  */
@@ -57,9 +57,9 @@ public class BaseClient implements IClient {
      * @param newEpoch New Epoch to be set
      * @return Completable future which returns true on successful epoch set.
      */
-    public CompletableFuture<Boolean> setRemoteEpoch(long newEpoch) {
-        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch).setEpoch(epoch);
-        log.info("setRemoteEpoch: send SET_EPOCH from me(clientId={}) to new epoch {}",
+    public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
+        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch).setEpoch(epoch);
+        log.info("sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}",
                 msg.getClientID(), epoch);
         return router.sendMessageAndGetCompletable(msg);
     }
