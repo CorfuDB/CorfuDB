@@ -17,6 +17,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
@@ -41,6 +42,13 @@ public class StateTransfer {
 
     // Maximum number of retries after which the Overwrite Exception is rethrown.
     private static final int OVERWRITE_RETRIES = 3;
+
+    // Default read options for the state read calls
+    private static ReadOptions readOptions = ReadOptions.builder()
+            .waitForHole(true)
+            .clientCacheable(false)
+            .serverCacheable(false)
+            .build();
 
     /**
      * Fetch and propagate the trimMark to the new/healing nodes. Else, a FastLoader reading from
@@ -198,7 +206,7 @@ public class StateTransfer {
         long ts1 = System.currentTimeMillis();
 
         // Don't cache the read results on server for state transfer.
-        Map<Long, ILogData> dataMap = runtime.getAddressSpaceView().nonCacheFetchAll(chunk, true);
+        Map<Long, ILogData> dataMap = runtime.getAddressSpaceView().read(chunk, readOptions);
 
         long ts2 = System.currentTimeMillis();
 

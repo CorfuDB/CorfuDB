@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure;
 
-
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 
+import java.io.File;
 import java.util.UUID;
 
+import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
 import org.assertj.core.api.Assertions;
@@ -17,8 +18,7 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
-
-//import static org.assertj.core.api.Assertions.assertThat;
+import org.mockito.Mockito;
 
 /**
  * Created by mwei on 12/14/15.
@@ -248,7 +248,7 @@ public class LayoutServerTest extends AbstractServerTest {
         sendPrepare(newEpoch, 1);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
         assertThat(s1).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
-       //shutdown this instance of server
+        //shutdown this instance of server
         s1.shutdown();
         //bring up a new instance of server with the previously persisted data
         LayoutServer s2 = getDefaultServer(serviceDir);
@@ -348,7 +348,7 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(s2).isPhase1Rank(new Rank(HIGH_RANK, AbstractServerTest.testClientId));
 
         //new LAYOUT_PROPOSE message with a lower phase2 rank should be rejected
-        sendPropose(newEpoch,  HIGH_RANK - 1, newLayout);
+        sendPropose(newEpoch, HIGH_RANK - 1, newLayout);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
 
 
@@ -464,10 +464,77 @@ public class LayoutServerTest extends AbstractServerTest {
         }
     }
 
+    /**
+     * Make sure that Paxos decisions are not based on
+     * mutable state that can be changed out of band.
+     */
+    @Test
+    public void testChangeEpochInPhase2ByBaseServer() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        LayoutServer layoutServer = getDefaultServer(serviceDir);
+
+        //  Spy on the LayoutServer which will let us trigger race conditions.
+        LayoutServer spyLayoutServer = Mockito.spy(layoutServer);
+
+        // Bootstrap the layout server.
+        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        spyLayoutServer.setCurrentLayout(layout);
+
+        // Create a new layout (data) for the propose phase (Phase II).
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        newLayout.setEpoch(layout.getEpoch() + 1L);
+
+        // Mock all RPC calls.
+        IServerRouter router = Mockito.mock(IServerRouter.class);
+        ChannelHandlerContext context = Mockito.mock(ChannelHandlerContext.class);
+        Mockito.doAnswer(invocation -> null)
+                .when(router).sendResponse(Mockito.any(), Mockito.any(), Mockito.any());
+
+        final long newSealEpoch = newLayout.getEpoch() + 1L;
+
+        // Trigger a race condition by bumping the server epoch just before
+        // Paxos is about to persist the accepted data.
+        Mockito.doAnswer(invocation -> {
+            spyLayoutServer.getServerContext().setServerEpoch(newSealEpoch, router);
+            return invocation.callRealMethod();
+        }).when(spyLayoutServer).setPhase2Data(Mockito.any(), Mockito.anyLong());
+
+        final long msgRank = 0L;
+
+        spyLayoutServer.getServerContext().setServerEpoch(newLayout.getEpoch(), router);
+
+        // Run the prepare phase (Phase I).
+        LayoutPrepareRequest prepareRequest = new LayoutPrepareRequest(
+                newLayout.getEpoch(), msgRank);
+        CorfuPayloadMsg<LayoutPrepareRequest> prepareRequestMsg =
+                new CorfuPayloadMsg<>(CorfuMsgType.LAYOUT_PREPARE, prepareRequest);
+        spyLayoutServer.handleMessageLayoutPrepare(prepareRequestMsg, context, router);
+
+        // Run the propose phase (Phase II). This function call will in turn call
+        // LayoutServer:::setPhase2Data(...) which has been instrumented
+        // with Mockito.doAnswer(...) to bump up the epoch.
+        LayoutProposeRequest proposeRequest = new LayoutProposeRequest(
+                newLayout.getEpoch(), msgRank, newLayout);
+        CorfuPayloadMsg<LayoutProposeRequest> layoutProposeRequestMsg =
+                new CorfuPayloadMsg<>(CorfuMsgType.LAYOUT_PROPOSE, proposeRequest);
+        spyLayoutServer.handleMessageLayoutPropose(layoutProposeRequestMsg, context, router);
+
+        // Make sure the epoch has actually changed.
+        Assertions.assertThat(newSealEpoch)
+                .isEqualTo(spyLayoutServer.getServerContext().getServerEpoch());
+
+        // Make sure no data has been accepted for the new epoch.
+        Assertions.assertThat(spyLayoutServer.getPhase2Data(newSealEpoch).isPresent())
+                .isFalse();
+        // Make sure no data has been accepted for the correct epoch.
+        Assertions.assertThat(spyLayoutServer.getPhase2Data(newLayout.getEpoch()).isPresent())
+                .isTrue();
+    }
+
     private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch) {
 
         long newEpoch = baseEpoch + reboot;
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch));
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch));
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         layout.setEpoch(newEpoch);
@@ -512,7 +579,7 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     private void setEpoch(long epoch) {
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, epoch));
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, epoch));
     }
 
     private void sendPrepare(long epoch, long rank) {

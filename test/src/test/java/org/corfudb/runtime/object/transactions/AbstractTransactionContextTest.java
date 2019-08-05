@@ -30,9 +30,9 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
     public ISMRMap<String, String> getMap() {
         if (testMap == null) {
             testMap = (ISMRMap<String, String>) instantiateCorfuObject(
-                    new TypeToken<SMRMap<String, String>>() {
-                    }, "test stream"
-            ) ;
+                    new TypeToken<SMRMap<String, String>>() {},
+                    "test stream"
+            );
         }
         return testMap;
     }

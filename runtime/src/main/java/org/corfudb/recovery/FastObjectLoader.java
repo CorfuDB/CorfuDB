@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -752,7 +753,9 @@ public class FastObjectLoader {
                 // Don't cache the read results on server for fast loader
                 ContiguousSet<Long> addresses = ContiguousSet.create(
                         Range.closed(lower, upper), DiscreteDomain.longs());
-                Map<Long, ILogData> range = runtime.getAddressSpaceView().nonCacheFetchAll(addresses, true);
+
+                Map<Long, ILogData> range = runtime.getAddressSpaceView().read(addresses,
+                        RecoveryUtils.fastLoaderReadOptions);
 
                 // Sanity
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {

@@ -1,11 +1,6 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -22,7 +17,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
-import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
 
@@ -54,7 +48,7 @@ public class CorfuServer {
                     + "\tcorfu_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
-                    + "[--log-size-quota-bytes=<max_log_size>]"
+                    + "[--log-size-quota-percentage=<max_log_size_percentage>]"
                     + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
@@ -158,9 +152,10 @@ public class CorfuServer {
                     + "              [default: TLSv1.1,TLSv1.2].\n"
                     + " --base-server-threads=<base_server_threads>                              "
                     + "              Number of threads dedicated for the base server.\n          "
-                    + " --log-size-quota-bytes=<max_log_size>                                    "
-                    + "              The max size of the log in bytes, if this limit is exceeded "
-                    + "              write requests will be rejected [default: -1].\n"
+                    + " --log-size-quota-percentage=<max_log_size_percentage>                    "
+                    + "              The max size as percentage of underlying file-store size.\n "
+                    + "              If this limit is exceeded "
+                    + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
                     + " --layout-server-threads=<layout_server_threads>                          "
                     + "              Number of threads dedicated for the layout server.\n        "
@@ -199,7 +194,6 @@ public class CorfuServer {
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
         // Print a nice welcome message.
-        AnsiConsole.systemInstall();
         printStartupMsg(opts);
         configureLogger(opts);
 
@@ -346,7 +340,6 @@ public class CorfuServer {
      * Print the corfu logo.
      */
     private static void printLogo() {
-        println(ansi().fg(WHITE).toString());
         println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
         println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
         println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
@@ -356,7 +349,6 @@ public class CorfuServer {
         println("███    ███ ███    ███   ███    ███   ███       ███    ███");
         println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
         println("                        ███    ███");
-        println(ansi().reset().toString());
     }
 
     /**
@@ -378,13 +370,14 @@ public class CorfuServer {
      */
     private static void printStartupMsg(Map<String, Object> opts) {
         printLogo();
-        int port = Integer.parseInt((String) opts.get("<port>"));
-        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
-        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
-                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                        opts.get("--log-path")).reset());
+        println("Welcome to CORFU SERVER");
+        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+
+        final int port = Integer.parseInt((String) opts.get("<port>"));
+        final String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                opts.get("--log-path").toString();
+
+        println("Serving on port " + port);
+        println("Data location: " + dataLocation);
     }
 }

@@ -13,6 +13,9 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
+import java.nio.file.FileStore;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -25,12 +28,17 @@ public class LogSizeQuotaIT extends AbstractIT {
     final int payloadSize = 1000;
 
     private Process runServerWithQuota(int port, long quota, boolean singleNode) throws Exception {
+        String logPath = getCorfuServerLogPath(DEFAULT_HOST, port);
+        FileStore corfuDirBackend = Files.getFileStore(Paths.get(CORFU_LOG_PATH));
+        long fsSize = corfuDirBackend.getTotalSpace();
+        final double HUNDRED = 100.0;
+        final double quotaInPerc = quota * HUNDRED / fsSize;
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setSingle(singleNode)
-                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, port))
-                .setLogSizeQuota(Long.toString(quota))
+                .setLogPath(logPath)
+                .setLogSizeLimitPercentage(Double.toString(quotaInPerc))
                 .runServer();
     }
 
