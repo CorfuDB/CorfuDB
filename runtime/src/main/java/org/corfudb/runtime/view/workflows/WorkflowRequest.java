@@ -46,8 +46,8 @@ public abstract class WorkflowRequest {
     protected abstract UUID sendRequest(ManagementClient client) throws TimeoutException;
 
     /**
-     * Select an orchestrator and return a client. Orchestrator's that
-     * are on unresponsive nodes and the affected endpoint by the workflow
+     * Select an orchestrator and return a client. Orchestrator
+     * located on the affected by the workflow endpoint
      * will not be selected. The layout might not reflect the state
      * of responsive servers, so we ping the endpoint before we select it.
      * An example of this would be a 3 node cluster, with two nodes that
