@@ -420,24 +420,24 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    public Rank getPhase1Rank() {
+    public Rank getPhase1Rank(long epoch) {
         return dataStore.get(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1);
+                epoch + KEY_SUFFIX_PHASE_1);
     }
 
-    public void setPhase1Rank(Rank rank) {
+    public void setPhase1Rank(Rank rank, long epoch) {
         dataStore.put(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
+                epoch + KEY_SUFFIX_PHASE_1, rank);
     }
 
-    public Phase2Data getPhase2Data() {
+    public Phase2Data getPhase2Data(long epoch) {
         return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2);
+                epoch + KEY_SUFFIX_PHASE_2);
     }
 
-    public void setPhase2Data(Phase2Data phase2Data) {
+    public void setPhase2Data(Phase2Data phase2Data, long epoch) {
         dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+                epoch + KEY_SUFFIX_PHASE_2, phase2Data);
     }
 
     public void setLayoutInHistory(Layout layout) {

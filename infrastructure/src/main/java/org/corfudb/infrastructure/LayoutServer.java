@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
@@ -126,17 +127,19 @@ public class LayoutServer extends AbstractServer {
         if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
-        long epoch = msg.getPayload();
-        if (epoch <= serverContext.getServerEpoch()) {
+
+        final long msgEpoch = msg.getPayload();
+        final long serverEpoch = getServerEpoch();
+
+        if (msgEpoch <= serverEpoch) {
             r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType
                     .LAYOUT_RESPONSE));
         } else {
             // else the client is somehow ahead of the server.
             //TODO figure out a strategy to deal with this situation
-            long serverEpoch = serverContext.getServerEpoch();
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.warn("handleMessageLayoutRequest: Message Epoch {} ahead of Server epoch {}",
-                    epoch, serverEpoch);
+                    msgEpoch, serverEpoch);
         }
     }
 
@@ -187,12 +190,14 @@ public class LayoutServer extends AbstractServer {
         if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
-        Rank prepareRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
-        Rank phase1Rank = getPhase1Rank();
-        Layout proposedLayout = getProposedLayout();
 
-        long serverEpoch = getServerEpoch();
-        if (msg.getPayload().getEpoch() != serverEpoch) {
+        final long payloadEpoch = msg.getPayload().getEpoch();
+        final long serverEpoch = getServerEpoch();
+
+        final Rank prepareRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
+        final Rank phase1Rank = getPhase1Rank(payloadEpoch);
+
+        if (payloadEpoch != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("handleMessageLayoutPrepare: Incoming message with wrong epoch, got {}, "
                             + "expected {}, message was: {}",
@@ -200,6 +205,7 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
+        Layout proposedLayout = getProposedLayout(payloadEpoch);
 
         // This is a prepare. If the rank is less than or equal to the phase 1 rank, reject.
         if (phase1Rank != null && prepareRank.lessThanEqualTo(phase1Rank)) {
@@ -210,9 +216,9 @@ public class LayoutServer extends AbstractServer {
         } else {
             // Return the layout with the highest rank proposed before.
             Rank highestProposedRank = proposedLayout == null ? new Rank(-1L, msg.getClientID())
-                    : getPhase2Rank();
-            setPhase1Rank(prepareRank);
-            log.debug("handleMessageLayoutPrepare: New phase 1 rank={}", getPhase1Rank());
+                    : getPhase2Rank(payloadEpoch);
+            setPhase1Rank(prepareRank, payloadEpoch);
+            log.debug("handleMessageLayoutPrepare: New phase 1 rank={}", prepareRank);
             r.sendResponse(ctx, msg, CorfuMsgType.LAYOUT_PREPARE_ACK.payloadMsg(new
                     LayoutPrepareResponse(highestProposedRank.getRank(), proposedLayout)));
         }
@@ -235,17 +241,18 @@ public class LayoutServer extends AbstractServer {
         if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
-        Rank proposeRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
-        Rank phase1Rank = getPhase1Rank();
 
-        long serverEpoch = getServerEpoch();
+        final long payloadEpoch = msg.getPayload().getEpoch();
+        final long serverEpoch = getServerEpoch();
+
+        final Rank proposeRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
+        final Rank phase1Rank = getPhase1Rank(payloadEpoch);
 
         // Check if the propose is for the correct epoch
-        if (msg.getPayload().getEpoch() != serverEpoch) {
+        if (payloadEpoch != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("handleMessageLayoutPropose: Incoming message with wrong epoch, got {}, "
-                            + "expected {}, message was: {}",
-                    msg.getPayload().getEpoch(), serverEpoch, msg);
+                            + "expected {}, message was: {}", payloadEpoch, serverEpoch, msg);
             return;
         }
         // This is a propose. If no prepare, reject.
@@ -256,6 +263,7 @@ public class LayoutServer extends AbstractServer {
                     LayoutProposeResponse(-1)));
             return;
         }
+
         // This is a propose. If the rank in the proposal is less than or equal to the highest yet
         // observed prepare rank, reject.
         if (!proposeRank.equals(phase1Rank)) {
@@ -265,8 +273,19 @@ public class LayoutServer extends AbstractServer {
                     LayoutProposeResponse(phase1Rank.getRank())));
             return;
         }
-        Rank phase2Rank = getPhase2Rank();
-        Layout proposeLayout = msg.getPayload().getLayout();
+
+        final Rank phase2Rank = getPhase2Rank(payloadEpoch);
+        final Layout proposeLayout = msg.getPayload().getLayout();
+
+        // Make sure that the layout epoch is the same as the LayoutProposeRequest epoch.
+        if (proposeLayout.getEpoch() != payloadEpoch) {
+            log.warn("handleMessageLayoutPropose: layout {} and payload {} epoch should be the same",
+                    proposeLayout.getEpoch(), payloadEpoch);
+            r.sendResponse(ctx, msg, CorfuMsgType.LAYOUT_PROPOSE_REJECT.payloadMsg(new
+                    LayoutProposeResponse(phase1Rank.getRank())));
+            return;
+        }
+
         // In addition, if the rank in the propose message is equal to the current phase 2 rank
         // (already accepted message), reject.
         // This can happen in case of duplicate messages.
@@ -278,9 +297,9 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
-        log.debug("handleMessageLayoutPropose: New phase 2 rank={},  layout={}",
+        log.debug("handleMessageLayoutPropose: New phase 2 rank={}, layout={}",
                 proposeRank, proposeLayout);
-        setPhase2Data(new Phase2Data(proposeRank, proposeLayout));
+        setPhase2Data(new Phase2Data(proposeRank, proposeLayout), payloadEpoch);
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
@@ -296,19 +315,22 @@ public class LayoutServer extends AbstractServer {
     private synchronized void forceLayout(@Nonnull CorfuPayloadMsg<LayoutCommittedRequest> msg,
                                                @Nonnull ChannelHandlerContext ctx,
                                                @Nonnull IServerRouter r) {
-        LayoutCommittedRequest req = msg.getPayload();
+        final long payloadEpoch = msg.getPayload().getEpoch();
+        final long serverEpoch = getServerEpoch();
 
-        if (req.getEpoch() != getServerEpoch()) {
+        if (payloadEpoch != serverEpoch) {
             // return can't force old epochs
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
             log.warn("forceLayout: Trying to force a layout with an old epoch. Layout {}, " +
-                    "current epoch {}", req.getLayout(), getServerEpoch());
+                    "current epoch {}", payloadEpoch, serverEpoch);
             return;
         }
 
-        setCurrentLayout(req.getLayout());
-        serverContext.setServerEpoch(req.getLayout().getEpoch(), r);
-        log.warn("forceLayout: Forcing new layout {}", req.getLayout());
+        final Layout msgLayout = msg.getPayload().getLayout();
+
+        setCurrentLayout(msgLayout);
+        serverContext.setServerEpoch(msgLayout.getEpoch(), r);
+        log.warn("forceLayout: Forcing new layout {}", msgLayout);
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
@@ -336,19 +358,22 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
-        Layout commitLayout = msg.getPayload().getLayout();
         if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
-        long serverEpoch = getServerEpoch();
-        if (msg.getPayload().getEpoch() < serverEpoch) {
+
+        final long payloadEpoch = msg.getPayload().getEpoch();
+        final long serverEpoch = getServerEpoch();
+        final Layout msgLayout = msg.getPayload().getLayout();
+
+        if (payloadEpoch < serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }
 
-        setCurrentLayout(commitLayout);
-        serverContext.setServerEpoch(msg.getPayload().getEpoch(), r);
-        log.info("New layout committed: {}", commitLayout);
+        setCurrentLayout(msgLayout);
+        serverContext.setServerEpoch(payloadEpoch, r);
+        log.info("New layout committed: {}", msgLayout);
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
@@ -373,20 +398,20 @@ public class LayoutServer extends AbstractServer {
         setLayoutInHistory(layout);
     }
 
-    public Rank getPhase1Rank() {
-        return serverContext.getPhase1Rank();
+    public Rank getPhase1Rank(long epoch) {
+        return serverContext.getPhase1Rank(epoch);
     }
 
-    public void setPhase1Rank(Rank rank) {
-        serverContext.setPhase1Rank(rank);
+    public void setPhase1Rank(Rank rank, long epoch) {
+        serverContext.setPhase1Rank(rank, epoch);
     }
 
-    public Phase2Data getPhase2Data() {
-        return serverContext.getPhase2Data();
+    public Phase2Data getPhase2Data(long epoch) {
+        return serverContext.getPhase2Data(epoch);
     }
 
-    public void setPhase2Data(Phase2Data phase2Data) {
-        serverContext.setPhase2Data(phase2Data);
+    public void setPhase2Data(Phase2Data phase2Data, long epoch) {
+        serverContext.setPhase2Data(phase2Data, epoch);
     }
 
     public void setLayoutInHistory(Layout layout) {
@@ -402,8 +427,8 @@ public class LayoutServer extends AbstractServer {
      *
      * @return the phase 2 rank
      */
-    public Rank getPhase2Rank() {
-        Phase2Data phase2Data = getPhase2Data();
+    public Rank getPhase2Rank(long epoch) {
+        Phase2Data phase2Data = getPhase2Data(epoch);
         if (phase2Data != null) {
             return phase2Data.getRank();
         }
@@ -415,8 +440,8 @@ public class LayoutServer extends AbstractServer {
      *
      * @return the proposed layout
      */
-    public Layout getProposedLayout() {
-        Phase2Data phase2Data = getPhase2Data();
+    public Layout getProposedLayout(long epoch) {
+        Phase2Data phase2Data = getPhase2Data(epoch);
         if (phase2Data != null) {
             return phase2Data.getLayout();
         }

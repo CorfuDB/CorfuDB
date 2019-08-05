@@ -27,36 +27,40 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
 
     public LayoutServerAssertions isInEpoch(long epoch) {
         isNotNull();
-        if (actual.getServerContext().getServerEpoch() != epoch) {
-            failWithMessage("Expected server to be in epoch <%d> but it was in epoch <%d>", epoch,
-                    actual.getServerContext().getServerEpoch());
+        final long serverEpoch = actual.getServerContext().getServerEpoch();
+        if (serverEpoch != epoch) {
+            failWithMessage("Expected server to be in epoch <%d> but it was in epoch <%d>",
+                    epoch, serverEpoch);
         }
         return this;
     }
 
     public LayoutServerAssertions isPhase1Rank(Rank phase1Rank) {
         isNotNull();
-        if (!actual.getPhase1Rank().equals(phase1Rank)) {
+        final long serverEpoch = actual.getServerContext().getServerEpoch();
+        if (!actual.getPhase1Rank(serverEpoch).equals(phase1Rank)) {
             failWithMessage("Expected server to be in phase1Rank <%s> but it was in phase1Rank <%s>", phase1Rank,
-                    actual.getPhase1Rank());
+                    actual.getPhase1Rank(serverEpoch));
         }
         return this;
     }
 
     public LayoutServerAssertions isPhase2Rank(Rank phase2Rank) {
         isNotNull();
-        if (!actual.getPhase2Rank().equals(phase2Rank)) {
+        final long serverEpoch = actual.getServerContext().getServerEpoch();
+        if (!actual.getPhase2Rank(serverEpoch).equals(phase2Rank)) {
             failWithMessage("Expected server to be in phase2Rank <%s> but it was in phase2Rank <%s>", phase2Rank,
-                    actual.getPhase2Rank());
+                    actual.getPhase2Rank(serverEpoch));
         }
         return this;
     }
 
     public LayoutServerAssertions isProposedLayout(Layout layout) {
         isNotNull();
-        if (!actual.getProposedLayout().asJSONString().equals(layout.asJSONString())) {
+        final long serverEpoch = actual.getServerContext().getServerEpoch();
+        if (!actual.getProposedLayout(serverEpoch).asJSONString().equals(layout.asJSONString())) {
             failWithMessage("Expected server to have proposedLayout  <%s> but it is <%s>", layout,
-                    actual.getProposedLayout());
+                    actual.getProposedLayout(serverEpoch));
 
         }
         return this;
