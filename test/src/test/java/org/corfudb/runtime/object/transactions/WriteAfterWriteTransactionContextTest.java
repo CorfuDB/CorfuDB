@@ -1,9 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ObjectsView;
@@ -55,18 +54,17 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).getLogEntry(getRuntime()).getType()).isEqualTo
-            (LogEntry.LogEntryType.MULTIOBJSMR);
+            (LogEntry.LogEntryType.SMRLOG);
 
-        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
+        SMRLogEntry tx1 = (SMRLogEntry)txns.get(0).getLogEntry
             (getRuntime());
-        assertThat(tx1.getEntryMap().size()).isEqualTo(1);
-        MultiSMREntry entryMap = tx1.getEntryMap().entrySet().iterator()
-                                                        .next().getValue();
-        assertThat(entryMap).isNotNull();
-        assertThat(entryMap.getUpdates().size()).isEqualTo(1);
-        SMREntry smrEntry = entryMap.getUpdates().get(0);
-        Object[] args = smrEntry.getSMRArguments();
-        assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
+        assertThat(tx1.getSMRUpdates().size()).isEqualTo(1);
+        List<SMRRecord> smrRecords = tx1.getSMRUpdates().entrySet().iterator().next().getValue();
+        assertThat(smrRecords).isNotNull();
+        assertThat(smrRecords.size()).isEqualTo(1);
+        SMRRecord smrRecord = smrRecords.get(0);
+        Object[] args = smrRecord.getSMRArguments();
+        assertThat(smrRecord.getSMRMethod()).isEqualTo("put");
         assertThat((String) args[0]).isEqualTo("k");
         assertThat((String) args[1]).isEqualTo("v2");
     }

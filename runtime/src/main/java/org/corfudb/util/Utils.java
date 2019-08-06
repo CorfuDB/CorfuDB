@@ -13,7 +13,7 @@ import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -445,15 +445,11 @@ public class Utils {
     public static void printLogAnatomy(CorfuRuntime runtime, ILogData logData) {
         try {
             LogEntry le = RecoveryUtils.deserializeLogData(runtime, logData);
-            if (le.getType() == LogEntry.LogEntryType.SMR) {
-                log.info("printLogAnatomy: Number of Streams: 1");
-                log.info("printLogAnatomy: Number of Entries: 1");
-                log.info("--------------------------");
-            } else if (le.getType() == LogEntry.LogEntryType.MULTIOBJSMR) {
+
+            if (le.getType() == LogEntry.LogEntryType.SMRLOG) {
                 log.info("printLogAnatomy: Number of Streams: {}", logData.getStreams().size());
-                ((MultiObjectSMREntry)le).getEntryMap().forEach((stream, multiSmrEntry) -> {
-                    log.info("printLogAnatomy: Number of Entries: {}",
-                            multiSmrEntry.getSMRUpdates(stream).size());
+                ((SMRLogEntry) le).getSMRUpdates().forEach((stream, records) -> {
+                    log.info("printLogAnatomy: Number of Entries: {}", records.size());
                 });
                 log.info("--------------------------");
             }

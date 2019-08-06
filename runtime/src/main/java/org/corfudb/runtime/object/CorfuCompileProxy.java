@@ -7,7 +7,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -80,7 +80,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * The ID of the stream of the log.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-            UUID streamID;
+    UUID streamID;
 
     /**
      * The type of the underlying object. We use this to instantiate
@@ -234,7 +234,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         if (TransactionalContext.isInTransaction()) {
             try {
                 // We generate an entry to avoid exposing the serializer to the tx context.
-                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
+                SMRRecord entry = new SMRRecord(smrUpdateFunction, args, serializer);
                 return TransactionalContext.getCurrentContext()
                         .logUpdate(this, entry, conflictObject);
             } catch (Exception e) {
@@ -245,8 +245,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
-        SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
+        SMRRecord smrRecord = new SMRRecord(smrUpdateFunction, args, serializer);
+        long address = underlyingObject.logUpdate(smrRecord, keepUpcallResult);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
         correctnessLogger.trace("Version, {}", address);

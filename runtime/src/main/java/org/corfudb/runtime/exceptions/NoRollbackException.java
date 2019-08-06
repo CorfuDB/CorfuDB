@@ -2,7 +2,7 @@ package org.corfudb.runtime.exceptions;
 
 import java.util.Optional;
 
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 
 /**
  * Created by mwei on 11/21/16.
@@ -24,9 +24,9 @@ public class NoRollbackException extends RuntimeException {
         );
     }
 
-    public NoRollbackException(Optional<SMREntry> entry, long address, long rollbackVersion) {
+    public NoRollbackException(Optional<SMRRecord> record, long address, long rollbackVersion) {
         super(String.format("Can't roll back due to %s@%d but need %d so can't undo",
-                entry.map(SMREntry::getSMRMethod).orElse("Unknown Entry"),
+                record.map(SMRRecord::getSMRMethod).orElse("Unknown SMR record"),
                 address,
                 rollbackVersion)
         );

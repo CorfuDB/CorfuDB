@@ -5,7 +5,6 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,10 +15,8 @@ import java.util.function.Consumer;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
@@ -33,7 +30,6 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -506,14 +502,14 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Write cp #2 of 3
         if (write2) {
-            MultiSMREntry smrEntries = new MultiSMREntry();
+            SMRLogEntry smrLogEntry = new SMRLogEntry();
             if (objects != null) {
                 for (int i = 0; i < objects.length; i++) {
-                    smrEntries.addTo(new SMREntry("put", (Object[]) objects[i], serializer));
+                    smrLogEntry.addTo(streamId, new SMRRecord("put", (Object[]) objects[i], serializer));
                 }
             }
             CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                    checkpointAuthor, checkpointId, streamId, mdKV, smrEntries);
+                    checkpointAuthor, checkpointId, streamId, mdKV, smrLogEntry);
             sv.append(cp2, null, null);
         }
 

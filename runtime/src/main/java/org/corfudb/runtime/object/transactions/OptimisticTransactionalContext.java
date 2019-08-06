@@ -3,20 +3,14 @@ package org.corfudb.runtime.object.transactions;
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Consumer;
-import java.util.stream.IntStream;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.logprotocol.ISMRConsumable;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -145,7 +139,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToReadSet(proxy, conflictObject);
 
         // if we have a result, return it.
-        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+        SMRRecord wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
         if (wrapper != null && wrapper.isHaveUpcallResult()) {
             return wrapper.getUpcallResult();
         }
@@ -155,7 +149,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
             syncWithRetryUnsafe(o, ts, proxy, this::setAsOptimisticStream);
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+            SMRRecord wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
             }
@@ -204,7 +198,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                              SMREntry updateEntry,
+                              SMRRecord updateEntry,
                               Object[] conflictObjects) {
         log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
                 this, proxy, updateEntry.getSMRMethod(),
@@ -264,13 +258,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
+        if (getWriteSetInfo().getWriteSet().getSMRUpdates().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
+        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getSMRUpdates().keySet());
 
         if (this.transaction.isLoggingEnabled()) {
             affectedStreamsIds.add(TRANSACTION_STREAM_ID);
@@ -296,7 +290,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         try {
             address = this.transaction.runtime.getStreamsView()
                 .append(
-                    // a MultiObjectSMREntry that contains the update(s) to objects
+                    // a SMRLogEntry that contains the update(s) to objects
                     collectWriteSetEntries(),
                     txInfo,
                     // a set of stream-IDs that contains the affected streams

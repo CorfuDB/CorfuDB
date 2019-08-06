@@ -1,19 +1,12 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.collect.ImmutableSet;
-
-import java.util.Set;
-
 import lombok.Getter;
-
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.view.Address;
+
+import java.util.Set;
 
 /**
  * A snapshot transactional context.
@@ -79,7 +72,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      */
     @Override
     public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                              SMREntry updateEntry,
+                              SMRRecord updateEntry,
                               Object[] conflictObject) {
         throw new UnsupportedOperationException(
                 "Can't modify object during a read-only transaction!");

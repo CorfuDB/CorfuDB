@@ -12,8 +12,8 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -26,7 +26,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
-import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -313,7 +312,7 @@ public class FastObjectLoader {
      * @param entry entry under scrutinization.
      * @return if the entry is already part of the checkpoint we started from.
      */
-    private boolean entryAlreadyContainedInCheckpoint(UUID streamId, SMREntry entry) {
+    private boolean entryAlreadyContainedInCheckpoint(UUID streamId, SMRRecord entry) {
         return streamsMetaData.containsKey(streamId) && entry.getGlobalAddress() <
                 streamsMetaData.get(streamId).getHeadAddress();
     }
@@ -330,7 +329,7 @@ public class FastObjectLoader {
      * @param entry entry to potentially apply
      * @return if we need to apply the entry.
      */
-    private boolean shouldEntryBeApplied(UUID streamId, SMREntry entry, boolean isCheckpointEntry) {
+    private boolean shouldEntryBeApplied(UUID streamId, SMRRecord entry, boolean isCheckpointEntry) {
         // 1.
         // In white list mode, ignore everything that is not in the list (the list contains the streams
         // passed by the client + derived checkpoint streams).
@@ -386,12 +385,12 @@ public class FastObjectLoader {
     /**
      * Update the corfu object and it's underlying stream with the new entry.
      *
-     * @param streamId identifies the Corfu stream
-     * @param entry entry to apply
-     * @param globalAddress global address of the entry
-     * @param isCheckPointEntry
+     * @param streamId          identifies the Corfu stream
+     * @param entry             entry to apply
+     * @param globalAddress     global address of the entry
+     * @param isCheckPointEntry if this is a checkpoint entry
      */
-    private void applySmrEntryToStream(UUID streamId, SMREntry entry,
+    private void applySmrEntryToStream(UUID streamId, SMRRecord entry,
                                        long globalAddress, boolean isCheckPointEntry) {
         if (shouldEntryBeApplied(streamId, entry, isCheckPointEntry)) {
 
@@ -415,21 +414,15 @@ public class FastObjectLoader {
         }
     }
 
-    private void applySmrEntryToStream(UUID streamId, SMREntry entry, long globalAddress) {
+    private void applySmrEntryToStream(UUID streamId, SMRRecord entry, long globalAddress) {
         applySmrEntryToStream(streamId, entry, globalAddress, false);
 
     }
 
-
-    private void updateCorfuObjectWithSmrEntry(ILogData logData, LogEntry logEntry, long globalAddress) {
-        UUID streamId = logData.getStreams().iterator().next();
-        applySmrEntryToStream(streamId, (SMREntry) logEntry, globalAddress);
-    }
-
-    private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, long globalAddress) {
-        MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;
-        multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -> {
-            multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -> {
+    private void updateCorfuObjectWithSMRLogEntry(LogEntry logEntry, long globalAddress) {
+        SMRLogEntry multiObjectLogEntry = (SMRLogEntry) logEntry;
+        multiObjectLogEntry.getSMRUpdates().forEach((streamId, smrRecords) -> {
+            smrRecords.forEach((smrEntry) -> {
                 applySmrEntryToStream(streamId, smrEntry, globalAddress);
             });
         });
@@ -474,11 +467,8 @@ public class FastObjectLoader {
         long globalAddress = logData.getGlobalAddress();
 
         switch (logEntry.getType()) {
-            case SMR:
-                updateCorfuObjectWithSmrEntry(logData, logEntry, globalAddress);
-                break;
-            case MULTIOBJSMR:
-                updateCorfuObjectWithMultiObjSmrEntry(logEntry, globalAddress);
+            case SMRLOG:
+                updateCorfuObjectWithSMRLogEntry(logEntry, globalAddress);
                 break;
             case CHECKPOINT:
                 updateCorfuObjectWithCheckPointEntry(logData, logEntry);
