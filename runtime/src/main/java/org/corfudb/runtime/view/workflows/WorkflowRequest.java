@@ -47,8 +47,8 @@ public abstract class WorkflowRequest {
 
     /**
      * Select an orchestrator and return a client. Orchestrator
-     * located on the affected by the workflow endpoint
-     * will not be selected. The layout might not reflect the state
+     * located on the affected by the workflow endpoint or nodes not responding
+     * to pings will not be selected. The layout might not reflect the state
      * of responsive servers, so we ping the endpoint before we select it.
      * An example of this would be a 3 node cluster, with two nodes that
      * die immediately, the layout won't have those two nodes as unresponsive
