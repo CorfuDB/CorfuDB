@@ -140,13 +140,22 @@ public class StreamAddressSpace {
      */
     public Roaring64NavigableMap getAddressesInRange(StreamAddressRange range) {
         Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();
+
+        //log.info("range query {} {}", range.getStart(), range.getEnd());
+
         if (range.getStart() > range.getEnd()) {
-            addressMap.forEach(address -> {
-                // Because our search is referenced to the stream's tail => (end < start]
-                if (address > range.getEnd() && address <= range.getStart()) {
-                    addressesInRange.add(address);
+            LongIterator iterator = getAddressMap().getReverseLongIterator();
+
+            while (iterator.hasNext()) {
+                long curr = iterator.next();
+                if (curr > range.getEnd()) {
+                    addressesInRange.addLong(curr);
+                } else if (curr > range.getStart()) {
+                    continue;
+                } else {
+                    break;
                 }
-            });
+            }
         }
 
         log.trace("getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.",
