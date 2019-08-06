@@ -5,6 +5,7 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.CorfuComponent;
@@ -45,7 +46,6 @@ public class MultiCheckpointWriter<T extends Map> {
         }
     }
 
-
     /** Checkpoint multiple SMRMaps. Since this method is Map specific
      *  then the keys are unique and the order doesn't matter.
      *
@@ -53,11 +53,11 @@ public class MultiCheckpointWriter<T extends Map> {
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-
     public Token appendCheckpoints(CorfuRuntime rt, String author) {
+        int numRetries = rt.getParameters().getCheckpointRetries();
+        int retry = 0;
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
 
-        // TODO(Maithem) should we throw an exception if a new min is not discovered
         Token minSnapshot = Token.UNINITIALIZED;
 
         final long cpStart = System.currentTimeMillis();
@@ -71,17 +71,32 @@ public class MultiCheckpointWriter<T extends Map> {
                                 .getSerializer();
                 cpw.setSerializer(serializer);
 
-                Token minCPSnapshot = cpw.appendCheckpoint();
+                Token minCPSnapshot = Token.UNINITIALIZED;
+                while (retry < numRetries) {
+                    try {
+                        minCPSnapshot = cpw.appendCheckpoint();
+                        break;
+                    } catch (WrongEpochException wee) {
+                        log.info("Epoch changed to {} during append checkpoint snapshot resolution. Sequencer" +
+                                " failover can lead to potential epoch regression, retry {}/{}", wee.getCorrectEpoch(),
+                                retry, numRetries);
+                        retry++;
+                        if (retry == numRetries) {
+                            String msg = String.format("Epochs changed during checkpoint cycle, " +
+                                    "over more than %s times. Potential sequencer regressions can lead to data loss. " +
+                                    "Aborting.", numRetries);
+                            throw new IllegalStateException(msg);
+                        }
+                    }
+                }
 
                 if (minSnapshot == Token.UNINITIALIZED) {
                     minSnapshot = minCPSnapshot;
-                } else if (minSnapshot.getEpoch() != minCPSnapshot.getEpoch()) {
-                    String msg = String.format("Epoch changed during GC cycle from %s to %s", minSnapshot,
-                            minCPSnapshot);
+                } else if (minCPSnapshot.compareTo(minSnapshot) < 0) {
+                    // Given that the snapshot returned by appendCheckpoint is a global snapshot that shouldn't regress.
+                    String msg = String.format("Potential epoch regression. Subsequent checkpoint returned a greater" +
+                            "snapshot {} than previous {}.", minCPSnapshot, minSnapshot);
                     throw new IllegalStateException(msg);
-                } else if (Token.min(minCPSnapshot, minSnapshot) == minCPSnapshot) {
-                    // Adopt the new min
-                    minSnapshot = minCPSnapshot;
                 }
             }
         } finally {

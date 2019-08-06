@@ -314,23 +314,19 @@ public class SequencerServer extends AbstractServer {
                                   ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
         List<UUID> streams = req.getStreams();
-        List<Long> streamTails;
+        Map<UUID, Long> streamTails;
         Token token;
         if (req.getStreams().isEmpty()) {
             // Global tail query
             token = new Token(sequencerEpoch, globalLogTail - 1);
-            streamTails = Collections.emptyList();
-        } else if (req.getStreams().size() == 1) {
-            // single stream query
-            token = new Token(sequencerEpoch, streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST));
-            streamTails = Collections.emptyList();
+            streamTails = Collections.emptyMap();
         } else {
-            // multiple stream query, the token is populated with the global tail and the tail queries are stored in
-            // streamTails
+            // multiple or single stream query, the token is populated with the global tail
+            // and the tail queries are stored in streamTails
             token = new Token(sequencerEpoch, globalLogTail - 1);
-            streamTails = new ArrayList<>(streams.size());
+            streamTails = new HashMap<>(streams.size());
             for (UUID stream : streams) {
-                streamTails.add(streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
+                streamTails.put(stream, streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
             }
         }
 
@@ -559,7 +555,7 @@ public class SequencerServer extends AbstractServer {
                     txResolutionResponse.getTokenType(),
                     txResolutionResponse.getConflictingKey(),
                     txResolutionResponse.getConflictingStream(),
-                    newToken, Collections.emptyMap(), Collections.emptyList())));
+                    newToken, Collections.emptyMap(), Collections.emptyMap())));
             return;
         }
 

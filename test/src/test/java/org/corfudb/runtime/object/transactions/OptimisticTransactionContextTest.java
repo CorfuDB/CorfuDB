@@ -1,6 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+
 import com.google.common.reflect.TypeToken;
 
 import java.nio.ByteBuffer;
@@ -841,5 +843,34 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         // When t2 wants to commit, the sequencer does not have consecutive epochs, so it should abort.
         t2(this::TXEnd).assertThrows().isInstanceOf(TransactionAbortedException.class);
+    }
+
+    /**
+     * Test that the transaction can commit if the first attempt got overwritten and retried.
+     * Basically on overwrite and retry we need to adjust the transaction snapshot otherwise
+     * the transaction will always conflict with itself and get TransactionAbortedException.
+     */
+    @Test
+    public void txnCanCommitIfOverwrittenAndRetry() throws Exception {
+        // Get a new runtime.
+        CorfuRuntime rt = getNewRuntime(getRuntime().getParameters())
+                .parseConfigurationString(getDefaultConfigurationString());
+        rt.connect();
+
+        OptimisticTXBegin();
+
+        put("k1", "v1");
+        put("k2", "v2");
+
+        // Hole fill the address that the transaction is about to commit, to
+        // create an OverwriteException and retry. The retry should succeed.
+        long currentTail = rt.getSequencerView().query().getSequence();
+        rt.getAddressSpaceView().read(currentTail + 1);
+
+        assertThatCode(this::TXEnd).doesNotThrowAnyException();
+
+        assertThat(rt.getSequencerView().query().getSequence()).isEqualTo(currentTail + 2);
+        assertThat(get("k1")).isEqualTo("v1");
+        assertThat(get("k2")).isEqualTo("v2");
     }
 }

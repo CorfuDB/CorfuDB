@@ -1272,7 +1272,7 @@ public class ManagementViewTest extends AbstractViewTest {
             assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReliability.STRONG_QUORUM);
             assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
-            TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+            TokenResponse tokenResponse = rt.getSequencerView().query();
             long lastAddress = tokenResponse.getSequence();
 
             Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
@@ -1421,9 +1421,8 @@ public class ManagementViewTest extends AbstractViewTest {
         // Verify sequencers in the layout and their order
         assertThat(actualLayout.getSequencers()).containsExactly(expectedNodes);
 
-        final TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID(
+        final long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID(
                 "test"));
-        final long lastAddress = tokenResponse.getSequence();
 
         // Verify Nodes' data
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
