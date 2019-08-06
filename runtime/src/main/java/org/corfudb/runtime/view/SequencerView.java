@@ -80,13 +80,26 @@ public class SequencerView extends AbstractView {
     }
 
     /**
+     * Return the tail of a specific stream.
+     *
+     * @param streamId the stream to query
+     * @return the stream tail
+     */
+    public long query(UUID streamId) {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)) {
+                return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                        .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);
+        }
+    }
+
+    /**
      * Return the next token in the sequencer for a particular stream.
      *
      * @param streamIds The stream IDs to retrieve from.
      * @return The first token retrieved.
      */
     public TokenResponse next(UUID ... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)){
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Arrays.asList(streamIds), 1)));
         }

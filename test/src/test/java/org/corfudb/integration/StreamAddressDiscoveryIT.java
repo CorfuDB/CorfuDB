@@ -741,12 +741,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Start checkpoint with snapshot time 9 for mapA
             CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream1),
                     "checkpointer-test", mapA);
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), (long) snapshotAddress);
 
             // Start checkpoint with snapshot time 9 for mapB
             CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream2),
                     "checkpointer-test", mapB);
-            cpwB.appendCheckpoint(new Token(0, snapshotAddress));
+            cpwB.appendCheckpoint(new Token(0, snapshotAddress), (long) snapshotAddress);
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
@@ -863,7 +863,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // we're interested in verifying the behaviour of streamA with end address != trim address.
             CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
                     "checkpoint-test", mapA);
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), (long) snapshotAddress);
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
@@ -962,7 +962,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint A with snapshot @ 9
             CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
                     "checkpointer-test", mapA);
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1), (long) snapshotAddress - 1);
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
