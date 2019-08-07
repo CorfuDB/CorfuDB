@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -179,9 +180,10 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @param r   Router
      */
     @ClientHandler(type = CorfuMsgType.ERROR_DATA_CORRUPTION)
-    private static Object handleReadDataCorruption(CorfuMsg msg,
+    private static Object handleReadDataCorruption(CorfuPayloadMsg<Long> msg,
                                                    ChannelHandlerContext ctx, IClientRouter r) {
-        throw new DataCorruptionException();
+        long read = msg.getPayload().longValue();
+        throw new DataCorruptionException(String.format("Encountered corrupted data while reading %s", read));
     }
 
     /**
