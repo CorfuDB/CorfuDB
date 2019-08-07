@@ -1,6 +1,12 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -9,17 +15,10 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
-import org.corfudb.runtime.CorfuRuntime;
-
 
 /**
  * Object & serialization methods for in-stream checkpoint
- * summarization of SMR object state.
+ * summary of SMR object state.
  */
 @ToString(callSuper = true)
 @NoArgsConstructor
@@ -92,14 +91,14 @@ public class CheckpointEntry extends LogEntry {
     @Getter
     Map<CheckpointDictKey, String> dict;
 
-    /** Optional: SMREntry objects that contain SMR
+    /** Optional: an SMRLogEntry that contain SMR
      *  object state of the stream that we're checkpointing.
      *  May be present in any CheckpointEntryType, but typically
      *  used by CONTINUATION entries.
      */
     @Getter
     @Setter
-    MultiSMREntry smrEntries;
+    SMRLogEntry smrEntries;
 
     /** Byte count of smrEntries in serialized form, zero
      *  if smrEntries.size() is zero or if value is unknown.
@@ -108,7 +107,7 @@ public class CheckpointEntry extends LogEntry {
     int smrEntriesBytes = 0;
 
     public CheckpointEntry(CheckpointEntryType type, String authorId, UUID checkpointId,
-                           UUID streamId, Map<CheckpointDictKey,String> dict, MultiSMREntry smrEntries) {
+                           UUID streamId, Map<CheckpointDictKey,String> dict, SMRLogEntry smrEntries) {
         super(LogEntryType.CHECKPOINT);
         this.cpType = type;
         this.checkpointId = checkpointId;
@@ -143,7 +142,7 @@ public class CheckpointEntry extends LogEntry {
         smrEntries = null;
         byte hasSmrEntries = b.readByte();
         if (hasSmrEntries > 0) {
-            smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime);
+            smrEntries = (SMRLogEntry) SMRLogEntry.deserialize(b, runtime);
         }
         smrEntriesBytes = b.readInt();
     }
