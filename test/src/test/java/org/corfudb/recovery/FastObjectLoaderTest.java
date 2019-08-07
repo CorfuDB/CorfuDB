@@ -683,7 +683,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     /**
      * Upon recreation of the map, the correct serializer should be
-     * set for the map. The serializer type comes from the SMREntry.
+     * set for the map. The serializer type comes from the SMRRecord.
      *
      * @throws Exception
      */

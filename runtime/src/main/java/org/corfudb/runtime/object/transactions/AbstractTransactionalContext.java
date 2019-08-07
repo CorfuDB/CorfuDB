@@ -4,8 +4,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -231,12 +231,12 @@ public abstract class AbstractTransactionalContext implements
      * Log an SMR update to the Corfu log.
      *
      * @param proxy          The proxy which generated the update.
-     * @param updateEntry    The entry which we are writing to the log.
+     * @param updateRecord   The record which we are writing to the log.
      * @param conflictObject Fine-grained conflict information, if available.
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
+    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMRRecord updateRecord,
                                        Object[] conflictObject);
 
     /**
@@ -325,14 +325,14 @@ public abstract class AbstractTransactionalContext implements
      * Add an update to the transaction optimistic write-set.
      *
      * @param proxy           the SMR object for this update
-     * @param updateEntry     the update
+     * @param updateRecord    the update
      * @param conflictObjects the conflict objects to add
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
+    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMRRecord updateRecord, Object[]
             conflictObjects) {
-        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
+        return getWriteSetInfo().add(proxy, updateRecord, conflictObjects);
     }
 
     /**
@@ -350,11 +350,11 @@ public abstract class AbstractTransactionalContext implements
     }
 
     /**
-     * convert our write set into a new MultiObjectSMREntry.
+     * convert our write set into a new SMRLogEntry.
      *
      * @return  the write set
      */
-    MultiObjectSMREntry collectWriteSetEntries() {
+    SMRLogEntry collectWriteSetEntries() {
         return getWriteSetInfo().getWriteSet();
     }
 
@@ -364,7 +364,7 @@ public abstract class AbstractTransactionalContext implements
      * @param id The stream to get a append set for.
      * @return The append set for that stream, as an ordered list.
      */
-    List<SMREntry> getWriteSetEntryList(UUID id) {
+    List<SMRRecord> getWriteSetEntryList(UUID id) {
         return getWriteSetInfo().getWriteSet().getSMRUpdates(id);
     }
 
