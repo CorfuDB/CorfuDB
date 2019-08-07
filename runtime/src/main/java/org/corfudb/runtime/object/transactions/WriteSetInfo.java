@@ -6,8 +6,8 @@ import java.util.UUID;
 
 import lombok.Getter;
 
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
@@ -23,13 +23,14 @@ public class WriteSetInfo extends ConflictSetInfo {
     Set<UUID> affectedStreams = new HashSet<>();
 
     /** The actual updates to mutated objects. */
-    MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
+    SMRLogEntry writeSet = new SMRLogEntry();
 
-    public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
+    public long add(ICorfuSMRProxyInternal proxy, SMRRecord updateRecord, Object[] conflictObjects) {
+
         synchronized (getRootContext().getTransactionID()) {
 
-            // add the SMRentry to the list of updates for this stream
-            writeSet.addTo(proxy.getStreamID(), updateEntry);
+            // add the SMR update record to the list of updates for this stream.
+            writeSet.addTo(proxy.getStreamID(), updateRecord);
 
             super.add(proxy, conflictObjects);
 
