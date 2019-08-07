@@ -6,12 +6,12 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -98,18 +98,18 @@ public class ObjectsViewTest extends AbstractViewTest {
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).getLogEntry(getRuntime()).getType())
-                .isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
+                .isEqualTo(LogEntry.LogEntryType.SMRLOG);
 
-        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
+        SMRLogEntry tx1 = (SMRLogEntry)txns.get(0).getLogEntry
                 (getRuntime());
-        MultiSMREntry entryMap = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
-        assertThat(entryMap).isNotNull();
+        List<SMRRecord> streamUpdates = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
+        assertThat(streamUpdates).isNotNull();
 
-        assertThat(entryMap.getUpdates().size()).isEqualTo(1);
+        assertThat(streamUpdates.size()).isEqualTo(1);
 
-        SMREntry smrEntry = entryMap.getUpdates().get(0);
-        Object[] args = smrEntry.getSMRArguments();
-        assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
+        SMRRecord smrRecord = streamUpdates.get(0);
+        Object[] args = smrRecord.getSMRArguments();
+        assertThat(smrRecord.getSMRMethod()).isEqualTo("put");
         assertThat((String) args[0]).isEqualTo("k");
         assertThat((String) args[1]).isEqualTo("v2");
     }
@@ -145,9 +145,12 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
-        IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
+        UUID streamBId = CorfuRuntime.getStreamID("b");
+        IStreamView streamB = r.getStreamsView().get(streamBId);
         smrMap.put("a", "b");
-        streamB.append(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
+        SMRLogEntry smrLogEntry = new SMRLogEntry();
+        smrLogEntry.addTo(streamBId, new SMRRecord("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
+        streamB.append(smrLogEntry);
 
         //this TX should not conflict
         assertThat(smrMap)
