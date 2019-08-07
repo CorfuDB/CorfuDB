@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.view.Address;
@@ -71,7 +71,7 @@ public class WriteSetSMRStream implements ISMRStream {
     private long currentContextPos;
 
     /**
-     * Current write position in an SMREntry
+     * Current write position in SMRRecord list pointed by currentContextPos.
      */
     private long writePos;
 
@@ -139,7 +139,7 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public List<SMREntry> remainingUpTo(long maxGlobal) {
+    public List<SMRRecord> remainingUpTo(long maxGlobal) {
         // Check for any new contexts
         if (TransactionalContext.getTransactionStack().size()
                 > contexts.size()) {
@@ -148,11 +148,11 @@ public class WriteSetSMRStream implements ISMRStream {
                 < contexts.size()) {
             mergeTransaction();
         }
-        List<SMREntry> entryList = new LinkedList<>();
+        List<SMRRecord> entryList = new LinkedList<>();
 
 
         for (int i = currentContext; i < contexts.size(); i++) {
-            final List<SMREntry> writeSet = contexts.get(i)
+            final List<SMRRecord> writeSet = contexts.get(i)
                     .getWriteSetEntryList(id);
             long readContextStart = i == currentContext ? currentContextPos + 1 : 0;
             for (long j = readContextStart; j < writeSet.size(); j++) {
@@ -168,7 +168,7 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public List<SMREntry> current() {
+    public List<SMRRecord> current() {
         if (Address.nonAddress(writePos)) {
             return Collections.emptyList();
         }
@@ -184,7 +184,7 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public List<SMREntry> previous() {
+    public List<SMRRecord> previous() {
         writePos--;
 
         if (writePos <= Address.maxNonAddress()) {
@@ -231,18 +231,18 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public Stream<SMREntry> stream() {
+    public Stream<SMRRecord> stream() {
         return streamUpTo(Address.MAX);
     }
 
     @Override
-    public Stream<SMREntry> streamUpTo(long maxGlobal) {
+    public Stream<SMRRecord> streamUpTo(long maxGlobal) {
         return remainingUpTo(maxGlobal)
                 .stream();
     }
 
     @Override
-    public long append(SMREntry entry,
+    public long append(SMRRecord entry,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         throw new UnsupportedOperationException();
