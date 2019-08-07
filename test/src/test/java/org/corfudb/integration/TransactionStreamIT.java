@@ -1,9 +1,11 @@
 package org.corfudb.integration;
 
+
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -35,18 +37,18 @@ public class TransactionStreamIT extends AbstractIT {
 
     /**
      *
-     * Extract the updates from the MultiObjectSMREntry and updates the counters map
+     * Extract the updates from the SMRLogEntry and updates the counters map
      */
     private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas) {
         for (ILogData ld : deltas) {
-            MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(null);
-            for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.getEntryMap().entrySet()) {
-                for (SMREntry update : multiSMREntry.getValue().getUpdates()) {
+            SMRLogEntry multiObjSmr = (SMRLogEntry) ld.getPayload(null);
+            for (Map.Entry<UUID, List<SMRRecord>> smrRecordsMap : multiObjSmr.getEntryMap().entrySet()) {
+                for (SMRRecord update : smrRecordsMap.getValue()) {
                     int key = (int) update.getSMRArguments()[0];
                     int val = (int) update.getSMRArguments()[1];
                     assertThat(key).isEqualTo(val);
-                    int newVal = map.getOrDefault(multiSMREntry.getKey(), 0) + key;
-                    map.put(multiSMREntry.getKey(), newVal);
+                    int newVal = map.getOrDefault(smrRecordsMap.getKey(), 0) + key;
+                    map.put(smrRecordsMap.getKey(), newVal);
                 }
             }
         }

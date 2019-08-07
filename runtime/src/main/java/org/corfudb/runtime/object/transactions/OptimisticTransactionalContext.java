@@ -9,7 +9,7 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -140,7 +140,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToReadSet(proxy, conflictObject);
 
         // if we have a result, return it.
-        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+        SMRRecord wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
         if (wrapper != null && wrapper.isHaveUpcallResult()) {
             return wrapper.getUpcallResult();
         }
@@ -150,7 +150,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
             syncWithRetryUnsafe(o, ts, proxy, o::setUncommittedChanges);
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+            SMRRecord wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
             }
@@ -168,19 +169,19 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * from operations via getUpcallResult.
      *
      * @param proxy         The proxy making the request.
-     * @param updateEntry   The timestamp of the request.
+     * @param updateRecord  The record which we are writing to the log.
      * @param <T>           The type of the proxy.
      * @return              The "address" that the update was written to.
      */
     @Override
     public <T extends ICorfuSMR<T>>long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                                   SMREntry updateEntry,
+                                                   SMRRecord updateRecord,
                                                    Object[] conflictObjects) {
         log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
-                this, proxy, updateEntry.getSMRMethod(),
-                updateEntry.getSMRArguments(), conflictObjects);
+                this, proxy, updateRecord.getSMRMethod(),
+                updateRecord.getSMRArguments(), conflictObjects);
 
-        return addToWriteSet(proxy, updateEntry, conflictObjects);
+        return addToWriteSet(proxy, updateRecord, conflictObjects);
     }
 
     /**
@@ -266,7 +267,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         try {
             address = this.transaction.runtime.getStreamsView()
                 .append(
-                    // a MultiObjectSMREntry that contains the update(s) to objects
+                    // a SMRLogEntry that contains the update(s) to objects
                     collectWriteSetEntries(),
                     txInfo,
                     // a set of stream-IDs that contains the affected streams
