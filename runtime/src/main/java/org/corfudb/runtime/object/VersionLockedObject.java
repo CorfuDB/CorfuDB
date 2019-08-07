@@ -4,7 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -399,7 +399,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      *                   saved, false otherwise.
      * @return The address the update was logged at.
      */
-    public long logUpdate(SMREntry entry, boolean saveUpcall) {
+    public long logUpdate(SMRRecord entry, boolean saveUpcall) {
         return smrStream.append(entry,
                 t -> {
                     if (saveUpcall) {
@@ -427,7 +427,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      *
      * @return True, if the object was modified by this thread. False otherwise.
      */
-    public boolean optimisticallyOwnedByThreadUnsafe() {
+    private boolean optimisticallyOwnedByThreadUnsafe() {
         return optimisticStream != null && optimisticStream.isStreamForThisThread();
     }
 
@@ -519,28 +519,27 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /**
      * Given a SMR entry with an undo entry, undo the update.
      *
-     * @param entry The entry to undo.
+     * @param record The record to undo.
      */
-    private void applyUndoRecordUnsafe(SMREntry entry, ISMRStream stream) {
-        log.trace("Undo[{}] of {}@{} ({})", this, entry.getSMRMethod(),
-                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
-                entry.getUndoRecord());
-        IUndoFunction<T> undoFunction = undoFunctionMap.get(entry.getSMRMethod());
+    private void applyUndoRecordUnsafe(SMRRecord record, ISMRStream stream) {
+        log.trace("Undo[{}] of {}@{} ({})", this, record.getSMRMethod(),
+                Address.isAddress(record.getGlobalAddress()) ? record.getGlobalAddress() : "OPT",
+                record.getUndoRecord());
+        IUndoFunction<T> undoFunction = undoFunctionMap.get(record.getSMRMethod());
         ICorfuExecutionContext.Context context = getContext(stream);
 
         // If the undo function exists, apply it.
         if (undoFunction != null) {
             undoFunction.doUndo(
                     object.getContext(context),
-                    entry.getUndoRecord(), entry.getSMRArguments());
+                    record.getUndoRecord(), record.getSMRArguments());
             return;
-        } else if (resetSet.contains(entry.getSMRMethod())) {
-            // If this is a reset, undo by restoring the
-            // previous state.
-            object = (T) entry.getUndoRecord();
+        } else if (resetSet.contains(record.getSMRMethod())) {
+            // If this is a reset, undo by restoring the previous state.
+            object = (T) record.getUndoRecord();
             // clear the undo record, since it is now
             // consumed (the object may change)
-            entry.clearUndoRecord();
+            record.clearUndoRecord();
             return;
         }
         // Otherwise we don't know how to undo,
@@ -568,40 +567,40 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /**
      * Apply an SMR update to the object, possibly optimistically.
      *
-     * @param entry The entry to apply.
+     * @param record The SMR record to apply.
      */
-    private Object applyUpdateUnsafe(SMREntry entry, long timestamp) {
-        log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
-                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
-                entry.getSMRArguments());
+    private Object applyUpdateUnsafe(SMRRecord record, long timestamp) {
+        log.trace("Apply[{}] of {}@{} ({})", this, record.getSMRMethod(),
+                Address.isAddress(record.getGlobalAddress()) ? record.getGlobalAddress() : "OPT",
+                record.getSMRArguments());
 
-        ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
+        ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(record.getSMRMethod());
         if (target == null) {
-            throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
+            throw new RuntimeException("Unknown upcall " + record.getSMRMethod());
         }
 
         ICorfuExecutionContext.Context context = getContext(timestamp);
 
         // Calculate an undo record if no undo record is present -OR- there
-        // is an optimistic entry, (which has no valid global address).
+        // is an optimistic record, (which has no valid global address).
         // In the case of optimistic entries, the snapshot may have changed
         // since the last time they were applied, so we need to recalculate
         // undo -- this is the case without snapshot isolation.
-        if (!entry.isUndoable() || !Address.isAddress(entry.getGlobalAddress())) {
+        if (!record.isUndoable() || !Address.isAddress(record.getGlobalAddress())) {
             // Can we generate an undo record?
             IUndoRecordFunction<T> undoRecordTarget =
-                    undoRecordFunctionMap.get(entry.getSMRMethod());
-            // If there was no previously calculated undo entry
+                    undoRecordFunctionMap.get(record.getSMRMethod());
+            // If there was no previously calculated undo record
             if (undoRecordTarget != null) {
                 // Calculate the undo record.
-                entry.setUndoRecord(undoRecordTarget
-                        .getUndoRecord(object.getContext(context), entry.getSMRArguments()));
-                log.trace("Apply[{}] Undo->{}", this, entry.getUndoRecord());
-            } else if (resetSet.contains(entry.getSMRMethod())) {
-                // This entry actually resets the object. So here
+                record.setUndoRecord(undoRecordTarget
+                        .getUndoRecord(object.getContext(context), record.getSMRArguments()));
+                log.trace("Apply[{}] Undo->{}", this, record.getUndoRecord());
+            } else if (resetSet.contains(record.getSMRMethod())) {
+                // This record actually resets the object. So here
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
-                entry.setUndoRecord(object);
+                record.setUndoRecord(object);
                 object.close();
                 object = newObjectFn.get();
                 log.trace("Apply[{}] Undo->RESET", this);
@@ -609,7 +608,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         }
 
         // Now invoke the upcall
-        return target.upcall(object.getContext(context), entry.getSMRArguments());
+        return target.upcall(object.getContext(context), record.getSMRArguments());
     }
 
     /**
@@ -619,31 +618,31 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param stream          The stream of SMR updates to apply in
      *                        reverse order.
      * @param rollbackVersion The version to stop roll back at.
-     * @throws NoRollbackException If an entry in the stream did not contain
+     * @throws NoRollbackException If an record in the stream did not contain
      *                             undo information.
      */
-    protected void rollbackStreamUnsafe(ISMRStream stream, long rollbackVersion) {
+    private void rollbackStreamUnsafe(ISMRStream stream, long rollbackVersion) {
         // If we're already at or before the given version, there's
         // nothing to do
         if (stream.pos() <= rollbackVersion) {
             return;
         }
 
-        List<SMREntry> entries = stream.current();
+        List<SMRRecord> entries = stream.current();
 
         while (!entries.isEmpty()) {
-            if (entries.stream().allMatch(SMREntry::isUndoable)) {
+            if (entries.stream().allMatch(SMRRecord::isUndoable)) {
                 // start from the end, process one at a time
-                ListIterator<SMREntry> it = entries.listIterator(entries.size());
+                ListIterator<SMRRecord> it = entries.listIterator(entries.size());
                 while (it.hasPrevious()) {
                     applyUndoRecordUnsafe(it.previous(), stream);
                 }
             } else {
-                Optional<SMREntry> entry = entries.stream().findFirst();
+                Optional<SMRRecord> entry = entries.stream().findFirst();
                 if (log.isTraceEnabled()) {
                     log.trace("rollbackStreamUnsafe: one or more stream entries in address @{} are not undoable. " +
                                     "Undoable entries: {}/{}", stream.pos(),
-                            (int) entries.stream().filter(SMREntry::isUndoable).count(),
+                            (int) entries.stream().filter(SMRRecord::isUndoable).count(),
                             entries.size());
                 }
                 throw new NoRollbackException(entry, stream.pos(), rollbackVersion);
@@ -674,7 +673,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param stream    The stream to sync forward
      * @param timestamp The timestamp to sync up to.
      */
-    protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
+    private void syncStreamUnsafe(ISMRStream stream, long timestamp) {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
@@ -715,13 +714,13 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         }
     }
 
-    /** Apply an SMREntry to the version object, while
+    /** Apply an SMRRecord to the version object, while
      * doing bookkeeping for the underlying stream.
      *
-     * @param entry smr entry
+     * @param record smr record
      */
-    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
-        applyUpdateUnsafe(entry, globalAddress);
+    public void applyUpdateToStreamUnsafe(SMRRecord record, long globalAddress) {
+        applyUpdateUnsafe(record, globalAddress);
         seek(globalAddress + 1);
     }
 
