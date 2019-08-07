@@ -5,7 +5,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /**
@@ -16,7 +16,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
  * ISMRStream wraps a pure stream and provides a similar API: append, remainingTo, current,
  * previous, pos and seek.
  * Different from a stream, the entries returned from methods that obtain stream entries,
- * like current, previous, are of type SMREntry.
+ * like current, previous, are of type SMRRecord.
  *
  * <p>Created by mwei on 3/13/17.
  */
@@ -24,11 +24,11 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 public interface ISMRStream {
 
 
-    List<SMREntry> remainingUpTo(long maxGlobal);
+    List<SMRRecord> remainingUpTo(long maxGlobal);
 
-    List<SMREntry> current();
+    List<SMRRecord> current();
 
-    List<SMREntry> previous();
+    List<SMRRecord> previous();
 
     long pos();
 
@@ -38,12 +38,12 @@ public interface ISMRStream {
 
     void gc(long trimMark);
 
-    Stream<SMREntry> stream();
+    Stream<SMRRecord> stream();
 
-    Stream<SMREntry> streamUpTo(long maxGlobal);
+    Stream<SMRRecord> streamUpTo(long maxGlobal);
 
     /**
-     * Append a SMREntry to the stream, returning the global address
+     * Append a SMRRecord to the stream, returning the global address
      * it was written at.
      *
      * <p>Optionally, provide a method to be called when an address is acquired,
@@ -61,7 +61,7 @@ public interface ISMRStream {
      *                              writing.
      * @return The (global) address the object was written at.
      */
-    long append(SMREntry entry,
+    long append(SMRRecord entry,
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback);
 
