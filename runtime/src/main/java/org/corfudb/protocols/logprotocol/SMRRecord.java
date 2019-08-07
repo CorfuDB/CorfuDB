@@ -1,32 +1,26 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.ToString;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.CorfuSerializer;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
-import static com.google.common.base.Preconditions.checkState;
+import java.util.Arrays;
 
 /**
  * Created by mwei on 1/8/16.
  */
 @SuppressWarnings("checkstyle:abbreviation")
-@ToString(callSuper = true)
+@ToString
 @NoArgsConstructor
 @EqualsAndHashCode
-public class SMREntry extends LogEntry implements ISMRConsumable {
+public class SMRRecord {
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -48,105 +42,105 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Getter
     private ISerializer serializerType;
 
-    /** An undo record, which can be used to undo this method.
-     *
+    /**
+     * An undo record, which can be used to undo this method.
      */
     @Getter
     public transient Object undoRecord;
 
-    /** A flag indicating whether an undo record is present. Necessary
+    /**
+     * A flag indicating whether an undo record is present. Necessary
      * because undo records may be NULL.
      */
     @Getter
     public boolean undoable;
 
-    /** The upcall result, if present. */
+    /**
+     * The upcall result, if present.
+     */
     @Getter
     public transient Object upcallResult;
 
-    /** If there is an upcall result for this modification. */
+    /**
+     * If there is an upcall result for this modification.
+     */
     @Getter
     public transient boolean haveUpcallResult = false;
 
-    /** Set the upcall result for this entry. */
+    /**
+     * The global address this record is associated to.
+     */
+    @Getter
+    @Setter
+    long globalAddress = Address.NON_ADDRESS;
+
+    /**
+     * Set the upcall result for this entry.
+     */
     public void setUpcallResult(Object result) {
         upcallResult = result;
         haveUpcallResult = true;
     }
 
-    /** Set the undo record for this entry. */
+    /**
+     * Set the undo record for this entry.
+     */
     public void setUndoRecord(Object object) {
         this.undoRecord = object;
         undoable = true;
     }
 
-    /** Clear the undo record for this entry. */
+    /**
+     * Clear the undo record for this entry.
+     */
     public void clearUndoRecord() {
         this.undoRecord = null;
         undoable = false;
     }
 
 
-    /** SMREntry constructor. */
-    public SMREntry(String smrMethod, @NonNull Object[] smrArguments, ISerializer serializer) {
-        super(LogEntryType.SMR);
+    /**
+     * SMRRecord constructor.
+     */
+    public SMRRecord(String smrMethod, @NonNull Object[] smrArguments, ISerializer serializer) {
         this.SMRMethod = smrMethod;
         this.SMRArguments = smrArguments;
         this.serializerType = serializer;
     }
 
     /**
-     * This function provides the remaining buffer. Child entries
-     * should initialize their contents based on the buffer.
+     * Deserialize from buffer and return a new {@code SMRRecord}.
      *
-     * @param b The remaining buffer.
+     * @param b byte buffer to deserialize.
+     * @return an {@code SMRRecord} deserialized from buffer.
      */
-    @Override
-    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
-        super.deserializeBuffer(b, rt);
+    static SMRRecord deserializeFromBuffer(ByteBuf b) {
+        SMRRecord record = new SMRRecord();
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
         b.readBytes(methodBytes, 0, methodLength);
-        SMRMethod = new String(methodBytes);
-        serializerType = Serializers.getSerializer(b.readByte());
+        record.SMRMethod = new String(methodBytes);
+        record.serializerType = Serializers.getSerializer(b.readByte());
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = serializerType.deserialize(objBuf, rt);
+            arguments[arg] = record.serializerType.deserialize(objBuf, null);
             b.skipBytes(len);
         }
-        SMRArguments = arguments;
+        record.SMRArguments = arguments;
+
+        return record;
     }
 
     /**
-     * Given a buffer with the reader index pointing to a serialized SMREntry, this method will
-     * seek the buffer's reader index to the end of the entry.
+     * Serialize this record into a buffer.
+     * The global address is not serialized.
+     *
+     * @param b byte buffer to serialize to.
      */
-    public static void seekToEnd(ByteBuf b) {
-        // Magic
-        byte magicByte = b.readByte();
-        checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");
-        // container type
-        byte type = b.readByte();
-        checkState(type == LogEntryType.SMR.asByte(), "Not a SMREntry!");
-        // Method name
-        short methodLength = b.readShort();
-        b.skipBytes(methodLength);
-        // Serializer type
-        b.readByte();
-        // num args
-        int numArgs = b.readByte();
-        for (int arg = 0; arg < numArgs; arg++) {
-            int len = b.readInt();
-            b.skipBytes(len);
-        }
-    }
-
-    @Override
-    public void serialize(ByteBuf b) {
-        super.serialize(b);
+    void serialize(ByteBuf b) {
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
         b.writeByte(serializerType.getType());
@@ -161,12 +155,5 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
-    }
-
-    @Override
-    public List<SMREntry> getSMRUpdates(UUID id) {
-        // TODO: we should check that the id matches the id of this entry,
-        // but replex erases this information.
-        return Collections.singletonList(this);
     }
 }
