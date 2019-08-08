@@ -2,9 +2,10 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.corfudb.protocols.logprotocol.SMREntryGarbageInfo;
+import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.logprotocol.SMRRecord;
+import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -40,21 +41,30 @@ public class LogDataTest {
 
     @Test
     public void testGarbagePayloadSerializeDeserialize() {
-        Long detectedAddress = 0L;
+        long detectedAddress = 0L;
         int smrEntrySize = 0;
+        UUID streamId = UUID.randomUUID();
+        int index = 0;
 
-        SMREntryGarbageInfo smrEntryGarbageInfo = new SMREntryGarbageInfo(detectedAddress, smrEntrySize);
-        LogData logData = new LogData(DataType.GARBAGE, smrEntryGarbageInfo);
+        SMRGarbageRecord recordGarbageInfo = new SMRGarbageRecord(detectedAddress, smrEntrySize);
+        SMRGarbageEntry garbageInfo = new SMRGarbageEntry();
+        garbageInfo.add(streamId, index, recordGarbageInfo);
+
+        LogData logData = new LogData(DataType.GARBAGE, garbageInfo);
         ByteBuf buf = Unpooled.buffer();
         logData.doSerialize(buf);
         LogData deserializedLogData = new LogData(buf);
 
         // TODO(Xin): runtime is not used in the test. Future patch will eliminate the dependency on runtime.
-        SMREntryGarbageInfo deserializedSMREntryGarbageInfo =
-                (SMREntryGarbageInfo) deserializedLogData.getPayload(null);
+        SMRGarbageEntry deserializedSMREntryGarbageInfo =
+                (SMRGarbageEntry) deserializedLogData.getPayload(null);
 
 
-        Assert.assertEquals(detectedAddress, (Long) deserializedSMREntryGarbageInfo.getDetectorAddress());
-        Assert.assertEquals(smrEntrySize, deserializedSMREntryGarbageInfo.getGarbageSize());
+        Assert.assertEquals(detectedAddress,
+                deserializedSMREntryGarbageInfo
+                        .getAllGarbageRecords()
+                        .get(streamId)
+                        .get(index)
+                        .getMarkerAddress());
     }
 }
