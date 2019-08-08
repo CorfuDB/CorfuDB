@@ -36,8 +36,10 @@ public class CorfuQueue<E> {
      * The main CorfuTable which contains the primary key-value mappings.
      */
     private final CorfuTable<Long, E> corfuTable;
+    private final CorfuTable<Long, Long> orderTable;
     private final CorfuRuntime runtime;
     private final CorfuGuidGenerator guidGenerator;
+    private final Long GLOBAL_ORDER_KEY = 0L;
 
     public CorfuQueue(CorfuRuntime runtime, String streamName) {
         this.runtime = runtime;
@@ -45,6 +47,10 @@ public class CorfuQueue<E> {
                 .setTypeToken(new TypeToken<CorfuTable<Long, E>>() {})
                 .setStreamName(streamName)
                 .setArguments(CorfuTable.IndexRegistry.empty(), new LinkedHashMap<Long, E>())
+                .open();
+        orderTable = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {})
+                .setStreamName(streamName+"ORDER")
                 .open();
         guidGenerator = new CorfuGuidGenerator(runtime);
     }
@@ -242,6 +248,8 @@ public class CorfuQueue<E> {
                     .getSnapshotTimestamp().getSequence();
             startedNewTransaction = true;
         }
+        Long maxOrder = orderTable.getOrDefault(GLOBAL_ORDER_KEY, 0L);
+
         List<CorfuQueueRecord<E>> copy = new ArrayList<>(
                 Math.min(corfuTable.size(), maxEntries)
         );
@@ -250,14 +258,18 @@ public class CorfuQueue<E> {
             if (++index >= maxEntries) {
                 break;
             }
-            // Note that index is already limited to fit within MAX_BITS_FOR_INDEX
-            long ordering = (snapshotVersion << MAX_BITS_FOR_INDEX) | index;
             long entryId = entry.getKey();
+            Long ordering = orderTable.get(entryId);
+            if (ordering == null) {
+                ordering = maxOrder + index;
+                orderTable.putIfAbsent(entryId, ordering);
+            }
             CorfuQueueRecord<E> record = new CorfuQueueRecord<>(
                     ordering, entryId, entry.getValue()
             );
             copy.add(record);
         }
+        orderTable.put(GLOBAL_ORDER_KEY, maxOrder + index);
         // Given that we are using a WRITE_AFTER_WRITE on a read-only txn, we expect no aborts.
         if (startedNewTransaction) {
             runtime.getObjectsView().TXEnd();
