@@ -4,11 +4,14 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -199,23 +202,11 @@ public class CorfuQueue<E> {
      *
      * To re-constitute the commit order in the presence of transactions the CorfuRecords returned
      * here have their UUID fields composed of two parts:
-     *     +----------------------------------------------------------------------------+
-     *     | Stream snapshot |Index in snapshot|     ID of the entry in the map        |
-     *     +----------------------------------------------------------------------------+
-     *     <----5 bytes------><----3 bytes-----><------- 8 bytes ----------------------->
+     *     +------------------------------------------------------------------+
+     *     | Global index in the list |     ID of the entry in the map        |
+     *     +------------------------------------------------------------------+
+     *     <---- 8 bytes--------------><------- 8 bytes ---------------------->
      *
-     * <p>Note: The ordering returned can be different based on the call. For example:
-     * Queue contents at start:
-     *         --- id1->R1 ----
-     * thread1: snapshot at 99
-     * id2 = enqueue(R2);
-     * list1 = entryList(); // contents returned are [99|0+id1 => R1, 99|1+id2 => R2]
-     *
-     * thread2: snapshot at 100
-     * list2 = entryList(); // contents returned are [100|0+id1 => R1]
-     *
-     * As seen above R1 returned to thread1 and thread2 have same id but different order.
-     * </p>
      *
      * <p>This function currently does not return a view like the java.util implementation,
      * and changes to the entryList will *not* be reflected in the map. </p>
@@ -233,47 +224,49 @@ public class CorfuQueue<E> {
                     "entryList can't return more than "+MAX_INDEX_ENTRIES+" entries"
             );
         }
-
-        // Bind the iteration order to a snapshot of the Queue using a transaction.
-        long snapshotVersion;
+        List<CorfuQueueRecord<E>> copy = Collections.emptyList();
         boolean startedNewTransaction = false;
-        if (TransactionalContext.isInTransaction()) {
-            snapshotVersion = TransactionalContext.getCurrentContext()
-                    .getSnapshotTimestamp().getSequence();
-        } else {
-            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE)
-                    .build()
-                    .begin();
-            snapshotVersion = TransactionalContext.getCurrentContext()
-                    .getSnapshotTimestamp().getSequence();
-            startedNewTransaction = true;
-        }
-        Long maxOrder = orderTable.getOrDefault(GLOBAL_ORDER_KEY, 0L);
+        do {
+            try {
+                if (!TransactionalContext.isInTransaction()) {
+                    runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE)
+                            .build()
+                            .begin();
+                    startedNewTransaction = true;
+                }
+                Long maxOrder = orderTable.getOrDefault(GLOBAL_ORDER_KEY, 0L);
 
-        List<CorfuQueueRecord<E>> copy = new ArrayList<>(
-                Math.min(corfuTable.size(), maxEntries)
-        );
-        int index = 0;
-        for (Map.Entry<Long, E> entry : corfuTable.entrySet()) {
-            if (++index >= maxEntries) {
-                break;
+                copy = new ArrayList<>(
+                        Math.min(corfuTable.size(), maxEntries)
+                );
+                int index = 0;
+                for (Map.Entry<Long, E> entry : corfuTable.entrySet()) {
+                    if (++index >= maxEntries) {
+                        break;
+                    }
+                    long entryId = entry.getKey();
+                    Long ordering = orderTable.get(entryId);
+                    if (ordering == null) {
+                        ordering = maxOrder + index;
+                        orderTable.putIfAbsent(entryId, ordering);
+                    }
+                    CorfuQueueRecord<E> record = new CorfuQueueRecord<>(
+                            ordering, entryId, entry.getValue()
+                    );
+                    copy.add(record);
+                }
+                orderTable.put(GLOBAL_ORDER_KEY, maxOrder + index);
+
+                if (startedNewTransaction) {
+                    runtime.getObjectsView().TXEnd();
+                    startedNewTransaction = false;
+                }
+            } catch (TransactionAbortedException e) {
+                if (e.getAbortCause() != AbortCause.CONFLICT) {
+                    throw e;
+                }
             }
-            long entryId = entry.getKey();
-            Long ordering = orderTable.get(entryId);
-            if (ordering == null) {
-                ordering = maxOrder + index;
-                orderTable.putIfAbsent(entryId, ordering);
-            }
-            CorfuQueueRecord<E> record = new CorfuQueueRecord<>(
-                    ordering, entryId, entry.getValue()
-            );
-            copy.add(record);
-        }
-        orderTable.put(GLOBAL_ORDER_KEY, maxOrder + index);
-        // Given that we are using a WRITE_AFTER_WRITE on a read-only txn, we expect no aborts.
-        if (startedNewTransaction) {
-            runtime.getObjectsView().TXEnd();
-        }
+        } while (startedNewTransaction);
         return copy;
     }
 
@@ -307,13 +300,15 @@ public class CorfuQueue<E> {
      * @return The entry that was successfully removed or null if there was no mapping.
      */
     public E removeEntry(CorfuRecordId entryId) {
-        return corfuTable.remove(entryId.id.getLeastSignificantBits());
+        orderTable.remove(entryId.getEntryId());
+        return corfuTable.remove(entryId.getEntryId());
     }
 
     /**
      * Remove all entries from the Queue.
      */
     public void clear() {
+        orderTable.clear();
         corfuTable.clear();
     }
 
