@@ -206,6 +206,13 @@ public class CorfuRuntime {
         int trimRetry = 2;
 
         /**
+         * The total number of retries the checkpointer will attempt on sequencer failover to
+         * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
+         */
+        @Default
+        int checkpointRetries = 5;
+
+        /**
          * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
          * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
          */

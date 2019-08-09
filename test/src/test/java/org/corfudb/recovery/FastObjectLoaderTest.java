@@ -126,7 +126,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     private void assertThatStreamTailsAreCorrect(Map<UUID, Long> streamTails) {
         maps.keySet().forEach((streamName) -> {
             UUID id = CorfuRuntime.getStreamID(streamName);
-            long tail = getDefaultRuntime().getSequencerView().query(id).getToken().getSequence();
+            long tail = getDefaultRuntime().getSequencerView().query(id);
             if (streamTails.containsKey(id)) {
                 assertThat(streamTails.get(id)).isEqualTo(tail);
             }
@@ -381,9 +381,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         Token snapshot = TransactionalContext
                 .getCurrentContext()
                 .getSnapshotTimestamp();
-        Token streamTail = getDefaultRuntime().getSequencerView().query(stream1).getToken();
+        long streamTail = getDefaultRuntime().getSequencerView().query(stream1);
         try {
-            cpw.startCheckpoint(snapshot, streamTail.getSequence());
+            cpw.startCheckpoint(snapshot, streamTail);
             cpw.appendObjectState(map.entrySet());
         } finally {
             getDefaultRuntime().getObjectsView().TXEnd();
@@ -655,8 +655,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
 
         UUID transactionStreams = rt1.getObjectsView().TRANSACTION_STREAM_ID;
-        long tailTransactionStream = rt1.getSequencerView().query(transactionStreams).
-                getToken().getSequence();
+        long tailTransactionStream = rt1.getSequencerView().query(transactionStreams);
 
         // Also recover the Transaction Stream
         assertThat(streamTails.size()).isEqualTo(mapCount + 1);
