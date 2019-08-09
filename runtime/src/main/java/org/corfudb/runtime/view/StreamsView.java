@@ -187,7 +187,7 @@ public class StreamsView extends AbstractView {
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
                         tokenResponse.getConflictStream(), temp.getToken(),
-                        temp.getBackpointerMap(), Collections.emptyList());
+                        temp.getBackpointerMap(), Collections.emptyMap());
 
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer

@@ -193,7 +193,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
             // Linearize this read against a timestamp
             final long timestamp = rt.getSequencerView()
-                            .query(getStreamID()).getToken().getSequence();
+                            .query(getStreamID());
             log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
             try {
@@ -268,9 +268,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public void sync() {
         // Linearize this read against a timestamp
-        final Token timestamp =
-                rt.getSequencerView()
-                        .query(getStreamID()).getToken();
+        TokenResponse response = rt.getSequencerView()
+                .query(new UUID[]{getStreamID()});
+        final Token timestamp = new Token(response.getEpoch(), response.getStreamTail(getStreamID()));
 
         log.debug("Sync[{}] {}", this, timestamp);
         // Acquire locks and perform read.
