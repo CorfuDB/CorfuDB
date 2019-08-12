@@ -187,8 +187,7 @@ public class StateTransferTest extends AbstractViewTest {
         assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReliability.STRONG_QUORUM);
         assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
-        TokenResponse tokenResponse = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getSequence();
+        long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_2, lastAddress);
@@ -331,9 +330,7 @@ public class StateTransferTest extends AbstractViewTest {
         // Verify sequencers in the layout and their order
         assertThat(actualLayout.getSequencers()).containsExactly(expectedNodes);
 
-        final TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID(
-                "test"));
-        final long lastAddress = tokenResponse.getSequence();
+        final long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
 
         // Verify Nodes' data
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);

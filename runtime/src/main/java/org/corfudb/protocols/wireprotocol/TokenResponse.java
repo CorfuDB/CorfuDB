@@ -1,14 +1,16 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 
 /**
  * Created by mwei on 8/8/16.
@@ -32,7 +34,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         this.conflictStream = NO_CONFLICT_STREAM;
         this.token = token;
         this.backpointerMap = backpointerMap;
-        this.streamTails = Collections.emptyList();
+        this.streamTails = Collections.emptyMap();
     }
 
     /** the cause/type of response. */
@@ -44,14 +46,14 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     // In case of a conflict, signal to the client which stream was responsible for the conflict.
     final UUID conflictStream;
 
-    /** The current token,
-     * or overload with "cause address" in case token request is denied. */
+    /** The current token or global log tail in the case of stream tails query */
     final Token token;
 
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
-    final List<Long> streamTails;
+    @Getter(AccessLevel.NONE)
+    final Map<UUID, Long> streamTails;
 
     /**
      * Deserialization Constructor from a Bytebuf to TokenResponse.
@@ -66,7 +68,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         Long sequence = ICorfuPayload.fromBuffer(buf, Long.class);
         token = new Token(epoch, sequence);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
-        streamTails = ICorfuPayload.listFromBuffer(buf, Long.class);
+        streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     @Override
@@ -90,4 +92,12 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         return token.getEpoch();
     }
 
+    public Long getStreamTail(UUID streamId) {
+        return streamTails.get(streamId);
+    }
+
+    @VisibleForTesting
+    public int getStreamTailsCount() {
+        return streamTails.size();
+    }
 }

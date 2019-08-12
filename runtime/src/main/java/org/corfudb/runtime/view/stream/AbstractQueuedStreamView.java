@@ -410,7 +410,7 @@ public abstract class AbstractQueuedStreamView extends
             try {
                 if (discoverAddressSpace(checkpointId, context.readCpQueue,
                         runtime.getSequencerView()
-                                .query(checkpointId).getToken().getSequence(),
+                                .query(checkpointId),
                         Address.NEVER_READ, d -> scanCheckpointStream(context, d, maxGlobal),
                         true, maxGlobal)) {
                     log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
@@ -458,8 +458,7 @@ public abstract class AbstractQueuedStreamView extends
             // belong to our stream.
             // For these reasons, we will keep this as the high boundary and prune
             // our discovered space of addresses up to maxGlobal.
-            latestTokenValue = runtime.getSequencerView().query(context.id)
-                    .getToken().getSequence();
+            latestTokenValue = runtime.getSequencerView().query(context.id);
             log.trace("Fill_Read_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }
 
@@ -593,7 +592,7 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
         return  !context.readQueue.isEmpty()
-                || runtime.getSequencerView().query(context.id).getToken().getSequence()
+                || runtime.getSequencerView().query(context.id)
                 > context.getGlobalPointer();
     }
 

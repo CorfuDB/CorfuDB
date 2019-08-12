@@ -247,9 +247,7 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private void verifyData(CorfuRuntime corfuRuntime) throws Exception {
 
-        TokenResponse tokenResponse = corfuRuntime.getSequencerView()
-                .query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getSequence();
+        long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
         Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
@@ -1177,7 +1175,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Verify sequencer has the correct steam tail.
         assertThat(runtime2.getLayoutView().getLayout().getPrimarySequencer()).isNotEqualTo(getServerEndpoint(PORT_0));
-        assertThat(runtime2.getSequencerView().query(streamId).getSequence()).isEqualTo(numEntries - 1);
+        assertThat(runtime2.getSequencerView().query(streamId)).isEqualTo(numEntries - 1);
 
         CorfuTable<String, String> table2 = runtime2.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
