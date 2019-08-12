@@ -318,11 +318,6 @@ public class AddressSpaceView extends AbstractView {
      * configurations
      */
     private boolean cacheReadRequest(ReadOptions options) {
-        if (runtime.getParameters().isCacheDisabled() && options.isClientCacheable()) {
-            // TODO(Maithem): We can remove this once we have multi-level caches
-            log.warn("read: Runtime cache is disabled, but read request is requesting to cache");
-        }
-
         return !runtime.getParameters().isCacheDisabled() && options.isClientCacheable();
     }
 
