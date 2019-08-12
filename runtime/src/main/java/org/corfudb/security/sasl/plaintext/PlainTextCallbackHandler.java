@@ -15,8 +15,8 @@ import javax.security.auth.callback.UnsupportedCallbackException;
 
 public class PlainTextCallbackHandler implements CallbackHandler {
 
-    private String username;
-    private String password;
+    private final String username;
+    private final String password;
 
     public PlainTextCallbackHandler(String username, String password) {
         this.username = username;

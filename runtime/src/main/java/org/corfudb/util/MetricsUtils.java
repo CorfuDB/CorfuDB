@@ -73,7 +73,7 @@ public class MetricsUtils {
     private static boolean metricsJmxReportingEnabled = false;
     private static boolean metricsJvmCollectionEnabled = false;
     private static boolean metricsSlf4jReportingEnabled = false;
-    private static String mpTrigger = "filter-trigger"; // internal use only
+    private static final String mpTrigger = "filter-trigger"; // internal use only
 
     public static final SizeOf sizeOf = SizeOf.newInstance();
 

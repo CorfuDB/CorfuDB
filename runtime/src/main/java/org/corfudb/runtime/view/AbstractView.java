@@ -66,7 +66,7 @@ public abstract class AbstractView {
      * Maintains reference of the RuntimeLayout which gets invalidated if the AbstractView
      * encounters a newer layout. (with a greater epoch)
      */
-    private AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
+    private final AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
 
     /**
      * Fetches the layout uninterruptibly and rethrows any systemDownHandlerExceptions or Errors

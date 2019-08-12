@@ -12,26 +12,26 @@ public class GitRepositoryState {
 
     private static GitRepositoryState _gitRepositoryState = null;
 
-    public String tags;
-    public String branch;
-    public String dirty;
-    public String remoteOriginUrl;
-    public String commitId;
-    public String commitIdAbbrev;
-    public String describe;
-    public String describeShort;
-    public String commitUserName;
-    public String commitUserEmail;
-    public String commitMessageFull;
-    public String commitMessageShort;
-    public String commitTime;
-    public String closestTagName;
-    public String closestTagCommitCount;
-    public String buildUserName;
-    public String buildUserEmail;
-    public String buildTime;
-    public String buildHost;
-    public String buildVersion;
+    public final String tags;
+    public final String branch;
+    public final String dirty;
+    public final String remoteOriginUrl;
+    public final String commitId;
+    public final String commitIdAbbrev;
+    public final String describe;
+    public final String describeShort;
+    public final String commitUserName;
+    public final String commitUserEmail;
+    public final String commitMessageFull;
+    public final String commitMessageShort;
+    public final String commitTime;
+    public final String closestTagName;
+    public final String closestTagCommitCount;
+    public final String buildUserName;
+    public final String buildUserEmail;
+    public final String buildTime;
+    public final String buildHost;
+    public final String buildVersion;
 
     private GitRepositoryState(Properties properties) {
         this.tags = properties.get("git.tags").toString();

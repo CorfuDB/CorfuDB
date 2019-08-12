@@ -19,7 +19,7 @@ public class Correctness {
     public static final String TX_END = "end";
     public static final String TX_ABORTED = "aborted";
 
-    private static Logger correctnessLogger = (Logger) LoggerFactory.getLogger("correctness");
+    private static final Logger correctnessLogger = (Logger) LoggerFactory.getLogger("correctness");
 
     public static void recordOperation(String operation, boolean transactionPrefix) {
         if (transactionPrefix) {
