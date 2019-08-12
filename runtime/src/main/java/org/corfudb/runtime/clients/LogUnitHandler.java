@@ -66,11 +66,10 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @param msg Incoming Message
      * @param ctx Context
      * @param r   Router
-     * @throws Exception Throws TrimmedException if address has already been trimmed.
+     * @throws TrimmedException Throws TrimmedException if address has already been trimmed.
      */
     @ClientHandler(type = CorfuMsgType.ERROR_TRIMMED)
-    private static Object handleTrimmed(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception {
+    private static Object handleTrimmed(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         throw new TrimmedException();
     }
 
@@ -83,8 +82,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @throws OverwriteException Throws OverwriteException if address has already been written to.
      */
     @ClientHandler(type = CorfuMsgType.ERROR_OVERWRITE)
-    private static Object handleOverwrite(CorfuPayloadMsg<Integer> msg, ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception {
+    private static Object handleOverwrite(CorfuPayloadMsg<Integer> msg, ChannelHandlerContext ctx, IClientRouter r) {
         throw new OverwriteException(OverwriteCause.fromId(msg.getPayload()));
     }
 
@@ -98,8 +96,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ClientHandler(type = CorfuMsgType.ERROR_DATA_OUTRANKED)
     private static Object handleDataOutranked(CorfuMsg msg,
-                                              ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception {
+                                              ChannelHandlerContext ctx, IClientRouter r) {
         throw new DataOutrankedException();
     }
 
@@ -126,8 +123,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @throws OutOfSpaceException Throws OutOfSpaceException if log unit out of space.
      */
     @ClientHandler(type = CorfuMsgType.ERROR_OOS)
-    private static Object handleOos(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception {
+    private static Object handleOos(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         throw new OutOfSpaceException();
     }
 

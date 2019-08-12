@@ -26,7 +26,7 @@ public class ClientMsgHandler {
 
     @FunctionalInterface
     public interface Handler<T extends CorfuMsg> {
-        Object handle(T corfuMsg, ChannelHandlerContext ctx, IClientRouter r) throws Exception;
+        Object handle(T corfuMsg, ChannelHandlerContext ctx, IClientRouter r);
     }
 
     /**

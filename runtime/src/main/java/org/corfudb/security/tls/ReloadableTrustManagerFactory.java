@@ -32,12 +32,12 @@ public class ReloadableTrustManagerFactory extends SimpleTrustManagerFactory {
     }
 
     @Override
-    protected void engineInit(KeyStore keyStore) throws KeyStoreException {
+    protected void engineInit(KeyStore keyStore) {
         //inherited, don't do anything
     }
 
     @Override
-    protected void engineInit(ManagerFactoryParameters managerFactoryParameters) throws InvalidAlgorithmParameterException {
+    protected void engineInit(ManagerFactoryParameters managerFactoryParameters) {
         //inherited, don't do anything
     }
 

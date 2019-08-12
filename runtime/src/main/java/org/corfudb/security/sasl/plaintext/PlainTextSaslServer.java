@@ -100,7 +100,7 @@ public class PlainTextSaslServer implements SaslServer {
     }
 
     @Override
-    public byte[] unwrap(byte[] incoming, int offset, int len) throws SaslException {
+    public byte[] unwrap(byte[] incoming, int offset, int len) {
         if (!authenticated) {
             throw new IllegalStateException("Authentication is incomplete");
         }
@@ -108,7 +108,7 @@ public class PlainTextSaslServer implements SaslServer {
     }
 
     @Override
-    public byte[] wrap(byte[] outgoing, int offset, int len) throws SaslException {
+    public byte[] wrap(byte[] outgoing, int offset, int len) {
         if (!authenticated) {
             throw new IllegalStateException("Authentication is incomplete");
         }
@@ -124,7 +124,7 @@ public class PlainTextSaslServer implements SaslServer {
     }
 
     @Override
-    public void dispose() throws SaslException {
+    public void dispose() {
     }
 
     public static class PlainTextSaslServerFactory implements SaslServerFactory {

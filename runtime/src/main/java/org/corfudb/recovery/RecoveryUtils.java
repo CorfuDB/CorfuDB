@@ -88,7 +88,7 @@ public class RecoveryUtils {
      * Getting the underlying logEntry should trigger deserialization only once.
      * Next access should just returned the logEntry directly.
      */
-    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) throws Exception {
+    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) {
         return logData.getLogEntry(runtime);
     }
 

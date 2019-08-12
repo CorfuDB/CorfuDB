@@ -145,11 +145,9 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * Channel event that is triggered when a new connected channel is created.
      *
      * @param ctx channel handler context
-     * @throws Exception
      */
     @Override
-    public void channelActive(ChannelHandlerContext ctx)
-        throws Exception {
+    public void channelActive(ChannelHandlerContext ctx) {
         log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
 
         // Write the handshake & add a timeout listener.
@@ -166,10 +164,9 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * Channel event that is triggered when the channel is closed.
      *
      * @param ctx channel handler context
-     * @throws Exception
      */
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void channelInactive(ChannelHandlerContext ctx) {
         log.debug("channelInactive: Channel closed.");
         if (!this.handshakeState.completed()) {
             this.fireHandshakeFailed(ctx);
@@ -181,11 +178,10 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      *
      * @param ctx channel handler context
      * @param cause exception cause
-     * @throws Exception
      */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx,
-        java.lang.Throwable cause) throws Exception {
+        java.lang.Throwable cause) {
         log.error("exceptionCaught: Exception {} caught.", cause.getClass().getSimpleName(), cause);
         if (cause instanceof ReadTimeoutException) {
             // Handshake has failed or completed. If none is True, handshake timed out.

@@ -141,10 +141,9 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * Channel event that is triggered when a new connected channel is created.
      *
      * @param ctx channel handler context
-     * @throws Exception
      */
     @Override
-    public void channelActive(final ChannelHandlerContext ctx) throws Exception {
+    public void channelActive(final ChannelHandlerContext ctx) {
         log.info("channelActive: Incoming connection established from: {} Start Read Timeout.",
                 ctx.channel().remoteAddress());
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER,
@@ -155,10 +154,9 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * Channel event that is triggered when the channel is closed.
      *
      * @param ctx channel handler context
-     * @throws Exception
      */
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void channelInactive(ChannelHandlerContext ctx) {
         log.debug("channelInactive: Channel closed.");
         if (!this.state.completed()) {
             this.fireHandshakeFailed(ctx);

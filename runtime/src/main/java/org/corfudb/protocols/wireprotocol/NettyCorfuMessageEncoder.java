@@ -21,7 +21,7 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<CorfuMsg> {
     @Override
     protected void encode(ChannelHandlerContext channelHandlerContext,
                           CorfuMsg corfuMsg,
-                          ByteBuf byteBuf) throws Exception {
+                          ByteBuf byteBuf) {
         try {
             corfuMsg.serialize(byteBuf);
             if(log.isDebugEnabled()) {

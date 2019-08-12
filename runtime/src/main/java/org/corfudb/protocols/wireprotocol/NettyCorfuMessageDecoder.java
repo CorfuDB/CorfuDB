@@ -18,7 +18,7 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
 
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
-                          List<Object> list) throws Exception {
+                          List<Object> list) {
         list.add(CorfuMsg.deserialize(byteBuf));
     }
 

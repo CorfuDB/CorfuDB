@@ -37,7 +37,7 @@ public class NeverHoleFillPolicy implements IHoleFillPolicy {
     @Nonnull
     @Override
     public ILogData peekUntilHoleFillRequired(long address,
-            Function<Long, ILogData> peekFunction) throws HoleFillRequiredException {
+            Function<Long, ILogData> peekFunction) {
         ILogData data = null;
         int tryNum = 0;
         do {
