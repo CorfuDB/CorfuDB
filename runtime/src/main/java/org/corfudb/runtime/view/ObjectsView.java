@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -24,8 +26,10 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nonnull;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -155,10 +159,22 @@ public class ObjectsView extends AbstractView {
             context.getTxOpDurationContext().stop();
         }
 
+        final long serializerCount = context.getWriteSetInfo().getWriteSet().getEntryMap().values()
+                .stream().map(MultiSMREntry::getUpdates)
+                .flatMap(List::stream)
+                .map(SMREntry::getSerializerType)
+                .map(ISerializer::getType)
+                .distinct().count();
+
         // Create a timer to measure the transaction commit duration
         Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);
         try (Timer.Context txCommitDuration =
                      MetricsUtils.getConditionalContext(txCommitDurationTimer)){
+            if (serializerCount > 1) {
+                throw new IllegalStateException(
+                        "Multiple serializers detected. Operation is not supported.");
+            }
+
             return TransactionalContext.getCurrentContext().commitTransaction();
         } catch (TransactionAbortedException e) {
             log.warn("TXEnd[{}] Aborted Exception {}", context, e);

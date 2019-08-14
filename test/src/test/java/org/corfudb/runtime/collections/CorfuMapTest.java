@@ -24,12 +24,14 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 
+import org.assertj.core.api.Assertions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.util.serializer.JsonSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -558,6 +560,30 @@ public class CorfuMapTest extends AbstractViewTest {
         getRuntime().getObjectsView().TXAbort();
         assertThat(testMap.size())
                 .isEqualTo(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void multipleSerializers() {
+        getRuntime().getObjectsView().TXBegin();
+        final Map<String, String> testMap1 = getRuntime().getObjectsView()
+                .build()
+                .setStreamName("testMap1")
+                .setTypeToken(CorfuTable.<String,String>getMapType())
+                .setSerializer(new JsonSerializer((byte) 2))
+                .open();
+        final Map<String, String> testMap2 = getRuntime().getObjectsView()
+                .build()
+                .setStreamName("testMap2")
+                .setTypeToken(CorfuTable.<String,String>getMapType())
+                .setSerializer(new JsonSerializer((byte) 3))
+                .open();
+
+        testMap1.put("z", "z");
+        testMap2.put("y", "y");
+        Assertions.assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasCauseInstanceOf(IllegalStateException.class);
     }
 
     @Test
