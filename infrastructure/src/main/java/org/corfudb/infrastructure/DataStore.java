@@ -93,16 +93,6 @@ public class DataStore implements IDataStore {
         return Caffeine.newBuilder().build(k -> null);
     }
 
-
-    public static int getChecksum(byte[] bytes) {
-        Hasher hasher = Hashing.crc32c().newHasher();
-        for (byte a : bytes) {
-            hasher.putByte(a);
-        }
-
-        return hasher.hash().asInt();
-    }
-
     /**
      * obtain a {@link LoadingCache}.
      * The cache is backed up by file-per-key under {@link DataStore::logDirPath}.
@@ -129,9 +119,7 @@ public class DataStore implements IDataStore {
                             String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
                             byte[] bytes = jsonPayload.getBytes();
 
-                            ByteBuffer buffer = ByteBuffer.allocate(bytes.length
-                                    + Integer.BYTES);
-                            buffer.putInt(getChecksum(bytes));
+                            ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
                             buffer.put(bytes);
                             Files.write(tmpPath, buffer.array(), StandardOpenOption.CREATE,
                                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
@@ -174,16 +162,9 @@ public class DataStore implements IDataStore {
                 return null;
             }
             byte[] bytes = Files.readAllBytes(path);
-            ByteBuffer buf = ByteBuffer.wrap(bytes);
-            int checksum = buf.getInt();
-            byte[] strBytes = Arrays.copyOfRange(bytes, 4, bytes.length);
-            if (checksum != getChecksum(strBytes)) {
-                throw new DataCorruptionException();
-            }
-
+            byte[] strBytes = Arrays.copyOfRange(bytes, 0, bytes.length);
             String json = new String(strBytes);
-            T val = JsonUtils.parser.fromJson(json, tClass);
-            return val;
+            return JsonUtils.parser.fromJson(json, tClass);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
