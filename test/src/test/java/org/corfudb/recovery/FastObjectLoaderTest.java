@@ -7,7 +7,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CheckpointWriter;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -17,7 +17,6 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
@@ -257,157 +256,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     }
 
     @Test
-    public void canReadCheckpointWithoutTrim() throws Exception {
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
-        checkPointAll(getDefaultRuntime());
-
-        checkPointAll(getDefaultRuntime());
-
-        // Clear are interesting because if applied in wrong order the map might end up wrong
-        clearAllMaps();
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    @Test
-    public void canReadCheckPointMultipleStream() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true,1);
-        checkPointAll(getDefaultRuntime());
-
-        clearAllMaps();
-
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    @Test
-    public void canReadMultipleCheckPointMultipleStreams() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        checkPointAll(getDefaultRuntime());
-        clearAllMaps();
-
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 2);
-
-        checkPointAll(getDefaultRuntime());
-        clearAllMaps();
-
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-
-    }
-
-    @Test
-    public void canReadCheckPointMultipleStreamsTrim() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        Token checkpointAddress = checkPointAll(getDefaultRuntime());
-        clearAllMaps();
-
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
-        Helpers.trim(getDefaultRuntime(), checkpointAddress);
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    @Test
-    public void canReadCheckPointMultipleStreamTrimWithLeftOver() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        checkPointAll(getDefaultRuntime());
-
-        // Clear are interesting because if applied in wrong order the map might end up wrong
-        clearAllMaps();
-
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
-        Token token = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), 2);
-        Helpers.trim(getDefaultRuntime(), token);
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    @Test
     public void canFindTailsRecoverSequencerMode() throws Exception {
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
 
         Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
         assertThatStreamTailsAreCorrect(streamTails);
-    }
-
-    @Test
-    public void canFindTailsWithCheckPoints() throws Exception {
-        // 1 tables has 1 entry and 2 tables have 2 entries
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        int mapCount = maps.size();
-        checkPointAll(getDefaultRuntime());
-
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
-        assertThatStreamTailsAreCorrect(streamTails);
-        assertThat(streamTails.size()).isEqualTo(mapCount * 2);
-    }
-
-    @Test
-    public void canFindTailsWithFailedCheckpoint() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        String streamName = "Map1";
-        Map<String, String> map = Helpers.createMap(streamName, rt1);
-        map.put("k1", "v1");
-
-        UUID stream1 = CorfuRuntime.getStreamID(streamName);
-
-        CheckpointWriter cpw = new CheckpointWriter(getDefaultRuntime(), stream1,
-                "author", (SMRMap) map);
-        getDefaultRuntime().getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-        Token snapshot = TransactionalContext
-                .getCurrentContext()
-                .getSnapshotTimestamp();
-        long streamTail = getDefaultRuntime().getSequencerView().query(stream1);
-        try {
-            cpw.startCheckpoint(snapshot, streamTail);
-            cpw.appendObjectState(map.entrySet());
-        } finally {
-            getDefaultRuntime().getObjectsView().TXEnd();
-        }
-        map.put("k2", "v2");
-
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
-        final int streamTailOfMap = SOME;
-        assertThat(streamTails.get(stream1)).isEqualTo(streamTailOfMap);
-    }
-
-    @Test
-    public void canFindTailsWithOnlyCheckpointAndTrim() throws Exception {
-        // 1 tables has 1 entry and 2 tables have 2 entries
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
-        int mapCount = maps.size();
-
-        Token checkPointAddress = checkPointAll(getDefaultRuntime());
-
-        Helpers.trim(getDefaultRuntime(), checkPointAddress);
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
-        assertThatStreamTailsAreCorrect(streamTails);
-        assertThat(streamTails.size()).isEqualTo(mapCount * 2);
     }
 
     @Test
@@ -488,53 +341,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     }
 
     @Test
-    public void canReadWithTruncatedCheckPoint() throws Exception{
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        Token firstCheckpointAddress = checkPointAll(getDefaultRuntime());
-
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        checkPointAll(getDefaultRuntime());
-
-        // Trim the log removing the checkpoint start of the first checkpoint
-        Helpers.trim(getDefaultRuntime(), firstCheckpointAddress);
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-
-    }
-
-    @Test
-    public void canReadLogTerminatedWithCheckpoint() throws Exception{
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
-        checkPointAll(getDefaultRuntime());
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    @Test
-    public void canReadWhenTheUserHasNoCheckpoint() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setLogHasNoCheckPoint(true);
-        fsm.setDefaultObjectsType(CorfuTable.class);
-        fsm.loadMaps();
-
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    @Test
     public void ignoreStreamForRuntimeButNotStreamTails() throws Exception {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
@@ -550,22 +356,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
         assertThatStreamTailsAreCorrectIgnore(streamTails, "Map1");
-    }
-
-    @Test
-    public void ignoreStreamCheckpoint() throws Exception{
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
-        checkPointAll(getDefaultRuntime());
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 2);
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.addStreamToIgnore("Map1");
-        fsm.setDefaultObjectsType(CorfuTable.class);
-        fsm.loadMaps();
-
-        assertThatMapsAreBuiltIgnore(rt2, "Map1");
     }
 
     @Test(expected = RuntimeException.class)
@@ -665,23 +455,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     }
 
     /**
-     * Ensure that an empty stream (stream that was opened but never had any updates)
-     * will not have its tail reconstructed. Tail of such an empty stream will be -1.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void doNotReconstructEmptyCheckpoints() throws Exception {
-        // Create SOME maps and only populate 2
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 0);
-        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 2);
-        CorfuRuntime rt1 = getDefaultRuntime();
-
-        checkPointAll(rt1);
-        assertThatStreamTailsAreCorrect(Helpers.getRecoveryStreamTails(getDefaultConfigurationString()));
-    }
-
-    /**
      * Upon recreation of the map, the correct serializer should be
      * set for the map. The serializer type comes from the SMRRecord.
      *
@@ -756,6 +529,54 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         assertThat(recreatedTable.get("a")).isEqualTo("b");
 
+    }
+
+    /**
+     * Here we providing and indexer to the FastLoader. After reconstruction, we open the map
+     * without specifying the indexer, but we are still able to use the indexer.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void canRecreateCorfuTableWithIndex() throws Exception {
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+
+
+        CorfuTable originalTable = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setArguments(new StringIndexer())
+                .setStreamName("test")
+                .open();
+
+        originalTable.put("k1", "a");
+        originalTable.put("k2", "ab");
+        originalTable.put("k3", "ba");
+
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
+                .connect();
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        fsmr.addIndexerToCorfuTableStream("test", new StringIndexer());
+        fsmr.setDefaultObjectsType(CorfuTable.class);
+        fsmr.loadMaps();
+
+        Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
+
+        // Recreating the table without explicitly providing the indexer
+        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setArguments(new StringIndexer())
+                .setStreamName("test")
+                .open();
+
+        assertThat(recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a"))
+                .containsExactlyInAnyOrder(MapEntry.entry("k1", "a"), MapEntry.entry("k2", "ab"));
+
+        Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
+
+        recreatedTable.get("k3");
+        assertThat(recreatedTable.hasSecondaryIndices()).isTrue();
+        recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a");
     }
 
     @Test
