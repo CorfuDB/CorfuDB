@@ -50,7 +50,7 @@ public class Address {
     /**
      * @return A constant which can be used in loops going down up to hitting a non-address.
      */
-    public static long NON_ADDRESS = -1L;
+    public static final long NON_ADDRESS = -1L;
 
     /** The maximum address. */
     public static final long MAX = Long.MAX_VALUE;

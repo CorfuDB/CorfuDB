@@ -85,7 +85,7 @@ public class FastObjectLoader {
     static final int DEFAULT_NUMBER_OF_PENDING_FUTURES = 1_000;
     static final int DEFAULT_NUMBER_OF_WORKERS = 4;
 
-    private CorfuRuntime runtime;
+    private final CorfuRuntime runtime;
 
     @Setter
     @Getter
@@ -127,7 +127,7 @@ public class FastObjectLoader {
     private boolean logHasNoCheckPoint = false;
 
     private boolean whiteList = false;
-    private List<UUID> streamsToLoad = new ArrayList<>();
+    private final List<UUID> streamsToLoad = new ArrayList<>();
 
     @VisibleForTesting
     void setLogHead(long head) { this.logHead = head; }
@@ -171,7 +171,7 @@ public class FastObjectLoader {
     /**
      * We can register streams with non-default type
      */
-    private Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
+    private final Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
 
     public void addCustomTypeStream(UUID streamId, ObjectBuilder ob) {
         customTypeStreams.put(streamId, ob);
@@ -203,7 +203,7 @@ public class FastObjectLoader {
     // In charge of summoning Corfu maps back in this world
     private ExecutorService necromancer;
 
-    private Map<UUID, StreamMetaData> streamsMetaData;
+    private final Map<UUID, StreamMetaData> streamsMetaData;
 
     @Setter
     @Getter

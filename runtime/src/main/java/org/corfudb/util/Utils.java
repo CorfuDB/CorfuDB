@@ -47,14 +47,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class Utils {
 
-    private static int DEFAULT_LOGUNIT = 0;
+    private static final int DEFAULT_LOGUNIT = 0;
 
     private Utils() {
         // prevent instantiation of this class
     }
 
-    private static Printer printer = new Textifier();
-    private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
+    private static final Printer printer = new Textifier();
+    private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);
 
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 

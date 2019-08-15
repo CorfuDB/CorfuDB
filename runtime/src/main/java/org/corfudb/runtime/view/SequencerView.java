@@ -33,7 +33,7 @@ public class SequencerView extends AbstractView {
     private Timer sequencerDeprecatedNextOneStream;
     private Timer sequencerDeprecatedNextMultipleStream;
     private Timer sequencerTrimCache;
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
