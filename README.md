@@ -279,7 +279,7 @@ To write your first program that uses Corfu, you will want to add Corfu as a dep
  <dependency>
     <groupId>org.corfudb</groupId>
     <artifactId>runtime</artifactId>
-    <version>0.1-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
     <scope>compile</scope>
 </dependency>
 ```
