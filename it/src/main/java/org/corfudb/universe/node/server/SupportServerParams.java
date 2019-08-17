@@ -1,5 +1,6 @@
 package org.corfudb.universe.node.server;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,19 +16,17 @@ import org.corfudb.universe.node.server.CorfuServer.Persistence;
 import org.slf4j.event.Level;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 
-@Builder(builderMethodName = "serverParamsBuilder")
+@Builder
 @AllArgsConstructor
 @EqualsAndHashCode(exclude = {"logLevel", "stopTimeout"})
 @ToString
-public class CorfuServerParams implements NodeParams {
-    @NonNull
-    private final String streamLogDir = "db";
-
-    @Default
-    @Getter
-    private final int port = ServerUtil.getRandomOpenPort();
+public class SupportServerParams implements NodeParams {
+    private static final Map<NodeType, Integer> PORTS = ImmutableMap.<NodeType, Integer>builder()
+            .put(NodeType.METRICS_SERVER, 9090)
+            .build();
 
     @Default
     @NonNull
@@ -46,11 +45,8 @@ public class CorfuServerParams implements NodeParams {
 
     @NonNull
     @Getter
-    private final NodeType nodeType = NodeType.CORFU_SERVER;
+    private final NodeType nodeType;
 
-    /**
-     * A name of the Corfu cluster
-     */
     @Getter
     @NonNull
     private final String clusterName;
@@ -62,15 +58,11 @@ public class CorfuServerParams implements NodeParams {
 
     @Override
     public String getName() {
-        return clusterName + "-corfu-node" + getPort();
+        return clusterName + "-support-node-" + getNodeType();
     }
 
-    public String getStreamLogDir() {
-        return getName() + "/" + streamLogDir;
-    }
-
-    @Override
     public Set<Integer> getPorts() {
-        return ImmutableSet.of(port);
+        return ImmutableSet.of(PORTS.get(getNodeType()));
     }
+
 }

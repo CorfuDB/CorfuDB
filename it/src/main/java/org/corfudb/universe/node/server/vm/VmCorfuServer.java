@@ -258,11 +258,6 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         }
     }
 
-    @Override
-    public Stress getStress() {
-        return stress;
-    }
-
     /**
      * Remove corfu server application dir.
      * AppDir is a directory that contains corfu-infrastructure jar file and could have log files, stream-log files and
