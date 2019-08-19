@@ -10,9 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NonNull;
 
-
 import java.util.Arrays;
-
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -76,6 +74,13 @@ public class SMRRecord {
      */
     @Getter
     public transient boolean haveUpcallResult = false;
+
+    /**
+     * The locator of this instance of SMRRecord in SpaceAddressView.
+     */
+    @Getter
+    @Setter
+    public transient SMRRecordLocator locator = null;
 
     /**
      * The global address this record is associated to.
