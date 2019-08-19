@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.annotations.Accessor;
@@ -83,6 +84,9 @@ public class CorfuTable<K ,V> implements
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
     private final CorfuTable<K, V> optimisticTable;
     private final VersionPolicy versionPolicy;
+
+    @Getter
+    private ILocatorStore<K> locatorStore = new MapLocatorStore<>();
 
     public CorfuTable(ContextAwareMap<K,V> mainMap,
                       Set<Index.Spec<K, V, ? extends Comparable>> indexSpec,
