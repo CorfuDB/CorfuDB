@@ -16,6 +16,7 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.Arrays;
 
 
+
 /**
  * Created by mwei on 1/8/16.
  */
@@ -73,6 +74,13 @@ public class SMRRecord {
      */
     @Getter
     public transient boolean haveUpcallResult = false;
+
+    /**
+     * The locator of this instance of SMRRecord in SpaceAddressView.
+     */
+    @Getter
+    @Setter
+    public transient SMRRecordLocator locator = null;
 
     /**
      * The global address this record is associated to.
