@@ -30,6 +30,9 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
         ICorfuSMR<FGMap<K, V>> {
 
     @Getter
+    private ILocatorStore<K> locatorStore = new MapLocatorStore<>();
+
+    @Getter
     public final int numBuckets;
 
     public FGMap(int numBuckets) {
