@@ -18,6 +18,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import lombok.Getter;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.TransactionalMethod;
@@ -28,6 +29,9 @@ import org.corfudb.annotations.TransactionalMethod;
 @CorfuObject
 @SuppressWarnings("checkstyle:abbreviation")
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
+
+    @Getter
+    private ILocatorStore<K> locatorStore = new MapLocatorStore<>();
 
     /**
      * Returns a {@link Set} view of the keys contained in this map.

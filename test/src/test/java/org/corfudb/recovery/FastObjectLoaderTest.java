@@ -758,60 +758,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     }
 
-    /**
-     * Here we providing and indexer to the FastLoader. After reconstruction, we open the map
-     * without specifying the indexer, but we are still able to use the indexer.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void canRecreateCorfuTableWithIndex() throws Exception {
-        CorfuRuntime originalRuntime = getDefaultRuntime();
-
-
-        CorfuTable originalTable = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
-                .setArguments(new StringIndexer())
-                .setStreamName("test")
-                .open();
-
-        originalTable.put("k1", "a");
-        originalTable.put("k2", "ab");
-        originalTable.put("k3", "ba");
-
-        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
-                .connect();
-
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap(originalTable);
-        Token cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
-        Helpers.trim(originalRuntime, cpAddress);
-
-
-        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        fsmr.addIndexerToCorfuTableStream("test", new StringIndexer());
-        fsmr.setDefaultObjectsType(CorfuTable.class);
-        fsmr.loadMaps();
-
-        Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
-
-        // Recreating the table without explicitly providing the indexer
-        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
-                .setArguments(new StringIndexer())
-                .setStreamName("test")
-                .open();
-
-        assertThat(recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a"))
-                .containsExactlyInAnyOrder(MapEntry.entry("k1", "a"), MapEntry.entry("k2", "ab"));
-
-        Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
-
-        recreatedTable.get("k3");
-        assertThat(recreatedTable.hasSecondaryIndices()).isTrue();
-        recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a");
-    }
-
     @Test
     public void canRecreateMixOfMaps() throws Exception {
         CorfuRuntime originalRuntime = getDefaultRuntime();
