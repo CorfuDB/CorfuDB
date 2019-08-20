@@ -6,8 +6,10 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.format.Types;
@@ -16,7 +18,10 @@ import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.infrastructure.log.CompactionPolicy.CompactionPolicyType;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -37,6 +42,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -47,6 +53,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.StreamLogParams.METADATA_SIZE;
@@ -63,17 +70,23 @@ import static org.corfudb.infrastructure.log.StreamLogParams.VERSION;
 @Slf4j
 public class StreamLogFiles implements StreamLog {
 
+    private static int CLOSE_SEGMENT_EXCEPTION_RETRY = 1;
+
     @Getter
     private final StreamLogParams logParams;
     @Getter
     private final Path logDir;
+    @Getter
+    private final FileStore fileStore;
 
     @Getter
     private final SegmentManager segmentManager;
 
     private final StreamLogDataStore dataStore;
 
-    private final Set<FileChannel> channelsToSync;
+    private final StreamLogCompactor compactor;
+
+    private final Set<AbstractLogSegment> segmentsToSync;
 
     //=================Log Metadata=================
     // TODO(Maithem) this should effectively be final, but it is used
@@ -85,7 +98,8 @@ public class StreamLogFiles implements StreamLog {
     // Derived size in bytes that normal writes to the log unit are capped at.
     // This is derived as a percentage of the log's filesystem capacity.
     private final long logSizeLimit;
-    // Resource quota to track the log size
+    // Resource quota to track the log size, which acts as an efficient
+    // estimation and may not reflect the real disk usage.
     private ResourceQuota logSizeQuota;
 
     /**
@@ -99,15 +113,16 @@ public class StreamLogFiles implements StreamLog {
         this.dataStore = streamLogDataStore;
 
         logDir = Paths.get(logParams.logPath, "log");
-        channelsToSync = new HashSet<>();
+        segmentsToSync = new HashSet<>();
 
         if (logParams.logSizeQuotaPercentage < 0.0 || 100.0 < logParams.logSizeQuotaPercentage) {
             String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
                     logParams.logSizeQuotaPercentage);
-            throw new LogUnitException(msg);
+            throw new IllegalArgumentException(msg);
         }
 
-        long fileSystemCapacity = initStreamLogDirectory();
+        fileStore = initStreamLogDirectory();
+        long fileSystemCapacity = getStorageTotalSpace(fileStore);
         logSizeLimit = (long) (fileSystemCapacity * logParams.logSizeQuotaPercentage / 100.0);
 
         long initialLogSize = estimateSize(logDir);
@@ -116,6 +131,7 @@ public class StreamLogFiles implements StreamLog {
         logSizeQuota.consume(initialLogSize);
 
         segmentManager = new SegmentManager(logParams, logDir, logSizeQuota);
+        segmentManager.deleteExistingCompactionOutputFiles();
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -128,14 +144,32 @@ public class StreamLogFiles implements StreamLog {
         if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
             syncTailSegment(getTrimMark() - 1);
         }
+
+        // Start running compactor.
+        compactor = new StreamLogCompactor(logParams, getCompactionPolicy(),
+                segmentManager, dataStore, logMetadata);
+    }
+
+    private CompactionPolicy getCompactionPolicy() {
+        CompactionPolicyType policyType = CompactionPolicyType
+                .valueOf(logParams.compactionPolicyType.toUpperCase());
+
+        if (policyType == CompactionPolicyType.GARBAGE_SIZE_FIRST) {
+            return new GarbageSizeFirstPolicy(logParams, logSizeQuota, fileStore);
+        } else if (policyType == CompactionPolicyType.SNAPSHOT_LENGTH_FIRST) {
+            return new SnapshotLengthFirstPolicy(logParams, logSizeQuota, fileStore, logMetadata);
+        } else {
+            throw new IllegalArgumentException("Compaction policy not found.");
+        }
     }
 
     /**
-     * Create stream log directory if not exists
-     * @return total capacity of the file system that owns the log files.
+     * Create stream log directory if not exists.
+     *
+     * @return the underlying file store of the corfu directory.
      */
-    private long initStreamLogDirectory() {
-        long fileSystemCapacity;
+    private FileStore initStreamLogDirectory() {
+        FileStore corfuDirFileStore;
 
         try {
             if (!logDir.toFile().exists()) {
@@ -143,9 +177,9 @@ public class StreamLogFiles implements StreamLog {
             }
 
             String corfuDir = logDir.getParent().toString();
-            FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
+            corfuDirFileStore = Files.getFileStore(Paths.get(corfuDir));
 
-            if (corfuDirBackend.isReadOnly()) {
+            if (corfuDirFileStore.isReadOnly()) {
                 throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
             }
 
@@ -159,42 +193,37 @@ public class StreamLogFiles implements StreamLog {
                 throw new LogUnitException("Stream log directory not writable in " + corfuDir);
             }
 
-            fileSystemCapacity = corfuDirBackend.getTotalSpace();
         } catch (IOException ioe) {
-            throw new LogUnitException(ioe);
+            throw new IllegalStateException(ioe);
         }
 
         log.info("initStreamLogDirectory: initialized {}", logDir);
-        return fileSystemCapacity;
+        return corfuDirFileStore;
     }
 
     /**
      * This method will scan the log (i.e. read all log segment files)
      * on this LU and create a map of stream offsets and the global
      * addresses seen.
-     *
+     * <p>
      * consecutive segments from [startSegment, endSegment]
      */
     private void initializeLogMetadata() {
-        // TODO: re-visit after compaction is done
-        long startingSegment = segmentManager.getSegmentOrdinal(dataStore.getStartingAddress());
+        long startSegment = segmentManager.getSegmentOrdinal(dataStore.getStartingAddress());
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
-
-        // Scan the log in reverse, this will ease stream trim mark resolution (as we require the
-        // END records of a checkpoint which are always the last entry in this stream)
-        // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
-        // for stream trim mark computation.
-        for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
-            // TODO: change this after merge segment is introduced
-            long startAddress = currentSegment * logParams.recordsPerSegment + 1;
-            StreamLogSegment streamSegment = segmentManager.getStreamLogSegment(startAddress);
+        for (long currentSegment = tailSegment; currentSegment >= startSegment; currentSegment--) {
+            StreamLogSegment streamSegment = segmentManager.getStreamLogSegmentByOridnal(currentSegment);
 
             for (Long address : streamSegment.getKnownAddresses().keySet()) {
-                // TODO: do we need to check trimmed addresses?
-                LogData logEntry = read(address);
-                logMetadata.update(logEntry, true);
+                LogData logData = read(address);
+                // It is safe to preclude compacted entries when updating stream tails
+                // because each record in it must have been marked garbage by someone
+                // with larger address and still not compacted yet.
+                if (logData.getType() != DataType.COMPACTED) {
+                    logMetadata.update(Collections.singletonList(logData));
+                }
             }
 
             // Close and remove the reference of the unprotected segments.
@@ -204,7 +233,8 @@ public class StreamLogFiles implements StreamLog {
         }
 
         long end = System.currentTimeMillis();
-        log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
+        log.info("initializeLogMetadata: took {} ms to load log metadata, log start: {}, " +
+                "global tail: {}", end - start, getTrimMark(), logMetadata.getGlobalTail());
     }
 
     /**
@@ -217,7 +247,6 @@ public class StreamLogFiles implements StreamLog {
      */
     static void writeHeader(FileChannel fileChannel, ResourceQuota quota,
                             int version, boolean verify) throws IOException {
-
         LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
                 .setVerifyChecksum(verify)
@@ -358,14 +387,22 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void sync(boolean force) throws IOException {
-        if (force) {
-            for (FileChannel ch : channelsToSync) {
-                ch.force(true);
+    public void sync(boolean force) {
+        if (!force) {
+            segmentsToSync.clear();
+            return;
+        }
+
+        for (AbstractLogSegment segment : segmentsToSync) {
+            try {
+                segment.sync();
+            } catch (ClosedSegmentException e) {
+                // Ignore, segment could be closed by compactor or SegmentManager.
+                log.debug("sync: segment {} closed, ignore sync", segment.filePath);
             }
         }
-        log.trace("Sync'd {} channels", channelsToSync.size());
-        channelsToSync.clear();
+        log.trace("Sync'd {} segments", segmentsToSync.size());
+        segmentsToSync.clear();
     }
 
     @Override
@@ -445,62 +482,115 @@ public class StreamLogFiles implements StreamLog {
             return;
         }
 
-        // Check if range overlaps more than two segments.
-        if (!verifyRangeWrite(range)) {
+        // Assuming garbage log entries are not mixed up with stream log entries.
+        DataType dataType = range.get(0).getType();
+        if (dataType != DataType.GARBAGE && !verifyRangeWrite(range)) {
             throw new IllegalArgumentException("Write range not consecutive or " +
                     "too large. Range size: " + range.size());
         }
 
-        // Append to first segment.
-        LogData first = range.get(0);
-        StreamLogSegment firstSegment = segmentManager.getStreamLogSegment(first.getGlobalAddress());
-        List<LogData> firstSegEntries = range
-                .stream()
-                .filter(entry -> segmentManager
-                        .getSegmentOrdinal(entry.getGlobalAddress()) == firstSegment.getOrdinal())
-                .collect(Collectors.toList());
+        Collection<List<LogData>> segmentedRange = getSegmentedEntries(range);
+        segmentedRange.forEach(entries -> appendToSegment(entries, dataType));
+    }
 
-        firstSegment.append(firstSegEntries);
+    /**
+     * Append to one segment. The caller should ensure entries do not span segments.
+     */
+    private void appendToSegment(List<LogData> entries, DataType dataType) {
+        LogData first = entries.get(0);
 
-        updateGlobalMetaData(firstSegEntries.get(firstSegEntries.size() - 1).getGlobalAddress(),
-                firstSegment.getWriteChannel(), firstSegEntries);
-
-        // Append to second segment if range spans two segments.
-        if (firstSegEntries.size() < range.size()) {
-            LogData last = range.get(range.size() - 1);
-            StreamLogSegment lastSegment = segmentManager.getStreamLogSegment(last.getGlobalAddress());
-            List<LogData> lastSegEntries = range
-                    .stream()
-                    .skip(firstSegEntries.size())
-                    .collect(Collectors.toList());
-
-            lastSegment.append(lastSegEntries);
-
-            updateGlobalMetaData(lastSegEntries.get(lastSegEntries.size() - 1).getGlobalAddress(),
-                    lastSegment.getWriteChannel(), lastSegEntries);
+        int retryCount = 0;
+        while (true) {
+            try {
+                if (dataType == DataType.GARBAGE) {
+                    GarbageLogSegment segment = segmentManager.getGarbageLogSegment(first.getGlobalAddress());
+                    segment.append(entries);
+                    segmentsToSync.add(segment);
+                    return;
+                }
+                StreamLogSegment segment = segmentManager.getStreamLogSegment(first.getGlobalAddress());
+                segment.append(entries);
+                updateGlobalMetaData(entries.get(entries.size() - 1).getGlobalAddress(), entries, segment);
+                return;
+            } catch (ClosedSegmentException e) {
+                // Segment could be closed because of compaction, retry once.
+                if (retryCount == CLOSE_SEGMENT_EXCEPTION_RETRY) {
+                    throw e;
+                }
+            }
         }
+    }
+
+    /**
+     * Group a list of entries by their corresponding segment's ordinal.
+     */
+    private Collection<List<LogData>> getSegmentedEntries(List<LogData> entries) {
+        Map<Long, List<LogData>> ordinalToRangeMap = new HashMap<>();
+
+        entries.forEach(entry -> {
+            long ordinal = segmentManager.getSegmentOrdinal(entry.getGlobalAddress());
+            List<LogData> list = ordinalToRangeMap.computeIfAbsent(ordinal, ord -> new ArrayList<>());
+            list.add(entry);
+        });
+
+        return ordinalToRangeMap.values();
     }
 
     @Override
     public void append(long address, LogData entry) {
-        // TODO: check entry type, append to garbage segment.
-        StreamLogSegment segment = segmentManager.getStreamLogSegment(address);
-        segment.append(address, entry);
-
-        updateGlobalMetaData(address, segment.getWriteChannel(), Collections.singletonList(entry));
+        int retryCount = 0;
+        while (true) {
+            try {
+                if (entry.getType() == DataType.GARBAGE) {
+                    GarbageLogSegment garbageSegment = segmentManager.getGarbageLogSegment(address);
+                    garbageSegment.append(address, entry);
+                    segmentsToSync.add(garbageSegment);
+                    return;
+                }
+                StreamLogSegment segment = segmentManager.getStreamLogSegment(address);
+                segment.append(address, entry);
+                updateGlobalMetaData(address, Collections.singletonList(entry), segment);
+                return;
+            } catch (ClosedSegmentException e) {
+                // Segment could be closed because of compaction, retry once.
+                if (retryCount == CLOSE_SEGMENT_EXCEPTION_RETRY) {
+                    throw e;
+                }
+            }
+        }
     }
 
-    private void updateGlobalMetaData(long lastAddress, FileChannel channelToSync, List<LogData> entries) {
-        channelsToSync.add(channelToSync);
+    private void updateGlobalMetaData(long lastAddress,
+                                      List<LogData> entries,
+                                      AbstractLogSegment segmentToSync) {
+        segmentsToSync.add(segmentToSync);
         syncTailSegment(lastAddress);
         logMetadata.update(entries);
     }
 
     @Override
     public LogData read(long address) {
-        // TODO: deal with (return) snapshot(compaction) mark?
-        StreamLogSegment segment = segmentManager.getStreamLogSegment(address);
-        return segment.read(address);
+        int retryCount = 0;
+        while (true) {
+            try {
+                StreamLogSegment segment = segmentManager.getStreamLogSegment(address);
+                return segment.read(address);
+            } catch (ClosedSegmentException e) {
+                // Segment could be closed because of compaction, retry once.
+                if (retryCount++ == CLOSE_SEGMENT_EXCEPTION_RETRY) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    @Override
+    public Map<UUID, Long> getCompactionMarks(@NonNull Set<UUID> streams) {
+        Map<UUID, Long> allCompactionMarks = dataStore.getCompactionMarks();
+        return streams
+                .stream()
+                .filter(allCompactionMarks::containsKey)
+                .collect(Collectors.toMap(Function.identity(), allCompactionMarks::get));
     }
 
     @Override
@@ -519,26 +609,35 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public void reset() {
         // Trim all segments
+        compactor.shutdown();
         long endSegment = segmentManager.getSegmentOrdinal(Math.max(logMetadata.getGlobalTail(), 0L));
         log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
         segmentManager.cleanAndClose(endSegment);
 
-        // TODO: stop compactor, also any race here involving compaction?
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
-        channelsToSync.clear();
+        segmentsToSync.clear();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         log.info("reset: Completed, end segment {}", endSegment);
     }
 
     @VisibleForTesting
-    Set<FileChannel> getChannelsToSync() {
-        return channelsToSync;
+    Set<AbstractLogSegment> getSegmentsToSync() {
+        return segmentsToSync;
     }
 
     //================File Operation Utilities (Parsing & I/O)================//
+
+    private static long getStorageTotalSpace(FileStore fileStore) {
+        try {
+            return fileStore.getTotalSpace();
+        } catch (IOException e) {
+            log.error("Error trying to get total disk space");
+            throw new IllegalStateException(e);
+        }
+    }
 
     static LogData getLogData(LogEntry entry) {
         ByteBuffer entryData = ByteBuffer.wrap(entry.getData().toByteArray());
@@ -598,7 +697,7 @@ public class StreamLogFiles implements StreamLog {
      * @return metadata field of null if it was partially written.
      * @throws IOException IO exception
      */
-     static Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
+    static Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
             log.error("Meta data has wrong size. Actual size: {}, expected: {}",
@@ -703,8 +802,7 @@ public class StreamLogFiles implements StreamLog {
     /**
      * Parse an entry.
      *
-     * @param channel  file channel
-     * @param metadata meta data
+     * @param channel file channel
      * @return an log entry
      * @throws IOException IO exception
      */
@@ -770,7 +868,16 @@ public class StreamLogFiles implements StreamLog {
     }
 
     static LogEntry getLogEntry(long address, LogData entry) {
-        ByteBuffer data = ByteBuffer.wrap(entry.getData() == null ? new byte[0] : entry.getData());
+        ByteBuffer data;
+
+        if (entry.getData() != null) {
+            data = ByteBuffer.wrap(entry.getData());
+        } else {
+            // TODO: check codec, compress, add size before compress.
+            ByteBuf buf = Unpooled.buffer();
+            ICorfuPayload.serialize(buf, entry);
+            data = ByteBuffer.wrap(buf.array());
+        }
 
         LogEntry.Builder logEntryBuilder = LogEntry.newBuilder()
                 .setDataType(Types.DataType.forNumber(entry.getType().ordinal()))

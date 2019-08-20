@@ -295,42 +295,6 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         return false;
     }
 
-<<<<<<< HEAD
-    /**
-     * Verify that a trim is covered either by a loaded checkpoint or by the locally resolved addresses.
-     *
-     * Because address maps might have been trimmed, the trim mark is a 'marker' of addresses that were
-     * removed from the map (historical) and that should be covered by a checkpoint.
-     *
-     * @param trimMark
-     * @return TRUE, trim mark contained in checkpoint, FALSE, otherwise.
-     */
-    private boolean isTrimCoveredByCheckpointOrLocalView(long trimMark) {
-        return isTrimResolvedLocally(trimMark) ||
-                isTrimCoveredByCheckpoint(trimMark);
-    }
-
-    private boolean isTrimResolvedLocally(long trimMark) {
-        return getCurrentContext().getCheckpoint().id == null
-                && getCurrentContext().resolvedQueue.contains(trimMark);
-    }
-
-    private boolean isTrimCoveredByCheckpoint(long trimMark) {
-        return getCurrentContext().getCheckpoint().id != null &&
-                getCurrentContext().getCheckpoint().startAddress >= trimMark;
-    }
-
-    /**
-     * Check to see if the current stream is checkpoint capable.
-     *
-     * @return whether this stream is capable of being checkpointed
-     */
-    private boolean isCheckpointCapable() {
-        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID);
-    }
-
-=======
->>>>>>> Cleanup checkpoint in stream layer (#1973)
     @Override
     public long getTotalUpdates() {
         return addressCount;

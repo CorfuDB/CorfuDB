@@ -5,7 +5,11 @@ import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nullable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -14,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * other housekeeping tasks, e.g. tracking the lower bound of snapshot address for transactions due to the loss of
  * some versions. Each SMRGarbageEntry instance is wrapped in one {@link org.corfudb.protocols.wireprotocol.LogData}
  * instance whose address is the same as that of the associated log data having SMREntries.
- *
+ * <p>
  * Created by Xin Li at 06/03/19.
  */
 public class SMRGarbageEntry extends LogEntry {
@@ -42,7 +46,6 @@ public class SMRGarbageEntry extends LogEntry {
         if (!streamIdToGarbageMap.containsKey(streamId)) {
             return null;
         }
-
         return streamIdToGarbageMap.get(streamId).get(index);
     }
 
@@ -100,6 +103,7 @@ public class SMRGarbageEntry extends LogEntry {
 
     /**
      * Get the total number of SMRRecords wrapped in this SMRGarbageEntry instance.
+     *
      * @return total number of SMRRecords.
      */
     public int getGarbageRecordCount() {
@@ -119,6 +123,30 @@ public class SMRGarbageEntry extends LogEntry {
         if (streamIdToGarbageMap.containsKey(streamId)) {
             streamIdToGarbageMap.get(streamId).remove(index);
         }
+    }
+
+    /**
+     * Prune the same garbage information contained in {@param pruneInfo}.
+     *
+     * @param pruneInfo pruning information
+     */
+    public void prune(@Nullable Map<UUID, List<Integer>> pruneInfo) {
+        if (pruneInfo == null) {
+            return;
+        }
+
+        if (pruneInfo == Collections.EMPTY_MAP) {
+            streamIdToGarbageMap.clear();
+            return;
+        }
+
+        pruneInfo.forEach((streamId, indexes) -> {
+            if (indexes == Collections.EMPTY_LIST) {
+                streamIdToGarbageMap.remove(streamId);
+            } else {
+                indexes.forEach(index -> remove(streamId, index));
+            }
+        });
     }
 
     /**
@@ -151,9 +179,9 @@ public class SMRGarbageEntry extends LogEntry {
     /**
      * Add information about one garbage-identified SMREntry.
      *
-     * @param streamId            stream ID the SMREntry belongs to.
-     * @param index               per-stream index of the SMREntry in the associated log data.
-     * @param recordGarbageInfo   garbage information about the SMREntry.
+     * @param streamId          stream ID the SMREntry belongs to.
+     * @param index             per-stream index of the SMREntry in the associated log data.
+     * @param recordGarbageInfo garbage information about the SMREntry.
      */
     public void add(UUID streamId, int index, SMRGarbageRecord recordGarbageInfo) {
         streamIdToGarbageMap.computeIfAbsent(streamId, id -> new ConcurrentHashMap<>());

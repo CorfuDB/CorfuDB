@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -31,8 +32,6 @@ import static com.google.common.base.Preconditions.checkState;
 @Slf4j
 public class SMRLogEntry extends LogEntry {
 
-    public final static SMRLogEntry TRIMMED_ENTRY = new SMRLogEntry();
-
     // Map from stream-ID to a list of SMR updates to this stream.
     @Getter
     public Map<UUID, List<SMRRecord>> streamUpdates = new ConcurrentHashMap<>();
@@ -43,15 +42,20 @@ public class SMRLogEntry extends LogEntry {
      */
     private final Map<UUID, byte[]> streamBuffers = new ConcurrentHashMap<>();
 
-    /**
-     * If this entry is trimmed because of compaction.
-     */
-    public boolean isTrimmed() {
-        return this == TRIMMED_ENTRY;
-    }
-
     public SMRLogEntry() {
         this.type = LogEntryType.SMRLOG;
+    }
+
+    /**
+     * Get all the streams that have updates.
+     * <p>
+     * If a stream is completely compacted at this address,
+     * that stream ID will not appear in the returned set.
+     *
+     * @return all the stream identifiers.
+     */
+    public Set<UUID> getStreams() {
+        return getEntryMap().keySet();
     }
 
     /**
@@ -59,13 +63,23 @@ public class SMRLogEntry extends LogEntry {
      * transaction, since only a single thread can execute a transaction at any point in time
      * synchronization is not required.
      *
-     * @param streamID  StreamID
+     * @param streamId  stream identifier
      * @param smrRecord SMRRecord to add
      */
-    public void addTo(UUID streamID, SMRRecord smrRecord) {
-        checkState(streamBuffers.isEmpty(), "Shouldn't be called on a deserialized object");
-        List<SMRRecord> records = streamUpdates.computeIfAbsent(streamID, k -> new ArrayList<>());
+    public void addTo(UUID streamId, SMRRecord smrRecord) {
+        List<SMRRecord> records = streamUpdates.computeIfAbsent(streamId, k -> new ArrayList<>());
         records.add(smrRecord);
+    }
+
+    /**
+     * Add multiple SMR-updates to one object's update-list.
+     *
+     * @param streamId   stream identifier
+     * @param smrRecords a list of SMRRecord to add
+     */
+    public void addTo(UUID streamId, List<SMRRecord> smrRecords) {
+        List<SMRRecord> records = streamUpdates.computeIfAbsent(streamId, k -> new ArrayList<>());
+        records.addAll(smrRecords);
     }
 
     /**
