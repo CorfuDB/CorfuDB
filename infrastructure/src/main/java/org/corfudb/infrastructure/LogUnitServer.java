@@ -38,6 +38,7 @@ import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -138,6 +139,7 @@ public class LogUnitServer extends AbstractServer {
         dataCache = new LogUnitServerCache(config, streamLog);
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
+        // TODO: change to new GC, put into StreamLogFile, start after initialization finishes.
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
     }
 
@@ -283,6 +285,7 @@ public class LogUnitServer extends AbstractServer {
                 rr.put(address, LogData.getEmpty(address));
             } else {
                 rr.put(address, (LogData) logData);
+                rr.setCompactionMarks(streamLog.getCompactionMarks(logData.getAllStreams()));
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
@@ -297,6 +300,7 @@ public class LogUnitServer extends AbstractServer {
         log.trace("multiRead: {}, cacheable: {}", msg.getPayload().getAddresses(), cacheable);
 
         ReadResponse rr = new ReadResponse();
+        Set<UUID> streams = new HashSet<>();
         try {
             for (Long address : msg.getPayload().getAddresses()) {
                 ILogData logData = dataCache.get(address, cacheable);
@@ -304,8 +308,10 @@ public class LogUnitServer extends AbstractServer {
                     rr.put(address, LogData.getEmpty(address));
                 } else {
                     rr.put(address, (LogData) logData);
+                    streams.addAll(logData.getAllStreams());
                 }
             }
+            rr.setCompactionMarks(streamLog.getCompactionMarks(streams));
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
