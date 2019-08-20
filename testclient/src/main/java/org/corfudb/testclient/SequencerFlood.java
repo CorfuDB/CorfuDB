@@ -19,21 +19,20 @@ import java.util.concurrent.atomic.LongAdder;
  */
 @Slf4j
 public class SequencerFlood {
-
     static class Args {
         @Parameter(names = {"-h", "--help"}, description = "Help message", help = true)
         boolean help;
 
         @Parameter(names = {"--endpoint"}, description = "Cluster endpoint", required = true)
-        String url;
+        String endpoint; //ip:portnum
 
         @Parameter(names = {"--num-clients"}, description = "Number of clients", required = true)
         int numClients;
 
-        @Parameter(names = {"--num-threads"}, description = "Number of threads", required = true)
+        @Parameter(names = {"--num-threads"}, description = "Total number of threads", required = true)
         int numThreads;
 
-        @Parameter(names = {"--num-requests"}, description = "Total number of requests", required = true)
+        @Parameter(names = {"--num-requests"}, description = "Number of requests per thread", required = true)
         int numRequests;
     }
 
@@ -50,30 +49,23 @@ public class SequencerFlood {
             System.exit(-1);
         }
 
-
         int numRuntimes = cmdArgs.numClients;
         int numThreads = cmdArgs.numThreads;
         int numRequests = cmdArgs.numRequests;
-
         CorfuRuntime[] rts = new CorfuRuntime[numRuntimes];
 
         for (int x = 0; x < rts.length; x++) {
-            rts[x] = new CorfuRuntime(cmdArgs.url).connect();
+            rts[x] = new CorfuRuntime(cmdArgs.endpoint).connect();
         }
-
         log.info("Connected {} runtimes...", numRuntimes);
 
         ExecutorService service = Executors.newFixedThreadPool(numThreads);
-
         LongAdder requestsCompleted = new LongAdder();
         Recorder recorder = new Recorder(TimeUnit.SECONDS.toMillis(120000), 5);
 
-
         for (int tNum = 0; tNum < numThreads; tNum++) {
             CorfuRuntime rt = rts[tNum % rts.length];
-
             service.submit(() -> {
-
                 for (int reqId = 0; reqId < numRequests; reqId++) {
                     long start = System.nanoTime();
                     rt.getSequencerView().query();
@@ -81,7 +73,6 @@ public class SequencerFlood {
                     recorder.recordValue(TimeUnit.NANOSECONDS.toMicros(end - start));
                     requestsCompleted.increment();
                 }
-
             });
         }
 
@@ -120,8 +111,5 @@ public class SequencerFlood {
 
         service.shutdown();
         service.awaitTermination(Long.MAX_VALUE, TimeUnit.MINUTES);
-
-
-
     }
 }
