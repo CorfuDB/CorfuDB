@@ -387,11 +387,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(seg2, new LogData(DataType.DATA, b));
         log.append(seg3, new LogData(DataType.DATA, b));
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(3);
+        assertThat(log.getSegmentsToSync().size()).isEqualTo(3);
 
         log.sync(true);
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+        assertThat(log.getSegmentsToSync().size()).isEqualTo(0);
     }
 
     private void writeToLog(StreamLog log, long address) {
