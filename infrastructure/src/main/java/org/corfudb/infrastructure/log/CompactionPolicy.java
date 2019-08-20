@@ -1,9 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
 /**
@@ -14,26 +10,18 @@ import java.util.List;
  */
 public interface CompactionPolicy {
 
+    enum CompactionPolicyType {
+        GARBAGE_SIZE_FIRST,
+        SNAPSHOT_LENGTH_FIRST,
+    }
+
     /**
      * Returns a list of segments selected for compaction based on
      * the compaction policy implementation.
      *
-     * @param compactibleSegments meta data of unprotected segments that
+     * @param compactibleSegments metadata of unprotected segments that
      *                            can be selected for compaction
-     * @return a list of segments selected for compaction
+     * @return a list of ordinals whose associated segments are selected for compaction.
      */
-    List<SegmentMetaData> getSegmentsToCompact(List<SegmentMetaData> compactibleSegments);
-
-    static CompactionPolicy getPolicy(StreamLogParams params) {
-        try {
-            Package policyPackagePath = CompactionPolicy.class.getPackage();
-            String policyClassName = policyPackagePath.getName() + "." + params.compactionPolicyName;
-            Class<?> policyClass = Class.forName(policyClassName);
-            Constructor<?> ctor = policyClass.getDeclaredConstructor(StreamLogParams.class);
-            return (CompactionPolicy) ctor.newInstance(params);
-        } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException
-                | IllegalAccessException | InvocationTargetException e) {
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
+    List<Long> getSegmentsToCompact(List<CompactionMetadata> compactibleSegments);
 }

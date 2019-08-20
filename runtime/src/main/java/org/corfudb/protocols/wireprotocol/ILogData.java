@@ -128,6 +128,13 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     void useToken(IToken token);
 
     /**
+     * Reset the payload, assuming data type not changed.
+     *
+     * @param newPayload new payload to reset.
+     */
+    void resetPayload(Object newPayload);
+
+    /**
      * Return whether the entry represents a hole or not.
      */
     default boolean isHole() {
