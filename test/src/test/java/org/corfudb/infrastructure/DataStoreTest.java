@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.junit.Test;
 

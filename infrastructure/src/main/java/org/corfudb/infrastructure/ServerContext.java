@@ -31,6 +31,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;

@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.datastore;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
@@ -7,11 +7,8 @@ import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.google.common.hash.Hasher;
-import com.google.common.hash.Hashing;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
 import javax.annotation.Nonnull;
@@ -47,7 +44,7 @@ import java.util.function.Consumer;
  */
 
 @Slf4j
-public class DataStore implements IDataStore {
+public class DataStore implements KvDataStore {
 
     static final String EXTENSION = ".ds";
 

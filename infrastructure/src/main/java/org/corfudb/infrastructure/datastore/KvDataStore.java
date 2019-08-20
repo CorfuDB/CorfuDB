@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.datastore;
 
 
 import lombok.AllArgsConstructor;
@@ -13,7 +13,7 @@ import lombok.Getter;
  *
  * <p>Created by mdhawan on 7/27/16.
  */
-public interface IDataStore {
+public interface KvDataStore {
 
     @Deprecated
     <T> void put(Class<T> tclass, String prefix, String key, T value);
