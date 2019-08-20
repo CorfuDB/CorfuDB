@@ -1,6 +1,7 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.esotericsoftware.kryo.NotNull;
+import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 
 import java.util.Arrays;
@@ -42,9 +43,9 @@ public interface IMetadata {
     EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap();
 
     /**
-     * Get the streams that belong to this append.
+     * Get the un-compacted streams that belong to this data.
      *
-     * @return A set of streams that belong to this append.
+     * @return A set of un-compacted streams that belong to this data.
      */
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams() {
@@ -54,6 +55,8 @@ public interface IMetadata {
 
     /**
      * Get whether or not this entry contains a given stream.
+     * NOTE: Compacted stream are not considered as contained.
+     *
      * @param stream    The stream to check.
      * @return          True, if the entry contains the given stream.
      */
@@ -99,6 +102,25 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);
     }
 
+    @SuppressWarnings("unchecked")
+    default Set<UUID> getCompactedStreams() {
+        return (Set<UUID>) getMetadataMap().getOrDefault(LogUnitMetadataType.COMPACTED_STREAMS,
+                Collections.EMPTY_SET);
+    }
+
+    default void setCompactedStreams(Set<UUID> compactedStreams) {
+        getMetadataMap().put(LogUnitMetadataType.COMPACTED_STREAMS, compactedStreams);
+    }
+
+    /**
+     * Get all the streams that belongs to this data including compacted and un-compacted.
+     *
+     * @return a set of all stream identifiers
+     */
+    default Set<UUID> getAllStreams() {
+        return Sets.union(getStreams(), getCompactedStreams());
+    }
+
     default void setGlobalAddress(Long address) {
         getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
     }
@@ -124,7 +146,6 @@ public interface IMetadata {
         return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID,
                 null);
     }
-
 
     /**
      * Get Log's global address (global tail).
@@ -238,6 +259,7 @@ public interface IMetadata {
     enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
+        COMPACTED_STREAMS(5, new TypeToken<Set<UUID>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
