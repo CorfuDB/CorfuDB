@@ -102,16 +102,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * The handlers registered to this router.
      */
-    public Map<CorfuMsgType, IClient> handlerMap;
+    public final Map<CorfuMsgType, IClient> handlerMap;
     /**
      * The clients registered to this router.
      */
-    public List<IClient> clientList;
+    public final List<IClient> clientList;
 
     /**
      * The outstanding requests on this router.
      */
-    public Map<Long, CompletableFuture> outstandingRequests;
+    public final Map<Long, CompletableFuture> outstandingRequests;
 
     /**
      * The currently registered channel.
@@ -590,8 +590,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * close the channel.
      */
     private void keepAlive() {
-        if (!channel.isOpen()) {
-            log.warn("keepAlive: channel not open, skipping sending keep alive.");
+        if (channel == null || !channel.isOpen()) {
+            log.info("keepAlive: channel not established or not open, skipping sending keep alive.");
             return;
         }
         // Send a keep alive message to server which ignores epoch

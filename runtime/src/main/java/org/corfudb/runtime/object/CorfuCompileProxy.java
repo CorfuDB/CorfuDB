@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -73,19 +74,19 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * The CorfuRuntime. This allows us to interact with the
      * Corfu log.
      */
-    CorfuRuntime rt;
+    final CorfuRuntime rt;
 
     /**
      * The ID of the stream of the log.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-            UUID streamID;
+    final UUID streamID;
 
     /**
      * The type of the underlying object. We use this to instantiate
      * new instances of the underlying object.
      */
-    Class<T> type;
+    final Class<T> type;
 
     /**
      * The serializer SMR entries will use to serialize their
@@ -193,7 +194,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
             // Linearize this read against a timestamp
             final long timestamp = rt.getSequencerView()
-                            .query(getStreamID()).getToken().getSequence();
+                            .query(getStreamID());
             log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
             try {
@@ -268,9 +269,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public void sync() {
         // Linearize this read against a timestamp
-        final Token timestamp =
-                rt.getSequencerView()
-                        .query(getStreamID()).getToken();
+        TokenResponse response = rt.getSequencerView()
+                .query(new UUID[]{getStreamID()});
+        final Token timestamp = new Token(response.getEpoch(), response.getStreamTail(getStreamID()));
 
         log.debug("Sync[{}] {}", this, timestamp);
         // Acquire locks and perform read.

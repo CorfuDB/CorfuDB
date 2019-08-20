@@ -534,7 +534,7 @@ public class LayoutServerTest extends AbstractServerTest {
     private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch) {
 
         long newEpoch = baseEpoch + reboot;
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch));
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch));
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         layout.setEpoch(newEpoch);
@@ -579,7 +579,7 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     private void setEpoch(long epoch) {
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, epoch));
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, epoch));
     }
 
     private void sendPrepare(long epoch, long rank) {

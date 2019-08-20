@@ -1,11 +1,6 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -22,7 +17,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
-import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
 
@@ -200,7 +194,6 @@ public class CorfuServer {
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
         // Print a nice welcome message.
-        AnsiConsole.systemInstall();
         printStartupMsg(opts);
         configureLogger(opts);
 
@@ -347,7 +340,6 @@ public class CorfuServer {
      * Print the corfu logo.
      */
     private static void printLogo() {
-        println(ansi().fg(WHITE).toString());
         println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
         println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
         println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
@@ -357,7 +349,6 @@ public class CorfuServer {
         println("███    ███ ███    ███   ███    ███   ███       ███    ███");
         println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
         println("                        ███    ███");
-        println(ansi().reset().toString());
     }
 
     /**
@@ -379,13 +370,14 @@ public class CorfuServer {
      */
     private static void printStartupMsg(Map<String, Object> opts) {
         printLogo();
-        int port = Integer.parseInt((String) opts.get("<port>"));
-        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
-        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
-                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                        opts.get("--log-path")).reset());
+        println("Welcome to CORFU SERVER");
+        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+
+        final int port = Integer.parseInt((String) opts.get("<port>"));
+        final String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                opts.get("--log-path").toString();
+
+        println("Serving on port " + port);
+        println("Data location: " + dataLocation);
     }
 }

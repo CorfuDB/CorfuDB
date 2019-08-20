@@ -887,12 +887,12 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         // Hole fill the address that the transaction is about to commit, to
         // create an OverwriteException and retry. The retry should succeed.
-        long currentTail = rt.getSequencerView().query().getToken().getSequence();
+        long currentTail = rt.getSequencerView().query().getSequence();
         rt.getAddressSpaceView().read(currentTail + 1);
 
         assertThatCode(this::TXEnd).doesNotThrowAnyException();
 
-        assertThat(rt.getSequencerView().query().getToken().getSequence()).isEqualTo(currentTail + 2);
+        assertThat(rt.getSequencerView().query().getSequence()).isEqualTo(currentTail + 2);
         assertThat(get("k1")).isEqualTo("v1");
         assertThat(get("k2")).isEqualTo("v2");
     }
