@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -182,18 +182,18 @@ public class StreamingSubscriptionContext {
                 return false;
             }
 
-            MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload(runtime);
+            SMRLogEntry smrLogEntry = (SMRLogEntry) logData.getPayload(runtime);
             long epoch = logData.getEpoch();
             //Build the CorfuStreamEntries from the MultiObjectSMREntry.
-            CorfuStreamEntries update = new CorfuStreamEntries(multiObjSMREntry.getEntryMap()
+            CorfuStreamEntries update = new CorfuStreamEntries(smrLogEntry.getEntryMap()
                     .entrySet()
                     .stream()
                     .filter(e -> tablesOfInterest.containsKey(e.getKey()))
                     .collect(Collectors.toMap(
                         e -> tablesOfInterest.get(e.getKey()),
-                        e -> e.getValue().getUpdates()
+                        e -> e.getValue()
                                 .stream()
-                                .map(smrEntry -> CorfuStreamEntry.fromSMREntry(smrEntry,
+                                .map(smrEntry -> CorfuStreamEntry.fromSMRRecord(smrEntry,
                                             epoch,
                                             tablesOfInterest.get(e.getKey()).getKeyClass(),
                                             tablesOfInterest.get(e.getKey()).getPayloadClass(),
@@ -203,7 +203,7 @@ public class StreamingSubscriptionContext {
             // Now enqueue the update. The enqueue can fail if the queue has reached its capacity.
             // Update the lastReadAddress iff the enqueue is successful.
             if (streamQueue.offer(update)) {
-                lastReadAddress = multiObjSMREntry.getGlobalAddress();
+                lastReadAddress = smrLogEntry.getGlobalAddress();
                 return true;
             }
         }

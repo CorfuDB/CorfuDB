@@ -3,11 +3,10 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
-import org.corfudb.protocols.logprotocol.SMREntry;
 
 /**
  * Entry returned by CorfuStore's StreamListener interface
@@ -75,10 +74,10 @@ public class CorfuStreamEntry<K extends Message, V extends Message, M extends Me
      * Convert a given SMREntry to CorfuStreamEntry.
      */
     public static <K extends Message, V extends Message, M extends Message>
-        CorfuStreamEntry<K, V, M> fromSMREntry(SMREntry entry, @Nonnull final long epoch,
-                                               @Nonnull final Class<K> keyClass,
-                                               @Nonnull final Class<V> payloadClass,
-                                               @Nullable final Class<M> metadataClass) {
+        CorfuStreamEntry<K, V, M> fromSMRRecord(SMRRecord entry, @Nonnull final long epoch,
+                                                @Nonnull final Class<K> keyClass,
+                                                @Nonnull final Class<V> payloadClass,
+                                                @Nullable final Class<M> metadataClass) {
 
         long address = entry.getGlobalAddress();
 

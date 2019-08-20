@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -7,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -50,8 +52,8 @@ public class InMemoryStreamLog implements StreamLog {
             }
 
             logCache.put(entry.getGlobalAddress(), entry);
-            logMetadata.update(entry, false);
         }
+        logMetadata.update(entries);
     }
 
     @Override
@@ -64,7 +66,7 @@ public class InMemoryStreamLog implements StreamLog {
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
-        logMetadata.update(entry, false);
+        logMetadata.update(Collections.singletonList(entry));
     }
 
     private boolean isTrimmed(long address) {
@@ -155,6 +157,11 @@ public class InMemoryStreamLog implements StreamLog {
         }
 
         return logCache.get(address);
+    }
+
+    @Override
+    public Map<UUID, Long> getCompactionMarks(@NonNull Set<UUID> streams) {
+        return Collections.emptyMap();
     }
 
     @Override
