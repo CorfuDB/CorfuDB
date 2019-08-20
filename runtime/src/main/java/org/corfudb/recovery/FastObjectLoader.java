@@ -333,13 +333,12 @@ public class FastObjectLoader {
      * @return
      */
     private boolean shouldLogDataBeProcessed(ILogData logData) {
-        boolean shouldProcess = false;
         for (UUID id : logData.getStreams()) {
-            if (shouldStreamBeProcessed(id)){
-                shouldProcess = true;
+            if (shouldStreamBeProcessed(id)) {
+                return true;
             }
         }
-        return shouldProcess;
+        return false;
     }
 
     /**
@@ -464,7 +463,6 @@ public class FastObjectLoader {
     private void processLogData(long address, ILogData logData) {
         switch (logData.getType()) {
             case DATA:
-                // Checkpoint should have been processed first
                 if (shouldLogDataBeProcessed(logData)) {
                     updateCorfuObject(logData);
                 }
@@ -477,6 +475,8 @@ public class FastObjectLoader {
                 log.warn("applyForEachAddress[address={}] is empty");
                 break;
             case RANK_ONLY:
+                break;
+            case COMPACTED:
                 break;
             default:
                 break;
