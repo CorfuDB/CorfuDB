@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 
@@ -23,8 +24,6 @@ import java.util.UUID;
 @ToString
 @Slf4j
 public class SMRLogEntry extends LogEntry {
-
-    public final static SMRLogEntry TRIMMED_ENTRY = new SMRLogEntry();
 
     // Map from stream-ID to a list of SMR updates to this stream.
     @Getter
@@ -40,30 +39,45 @@ public class SMRLogEntry extends LogEntry {
     }
 
     /**
-     * If this entry is trimmed because of compaction.
+     * Extract a particular stream's entry from this object.
+     *
+     * @param streamId stream identifier
+     * @return the SMR Record list corresponding to streamId
      */
-    public boolean isTrimmed() {
-        return this == TRIMMED_ENTRY;
+    private List<SMRRecord> getStreamEntry(UUID streamId) {
+        return getEntryMap().computeIfAbsent(streamId, sid -> new ArrayList<>());
     }
 
     /**
-     * Extract a particular stream's entry from this object.
+     * Get all the streams that have updates.
+     * <p>
+     * If a stream is completely compacted at this address,
+     * that stream ID will not appear in the returned set.
      *
-     * @param streamID stream ID
-     * @return the SMR Record list corresponding to streamId
+     * @return all the stream identifiers.
      */
-    private List<SMRRecord> getStreamEntry(UUID streamID) {
-        return getEntryMap().computeIfAbsent(streamID, sid -> new ArrayList<>());
+    public Set<UUID> getStreams() {
+        return entryMap.keySet();
     }
 
     /**
      * Add one SMR-update to one object's update-list.
      *
-     * @param streamID  StreamID
+     * @param streamId  stream identifier
      * @param smrRecord SMRRecord to add
      */
-    public void addTo(UUID streamID, SMRRecord smrRecord) {
-        getStreamEntry(streamID).add(smrRecord);
+    public void addTo(UUID streamId, SMRRecord smrRecord) {
+        getStreamEntry(streamId).add(smrRecord);
+    }
+
+    /**
+     * Add multiple SMR-updates to one object's update-list.
+     *
+     * @param streamId   stream identifier
+     * @param smrRecords a list of SMRRecord to add
+     */
+    public void addTo(UUID streamId, List<SMRRecord> smrRecords) {
+        getStreamEntry(streamId).addAll(smrRecords);
     }
 
     /**
