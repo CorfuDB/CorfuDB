@@ -28,7 +28,7 @@ import org.corfudb.util.serializer.Serializers;
 @Builder
 public class SMRRecord {
 
-    public final static SMRRecord TRIMMED_RECORD = SMRRecord.builder().build();
+    public final static SMRRecord COMPACTED_RECORD = SMRRecord.builder().build();
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -98,8 +98,8 @@ public class SMRRecord {
     /**
      * If this record is trimmed because of compaction.
      */
-    public boolean isTrimmed() {
-        return this == TRIMMED_RECORD;
+    public boolean isCompacted() {
+        return this == COMPACTED_RECORD;
     }
 
     /**
@@ -143,9 +143,9 @@ public class SMRRecord {
      * @return an {@code SMRRecord} deserialized from buffer.
      */
     static SMRRecord deserializeFromBuffer(ByteBuf b, CorfuRuntime rt) {
-        boolean trimmed = b.readBoolean();
-        if (trimmed) {
-            return TRIMMED_RECORD;
+        boolean compacted = b.readBoolean();
+        if (compacted) {
+            return COMPACTED_RECORD;
         }
         SMRRecord record = new SMRRecord();
         short methodLength = b.readShort();
@@ -173,9 +173,9 @@ public class SMRRecord {
      * @param b byte buffer to serialize to.
      */
     void serialize(ByteBuf b) {
-        b.writeBoolean(isTrimmed());
-        if (isTrimmed()) {
-            // A trimmed record does not need serializedSize;
+        b.writeBoolean(isCompacted());
+        if (isCompacted()) {
+            // A compacted record does not need serializedSize;
             return;
         }
 
