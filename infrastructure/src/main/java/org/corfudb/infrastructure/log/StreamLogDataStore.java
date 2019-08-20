@@ -7,28 +7,41 @@ import org.corfudb.infrastructure.IDataStore;
 import org.corfudb.infrastructure.IDataStore.KvRecord;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Data access layer for StreamLog.
- * Keeps stream log related meta information: startingAddress and tailSegment.
+ * Keeps stream log related meta information: startingAddress, tailSegment
+ * and per-segment per-stream compaction marks.
  * Provides access to the stream log related meta information.
  */
 @Slf4j
 @RequiredArgsConstructor
 public class StreamLogDataStore {
     private static final String TAIL_SEGMENT_PREFIX = "TAIL_SEGMENT";
-    public static final String TAIL_SEGMENT_KEY = "CURRENT";
+    private static final String TAIL_SEGMENT_KEY = "CURRENT";
 
-    public static final String STARTING_ADDRESS_PREFIX = "STARTING_ADDRESS";
-    public static final String STARTING_ADDRESS_KEY = "CURRENT";
+    private static final String STARTING_ADDRESS_PREFIX = "STARTING_ADDRESS";
+    private static final String STARTING_ADDRESS_KEY = "CURRENT";
 
-    public static final KvRecord<Long> TAIL_SEGMENT_RECORD = new KvRecord<>(
+    private static final String COMPACTION_MARK_PREFIX = "COMPACTION_MARK";
+    private static final String COMPACTION_MARK_KEY = "CURRENT";
+
+    private static final KvRecord<Long> TAIL_SEGMENT_RECORD = new KvRecord<>(
             TAIL_SEGMENT_PREFIX, TAIL_SEGMENT_KEY, Long.class
     );
 
-    public static final KvRecord<Long> STARTING_ADDRESS_RECORD = new KvRecord<>(
+    private static final KvRecord<Long> STARTING_ADDRESS_RECORD = new KvRecord<>(
             STARTING_ADDRESS_PREFIX, STARTING_ADDRESS_KEY, Long.class
+    );
+
+    private static final KvRecord<Map> COMPACTION_MARK_RECORD = new KvRecord<>(
+            COMPACTION_MARK_PREFIX, COMPACTION_MARK_KEY, Map.class
     );
 
     private static final long ZERO_ADDRESS = 0L;
@@ -44,13 +57,18 @@ public class StreamLogDataStore {
      * Cached tail segment
      */
     private final AtomicLong tailSegment = new AtomicLong(Address.NON_ADDRESS);
+    /**
+     * Cached stream compaction marks. Any snapshot read on the stream before
+     * compaction mark may result in in-complete history.
+     */
+    private final AtomicReference<Map<UUID, Long>> streamCompactionMarks = new AtomicReference<>(null);
 
     /**
      * Return current cached tail segment or get the segment from the data store if not initialized
      *
      * @return tail segment
      */
-    public long getTailSegment() {
+    long getTailSegment() {
         if (tailSegment.get() == Address.NON_ADDRESS) {
             tailSegment.set(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
         }
@@ -63,7 +81,7 @@ public class StreamLogDataStore {
      *
      * @param newTailSegment updated tail segment
      */
-    public void updateTailSegment(long newTailSegment) {
+    void updateTailSegment(long newTailSegment) {
         if (tailSegment.get() >= newTailSegment) {
             log.trace("New tail segment less than or equals to the old one: {}. Ignore", newTailSegment);
             return;
@@ -79,7 +97,7 @@ public class StreamLogDataStore {
      *
      * @return the starting address
      */
-    public long getStartingAddress() {
+    long getStartingAddress() {
         if (startingAddress.get() == Address.NON_ADDRESS) {
             startingAddress.set(dataStore.get(STARTING_ADDRESS_RECORD, ZERO_ADDRESS));
         }
@@ -92,7 +110,7 @@ public class StreamLogDataStore {
      *
      * @param newStartingAddress updated starting address
      */
-    public void updateStartingAddress(long newStartingAddress) {
+    void updateStartingAddress(long newStartingAddress) {
         log.info("Update starting address to: {}", newStartingAddress);
 
         dataStore.put(STARTING_ADDRESS_RECORD, newStartingAddress);
@@ -102,7 +120,7 @@ public class StreamLogDataStore {
     /**
      * Reset tail segment
      */
-    public void resetTailSegment() {
+    void resetTailSegment() {
         log.info("Reset tail segment. Current segment: {}", tailSegment.get());
         dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
         tailSegment.set(ZERO_ADDRESS);
@@ -111,9 +129,47 @@ public class StreamLogDataStore {
     /**
      * Reset starting address
      */
-    public void resetStartingAddress() {
+    void resetStartingAddress() {
         log.info("Reset starting address. Current address: {}", startingAddress.get());
         dataStore.put(STARTING_ADDRESS_RECORD, ZERO_ADDRESS);
         startingAddress.set(ZERO_ADDRESS);
+    }
+
+    /**
+     * Update current stream compaction marks with a subset of compaction marks.
+     *
+     * @param compactionMarks a subset of compaction marks to update
+     */
+    void updateCompactionMarks(Map<UUID, Long> compactionMarks) {
+        log.debug("Updating stream compaction mark, current: {}", streamCompactionMarks.get());
+        streamCompactionMarks.updateAndGet(cm -> {
+            Map<UUID, Long> newCompactionMarks = new HashMap<>(cm);
+            compactionMarks.forEach((id, addr) -> newCompactionMarks.merge(id, addr, Math::max));
+            dataStore.put(COMPACTION_MARK_RECORD, newCompactionMarks);
+            return newCompactionMarks;
+        });
+        log.debug("Updated stream compaction mark to: {}", streamCompactionMarks.get());
+    }
+
+    /**
+     * Return current stream compaction marks.
+     */
+    @SuppressWarnings("unchecked")
+    Map<UUID, Long> getCompactionMarks() {
+        if (streamCompactionMarks.get() == null) {
+            streamCompactionMarks.getAndUpdate(
+                    cm -> dataStore.get(COMPACTION_MARK_RECORD, Collections.emptyMap()));
+        }
+
+        return streamCompactionMarks.get();
+    }
+
+    /**
+     * Reset stream compaction marks.
+     */
+    void resetCompactionMarks() {
+        log.info("Reset stream compaction marks.");
+        dataStore.put(COMPACTION_MARK_RECORD, Collections.emptyMap());
+        streamCompactionMarks.set(Collections.emptyMap());
     }
 }

@@ -2,19 +2,16 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.util.EnumMap;
-import java.util.concurrent.atomic.AtomicReference;
-
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.serializer.Serializers;
+
+import java.util.EnumMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Created by mwei on 8/15/16.
@@ -60,6 +57,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         LogData logData = new LogData(DataType.EMPTY);
         logData.setGlobalAddress(address);
         return logData;
+    }
+
+    public static LogData getCompacted(EnumMap<LogUnitMetadataType, Object> metadataMap) {
+        return new LogData(DataType.COMPACTED, metadataMap);
     }
 
     /**
@@ -159,10 +160,16 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
+    public LogData(DataType type, EnumMap<LogUnitMetadataType, Object> metadataMap) {
+        this.type = type;
+        this.data = null;
+        this.metadataMap = metadataMap;
+    }
+
     /**
      * Constructor for generating LogData.
      *
-     * @param type The type of log data to instantiate.
+     * @param type   The type of log data to instantiate.
      * @param object The actual data/value
      */
     public LogData(DataType type, final Object object) {
@@ -202,6 +209,18 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (payload.get() instanceof LogEntry) {
             ((LogEntry) payload.get()).setGlobalAddress(token.getSequence());
         }
+    }
+
+    /**
+     * Reset the payload, assuming data type not changed.
+     *
+     * @param newPayload new payload to reset.
+     */
+    public void resetPayload(Object newPayload) {
+        data = null;
+        payload.set(newPayload);
+        serializedCache = null;
+        lastKnownSize = NOT_KNOWN;
     }
 
     /**
@@ -250,8 +269,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     /**
      * LogData are considered equals if clientId and threadId are equal.
      * Here, it means or both of them are null or both of them are the same.
-     * @param o
-     * @return
      */
     @Override
     public boolean equals(Object o) {
