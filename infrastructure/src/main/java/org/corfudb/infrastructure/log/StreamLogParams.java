@@ -42,25 +42,25 @@ public class StreamLogParams {
 
     // Region: compactor parameters
     @Default
-    public String compactionPolicyName = "GarbageSizeCompactionPolicy";
+    public String compactionPolicyType = "GARBAGE_SIZE_FIRST";
 
     @Default
-    public long compactorInitialDelay = 15;
+    public long compactorInitialDelay = 20;
 
     @Default
-    public long compactorPeriod = 15;
+    public long compactorPeriod = 20;
 
     @Default
     public TimeUnit compactorTimeUnit = TimeUnit.MINUTES;
 
     @Default
-    public int compactorWorker = 10;
+    public int compactorWorkers = Runtime.getRuntime().availableProcessors() + 1;
 
     @Default
-    public int maxSegmentsForCompaction = 10;
+    public int maxSegmentsForCompaction = 20;
 
     /**
-     * Number of last several segments that will not be selected for compaction.
+     * Number of newest segments that will not be selected for compaction.
      * Note: This number should be at least 1.
      */
     @Default
