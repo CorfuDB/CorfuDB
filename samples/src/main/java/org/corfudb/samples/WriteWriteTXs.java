@@ -123,7 +123,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      * Set up a repeatable PRNG
      */
     final int SEED = 434343;
-    Random rand = new Random(SEED);
+    final Random rand = new Random(SEED);
 
     /**
      * This method initiates all the data structures for this program

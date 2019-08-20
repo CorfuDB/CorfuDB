@@ -54,7 +54,7 @@ public class CorfuMsgHandler {
     }
 
     /** The handler map. */
-    private Map<CorfuMsgType, Handler> handlerMap;
+    private final Map<CorfuMsgType, Handler> handlerMap;
 
     /** Get the types this handler will handle.
      *

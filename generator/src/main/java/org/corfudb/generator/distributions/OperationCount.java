@@ -11,7 +11,7 @@ import java.util.Random;
  * Created by maithem on 7/14/17.
  */
 public class OperationCount implements DataSet {
-    private Random rand = new Random();
+    private final Random rand = new Random();
 
     public void populate() {
         //no-op

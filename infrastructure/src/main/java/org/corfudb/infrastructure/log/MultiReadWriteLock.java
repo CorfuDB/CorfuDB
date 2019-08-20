@@ -24,7 +24,7 @@ public class MultiReadWriteLock {
     // lock references per thread
     private final ThreadLocal<LinkedList<LockMetadata>> threadLockReferences = new ThreadLocal<>();
     // all used locks
-    private ConcurrentHashMap<Long, LockReference> locks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, LockReference> locks = new ConcurrentHashMap<>();
 
     /**
      * Acquire a read lock. The recommended use of this method is in try-with-resources statement.

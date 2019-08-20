@@ -49,8 +49,8 @@ import java.util.function.Function;
 public class CheckpointWriter<T extends Map> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
-    private UUID streamId;
-    private String author;
+    private final UUID streamId;
+    private final String author;
     @Getter
     private UUID checkpointId;
     private LocalDateTime startTime;
@@ -60,15 +60,15 @@ public class CheckpointWriter<T extends Map> {
     private long numBytes = 0;
 
     // Registry and Timer used for measuring append checkpoint
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     private static final String CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
             "append-checkpoint";
-    private Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
+    private final Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
 
     @SuppressWarnings("checkstyle:abbreviation")
     final UUID checkpointStreamID;
 
-    Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
+    final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
 
     /** Mutator lambda to change map key.  Typically used for
      *  testing but could also be used for type conversion, etc.
@@ -98,16 +98,16 @@ public class CheckpointWriter<T extends Map> {
 
     /** Local ref to the object's runtime.
      */
-    private CorfuRuntime rt;
+    private final CorfuRuntime rt;
 
     /** Local ref to the stream's view.
      */
-    StreamsView sv;
+    final StreamsView sv;
 
     /** Local ref to the object that we're dumping.
      *  TODO: generalize to all SMR objects.
      */
-    private T map;
+    private final T map;
 
     @Getter
     @Setter

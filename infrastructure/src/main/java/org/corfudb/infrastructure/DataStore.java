@@ -60,7 +60,7 @@ public class DataStore implements IDataStore {
 
     private final boolean inMem;
 
-    private Consumer<String> cleanupTask;
+    private final Consumer<String> cleanupTask;
 
     /**
      * Return a new DataStore object.
