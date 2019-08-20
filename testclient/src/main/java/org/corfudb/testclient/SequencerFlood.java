@@ -2,6 +2,7 @@ package org.corfudb.testclient;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import com.sun.xml.internal.xsom.impl.scd.Iterators;
 import lombok.extern.slf4j.Slf4j;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
@@ -13,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.Arrays;
 
 /**
  * Created by Maithem on 8/1/19.
@@ -62,15 +64,20 @@ public class SequencerFlood {
         ExecutorService service = Executors.newFixedThreadPool(numThreads);
         LongAdder requestsCompleted = new LongAdder();
         Recorder recorder = new Recorder(TimeUnit.SECONDS.toMillis(120000), 5);
+        SimpleTrace[] traces = new SimpleTrace[numThreads];
 
         for (int tNum = 0; tNum < numThreads; tNum++) {
             CorfuRuntime rt = rts[tNum % rts.length];
+            int id = tNum;
             service.submit(() -> {
+                traces[id] = new SimpleTrace ("Recorder");
                 for (int reqId = 0; reqId < numRequests; reqId++) {
                     long start = System.nanoTime();
                     rt.getSequencerView().query();
                     long end = System.nanoTime();
+                    traces[id].start();
                     recorder.recordValue(TimeUnit.NANOSECONDS.toMicros(end - start));
+                    traces[id].end();
                     requestsCompleted.increment();
                 }
             });
@@ -79,29 +86,29 @@ public class SequencerFlood {
         Thread statusReporter = new Thread(() -> {
             long currTs;
             long prevTs = 0;
-
             long currMsgCnt;
             long prevMsgCnt = 0;
             while (true) {
                 try {
-                    currTs = System.currentTimeMillis();
-                    currMsgCnt = requestsCompleted.intValue();
+                    currTs = System.currentTimeMillis ();
+                    currMsgCnt = requestsCompleted.intValue ();
                     double throughput = (currMsgCnt - prevMsgCnt) / ((currTs - prevTs) / 1000);
-                    Histogram histogram = recorder.getIntervalHistogram();
+                    Histogram histogram = recorder.getIntervalHistogram ();
 
-                    log.info("Throughput {} req/sec Latency: mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
+                    log.info ("Throughput {} req/sec Latency: total: {} ms mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
                             throughput,
-                            histogram.getMean() / 1000.0,
-                            histogram.getValueAtPercentile(50) / 1000.0,
-                            histogram.getValueAtPercentile(95) / 1000.0,
-                            histogram.getValueAtPercentile(99) / 1000.0);
+                            histogram.getTotalCount () / 1000.0,
+                            histogram.getMean () / 1000.0,
+                            histogram.getValueAtPercentile (50) / 1000.0,
+                            histogram.getValueAtPercentile (95) / 1000.0,
+                            histogram.getValueAtPercentile (99) / 1000.0);
 
-                    Sleep.sleepUninterruptibly(Duration.ofMillis(1000 * 3));
+                    Sleep.sleepUninterruptibly (Duration.ofMillis (1000 * 3));
                     prevTs = currTs;
                     prevMsgCnt = currMsgCnt;
                 } catch (Exception e) {
                     // ignore exception
-                    log.warn("statusReporter: encountered exception", e);
+                    log.warn ("statusReporter: encountered exception", e);
                 }
             }
         });
@@ -111,5 +118,6 @@ public class SequencerFlood {
 
         service.shutdown();
         service.awaitTermination(Long.MAX_VALUE, TimeUnit.MINUTES);
+        SimpleTrace.log(traces, "Recorder Overhead");
     }
 }
