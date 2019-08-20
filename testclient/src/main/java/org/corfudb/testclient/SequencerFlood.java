@@ -2,7 +2,6 @@ package org.corfudb.testclient;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
-import com.sun.xml.internal.xsom.impl.scd.Iterators;
 import lombok.extern.slf4j.Slf4j;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
@@ -14,7 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
-import java.util.Arrays;
+
 
 /**
  * Created by Maithem on 8/1/19.
