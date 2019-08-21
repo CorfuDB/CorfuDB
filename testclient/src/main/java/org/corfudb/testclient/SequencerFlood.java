@@ -1,4 +1,4 @@
-package org.corfudb.benchmarks;
+package org.corfudb.testclient;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -7,12 +7,13 @@ import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.Sleep;
-import org.corfudb.benchmarks.ObjectFetcher;
+
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
+
 
 /**
  * Created by Maithem on 8/1/19.
@@ -57,7 +58,6 @@ public class SequencerFlood {
         for (int x = 0; x < rts.length; x++) {
             rts[x] = new CorfuRuntime(cmdArgs.endpoint).connect();
         }
-
         log.info("Connected {} runtimes...", numRuntimes);
 
         ExecutorService service = Executors.newFixedThreadPool(numThreads);

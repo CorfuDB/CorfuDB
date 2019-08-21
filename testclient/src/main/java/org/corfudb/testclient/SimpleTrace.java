@@ -1,4 +1,4 @@
-package org.corfudb.benchmarks;
+package org.corfudb.testclient;
 
 import lombok.extern.slf4j.Slf4j;
 import java.util.concurrent.TimeUnit;
