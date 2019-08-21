@@ -52,7 +52,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>org.corfudb.testclient.SequencerFlood</mainClass>
+                            <mainClass>org.corfudb.benchmarks.SequencerFlood</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

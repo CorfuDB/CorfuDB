@@ -1,4 +1,4 @@
-package org.corfudb.testclient;
+package org.corfudb.benchmarks;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -47,7 +47,7 @@ public class SequencerFlood {
 
         if (cmdArgs.help) {
             jc.usage();
-            System.exit(-1);
+            System.exit(0);
         }
 
         int numRuntimes = cmdArgs.numClients;
