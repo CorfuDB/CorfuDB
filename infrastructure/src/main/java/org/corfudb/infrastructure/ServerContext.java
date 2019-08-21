@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
@@ -31,6 +32,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -86,6 +88,29 @@ public class ServerContext implements AutoCloseable {
 
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
+
+    private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
+
+    private static final KvRecord<Layout> CURR_LAYOUT_RECORD = KvRecord.of(
+            PREFIX_LAYOUT, KEY_LAYOUT, Layout.class
+    );
+
+    private static final KvRecord<Long> SERVER_EPOCH_RECORD= KvRecord.of(
+            PREFIX_EPOCH, KEY_EPOCH, Long.class
+    );
+
+    private static final KvRecord<Long> SEQUENCER_RECORD = KvRecord.of(
+            KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, Long.class
+    );
+
+    private static final KvRecord<Layout> MANAGEMENT_LAYOUT_RECORD = KvRecord.of(
+            PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, Layout.class
+    );
+
+    private static final KvRecord<Long> LOG_UNIT_WATERMARK_RECORD = KvRecord.of(
+            PREFIX_LOGUNIT, EPOCH_WATER_MARK, Long.class
+    );
+
 
     /**
      * various duration constants.
@@ -265,11 +290,11 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
-        String currentId = getDataStore().get(String.class, "", ServerContext.NODE_ID);
+        String currentId = getDataStore().get(NODE_ID_RECORD);
         if (currentId == null) {
             String idString = UuidUtils.asBase64(UUID.randomUUID());
             log.info("No Node Id, setting to new Id={}", idString);
-            getDataStore().put(String.class, "", ServerContext.NODE_ID, idString);
+            getDataStore().put(NODE_ID_RECORD, idString);
         } else {
             log.info("Node Id = {}", currentId);
         }
@@ -289,7 +314,7 @@ public class ServerContext implements AutoCloseable {
      * @return A node ID for this node, as a base64 string.
      */
     public String getNodeIdBase64() {
-        return getDataStore().get(String.class, "", ServerContext.NODE_ID);
+        return getDataStore().get(NODE_ID_RECORD);
     }
 
     /**
@@ -369,7 +394,7 @@ public class ServerContext implements AutoCloseable {
      * @return The current stored {@link Layout}
      */
     public Layout getCurrentLayout() {
-        return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+        return getDataStore().get(CURR_LAYOUT_RECORD);
     }
 
     /**
@@ -378,7 +403,7 @@ public class ServerContext implements AutoCloseable {
      * @param layout The {@link Layout} to set in the {@link DataStore}.
      */
     public void setCurrentLayout(Layout layout) {
-        getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+        getDataStore().put(CURR_LAYOUT_RECORD, layout);
     }
 
     /**
@@ -394,7 +419,7 @@ public class ServerContext implements AutoCloseable {
      * The epoch of this router. This is managed by the base server implementation.
      */
     public synchronized long getServerEpoch() {
-        Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        Long epoch = dataStore.get(SERVER_EPOCH_RECORD);
         return epoch == null ? 0 : epoch;
     }
 
@@ -404,9 +429,9 @@ public class ServerContext implements AutoCloseable {
      * @param serverEpoch the epoch to set
      */
     public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
-        Long lastEpoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        Long lastEpoch = dataStore.get(SERVER_EPOCH_RECORD);
         if (lastEpoch == null || lastEpoch < serverEpoch) {
-            dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
+            dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
             r.setServerEpoch(serverEpoch);
             getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
         } else if (serverEpoch == lastEpoch) {
@@ -418,7 +443,10 @@ public class ServerContext implements AutoCloseable {
     }
 
     public void setLayoutInHistory(Layout layout) {
-        dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
+        KvRecord<Layout> currLayoutRecord = KvRecord.of(
+                PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), Layout.class
+        );
+        dataStore.put(currLayoutRecord, layout);
     }
 
     /**
@@ -428,7 +456,7 @@ public class ServerContext implements AutoCloseable {
      * @param sequencerEpoch Epoch to persist.
      */
     public void setSequencerEpoch(long sequencerEpoch) {
-        dataStore.put(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, sequencerEpoch);
+        dataStore.put(SEQUENCER_RECORD, sequencerEpoch);
     }
 
     /**
@@ -437,7 +465,7 @@ public class ServerContext implements AutoCloseable {
      * @return Sequencer epoch.
      */
     public long getSequencerEpoch() {
-        Long epoch = dataStore.get(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH);
+        Long epoch = dataStore.get(SEQUENCER_RECORD);
         return epoch == null ? Layout.INVALID_EPOCH : epoch;
     }
 
@@ -457,7 +485,7 @@ public class ServerContext implements AutoCloseable {
 
         // Update only if new layout has a higher epoch than the existing layout.
         if (currentLayout == null || newLayout.getEpoch() > currentLayout.getEpoch()) {
-            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, newLayout);
+            dataStore.put(MANAGEMENT_LAYOUT_RECORD, newLayout);
             currentLayout = copyManagementLayout();
             log.info("Update to new layout at epoch {}", currentLayout.getEpoch());
             return currentLayout;
@@ -479,12 +507,13 @@ public class ServerContext implements AutoCloseable {
             return;
         }
 
-        dataStore.put(
-                FailureDetectorMetrics.class,
+        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
                 PREFIX_FAILURE_DETECTOR,
                 String.valueOf(getManagementLayout().getEpoch()),
-                detector
+                FailureDetectorMetrics.class
         );
+
+        dataStore.put(fdRecord, detector);
     }
 
     /**
@@ -498,17 +527,15 @@ public class ServerContext implements AutoCloseable {
             return getDefaultFailureDetectorMetric(getManagementLayout());
         }
 
-        FailureDetectorMetrics failureMetrics = dataStore.get(
-                FailureDetectorMetrics.class, PREFIX_FAILURE_DETECTOR, String.valueOf(getManagementLayout().getEpoch())
+        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
+                PREFIX_FAILURE_DETECTOR,
+                String.valueOf(getManagementLayout().getEpoch()),
+                FailureDetectorMetrics.class
         );
 
-        if (failureMetrics == null){
-            Layout layout = getManagementLayout();
-
-            return getDefaultFailureDetectorMetric(layout);
-        }
-
-        return failureMetrics;
+        return Optional
+                .ofNullable(dataStore.get(fdRecord))
+                .orElseGet(() -> getDefaultFailureDetectorMetric(getManagementLayout()));
     }
 
     /**
@@ -531,7 +558,7 @@ public class ServerContext implements AutoCloseable {
      * @return The last persisted layout
      */
     public Layout getManagementLayout() {
-        return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
+        return dataStore.get(MANAGEMENT_LAYOUT_RECORD);
     }
 
     /**
@@ -540,7 +567,7 @@ public class ServerContext implements AutoCloseable {
      * @param resetEpoch Epoch at which the reset command was received.
      */
     public synchronized void setLogUnitEpochWaterMark(long resetEpoch) {
-        dataStore.put(Long.class, PREFIX_LOGUNIT, EPOCH_WATER_MARK, resetEpoch);
+        dataStore.put(LOG_UNIT_WATERMARK_RECORD, resetEpoch);
     }
 
     /**
@@ -549,7 +576,7 @@ public class ServerContext implements AutoCloseable {
      * @return Reset epoch.
      */
     public synchronized long getLogUnitEpochWaterMark() {
-        Long resetEpoch = dataStore.get(Long.class, PREFIX_LOGUNIT, EPOCH_WATER_MARK);
+        Long resetEpoch = dataStore.get(LOG_UNIT_WATERMARK_RECORD);
         return resetEpoch == null ? Layout.INVALID_EPOCH : resetEpoch;
     }
 

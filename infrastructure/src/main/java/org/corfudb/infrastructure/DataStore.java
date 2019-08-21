@@ -47,7 +47,7 @@ import java.util.function.Consumer;
  */
 
 @Slf4j
-public class DataStore implements IDataStore {
+public class DataStore implements KvDataStore {
 
     static final String EXTENSION = ".ds";
 
@@ -162,11 +162,6 @@ public class DataStore implements IDataStore {
                 .build();
     }
 
-    @Override
-    public synchronized <T> void put(Class<T> tclass, String prefix, String key, T value) {
-        put(new KvRecord<>(prefix, key, tclass), value);
-    }
-
     private <T> T load(Class<T> tClass, String key) {
         try {
             Path path = Paths.get(logDirPath, key + EXTENSION);
@@ -195,16 +190,6 @@ public class DataStore implements IDataStore {
      */
     private enum NullValue {
         NULL_VALUE
-    }
-
-    @Override
-    public synchronized <T> T get(Class<T> tclass, String prefix, String key) {
-        return get(new KvRecord<>(prefix, key, tclass));
-    }
-
-    @Override
-    public synchronized <T> void delete(Class<T> tclass, String prefix, String key) {
-        delete(new KvRecord<>(prefix, key, tclass));
     }
 
     @Override
