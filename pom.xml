@@ -19,7 +19,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
-        <module>testclient</module>
+        <module>benchmarks</module>
     </modules>
 
 
