@@ -46,7 +46,7 @@ public class SequencerFlood {
 
         if (cmdArgs.help) {
             jc.usage();
-            System.exit(0);
+            System.exit(-1);
         }
 
         int numRuntimes = cmdArgs.numClients;
