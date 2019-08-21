@@ -3,8 +3,8 @@ package org.corfudb.infrastructure.log;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.KvDataStore;
-import org.corfudb.infrastructure.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.datastore.KvDataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.runtime.view.Address;
 
 import java.util.concurrent.atomic.AtomicLong;

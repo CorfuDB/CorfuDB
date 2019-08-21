@@ -2,8 +2,8 @@ package org.corfudb.infrastructure.paxos;
 
 import lombok.Builder;
 import lombok.NonNull;
-import org.corfudb.infrastructure.DataStore;
-import org.corfudb.infrastructure.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.Phase2Data;
 import org.corfudb.infrastructure.Rank;
 

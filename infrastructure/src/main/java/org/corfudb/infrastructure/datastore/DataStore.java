@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.datastore;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
