@@ -112,6 +112,16 @@ public class ThreadSafeStreamView implements IStreamView {
         return stream.getTotalUpdates();
     }
 
+    @Override
+    public long getCompactionMark() {
+        return stream.getCompactionMark();
+    }
+
+    @Override
+    public void setCompactionMark(long compactionMark) {
+        stream.setCompactionMark(compactionMark);
+    }
+
     @VisibleForTesting
     IStreamView getUnderlyingStream() {
         return stream;
