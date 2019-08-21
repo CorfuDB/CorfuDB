@@ -8,4 +8,8 @@ public interface Cluster extends Group {
      * Bootstrap a {@link Cluster}
      */
     void bootstrap();
+
+    enum ClusterType {
+        CORFU_CLUSTER, SUPPORT_CLUSTER
+    }
 }

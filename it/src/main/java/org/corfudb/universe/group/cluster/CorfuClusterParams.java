@@ -9,6 +9,7 @@ import lombok.NonNull;
 import lombok.ToString;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.common.util.ClassUtils;
@@ -23,27 +24,36 @@ import java.util.stream.Collectors;
 @Builder
 @EqualsAndHashCode
 @ToString
-public
-class CorfuClusterParams implements GroupParams {
+public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
+
     @Getter
     @Default
     @NonNull
     private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
+
     @Default
     @NonNull
     private final SortedSet<CorfuServerParams> nodes = new TreeSet<>();
+
     @Getter
     @Default
     @NonNull
     private NodeType nodeType = NodeType.CORFU_SERVER;
+
     @Default
     @Getter
     @NonNull
     private final int bootStrapRetries = 20;
+
     @Default
     @Getter
     @NonNull
     private final Duration retryDuration = Duration.ofSeconds(3);
+
+    @Override
+    public ClusterType getType() {
+        return ClusterType.CORFU_CLUSTER;
+    }
 
     @Override
     public ImmutableSortedSet<CorfuServerParams> getNodesParams() {
@@ -58,6 +68,7 @@ class CorfuClusterParams implements GroupParams {
         return nodesMap.get(serverName);
     }
 
+    @Override
     public synchronized CorfuClusterParams add(CorfuServerParams nodeParams) {
         nodes.add(ClassUtils.cast(nodeParams));
         return this;

@@ -13,7 +13,9 @@ import java.io.FileReader;
 import java.io.IOException;
 
 @Slf4j
-public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends UniverseParams> implements CorfuServer {
+public abstract class AbstractCorfuServer<
+        T extends CorfuServerParams,
+        U extends UniverseParams> implements CorfuServer {
 
     private static final String POM_FILE = "pom.xml";
 

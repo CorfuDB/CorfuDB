@@ -11,7 +11,6 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.universe.node.stress.Stress;
 import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
@@ -27,8 +26,10 @@ import static org.corfudb.runtime.CorfuRuntime.fromParameters;
 @Slf4j
 public class LocalCorfuClient implements CorfuClient {
     private final CorfuRuntime runtime;
+
     @Getter
     private final ClientParams params;
+
     @Getter
     private final ImmutableSortedSet<String> serverEndpoints;
 
@@ -86,11 +87,6 @@ public class LocalCorfuClient implements CorfuClient {
     @Override
     public void destroy() {
         runtime.shutdown();
-    }
-
-    @Override
-    public Stress getStress() {
-        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override

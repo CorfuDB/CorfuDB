@@ -49,7 +49,7 @@ import java.util.function.Consumer;
 @Slf4j
 public class DataStore implements KvDataStore {
 
-    static final String EXTENSION = ".ds";
+    public static final String EXTENSION = ".ds";
 
     @Getter
     private final Cache<String, Object> cache;
