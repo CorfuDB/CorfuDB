@@ -196,4 +196,16 @@ public interface IStreamView extends
      * @return total number of updates belonging to this stream.
      */
     long getTotalUpdates();
+
+    /**
+     * Get the compaction mark of this stream.
+     * @return compaction mark.
+     */
+    long getCompactionMark();
+
+    /**
+     * Set the compaction mark of this stream.
+     * @param compactionMark updated compaction mark address.  
+     */
+    void setCompactionMark(long compactionMark);
 }
