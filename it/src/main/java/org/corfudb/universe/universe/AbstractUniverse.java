@@ -8,13 +8,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.common.util.ClassUtils;
+import org.corfudb.universe.node.Node;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
-public abstract class AbstractUniverse<P extends UniverseParams> implements Universe {
+public abstract class AbstractUniverse<
+        N extends Node.NodeParams,
+        P extends UniverseParams> implements Universe {
     @Getter
     @NonNull
     protected final P universeParams;
@@ -44,7 +47,7 @@ public abstract class AbstractUniverse<P extends UniverseParams> implements Univ
                 .forEach(Group::deploy);
     }
 
-    protected abstract Group buildGroup(GroupParams groupParams);
+    protected abstract Group buildGroup(GroupParams<N> groupParams);
 
     @Override
     public ImmutableMap<String, Group> groups() {
