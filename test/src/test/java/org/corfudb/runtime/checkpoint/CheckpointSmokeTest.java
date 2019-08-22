@@ -276,9 +276,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Token snapshot = TransactionalContext
                 .getCurrentContext()
                 .getSnapshotTimestamp();
-        Token streamTail = r.getSequencerView().query(streamId).getToken();
+        long streamTail = r.getSequencerView().query(streamId);
         try {
-            cpw.startCheckpoint(snapshot, streamTail.getSequence());
+            cpw.startCheckpoint(snapshot, streamTail);
             cpw.appendObjectState(m.entrySet());
             cpw.finishCheckpoint();
 
@@ -494,8 +494,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Write cp #1 of 3
         if (write1) {
-            TokenResponse tokResp1 = r.getSequencerView().query(streamId);
-            long addr1 = tokResp1.getToken().getSequence();
+            long addr1 = r.getSequencerView().query(streamId);
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
@@ -662,11 +661,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Checkpoint Writer 2 @15
         CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
-        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), (long) snapshotAddress2 - 1);
 
         // Checkpoint Writer 1 @10
         CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
-        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), (long) snapshotAddress1 - 1);
 
         // Trim @snapshotAddress=15
         r.getAddressSpaceView().prefixTrim(cp2Token);
@@ -688,6 +687,57 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         rt2.getObjectsView().TXEnd();
 
         assertThat(mA2).hasSize(numEntries + 1);
+    }
+
+    /**
+     * Test that the checkpoint writer token is progressing despite the fact that a stream
+     * has not been updated for some time. This will guarantee that trim will continue progressing
+     * even in scenarios where some streams are not constantly updated.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCheckpointTokenProgressesForNonWrittenStreams() throws Exception {
+        final int numEntries = 5;
+
+        // Open map A
+        final String streamA = "streamA";
+        Map<String, Long> mA = instantiateMap(streamA);
+
+        // Open map B
+        final String streamB = "streamB";
+        Map<String, Long> mB = instantiateMap(streamB);
+
+        // Write numEntries Entries to mA
+        for (int i = 0; i < numEntries; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        // Write numEntries Entries to mB
+        for (int i = 0; i < numEntries; i++) {
+            mB.put(String.valueOf(i), (long) i);
+        }
+
+        // MultiCheckpointWriter when both streams have experienced updates
+        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+        mcw1.addMap(mA);
+        mcw1.addMap(mB);
+        Token minSnapshot1 = mcw1.appendCheckpoints(r, "test-author");
+
+        // Let mA not perceive any updates and only update mB
+        // Write numEntries Entries to mB
+        for (int i = numEntries; i < numEntries*2; i++) {
+            mB.put(String.valueOf(i), (long) i);
+        }
+
+        // MultiCheckpointWriter when one stream has progressed and the other
+        // has no new updates after last checkpoint.
+        MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+        mcw2.addMap(mA);
+        mcw2.addMap(mB);
+        Token minSnapshot2 = mcw2.appendCheckpoints(r, "test-author");
+
+        assertThat(minSnapshot2).isGreaterThan(minSnapshot1);
     }
 }
 

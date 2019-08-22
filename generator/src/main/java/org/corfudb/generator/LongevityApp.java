@@ -29,15 +29,15 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class LongevityApp {
-    private long durationMs;
-    private boolean checkPoint;
-    BlockingQueue<Operation> operationQueue;
-    CorfuRuntime rt;
-    State state;
+    private final long durationMs;
+    private final boolean checkPoint;
+    final BlockingQueue<Operation> operationQueue;
+    final CorfuRuntime rt;
+    final State state;
 
-    ExecutorService taskProducer;
-    ScheduledExecutorService checkpointer;
-    ExecutorService workers;
+    final ExecutorService taskProducer;
+    final ScheduledExecutorService checkpointer;
+    final ExecutorService workers;
 
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
@@ -47,7 +47,7 @@ public class LongevityApp {
     static final int QUEUE_CAPACITY = 1000;
 
     long startTime;
-    int numberThreads;
+    final int numberThreads;
 
 
     public LongevityApp(long durationMs, int numberThreads, String configurationString, boolean checkPoint) {

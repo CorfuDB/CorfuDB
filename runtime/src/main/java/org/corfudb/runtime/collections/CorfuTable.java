@@ -224,7 +224,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
     // The "main" map which contains the primary key-value mappings.
     private final Map<K,V> mainMap;
-    private Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
+    private final Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
 
     /**

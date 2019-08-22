@@ -40,6 +40,12 @@
             <version>${logback.classic.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.fusesource.jansi</groupId>
+            <artifactId>jansi</artifactId>
+            <version>1.14</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

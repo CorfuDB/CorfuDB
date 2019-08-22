@@ -30,7 +30,7 @@ import java.util.NoSuchElementException;
  * DNS-related scenarios.
  */
 public class FakeDns {
-    private static FakeDns instance = new FakeDns();
+    private static final FakeDns instance = new FakeDns();
 
     private final Map<String, InetAddress> forwardResolutions = new HashMap<>();
 
