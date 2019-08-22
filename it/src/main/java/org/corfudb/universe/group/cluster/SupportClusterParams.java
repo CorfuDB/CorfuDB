@@ -9,16 +9,19 @@ import lombok.NonNull;
 import lombok.ToString;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.node.server.SupportServerParams;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
 @Builder
 @EqualsAndHashCode
 @ToString
-public class SupportClusterParams implements Group.GroupParams<SupportServerParams> {
+public class SupportClusterParams implements GroupParams<SupportServerParams> {
 
     @Getter
     @Default
@@ -40,7 +43,7 @@ public class SupportClusterParams implements Group.GroupParams<SupportServerPara
     }
 
     @Override
-    public Group.GroupParams<SupportServerParams> add(SupportServerParams nodeParams) {
+    public GroupParams<SupportServerParams> add(SupportServerParams nodeParams) {
         nodes.add(nodeParams);
         return this;
     }
