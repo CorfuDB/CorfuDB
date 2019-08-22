@@ -39,7 +39,8 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
     @Test(timeout = 300000)
     public void allNodesPartitionedTest() {
         getScenario().describe((fixture, testCase) -> {
-            CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
+            CorfuCluster<CorfuServer, CorfuClusterParams> corfuCluster =
+                    universe.getGroup(fixture.getCorfuCluster().getName());
             CorfuClusterParams corfuClusterParams = corfuCluster.getParams();
 
             assertThat(corfuCluster.nodes().size()).isEqualTo(3);
