@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster;
-import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.docker.DockerCorfuCluster;
 import org.corfudb.universe.group.cluster.docker.DockerSupportCluster;
 import org.corfudb.universe.logging.LoggingParams;
@@ -118,7 +117,7 @@ public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniversePa
 
                 return DockerSupportCluster.builder()
                         .universeParams(universeParams)
-                        .monitoringParams(ClassUtils.cast(groupParams))
+                        .supportParams(ClassUtils.cast(groupParams))
                         .loggingParams(loggingParams)
                         .docker(docker)
                         .build();

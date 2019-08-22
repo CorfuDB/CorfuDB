@@ -22,7 +22,7 @@ import static org.corfudb.universe.node.Node.NodeParams;
  * STOP: stops a {@link Group} gracefully within the provided timeout
  * KILL: kills a {@link Group} immediately
  */
-public interface Group {
+public interface Group<T extends Node, G extends Group.GroupParams> {
 
     /**
      * Deploy the {@link Group} into the {@link Universe}.
@@ -59,16 +59,14 @@ public interface Group {
      *
      * @return a Group parameters
      */
-    <T extends GroupParams> T getParams();
+    G getParams();
 
     /**
      * Provide the nodes that the {@link Group} is composed of.
      *
      * @return an {@link ImmutableList} of {@link Node}s.
      */
-    <T extends Node> ImmutableSortedMap<String, T> nodes();
-
-    <T extends Node> T getNode(String nodeName);
+    ImmutableSortedMap<String, T> nodes();
 
     interface GroupParams<T extends NodeParams> {
         String getName();

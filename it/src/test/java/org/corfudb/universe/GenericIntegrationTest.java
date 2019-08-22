@@ -1,5 +1,6 @@
 package org.corfudb.universe;
 
+import com.google.common.collect.ImmutableSet;
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import org.corfudb.universe.logging.LoggingParams;
@@ -16,6 +17,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestName;
+
+import java.util.Set;
 
 public abstract class GenericIntegrationTest {
     private static final UniverseFactory UNIVERSE_FACTORY = UniverseFactory.getInstance();
@@ -71,9 +74,10 @@ public abstract class GenericIntegrationTest {
         return Scenario.with(universeFixture);
     }
 
-    public Scenario getDockerScenario(int numNodes) {
+    public Scenario getDockerScenario(int numNodes, Set<Integer> metricsPorts) {
         UniverseFixture universeFixture = new UniverseFixture();
         universeFixture.setNumNodes(numNodes);
+        universeFixture.setMetricsPorts(metricsPorts);
 
         //Assign universe variable before deploy prevents resources leaks
         universe = UNIVERSE_FACTORY.buildDockerUniverse(universeFixture.data(), docker, getDockerLoggingParams());
@@ -84,13 +88,18 @@ public abstract class GenericIntegrationTest {
 
     public Scenario<UniverseParams, AbstractUniverseFixture<UniverseParams>> getScenario() {
         final int defaultNumNodes = 3;
-        return getScenario(defaultNumNodes);
+        return getScenario(defaultNumNodes, ImmutableSet.of());
     }
 
     public Scenario<UniverseParams, AbstractUniverseFixture<UniverseParams>> getScenario(int numNodes) {
+        return getScenario(numNodes, ImmutableSet.of());
+    }
+
+    public Scenario<UniverseParams, AbstractUniverseFixture<UniverseParams>>getScenario(
+            int numNodes, Set<Integer> metricsPorts) {
         switch (universeMode) {
             case DOCKER:
-                return getDockerScenario(numNodes);
+                return getDockerScenario(numNodes, metricsPorts);
             case VM:
                 return getVmScenario(numNodes);
             case PROCESS:
