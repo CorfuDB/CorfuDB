@@ -56,7 +56,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
                     && cp.getSmrEntries().getUpdates().size() > 0) {
                 cp.getSmrEntries().getUpdates().forEach(e -> {
                     e.setRuntime(runtime);
-                    e.setEntry(logData);
+                    e.setGlobalAddress(logData.getGlobalAddress());
                 });
                 return cp.getSmrEntries().getUpdates();
             } else {

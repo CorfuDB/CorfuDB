@@ -89,8 +89,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private final StreamLogDataStore dataStore;
 
     private ConcurrentMap<String, SegmentHandle> writeChannels;
-    private Set<FileChannel> channelsToSync;
-    private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
+    private final Set<FileChannel> channelsToSync;
+    private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
 
     //=================Log Metadata=================
     // TODO(Maithem) this should effectively be final, but it is used

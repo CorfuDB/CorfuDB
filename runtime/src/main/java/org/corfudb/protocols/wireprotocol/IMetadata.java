@@ -47,7 +47,7 @@ public interface IMetadata {
      */
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams() {
-        return (Set<UUID>) ((Map<UUID, Long>)getMetadataMap().getOrDefault(
+        return ((Map<UUID, Long>) getMetadataMap().getOrDefault(
                 LogUnitMetadataType.BACKPOINTER_MAP, Collections.emptyMap())).keySet();
     }
 
@@ -131,12 +131,8 @@ public interface IMetadata {
      */
     @SuppressWarnings("unchecked")
     default Long getGlobalAddress() {
-        if (getMetadataMap() == null
-                || getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS) == null) {
-            return -1L;
-        }
         return Optional.ofNullable((Long) getMetadataMap()
-                .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
+                .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse(Address.NON_ADDRESS);
     }
 
     /**
