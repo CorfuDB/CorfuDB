@@ -16,6 +16,7 @@ import org.corfudb.universe.node.server.CorfuServer.Persistence;
 import org.slf4j.event.Level;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,12 +32,7 @@ public class SupportServerParams implements NodeParams {
     @Default
     @NonNull
     @Getter
-    private final Mode mode = Mode.CLUSTER;
-
-    @Default
-    @NonNull
-    @Getter
-    private final Persistence persistence = Persistence.DISK;
+    private final Set<Integer> metricPorts = new HashSet<>();
 
     @Default
     @NonNull

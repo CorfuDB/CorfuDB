@@ -28,15 +28,14 @@ public class DockerSupportCluster extends AbstractSupportCluster {
     private final DockerManager dockerManager;
 
     @Builder
-    public DockerSupportCluster(DockerClient docker, SupportClusterParams monitoringParams,
+    public DockerSupportCluster(DockerClient docker, SupportClusterParams supportParams,
                                 UniverseParams universeParams,
                                 LoggingParams loggingParams) {
-        super(universeParams, monitoringParams);
+        super(universeParams, supportParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
         this.dockerManager = DockerManager.builder().docker(docker).build();
     }
-
 
     @Override
     public void bootstrap() {

@@ -23,6 +23,8 @@ import org.corfudb.universe.util.DockerManager;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +32,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
+
     @NonNull
     private final DockerClient docker;
     @NonNull
@@ -62,7 +65,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
 
     @Override
     protected ImmutableSortedSet<String> getClusterLayoutServers() {
-        List<String> servers = nodes
+        List<String> servers = nodes()
                 .values()
                 .stream()
                 .map(CorfuServer::getEndpoint)

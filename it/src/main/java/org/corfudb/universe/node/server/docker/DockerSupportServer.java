@@ -13,24 +13,29 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.lang.StringUtils;
 import org.corfudb.universe.group.cluster.SupportClusterParams;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.SupportServer;
+import org.corfudb.universe.node.server.SupportServerParams;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.util.DockerManager;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Log4j
-public class DockerSupportServer<N extends Node.NodeParams> implements SupportServer {
+public class DockerSupportServer<N extends SupportServerParams> implements SupportServer {
     private static final String ALL_NETWORK_INTERFACES = "0.0.0.0";
+    private static final String PROMETHEUS_CONFIG_PATH = "/etc/prometheus/prometheus.yml";
     private static final Map<NodeType, String> IMAGE_NAME = ImmutableMap.<NodeType, String>builder()
             .put(NodeType.METRICS_SERVER, "prom/prometheus")
             .put(NodeType.SHELL_NODE, "ubuntu")
@@ -57,19 +62,19 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
     private final SupportClusterParams clusterParams;
 
     @NonNull
-    private final AtomicReference<String> ipAddress = new AtomicReference<>();
+    private final List<File> openedFiles = new ArrayList<>();
 
     @NonNull
-    private final String prometheusConfigPath;
+    private final AtomicReference<String> ipAddress = new AtomicReference<>();
+
 
     @Builder
     public DockerSupportServer(DockerClient docker, DockerManager dockerManager,
-                               N params, String prometheusConfigPath,
-                               SupportClusterParams clusterParams, UniverseParams universeParams) {
+                               N params, SupportClusterParams clusterParams,
+                               UniverseParams universeParams) {
         this.docker = docker;
         this.dockerManager = dockerManager;
         this.params = params;
-        this.prometheusConfigPath = prometheusConfigPath;
         this.clusterParams = clusterParams;
         this.universeParams = universeParams;
     }
@@ -92,8 +97,8 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
         }
 
         HostConfig.Bind configurationFile =  HostConfig.Bind.builder()
-                .from("/home/nsx/prometheus.yml")
-                .to("/etc/prometheus/prometheus.yml").build();
+                .from(createConfiguration(params.getMetricPorts()))
+                .to(PROMETHEUS_CONFIG_PATH).build();
         HostConfig hostConfig = HostConfig.builder()
                 .privileged(true)
                 .binds(configurationFile)
@@ -105,11 +110,23 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
                 .exposedPorts(ports.stream().toArray(String[]::new))
                 .image(IMAGE_NAME.get(getParams().getNodeType()));
 
-        if (CMD.containsKey(getParams().getNodeType())) {
-            builder.cmd(CMD.get(getParams().getNodeType()));
-        }
-
         return builder.build();
+    }
+
+    private String createConfiguration(Set<Integer> metricsPorts) {
+        try {
+            final String corfuRuntimeIp =
+                    docker.inspectNetwork(universeParams.getNetworkName())
+                            .ipam().config().stream().findFirst().get().gateway();
+            File tempConfiguration = File.createTempFile("prometheus", ".yml");
+            BufferedWriter writer = new BufferedWriter(new FileWriter(tempConfiguration));
+            writer.write(PromethousConfig.getConfig(corfuRuntimeIp, metricsPorts));
+            writer.flush();
+            openedFiles.add(tempConfiguration);
+            return tempConfiguration.getAbsolutePath();
+        } catch (Exception e) {
+            throw new NodeException(e);
+        }
     }
 
     private String deployContainer() {
@@ -117,8 +134,7 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
 
         String id;
         try {
-            ContainerCreation container = docker.createContainer(containerConfig,
-                    params.getName());
+            ContainerCreation container = docker.createContainer(containerConfig, params.getName());
             id = container.id();
 
             dockerManager.addShutdownHook(clusterParams.getName());
@@ -154,6 +170,7 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
     @Override
     public void stop(Duration timeout) {
         dockerManager.stop(params.getName(), timeout);
+        openedFiles.forEach(File::delete);
     }
 
     /**
@@ -164,6 +181,7 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
     @Override
     public void kill() {
         dockerManager.kill(params.getName());
+        openedFiles.forEach(File::delete);
     }
 
     /**
@@ -174,6 +192,7 @@ public class DockerSupportServer<N extends Node.NodeParams> implements SupportSe
     @Override
     public void destroy() {
         dockerManager.destroy(params.getName());
+        openedFiles.forEach(File::delete);
     }
 
 }

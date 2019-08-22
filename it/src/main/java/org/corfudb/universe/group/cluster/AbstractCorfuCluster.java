@@ -1,5 +1,6 @@
 package org.corfudb.universe.group.cluster;
 
+import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
@@ -11,14 +12,20 @@ import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 @Slf4j
 public abstract class AbstractCorfuCluster<U extends UniverseParams> extends AbstractCluster<
+        CorfuServer,
         CorfuServerParams,
         CorfuClusterParams,
-        U> implements CorfuCluster {
+        U> implements CorfuCluster<CorfuServer, CorfuClusterParams> {
+
+    private final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
 
     public AbstractCorfuCluster(CorfuClusterParams params, U universeParams) {
         super(params, universeParams);
@@ -64,9 +71,24 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams> extends Abs
     public LocalCorfuClient getLocalCorfuClient() {
         return LocalCorfuClient.builder()
                 .serverEndpoints(getClusterLayoutServers())
+                .metricsPort(Optional.empty())
+                .build()
+                .deploy();
+    }
+
+    @Override
+    public LocalCorfuClient getLocalCorfuClient(int metricsPort) {
+        return LocalCorfuClient.builder()
+                .metricsPort(Optional.of(metricsPort))
+                .serverEndpoints(getClusterLayoutServers())
                 .build()
                 .deploy();
     }
 
     protected abstract ImmutableSortedSet<String> getClusterLayoutServers();
+
+    @Override
+    public ImmutableSortedMap<String, CorfuServer> nodes() {
+        return ImmutableSortedMap.copyOf(nodes);
+    }
 }

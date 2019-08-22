@@ -1,7 +1,5 @@
 package org.corfudb.universe.group.cluster;
 
-import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -9,29 +7,22 @@ import org.corfudb.universe.group.Group;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.NodeException;
-import org.corfudb.universe.node.client.LocalCorfuClient;
-import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.common.util.ClassUtils;
 
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static lombok.Builder.Default;
 
 @Slf4j
 public abstract class AbstractCluster<
+        T extends Node,
         N extends NodeParams,
         P extends Group.GroupParams<N>,
-        U extends UniverseParams> implements Cluster {
-
-    @Default
-    protected final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
+        U extends UniverseParams> implements Cluster<T, P> {
 
     @Getter
     @NonNull
@@ -63,7 +54,7 @@ public abstract class AbstractCluster<
     public void stop(Duration timeout) {
         log.info("Stop corfu cluster: {}", params.getName());
 
-        nodes.values().forEach(node -> {
+        nodes().values().forEach(node -> {
             try {
                 node.stop(timeout);
             } catch (Exception e) {
@@ -77,7 +68,7 @@ public abstract class AbstractCluster<
      */
     @Override
     public void kill() {
-        nodes.values().forEach(node -> {
+        nodes().values().forEach(node -> {
             try {
                 node.kill();
             } catch (Exception e) {
@@ -90,7 +81,7 @@ public abstract class AbstractCluster<
     public void destroy() {
         log.info("Destroy group: {}", params.getName());
 
-        nodes.values().forEach(node -> {
+        nodes().values().forEach(node -> {
             try {
                 node.destroy();
             } catch (NodeException e) {
@@ -105,25 +96,5 @@ public abstract class AbstractCluster<
         params.add(corfuServerParams);
 
         return deployAsync(buildServer(corfuServerParams)).join();
-    }
-
-    @Override
-    public <T extends Node> T getNode(String nodeNameSuffix) {
-        String fullNodeName = params.getFullNodeName(nodeNameSuffix);
-        Optional<Node> node = Optional.ofNullable(nodes.get(fullNodeName));
-
-        if (!node.isPresent()) {
-            throw new NodeException(String.format(
-                    "Node not found. Node name: %s, cluster: %s, cluster nodes: %s",
-                    fullNodeName, params.getName(), nodes.keySet())
-            );
-        }
-
-        return ClassUtils.cast(node.get());
-    }
-
-    @Override
-    public <T extends Node> ImmutableSortedMap<String, T> nodes() {
-        return ClassUtils.cast(ImmutableSortedMap.copyOf(nodes));
     }
 }
