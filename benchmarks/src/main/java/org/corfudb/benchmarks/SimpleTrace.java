@@ -11,7 +11,7 @@ public class SimpleTrace {
     long start; //the current operation start time in nanoseconds
 
     SimpleTrace(String name) {
-        name = name;
+        this.name = name;
         total = 0;
         cnt = 0;
         start = System.nanoTime();
@@ -41,7 +41,7 @@ public class SimpleTrace {
             log.warn("{} reset cnt {} total {} ms  average {} micros", name, cnt, total/1000, total/(1.0*cnt));
     }
 
-    static void log(SimpleTrace[] traces, String s) {
+    static void log(SimpleTrace[] traces, String name) {
         long totalElapse = 0;
         long totalCnt = 0;
         for (int i = 0; i < traces.length; i++) {
@@ -49,6 +49,6 @@ public class SimpleTrace {
             totalCnt += traces[i].cnt;
         }
         log.info ("{} aggregate cnt {} total {} ms  average {} micros",
-                s, totalCnt, totalElapse/1000, totalElapse/(1.0*totalCnt));
+                name, totalCnt, totalElapse/1000, totalElapse/(1.0*totalCnt));
     }
 }
