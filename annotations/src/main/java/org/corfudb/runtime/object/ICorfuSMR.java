@@ -76,4 +76,15 @@ public interface ICorfuSMR<T>
     @DontInstrument
     default void closeWrapper() {
     }
+
+    /**
+     * Get a map from strings (function names) to garbage identification
+     * methods.
+     *
+     * @return The garbage identification map.
+     */
+    default Map<String, IGarbageIdentificationFunction>
+        getCorfuGarbageIdentificationMap() {
+        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
+    }
 }

@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
@@ -24,10 +25,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 //TODO Discard TransactionStream for building maps but not for constructing tails
 
@@ -107,6 +110,11 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     private final Map<String, IUndoFunction<T>> undoFunctionMap;
 
     /**
+     * The garbage identification function map for this object.
+     */
+    private final Map<String, IGarbageIdentificationFunction> garbageIdentifyFunctionMap;
+
+    /**
      * The reset set for this object.
      */
     private final Set<String> resetSet;
@@ -120,6 +128,11 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * Correctness Logging
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
+
+    /**
+     * The largest address that the stream is synced to.
+     */
+    private long syncTail = Address.NON_ADDRESS;
 
     /**
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
@@ -137,6 +150,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.undoRecordFunctionMap = wrapperObject.getCorfuUndoRecordMap();
         this.undoFunctionMap = wrapperObject.getCorfuUndoMap();
         this.resetSet = wrapperObject.getCorfuResetSet();
+        this.garbageIdentifyFunctionMap = wrapperObject.getCorfuGarbageIdentificationMap();
 
         wrapperObject.closeWrapper();
         this.newObjectFn = newObjectFn;
@@ -470,6 +484,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         object = newObjectFn.get();
         smrStream.reset();
         optimisticStream = null;
+        syncTail = Address.NON_ADDRESS;
     }
 
     /**
@@ -677,25 +692,64 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
-        stream.streamUpTo(syncTo)
-                .forEachOrdered(entry -> {
+
+        Stream<SMRRecord> smrRecordStream = stream.streamUpTo(syncTo);
+        applyUpdateStreamUnsafe(smrRecordStream, timestamp);
+    }
+
+    private void applyUpdateStreamUnsafe(Stream<SMRRecord> smrRecordStream, long timestamp) {
+        // AtomicLong is used as a container to bypass the restriction of lambda expression
+        final AtomicLong lastSyncAddress = new AtomicLong(Address.NON_ADDRESS);
+        boolean isOptimistic = timestamp == Address.OPTIMISTIC;
+
+        smrRecordStream
+                .forEachOrdered(record -> {
                     try {
-                        Object res = applyUpdateUnsafe(entry, timestamp);
-                        if (timestamp == Address.OPTIMISTIC) {
-                            entry.setUpcallResult(res);
-                        } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
-                            log.debug("Sync[{}] Upcall Result {}",
-                                    this, entry.getGlobalAddress());
-                            upcallResults.put(entry.getGlobalAddress(), res == null
-                                    ? NullValue.NULL_VALUE : res);
-                            pendingUpcalls.remove(entry.getGlobalAddress());
+                        Object res = applyUpdateUnsafe(record, timestamp);
+                        if (isOptimistic) {
+                            record.setUpcallResult(res);
+                        } else { // materialized log
+                            if (pendingUpcalls.contains(record.getGlobalAddress())) {
+                                log.debug("Sync[{}] Upcall Result {}",
+                                        this, record.getGlobalAddress());
+                                upcallResults.put(record.getGlobalAddress(), res == null
+                                        ? NullValue.NULL_VALUE : res);
+                                pendingUpcalls.remove(record.getGlobalAddress());
+                            }
+
+                            // Record with global address larger than lastSyncAddress indicates that all SMRRecords
+                            // from last global address has been applied. Therefore, syncTail could be updated.
+                            if (lastSyncAddress.get() != Address.NON_ADDRESS &&
+                                    record.getGlobalAddress() > lastSyncAddress.get()) {
+                                syncTail = Math.max(syncTail, lastSyncAddress.get());
+                            }
+
+                            // to check whether the SMRRecord is first encountered by VLO
+                            if (record.getGlobalAddress() > syncTail) {
+                                IGarbageIdentificationFunction garbageIdentifyFunction =
+                                        garbageIdentifyFunctionMap.get(record.getSMRMethod());
+                                if (garbageIdentifyFunction != null) {
+                                    List<Object> garbage =
+                                            garbageIdentifyFunction.identify(record.locator, record.getSMRArguments());
+                                    // TODO(xin): handle garbage
+                                }
+
+                                lastSyncAddress.set(record.getGlobalAddress());
+                            }
                         }
-                        entry.setUpcallResult(res);
+
+                        record.setUpcallResult(res);
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
                         throw new UnrecoverableCorfuError(e);
                     }
                 });
+
+
+        // update syncTail after applying all SMRRecords. 
+        if (!isOptimistic) {
+            syncTail = Math.max(syncTail, lastSyncAddress.get());
+        }
     }
 
     /**
@@ -717,10 +771,10 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /** Apply an SMRRecord to the version object, while
      * doing bookkeeping for the underlying stream.
      *
-     * @param record smr record
+     * @param updates smr records
      */
-    public void applyUpdateToStreamUnsafe(SMRRecord record, long globalAddress) {
-        applyUpdateUnsafe(record, globalAddress);
+    public void applyUpdatesToStreamUnsafe(List<SMRRecord> updates, long globalAddress) {
+        applyUpdateStreamUnsafe(updates.stream(), globalAddress);
         seek(globalAddress + 1);
     }
 
