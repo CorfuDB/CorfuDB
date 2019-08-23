@@ -1,6 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
@@ -37,7 +36,6 @@ import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.TransactionalMethod;
-import org.corfudb.util.ImmuableListSetWrapper;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -223,39 +221,58 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     }
 
     // The "main" map which contains the primary key-value mappings.
-    private final Map<K,V> mainMap;
+    private final StreamingMap<K,V> mainMap;
     private final Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
 
     /**
-     * Generate a table with a given implementation for the mainMap
+     * Generate a table with a given implementation for the {@link StreamingMap}.
      */
-    public CorfuTable(IndexRegistry<K, V> indices, Map<K, V> mapImpl) {
+    public CorfuTable(IndexRegistry<K, V> indices, StreamingMap<K, V> streamingMap) {
         indices.forEach(index -> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
             indexSpec.add(index);
         });
         log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
                 secondaryIndexes.keySet());
-        mainMap = mapImpl;
+        mainMap = streamingMap;
+    }
+
+    /**
+     * Generate a table with a given implementation for the {@link Map}.
+     */
+    public CorfuTable(IndexRegistry<K, V> indices, Map<K, V> mapImpl) {
+        this(indices, new StreamingMapDecorator<>(mapImpl));
     }
 
     /**
      * Generate a table with the given set of indexes.
      */
     public CorfuTable(IndexRegistry<K, V> indices) {
-        this(indices, new HashMap<>());
+        this(indices, new StreamingMapDecorator<>(new HashMap<>()));
+    }
+
+    /**
+     * Generates a table with the given {@link Map} implementation and
+     * without any secondary indexes.
+     */
+    public CorfuTable(Map<K, V> mapImpl) {
+        this(IndexRegistry.empty(), mapImpl);
+    }
+
+    /**
+     * Generates a table with the given {@link StreamingMap} implementation
+     * and without any secondary indexes.
+     */
+    public CorfuTable(StreamingMap<K, V> streamingMap) {
+        this(IndexRegistry.empty(), streamingMap);
     }
 
     /**
      * Default constructor. Generates a table without any secondary indexes.
      */
     public CorfuTable() {
-        this(IndexRegistry.empty(), new HashMap<>());
-    }
-
-    public CorfuTable(Map<K, V> underlying) {
-        this(IndexRegistry.empty(), underlying);
+        this(IndexRegistry.empty(), new StreamingMapDecorator<>(new HashMap<>()));
     }
 
     /** {@inheritDoc} */
@@ -457,24 +474,24 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * This method has a memory/CPU advantage over the map iterators as no deep copy
      * is actually performed.
      *
-     * @param p java predicate (function to evaluate)
+     * @param valuePredicate java predicate (function to evaluate)
      * @return a view of the values contained in this map meeting the predicate condition.
      */
     @Accessor
-    public List<V> scanAndFilter(Predicate<? super V> p) {
-        return mainMap.values().parallelStream()
-                                    .filter(p)
-                                    .collect(Collectors.toCollection(ArrayList::new));
+    public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
+        return mainMap.entryStream()
+                .map(Entry::getValue).filter(valuePredicate)
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** {@inheritDoc} */
     @Override
     @Accessor
-    public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>>
-                                                                    entryPredicate) {
-        return mainMap.entrySet().parallelStream()
-                                    .filter(entryPredicate)
-                                    .collect(Collectors.toCollection(ArrayList::new));
+    public Collection<Map.Entry<K, V>> scanAndFilterByEntry(
+            Predicate<? super Map.Entry<K, V>> entryPredicate) {
+        return mainMap.entryStream()
+                .filter(entryPredicate)
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** {@inheritDoc} */
@@ -549,14 +566,16 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @Accessor
     public @Nonnull Set<K> keySet() {
-        return ImmutableSet.copyOf(mainMap.keySet());
+        return mainMap.entryStream().map(Entry::getKey)
+                .collect(ImmutableSet.toImmutableSet());
     }
 
     /** {@inheritDoc} */
     @Override
     @Accessor
     public @Nonnull Collection<V> values() {
-        return ImmutableList.copyOf(mainMap.values());
+        return mainMap.entryStream().map(Entry::getValue)
+                .collect(ImmutableSet.toImmutableSet());
     }
 
     /**
@@ -566,13 +585,16 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @Accessor
     public @Nonnull Set<Entry<K, V>> entrySet() {
-        List<Entry<K, V>> copy = new ArrayList<>(mainMap.size());
-        for (Map.Entry<K, V> entry : mainMap.entrySet()) {
-            copy.add(new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-                    entry.getValue()));
-        }
-        return new ImmuableListSetWrapper<>(copy);
+        return mainMap.entryStream().map(entry ->
+                new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue()))
+                .collect(ImmutableSet.toImmutableSet());
     }
+
+    @Accessor
+    public @Nonnull Stream<Entry<K, V>> entryStream() {
+        return mainMap.entryStream();
+    }
+
 
     /** {@inheritDoc} */
     @Override
