@@ -34,15 +34,14 @@ public class CorfuCompileWrapperBuilder {
     public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
                                    UUID streamID, Object[] args,
                                    ISerializer serializer)
-            throws ClassNotFoundException, IllegalAccessException,
-            InstantiationException, InvocationTargetException {
+            throws Exception {
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
 
         // Instantiate a new instance of this class.
         ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
-                            findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
+                findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.

@@ -451,11 +451,22 @@ public class VersionLockedObject<T> {
         return optimisticStream != null && optimisticStream.pos() != Address.NEVER_READ;
     }
 
+    private void closeObject() {
+        if (object instanceof AutoCloseable) {
+            try {
+                ((AutoCloseable) object).close();
+            } catch (Exception ex) {
+                throw new UnrecoverableCorfuError(ex);
+            }
+        }
+    }
+
     /**
      * Reset this object to the uninitialized state.
      */
     public void resetUnsafe() {
         log.debug("Reset[{}]", this);
+        closeObject();
         object = newObjectFn.get();
         smrStream.reset();
         optimisticStream = null;
@@ -556,6 +567,7 @@ public class VersionLockedObject<T> {
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
                 entry.setUndoRecord(object);
+                closeObject();
                 object = newObjectFn.get();
                 log.trace("Apply[{}] Undo->RESET", this);
             }

@@ -12,6 +12,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
@@ -67,7 +68,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @Nonnull final V valueSchema,
                  @Nullable final M metadataSchema,
                  @Nonnull final CorfuRuntime corfuRuntime,
-                 @Nonnull final ISerializer serializer) {
+                 @Nonnull final ISerializer serializer,
+                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier) {
 
         this.corfuRuntime = corfuRuntime;
         this.namespace = namespace;
@@ -83,7 +85,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(valueSchema))
+                .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier)
                 .open();
     }
 
