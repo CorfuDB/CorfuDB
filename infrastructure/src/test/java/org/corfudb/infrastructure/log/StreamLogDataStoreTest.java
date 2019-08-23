@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.log;
 import static org.junit.Assert.*;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
