@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
-import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -23,6 +22,7 @@ import org.corfudb.runtime.exceptions.FastObjectLoaderException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.CFUtils;
@@ -47,7 +47,6 @@ import java.util.function.BiConsumer;
 import static org.corfudb.recovery.RecoveryUtils.createObjectIfNotExist;
 import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
 import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
-import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
 
 /** The FastObjectLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -295,10 +294,9 @@ public class FastObjectLoader {
      *   2. In blacklist mode, if the stream is in the blacklist (streamToIgnore)
      *
      * @param streamId identifies the Corfu stream
-     * @param record record to potentially apply
      * @return if we need to apply the entry.
      */
-    private boolean shouldRecordBeApplied(UUID streamId, SMRRecord record) {
+    private boolean shouldEntryBeApplied(UUID streamId) {
         // 1.
         // In white list mode, ignore everything that is not in the list (the list contains the streams
         // passed by the client + derived checkpoint streams).
@@ -344,44 +342,38 @@ public class FastObjectLoader {
         return shouldProcess;
     }
 
-
     /**
      * Update the corfu object and it's underlying stream with the new entry.
      *
-     * @param streamId          identifies the Corfu stream
-     * @param record            record to apply
-     * @param globalAddress     global address of the entry
+     * @param logEntry          logEntry from which to apply update.
+     * @param globalAddress     global address of the entry.
      */
-    private void applySmrEntryToStream(UUID streamId, SMRRecord record,
-                                       long globalAddress) {
-        if (shouldRecordBeApplied(streamId, record)) {
-
-            // Get the serializer type from the entry
-            ISerializer serializer = Serializers.getSerializer(record.getSerializerType().getType());
-
-            // Get the type of the object we want to recreate
-            Class objectType = getStreamType(streamId);
-
-            // Create an Object only for non-checkpoints
-
-            // If it is a special type, create it with the object builder
-            if (customTypeStreams.containsKey(streamId)) {
-                createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
-            }
-            else {
-                createObjectIfNotExist(runtime, streamId, serializer, objectType);
-            }
-            CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);
-            cp.getUnderlyingObject().applyUpdateToStreamUnsafe(record, globalAddress);
-        }
-    }
-
     private void updateCorfuObjectWithSMRLogEntry(LogEntry logEntry, long globalAddress) {
         SMRLogEntry multiObjectLogEntry = (SMRLogEntry) logEntry;
         multiObjectLogEntry.getEntryMap().forEach((streamId, smrRecords) -> {
-            smrRecords.forEach((smrEntry) -> {
-                applySmrEntryToStream(streamId, smrEntry, globalAddress);
-            });
+            if (shouldEntryBeApplied(streamId) && !smrRecords.isEmpty()) {
+
+                // Get the serializer type from the entry
+                ISerializer serializer = Serializers.getSerializer(smrRecords.get(0).getSerializerType().getType());
+
+                // Get the type of the object we want to recreate
+                Class objectType = getStreamType(streamId);
+
+                // Create an Object only for non-checkpoints
+
+                // If it is a special type, create it with the object builder
+                if (customTypeStreams.containsKey(streamId)) {
+                    createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
+                }
+                else {
+                    createObjectIfNotExist(runtime, streamId, serializer, objectType);
+                }
+
+                ISMRStream.addLocatorToSMRRecords(smrRecords, logEntry.getGlobalAddress(), streamId);
+
+                CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);
+                cp.getUnderlyingObject().applyUpdatesToStreamUnsafe(smrRecords, globalAddress);
+            }
         });
     }
 
@@ -473,7 +465,7 @@ public class FastObjectLoader {
         switch (logData.getType()) {
             case DATA:
                 // Checkpoint should have been processed first
-                if (!isCheckPointEntry(logData) && shouldLogDataBeProcessed(logData)) {
+                if (shouldLogDataBeProcessed(logData)) {
                     updateCorfuObject(logData);
                 }
                 break;
