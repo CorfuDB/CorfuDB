@@ -2,7 +2,8 @@ package org.corfudb.infrastructure.paxos;
 
 import lombok.Builder;
 import lombok.NonNull;
-import org.corfudb.infrastructure.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.Phase2Data;
 import org.corfudb.infrastructure.Rank;
 
@@ -28,7 +29,11 @@ public class PaxosDataStore {
      * @return phase1 rank
      */
     public Optional<Rank> getPhase1Rank(long serverEpoch) {
-        Rank rank = dataStore.get(Rank.class, PREFIX_PHASE_1, serverEpoch + KEY_SUFFIX_PHASE_1);
+        KvRecord<Rank> phase1Record = KvRecord.of(
+                PREFIX_PHASE_1, serverEpoch + KEY_SUFFIX_PHASE_1, Rank.class
+        );
+
+        Rank rank = dataStore.get(phase1Record);
         return Optional.ofNullable(rank);
     }
 
@@ -38,7 +43,12 @@ public class PaxosDataStore {
      * @param serverEpoch current server epoch
      */
     public void setPhase1Rank(Rank rank, long serverEpoch) {
-        dataStore.put(Rank.class, PREFIX_PHASE_1, serverEpoch + KEY_SUFFIX_PHASE_1, rank);
+        KvRecord<Rank> phase1Record = KvRecord.of(
+                PREFIX_PHASE_1,
+                serverEpoch + KEY_SUFFIX_PHASE_1,
+                Rank.class
+        );
+        dataStore.put(phase1Record, rank);
     }
 
     /**
@@ -47,13 +57,13 @@ public class PaxosDataStore {
      * @return phase2 data
      */
     public Optional<Phase2Data> getPhase2Data(long serverEpoch) {
-        Phase2Data rank = dataStore.get(
-                Phase2Data.class,
+        KvRecord<Phase2Data> phase2Record = KvRecord.of(
                 PREFIX_PHASE_2,
-                serverEpoch + KEY_SUFFIX_PHASE_2
+                serverEpoch + KEY_SUFFIX_PHASE_2,
+                Phase2Data.class
         );
 
-        return Optional.ofNullable(rank);
+        return Optional.ofNullable(dataStore.get(phase2Record));
     }
 
     /**
@@ -62,11 +72,11 @@ public class PaxosDataStore {
      * @param serverEpoch current server epoch
      */
     public void setPhase2Data(Phase2Data phase2Data, long serverEpoch) {
-        dataStore.put(
-                Phase2Data.class,
+        KvRecord<Phase2Data> phase2Record = KvRecord.of(
                 PREFIX_PHASE_2,
                 serverEpoch + KEY_SUFFIX_PHASE_2,
-                phase2Data
+                Phase2Data.class
         );
+        dataStore.put(phase2Record, phase2Data);
     }
 }
