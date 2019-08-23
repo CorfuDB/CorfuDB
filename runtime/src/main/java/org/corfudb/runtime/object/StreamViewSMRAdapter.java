@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.logprotocol.SMRRecord;
-import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -15,7 +14,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -50,16 +48,9 @@ public class StreamViewSMRAdapter implements ISMRStream {
         this.streamView = streamView;
     }
 
-    private List<SMRRecord> dataAndCheckpointMapper(ILogData logData) {
+    public List<SMRRecord> dataMapper(ILogData logData) {
         List<SMRRecord> updates = ((SMRLogEntry) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
-        IntStream.range(0, updates.size()).forEach(i -> {
-            SMRRecord entry = updates.get(i);
-            // It is not necessary to compute locator when it has been computed
-            if (entry.locator == null) {
-                entry.setLocator(new SMRRecordLocator(logData.getGlobalAddress(), streamView.getId(), i));
-            }
-        });
-
+        ISMRStream.addLocatorToSMRRecords(updates, logData.getGlobalAddress(), streamView.getId());
         return updates;
     }
 
@@ -79,7 +70,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
                 .filter(m -> m.getType() == DataType.DATA)
                 .filter(m -> m.getPayload(runtime) instanceof SMRLogEntry
                         || m.hasCheckpointMetadata())
-                .map(this::dataAndCheckpointMapper)
+                .map(this::dataMapper)
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
     }
@@ -145,7 +136,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
                 .filter(m -> m.getType() == DataType.DATA)
                 .filter(m -> m.getPayload(runtime) instanceof SMRLogEntry
                         || m.hasCheckpointMetadata())
-                .map(this::dataAndCheckpointMapper)
+                .map(this::dataMapper)
                 .flatMap(List::stream);
     }
 
