@@ -67,7 +67,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @Nonnull final V valueSchema,
                  @Nullable final M metadataSchema,
                  @Nonnull final CorfuRuntime corfuRuntime,
-                 @Nonnull final ISerializer serializer) {
+                 @Nonnull final ISerializer serializer,
+                 @Nonnull final StreamingMap<K, V> streamingMap) {
 
         this.corfuRuntime = corfuRuntime;
         this.namespace = namespace;
@@ -83,7 +84,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(valueSchema))
+                .setArguments(new ProtobufIndexer(valueSchema), streamingMap)
                 .open();
     }
 
