@@ -25,12 +25,14 @@ public class SMRRecordLocator implements Comparable<SMRRecordLocator>, ICorfuSer
     private long globalAddress;
     private UUID streamId;
     private int index;
+    private int serializedSize;
 
     public void serialize(ByteBuf buf) {
         buf.writeLong(globalAddress);
         buf.writeLong(streamId.getMostSignificantBits());
         buf.writeLong(streamId.getLeastSignificantBits());
         buf.writeInt(index);
+        buf.writeInt(serializedSize);
     }
 
 
@@ -42,6 +44,7 @@ public class SMRRecordLocator implements Comparable<SMRRecordLocator>, ICorfuSer
         long leastSignificantBits = buf.readLong();
         smrRecordLocator.setStreamId(new UUID(mostSignificantBits, leastSignificantBits));
         smrRecordLocator.setIndex(buf.readInt());
+        smrRecordLocator.setSerializedSize(buf.readInt());
 
         return smrRecordLocator;
     }

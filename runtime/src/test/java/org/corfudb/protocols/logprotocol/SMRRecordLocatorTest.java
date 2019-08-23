@@ -19,7 +19,9 @@ public class SMRRecordLocatorTest {
         long globalAddress = Address.getMinAddress();
         UUID steramId = UUID.randomUUID();
         int index = 0;
-        SMRRecordLocator locator = new SMRRecordLocator(globalAddress, steramId, index);
+        int serializedSize = 0;
+
+        SMRRecordLocator locator = new SMRRecordLocator(globalAddress, steramId, index, serializedSize);
 
         ByteBuf buf = Unpooled.buffer();
         locator.serialize(buf);
