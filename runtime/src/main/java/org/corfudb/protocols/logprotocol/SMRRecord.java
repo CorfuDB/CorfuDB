@@ -76,7 +76,7 @@ public class SMRRecord {
     public transient boolean haveUpcallResult = false;
 
     /**
-     * The locator of this instance of SMRRecord in SpaceAddressView.
+     * The locator of this instance of SMRRecord in global log.
      */
     @Getter
     @Setter

@@ -39,6 +39,7 @@ import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.ImmutableListSetWrapper;
+import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 
@@ -291,7 +292,8 @@ public class CorfuTable<K ,V> implements
 
     /** {@inheritDoc} */
     @Override
-    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
+    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord",
+            garbageIdentifyFunction = "identifyPutGarbage")
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
@@ -311,6 +313,11 @@ public class CorfuTable<K ,V> implements
     protected void undoPut(CorfuTable<K, V> table, V undoRecord, K key, V value) {
         // Same as undoRemove (restore previous value)
         undoRemove(table, undoRecord, key);
+    }
+
+    @DontInstrument
+    protected List<Object> identifyPutGarbage(Object locator, K key, V value) {
+        return new ArrayList<>(locatorStore.addUnsafe(key, (SMRRecordLocator) locator));
     }
 
     @DontInstrument
@@ -399,8 +406,8 @@ public class CorfuTable<K ,V> implements
 
     /** {@inheritDoc} */
     @Override
-    @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
-            undoRecordFunction = "undoRemoveRecord")
+    @MutatorAccessor(name = "remove", undoFunction = "undoRemove", undoRecordFunction = "undoRemoveRecord",
+            garbageIdentifyFunction = "identifyRemoveGarbage")
     @SuppressWarnings("unchecked")
     public V remove(@ConflictParameter Object key) {
         V previous =  mainMap.remove(key);
@@ -427,6 +434,12 @@ public class CorfuTable<K ,V> implements
         }
     }
 
+    @DontInstrument
+    protected List<Object> identifyRemoveGarbage(Object locator, K key) {
+        // TODO(Xin): Distinguish put and remove in the future
+        return new ArrayList<>(locatorStore.addUnsafe(key, (SMRRecordLocator) locator));
+    }
+
     /** {@inheritDoc} */
     @Override
     @Mutator(name = "remove", noUpcall = true)
@@ -438,32 +451,22 @@ public class CorfuTable<K ,V> implements
 
     /** {@inheritDoc} */
     @Override
-    @Mutator(name = "putAll",
-            undoFunction = "undoPutAll",
-            undoRecordFunction = "undoPutAllRecord",
-            conflictParameterFunction = "putAllConflictFunction")
+    @TransactionalMethod
     public void putAll(@Nonnull Map<? extends K, ? extends V> m) {
-        // If we have no index functions, then just directly put all
-        if (secondaryIndexes.isEmpty()) {
-            mainMap.putAll(m);
-        } else {
-            // Otherwise we must update all secondary indexes
-            // TODO: Do this in parallel (need to acquire update locks, potentially)
-            m.entrySet().stream()
-                    .forEach(e -> {
-                        V previous = mainMap.put(e.getKey(), e.getValue());
-                        unmapSecondaryIndexes(e.getKey(), previous);
-                        mapSecondaryIndexes(e.getKey(), e.getValue());
-                    });
-        }
+        m.entrySet().stream().forEach(entry -> put(entry.getKey(), entry.getValue()));
     }
 
     /** {@inheritDoc} */
     @Override
-    @Mutator(name = "clear", reset = true)
+    @Mutator(name = "clear", garbageIdentificationFunction = "identifyClearGarbage", reset = true)
     public void clear() {
         mainMap.clear();
         secondaryIndexes.values().forEach(Map::clear);
+    }
+
+    @DontInstrument
+    protected List<Object> identifyClearGarbage(Object locator) {
+        return new ArrayList<>(locatorStore.clearUnsafe());
     }
 
     /** {@inheritDoc} */
