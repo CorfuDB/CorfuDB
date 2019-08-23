@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.paxos;
 import lombok.Builder;
 import lombok.NonNull;
 import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.Phase2Data;
 import org.corfudb.infrastructure.Rank;
@@ -21,7 +22,7 @@ public class PaxosDataStore {
     private static final String KEY_SUFFIX_PHASE_2 = "DATA";
 
     @NonNull
-    private final DataStore dataStore;
+    private final KvDataStore dataStore;
 
     /**
      * Returns phase1 rank for current epoch

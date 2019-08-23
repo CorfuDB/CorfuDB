@@ -36,8 +36,8 @@ public interface KvDataStore {
      *
      * @param key key meta info
      * @param defaultValue a default value
-     * @param <T>
-     * @return
+     * @param <T> data type associated with the value
+     * @return a value
      */
     <T> T get(KvRecord<T> key, T defaultValue);
 
@@ -51,7 +51,7 @@ public interface KvDataStore {
     /**
      * Key-value meta information class, provides all the information for saving and getting data from a data store
      *
-     * @param <T> data type
+     * @param <T> data type associated with the value
      */
     @AllArgsConstructor
     @Getter
@@ -84,7 +84,7 @@ public interface KvDataStore {
         /**
          * Build kv record with empty prefix
          * @param key key name
-         * @param dataType data type
+         * @param dataType data type associated with the value
          * @param <R> class type
          * @return kv record
          */

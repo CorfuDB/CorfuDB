@@ -11,6 +11,9 @@ import java.util.function.Consumer;
 
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
+import org.corfudb.infrastructure.datastore.InMemoryDataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.junit.Test;
@@ -27,16 +30,17 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     private DataStore createPersistDataStore(String serviceDir, String numRetention,
                                              Consumer<String> cleanupTask) {
-        return new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--metadata-retention", numRetention)
-                .build(), cleanupTask);
+        ImmutableMap<String, Object> opts = new ImmutableMap.Builder<String, Object>()
+                .put(DataStoreConfig.LOG_PATH_PARAM, serviceDir)
+                .put(DataStoreConfig.METADATA_RETENTION_PARAM, numRetention)
+                .build();
+        DataStoreConfig dsConfig = DataStoreConfig.parse(opts);
+
+        return new DataStore(dsConfig, cleanupTask);
     }
 
-    private DataStore createInMemoryDataStore() {
-        return new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--memory", true)
-                .build(), fn -> { });
+    private InMemoryDataStore createInMemoryDataStore() {
+        return InMemoryDataStore.builder().build();
     }
 
     @Test
@@ -95,7 +99,7 @@ public class DataStoreTest extends AbstractCorfuTest {
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
 
-        for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
+        for (int i = 0; i < dataStore.getConfig().getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(TEST_RECORD, value);
 
@@ -118,8 +122,9 @@ public class DataStoreTest extends AbstractCorfuTest {
                 .setLogPath(serviceDirPath)
                 .setRetention(String.valueOf(numRetention))
                 .build();
-        DataStore dataStore = serverContext.getDataStore();
-        Set<String> prefixesToClean = serverContext.getDsFilePrefixesForCleanup();
+        KvDataStore dataStore = serverContext.getDataStore();
+        Set<String> prefixesToClean = ((DataStore)serverContext.getDataStore())
+                .getDsFilePrefixesForCleanup();
 
         for (int i = 1; i < numRetention + 2; i++) {
             final int epoch = i;
@@ -149,7 +154,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testInMemoryPutGet() {
-        DataStore dataStore = createInMemoryDataStore();
+        InMemoryDataStore dataStore = createInMemoryDataStore();
         String value = UUID.randomUUID().toString();
         dataStore.put(TEST_RECORD, value);
         assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
@@ -161,9 +166,10 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testInMemoryEviction() {
-        DataStore dataStore = createInMemoryDataStore();
+        InMemoryDataStore dataStore = createInMemoryDataStore();
 
-        for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
+        final int iterations = 1_000;
+        for (int i = 0; i < iterations * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(TEST_RECORD, value);
             assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);

@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -43,9 +44,10 @@ public class StreamLogDataStoreTest {
 
     private StreamLogDataStore getStreamLogDataStore() {
         Map<String, Object> opts = new HashMap<>();
-        opts.put("--log-path", tempDir.getRoot().getAbsolutePath());
+        opts.put(DataStoreConfig.LOG_PATH_PARAM, tempDir.getRoot().getAbsolutePath());
 
-        DataStore ds = new DataStore(opts, val -> log.info("clean up"));
+        DataStoreConfig dsConfig = DataStoreConfig.parse(opts);
+        DataStore ds = new DataStore(dsConfig, val -> log.info("clean up"));
 
         return StreamLogDataStore.builder()
                 .dataStore(ds)

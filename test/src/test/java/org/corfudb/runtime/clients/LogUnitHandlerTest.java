@@ -34,6 +34,8 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -464,7 +466,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry
-        String logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = serverContext.getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         String logFilePath = logDir + File.separator + "0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
 

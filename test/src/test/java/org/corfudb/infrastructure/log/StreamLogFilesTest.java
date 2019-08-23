@@ -25,6 +25,7 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -168,7 +169,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             }
         }
 
-        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = sc.getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         File file = new File(logDir);
         long logSize = FileUtils.sizeOfDirectory(file);
 
@@ -198,7 +199,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             entries.add(getEntry(x));
         }
 
-        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = sc.getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         File file = new File(logDir);
         // Write the same range twice
         log.append(entries);
@@ -222,7 +223,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             entries.add(LogData.getTrimmed(x));
         }
 
-        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = sc.getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         File file = new File(logDir);
         long logSize = FileUtils.sizeOfDirectory(file);
         log.append(entries);
@@ -307,7 +308,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // This test manipulates a log file directly and manipulates
         // log records by overwriting some parts of the record simulating
         // different data corruption scenarios
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         StreamLog log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
@@ -449,7 +450,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testPrefixTrim() {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
         // Write 50 segments and trim the first 25
@@ -529,7 +530,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testPrefixTrimAfterRestart() {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         final long numSegments = 3;
@@ -555,7 +556,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
      */
     @Test
     public void testResetStreamLog() {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         final long numSegments = 3;
@@ -587,7 +588,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void partialHeaderMetadataTest() throws Exception {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         String logFilePath = logDir + File.separator + 0 + ".log";
 
         File dir = new File(logDir);
@@ -614,7 +615,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void partialHeaderTest() throws Exception {
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         String logFilePath = logDir + File.separator + 0 + ".log";
 
         File dir = new File(logDir);
@@ -670,7 +671,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         entryBuf.put(entryBytes);
         entryBuf.flip();
 
-        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = getContext().getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM) + File.separator + "log";
         String logFilePath = logDir + File.separator + 0 + ".log";
 
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");

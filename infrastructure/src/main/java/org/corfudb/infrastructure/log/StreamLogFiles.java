@@ -18,6 +18,7 @@ import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -114,7 +115,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param noVerify      Disable checksum if true
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
-        logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
+        logDir = Paths.get(serverContext.getServerConfig().get(DataStoreConfig.LOG_PATH_PARAM).toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;

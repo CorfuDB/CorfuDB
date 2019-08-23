@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**
@@ -59,15 +60,15 @@ public class ServerContextBuilder {
                 new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", initialToken)
                 .put("--single", single)
-                .put("--memory", memory)
+                .put(DataStoreConfig.MEMORY_PARAM, memory)
                 .put("--Threads", numThreads)
                 .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache)
                 .put("--log-size-quota-percentage", logSizeLimitPercentage)
                 .put("--batch-size", batchSize)
-                .put("--metadata-retention", retention);
+                .put(DataStoreConfig.METADATA_RETENTION_PARAM, retention);
         if (logPath != null) {
-         builder.put("--log-path", logPath);
+         builder.put(DataStoreConfig.LOG_PATH_PARAM, logPath);
         }
         if (managementBootstrapEndpoint != null) {
             builder.put("--management-server", managementBootstrapEndpoint);

@@ -3,38 +3,18 @@ package org.corfudb.infrastructure;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 import com.codahale.metrics.MetricRegistry;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.EventLoopGroup;
-
-import java.io.File;
-import java.nio.file.Files;
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.annotation.Nonnull;
-
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
+import org.corfudb.infrastructure.datastore.InMemoryDataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
@@ -47,6 +27,16 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Server Context:
@@ -70,7 +60,7 @@ public class ServerContext implements AutoCloseable {
     private static final String KEY_EPOCH = "CURRENT";
     private static final String PREFIX_LAYOUT = "LAYOUT";
     private static final String KEY_LAYOUT = "CURRENT";
-    private static final String PREFIX_LAYOUTS = "LAYOUTS";
+    public static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
     private static final String KEY_SEQUENCER = "SEQUENCER";
@@ -112,18 +102,16 @@ public class ServerContext implements AutoCloseable {
             PREFIX_LOGUNIT, EPOCH_WATER_MARK, Long.class
     );
 
-
     /**
      * various duration constants.
      */
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
-
     @Getter
     private final Map<String, Object> serverConfig;
 
     @Getter
-    private final DataStore dataStore;
+    private final KvDataStore dataStore;
 
     @Getter
     @Setter
@@ -151,10 +139,6 @@ public class ServerContext implements AutoCloseable {
     @Getter
     private static final MetricRegistry metrics = new MetricRegistry();
 
-    @Getter
-    private final Set<String> dsFilePrefixesForCleanup =
-            Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
-
     /**
      * Returns a new ServerContext.
      *
@@ -162,7 +146,13 @@ public class ServerContext implements AutoCloseable {
      */
     public ServerContext(Map<String, Object> serverConfig) {
         this.serverConfig = serverConfig;
-        this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
+        DataStoreConfig dsConfig = DataStoreConfig.parse(serverConfig);
+        if (dsConfig.isInMemory()) {
+            this.dataStore = InMemoryDataStore.builder().build();
+        } else {
+            this.dataStore = new DataStore(dsConfig);
+        }
+
         generateNodeId();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
@@ -209,49 +199,6 @@ public class ServerContext implements AutoCloseable {
     int getManagementServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
         return threadCount == null ? 4 : threadCount;
-    }
-
-    /**
-     * Cleanup the DataStore files with names that are prefixes of the specified
-     * fileName when so that the number of these files don't exceed the user-defined
-     * retention limit. Cleanup is always done on files with lower epochs.
-     */
-    private void dataStoreFileCleanup(String fileName) {
-        String logDirPath = getServerConfig(String.class, "--log-path");
-        if (logDirPath == null) {
-            return;
-        }
-
-        File logDir = new File(logDirPath);
-        Set<String> prefixesToClean = getDsFilePrefixesForCleanup();
-        int numRetention = Integer.parseInt(getServerConfig(String.class, "--metadata-retention"));
-
-        prefixesToClean.stream()
-                .filter(fileName::startsWith)
-                .forEach(prefix -> {
-                    File[] foundFiles = logDir.listFiles((dir, name) -> name.startsWith(prefix));
-                    if (foundFiles == null || foundFiles.length <= numRetention) {
-                        log.debug("DataStore cleanup not started for prefix: {}.", prefix);
-                        return;
-                    }
-                    log.debug("Start cleaning up DataStore files with prefix: {}.", prefix);
-                    Arrays.stream(foundFiles)
-                            .sorted(Comparator.comparingInt(file -> {
-                                // Extract epoch number from file name and cast to int for comparision
-                                Matcher matcher = Pattern.compile("\\d+").matcher(file.getName());
-                                return matcher.find(prefix.length()) ? Integer.parseInt(matcher.group()) : 0;
-                            }))
-                            .limit(foundFiles.length - numRetention)
-                            .forEach(file -> {
-                                try {
-                                    if (Files.deleteIfExists(file.toPath())) {
-                                        log.info("Removed DataStore file: {}", file.getName());
-                                    }
-                                } catch (Exception e) {
-                                    log.error("Error when cleaning up DataStore files", e);
-                                }
-                            });
-                });
     }
 
     /**

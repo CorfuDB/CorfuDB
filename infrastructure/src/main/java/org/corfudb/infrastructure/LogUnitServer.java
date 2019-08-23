@@ -5,6 +5,8 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -483,7 +485,7 @@ public class LogUnitServer extends AbstractServer {
             return LogUnitServerConfig.builder()
                     .cacheSizeHeapRatio(cacheSizeHeapRatio)
                     .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
-                    .memoryMode(Boolean.valueOf(opts.get("--memory").toString()))
+                    .memoryMode(Boolean.valueOf(opts.get(DataStoreConfig.MEMORY_PARAM).toString()))
                     .noVerify((Boolean) opts.get("--no-verify"))
                     .noSync((Boolean) opts.get("--no-sync"))
                     .build();
