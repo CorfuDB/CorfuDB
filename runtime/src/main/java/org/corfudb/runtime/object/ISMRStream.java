@@ -3,9 +3,11 @@ package org.corfudb.runtime.object;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.corfudb.protocols.logprotocol.SMRRecord;
+import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /**
@@ -73,5 +75,19 @@ public interface ISMRStream {
     @SuppressWarnings("checkstyle:abbreviation")
     default UUID getID() {
         return new UUID(0L, 0L);
+    }
+
+    static void addLocatorToSMRRecords(List<SMRRecord> smrRecords, long globalAddress, UUID streamId) {
+        IntStream.range(0, smrRecords.size()).forEach(i -> {
+            SMRRecord entry = smrRecords.get(i);
+            // It is not necessary to compute locator when it has been computed
+            if (entry.locator == null) {
+                entry.setLocator(new SMRRecordLocator(
+                        globalAddress,
+                        streamId,
+                        i,
+                        entry.getSerializedSize()));
+            }
+        });
     }
 }
