@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Persisted Queue supported by CorfuDB using distributed State Machine Replication.
@@ -44,11 +45,13 @@ public class CorfuQueue<E> {
 
     public CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer,
                       IndexRegistry<Long, E> indices) {
+        final Supplier<StreamingMap<Long, E>> mapSupplier =
+                () -> new StreamingMapDecorator<>(new LinkedHashMap<Long, E>());
         this.runtime = runtime;
         corfuTable = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<Long, E>>() {})
                 .setStreamName(streamName)
-                .setArguments(indices, new LinkedHashMap<Long, E>())
+                .setArguments(indices, mapSupplier)
                 .setSerializer(serializer)
                 .open();
         guidGenerator = CorfuGuidGenerator.getInstance(runtime);
