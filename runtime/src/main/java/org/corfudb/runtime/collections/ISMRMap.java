@@ -5,9 +5,9 @@ import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.annotations.DontInstrument;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -73,7 +73,8 @@ public interface ISMRMap<K, V> extends Map<K, V> {
      * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
-    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
+    @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord",
+            garbageIdentifyFunction = "identifyPutGarbage")
     @Override
     V put(@ConflictParameter K key, V value);
 
@@ -90,10 +91,13 @@ public interface ISMRMap<K, V> extends Map<K, V> {
      * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
-    @Mutator(name = "put", noUpcall = true)
+    @Mutator(name = "put", garbageIdentificationFunction = "identifyPutGarbage", noUpcall = true)
     default void blindPut(@ConflictParameter K key, V value) {
         put(key, value);
     }
+
+    List<Object> identifyPutGarbage(Object locator, K key, V value);
+
 
     /** Generate an undo record for a put, given the previous state of the map
      * and the parameters to the put call.
@@ -133,7 +137,7 @@ public interface ISMRMap<K, V> extends Map<K, V> {
      * operation on the given key.
      */
     @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
-            undoRecordFunction = "undoRemoveRecord")
+            undoRecordFunction = "undoRemoveRecord", garbageIdentifyFunction = "identifyRemoveGarbage")
     @Override
     V remove(@ConflictParameter Object key);
 
@@ -162,6 +166,8 @@ public interface ISMRMap<K, V> extends Map<K, V> {
             map.put(key, undoRecord);
         }
     }
+
+    List<Object> identifyRemoveGarbage(Object locator, K key);
 
     /**
      * {@inheritDoc}
@@ -231,9 +237,11 @@ public interface ISMRMap<K, V> extends Map<K, V> {
      * <p>Conflicts: this operation conflicts with the entire map, since it drops
      * all mappings which are present.
      */
-    @Mutator(name = "clear", reset = true)
+    @Mutator(name = "clear", garbageIdentificationFunction = "identifyClearGarbage", reset = true)
     @Override
     void clear();
+
+    List<Object> identifyClearGarbage(Object locator);
 
     /**
      * {@inheritDoc}

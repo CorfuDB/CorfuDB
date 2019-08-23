@@ -31,9 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,8 +41,6 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * Created by rmichoud on 6/16/17.
  */
 public class FastObjectLoaderTest extends AbstractViewTest {
-    static final int NUMBER_OF_CHECKPOINTS = 20;
-    static final int NUMBER_OF_PUT = 100;
     static final int SOME = 3;
     static final int MORE = 5;
 
@@ -291,55 +286,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-    }
-
-    /**
-     * Interleaving checkpoint entries and normal entries through multithreading
-     *
-     * @throws Exception
-     */
-    @Test
-    public void canReadWithEntriesInterleavingCPS() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        int mapCount = maps.size();
-
-        ExecutorService checkPointThread = Executors.newFixedThreadPool(1);
-        checkPointThread.execute(() -> {
-            for (int i = 0; i < NUMBER_OF_CHECKPOINTS; i++) {
-                try {
-                    checkPointAll(getDefaultRuntime());
-                } catch (Exception e) {
-
-                }
-            }
-        });
-
-
-        for (int i = 0; i < NUMBER_OF_PUT; i++) {
-            maps.get("Map" + (i % maps.size())).put("k" + Integer.toString(i),
-                    "v" + Integer.toString(i));
-        }
-
-        try {
-            checkPointThread.shutdown();
-            final int timeout = 10;
-            checkPointThread.awaitTermination(timeout, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-
-        }
-
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
-        assertThatMapsAreBuilt(rt2);
-        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
-
-
-        // Also test it cans find the tails
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
-        assertThatStreamTailsAreCorrect(streamTails);
-
-        // Need to have checkpoint for each stream
-        assertThat(streamTails.size()).isEqualTo(mapCount * 2);
-
     }
 
     @Test
