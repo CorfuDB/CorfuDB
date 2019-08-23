@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -129,6 +128,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @param serializer          Serializer used by the SMR entries to serialize the arguments.
      * @param upcallTargetMap     upCallTargetMap
      * @param undoTargetMap       undoTargetMap
+     * @param garbageFunctionMap  garbageFunctionMap
      * @param undoRecordTargetMap undoRecordTargetMap
      * @param resetSet            resetSet
      */
@@ -139,6 +139,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
+                             Map<String, IGarbageIdentificationFunction> garbageFunctionMap,
                              Set<String> resetSet
     ) {
         this.rt = rt;
@@ -151,8 +152,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                upcallTargetMap, undoRecordTargetMap,
-                undoTargetMap, resetSet);
+                upcallTargetMap, undoRecordTargetMap, undoTargetMap,
+                garbageFunctionMap, resetSet);
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();

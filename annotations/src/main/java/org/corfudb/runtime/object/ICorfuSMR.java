@@ -44,4 +44,12 @@ public interface ICorfuSMR<T> {
     default UUID getCorfuStreamID() {
         return getCorfuSMRProxy().getStreamID();
     }
+
+    /**
+     * Get a map from strings (function names) to garbage identification
+     * methods.
+     * @return The garbage identification map.
+     * */
+    Map<String, IGarbageIdentificationFunction>
+        getCorfuGarbageIdentificationMap();
 }
