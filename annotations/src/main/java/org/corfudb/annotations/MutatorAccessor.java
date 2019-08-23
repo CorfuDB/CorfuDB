@@ -50,4 +50,10 @@ public @interface MutatorAccessor {
      * @return True, if no upcall should be generated.
      */
     boolean noUpcall() default false;
+
+    /** The name of the function which will be called when syncing up to the smr
+     * stream backed by the log to identify garbage.
+     * @return  The name of a garbage identification function.
+     */
+    String garbageIdentifyFunction() default  "";
 }
