@@ -35,18 +35,6 @@ public class RecoveryUtils {
         return new ObjectsView.ObjectID(streamId, type);
     }
 
-    static boolean isCheckPointEntry(ILogData logData) {
-        return logData.hasCheckpointMetadata();
-    }
-
-    static long getSnapShotAddressOfCheckPoint(CheckpointEntry logEntry) {
-        return Long.parseLong(logEntry.getDict().get(SNAPSHOT_ADDRESS));
-    }
-
-    static long getStartAddressOfCheckPoint(ILogData logData) {
-        return logData.getCheckpointedStreamStartLogAddress();
-    }
-
     /**
      * Create a new object SMRMap as recipient of SMRUpdates (if doesn't exist yet)
      */

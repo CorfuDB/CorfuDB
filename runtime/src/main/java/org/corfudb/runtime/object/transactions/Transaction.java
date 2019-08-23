@@ -31,7 +31,7 @@ public class Transaction {
      * The type of context to build.
      */
     @Default
-    final TransactionType type = TransactionType.OPTIMISTIC;;
+    final TransactionType type = TransactionType.OPTIMISTIC;
 
     /**
      * For snapshot transactions, the address the

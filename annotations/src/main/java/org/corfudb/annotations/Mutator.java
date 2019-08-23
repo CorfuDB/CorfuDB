@@ -51,4 +51,11 @@ public @interface Mutator {
      * @return True, if no upcall should be generated.
      */
     boolean noUpcall() default false;
+
+    /** The name of the garbage identification function which will be called
+     * when syncing up to materialized smr streams.
+     * @return  The name of a garbage identification function.
+     */
+    String garbageIdentificationFunction() default  "";
+
 }
