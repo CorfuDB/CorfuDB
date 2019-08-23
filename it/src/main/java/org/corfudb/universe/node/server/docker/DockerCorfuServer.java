@@ -36,8 +36,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Implements a docker instance representing a {@link CorfuServer}.
@@ -122,11 +124,6 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
         collectLogs();
         dockerManager.destroy(params.getName());
-    }
-
-    @Override
-    public Stress getStress() {
-        throw new UnsupportedOperationException("Not implemented");
     }
 
     /**
@@ -323,7 +320,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
     private ContainerConfig buildContainerConfig() {
         // Bind ports
-        String[] ports = {String.valueOf(params.getPort())};
+        List<String> ports = params.getPorts().stream()
+                .map(Objects::toString).collect(Collectors.toList());
         Map<String, List<PortBinding>> portBindings = new HashMap<>();
         for (String port : ports) {
             List<PortBinding> hostPorts = new ArrayList<>();
@@ -348,7 +346,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 .hostConfig(hostConfig)
                 .image(IMAGE_NAME)
                 .hostname(params.getName())
-                .exposedPorts(ports)
+                .exposedPorts(ports.stream().toArray(String[]::new))
                 .cmd("sh", "-c", cmdLine)
                 .build();
     }

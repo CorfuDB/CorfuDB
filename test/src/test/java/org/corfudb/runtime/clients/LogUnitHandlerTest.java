@@ -14,6 +14,9 @@ import io.netty.buffer.Unpooled;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.file.FileStore;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -184,11 +187,14 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         serverRouter.reset();
         String dirPath = PARAMETERS.TEST_TEMP_DIR;
         final int maxLogSizeInBytes = 1000;
+        FileStore corfuDirBackend = Files.getFileStore(Paths.get(dirPath));
+        final long fsSize = corfuDirBackend.getTotalSpace();
+        final double maxLogSizeInPercentage = maxLogSizeInBytes * 100.0 / fsSize;
         ServerContext sc = serverContext = new ServerContextBuilder()
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
-                .setLogSizeQuota(Long.toString(maxLogSizeInBytes))
+                .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
                 .build();
         LogUnitServer server = new LogUnitServer(sc);
         serverRouter.addServer(server);

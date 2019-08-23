@@ -22,14 +22,12 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -380,7 +378,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         log.info("Only allow SERVERS.PORT_0 to manage failures. Prevent the other servers from handling failures.");
         TestRule testRule = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SET_EPOCH)
+                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEAL)
                         || corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
                 .drop();
 
@@ -401,7 +399,7 @@ public class ManagementViewTest extends AbstractViewTest {
         log.info("Prevent ENDPOINT_1 from sealing.");
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 SERVERS.ENDPOINT_1, new TestRule()
-                        .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SET_EPOCH))
+                        .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEAL))
                         .drop());
         log.info("Simulate ENDPOINT_2 failure from ENDPOINT_1 (only Management Server)");
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
@@ -1443,7 +1441,7 @@ public class ManagementViewTest extends AbstractViewTest {
         managementRuntime1.getParameters().setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
 
         TestRule testRule = new TestRule()
-                .matches(m -> m.getMsgType().equals(CorfuMsgType.SET_EPOCH))
+                .matches(m -> m.getMsgType().equals(CorfuMsgType.SEAL))
                 .drop();
         addClientRule(managementRuntime0, testRule);
         addClientRule(managementRuntime1, testRule);

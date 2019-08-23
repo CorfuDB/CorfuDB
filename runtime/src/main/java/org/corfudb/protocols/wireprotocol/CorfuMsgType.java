@@ -24,7 +24,7 @@ public enum CorfuMsgType {
     PING(0, TypeToken.of(CorfuMsg.class), true),
     PONG(1, TypeToken.of(CorfuMsg.class), true),
     RESET(2, TypeToken.of(CorfuMsg.class), true),
-    SET_EPOCH(3, new TypeToken<CorfuPayloadMsg<Long>>() {}, true),
+    SEAL(3, new TypeToken<CorfuPayloadMsg<Long>>() {}, true),
     ACK(4, TypeToken.of(CorfuMsg.class), true),
     WRONG_EPOCH(5, new TypeToken<CorfuPayloadMsg<Long>>() {},  true),
     NACK(6, TypeToken.of(CorfuMsg.class)),
@@ -77,7 +77,7 @@ public enum CorfuMsgType {
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
     RANGE_WRITE(56, new TypeToken<CorfuPayloadMsg<RangeWriteMsg>>(){}),
-    ERROR_DATA_CORRUPTION(57, TypeToken.of(CorfuMsg.class)),
+    ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
 

@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -84,7 +85,7 @@ public class FastObjectLoader {
     static final int DEFAULT_NUMBER_OF_PENDING_FUTURES = 1_000;
     static final int DEFAULT_NUMBER_OF_WORKERS = 4;
 
-    private CorfuRuntime runtime;
+    private final CorfuRuntime runtime;
 
     @Setter
     @Getter
@@ -126,7 +127,7 @@ public class FastObjectLoader {
     private boolean logHasNoCheckPoint = false;
 
     private boolean whiteList = false;
-    private List<UUID> streamsToLoad = new ArrayList<>();
+    private final List<UUID> streamsToLoad = new ArrayList<>();
 
     @VisibleForTesting
     void setLogHead(long head) { this.logHead = head; }
@@ -170,7 +171,7 @@ public class FastObjectLoader {
     /**
      * We can register streams with non-default type
      */
-    private Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
+    private final Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
 
     public void addCustomTypeStream(UUID streamId, ObjectBuilder ob) {
         customTypeStreams.put(streamId, ob);
@@ -202,7 +203,7 @@ public class FastObjectLoader {
     // In charge of summoning Corfu maps back in this world
     private ExecutorService necromancer;
 
-    private Map<UUID, StreamMetaData> streamsMetaData;
+    private final Map<UUID, StreamMetaData> streamsMetaData;
 
     @Setter
     @Getter
@@ -313,7 +314,7 @@ public class FastObjectLoader {
      * @return if the entry is already part of the checkpoint we started from.
      */
     private boolean entryAlreadyContainedInCheckpoint(UUID streamId, SMREntry entry) {
-        return streamsMetaData.containsKey(streamId) && entry.getEntry().getGlobalAddress() <
+        return streamsMetaData.containsKey(streamId) && entry.getGlobalAddress() <
                 streamsMetaData.get(streamId).getHeadAddress();
     }
 
@@ -752,7 +753,9 @@ public class FastObjectLoader {
                 // Don't cache the read results on server for fast loader
                 ContiguousSet<Long> addresses = ContiguousSet.create(
                         Range.closed(lower, upper), DiscreteDomain.longs());
-                Map<Long, ILogData> range = runtime.getAddressSpaceView().nonCacheFetchAll(addresses, true);
+
+                Map<Long, ILogData> range = runtime.getAddressSpaceView().read(addresses,
+                        RecoveryUtils.fastLoaderReadOptions);
 
                 // Sanity
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {

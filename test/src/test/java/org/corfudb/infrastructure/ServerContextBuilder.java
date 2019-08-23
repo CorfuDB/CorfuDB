@@ -38,7 +38,7 @@ public class ServerContextBuilder {
     String address = "test";
     int port = 9000;
     String seqCache = "1000";
-    String logSizeQuota = "-1";
+    String logSizeLimitPercentage = "100.0";
     String batchSize = "100";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
@@ -63,7 +63,7 @@ public class ServerContextBuilder {
                 .put("--Threads", numThreads)
                 .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache)
-                .put("--log-size-quota-bytes", logSizeQuota)
+                .put("--log-size-quota-percentage", logSizeLimitPercentage)
                 .put("--batch-size", batchSize)
                 .put("--metadata-retention", retention);
         if (logPath != null) {

@@ -362,7 +362,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logLevel = "INFO";
         private String logPath = null;
         private String trustStore = null;
-        private String logSizeQuota = null;
+        private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
 
 
@@ -383,8 +383,8 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" -s");
             }
 
-            if (logSizeQuota != null) {
-                command.append(" --log-size-quota-bytes ").append(logSizeQuota);
+            if (logSizeLimitPercentage != null) {
+                command.append(" --log-size-quota-percentage ").append(logSizeLimitPercentage);
             }
 
             if (tlsEnabled) {

@@ -76,9 +76,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
                         final Object actualValue =
                                 Serializers.CORFU.deserialize(copyBuf, runtime);
-                        // TODO: Remove circular dependency on logEntry.
                         if (actualValue instanceof LogEntry) {
-                            ((LogEntry) actualValue).setEntry(this);
+                            ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
                             ((LogEntry) actualValue).setRuntime(runtime);
                         }
                         value = actualValue == null ? this.payload : actualValue;
@@ -174,9 +173,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             this.type = type;
             this.data = null;
             this.payload.set(object);
-            if (object instanceof LogEntry) {
-                ((LogEntry) object).setEntry(this);
-            }
             this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
             if (object instanceof CheckpointEntry) {
                 CheckpointEntry cp = (CheckpointEntry) object;
@@ -187,6 +183,23 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         Long.parseLong(cp.getDict()
                                 .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)));
             }
+        }
+    }
+
+    /**
+     * Assign a given token to this log data.
+     *
+     * @param token the token to use
+     */
+    @Override
+    public void useToken(IToken token) {
+        setGlobalAddress(token.getSequence());
+        setEpoch(token.getEpoch());
+        if (token.getBackpointerMap().size() > 0) {
+            setBackpointerMap(token.getBackpointerMap());
+        }
+        if (payload.get() instanceof LogEntry) {
+            ((LogEntry) payload.get()).setGlobalAddress(token.getSequence());
         }
     }
 

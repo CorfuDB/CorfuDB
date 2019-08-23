@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.3.0.20190722223401.7313</version>
+        <version>0.3.0.20190823023939.8316</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -149,11 +149,6 @@
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>
             <version>0.6.0.20150202</version>
-        </dependency>
-        <dependency>
-            <groupId>org.fusesource.jansi</groupId>
-            <artifactId>jansi</artifactId>
-            <version>1.14</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>

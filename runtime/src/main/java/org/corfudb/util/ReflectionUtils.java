@@ -22,7 +22,7 @@ public class ReflectionUtils {
         // prevent instantiation of this class
     }
 
-    static Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
+    static final Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
             .put("int", Integer.TYPE)
             .put("long", Long.TYPE)
             .put("double", Double.TYPE)
@@ -41,8 +41,8 @@ public class ReflectionUtils {
             .put("byte[]", byte[].class)
             .put("short[]", short[].class)
             .build();
-    private static Pattern methodExtractor = Pattern.compile("([^.\\s]*)\\((.*)\\)$");
-    private static Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
+    private static final Pattern methodExtractor = Pattern.compile("([^.\\s]*)\\((.*)\\)$");
+    private static final Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
 
     public static String getShortMethodName(String longName) {
         int packageIndex = longName.substring(0, longName.indexOf('(')).lastIndexOf('.');

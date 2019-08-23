@@ -11,10 +11,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
@@ -24,6 +28,8 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,8 +49,8 @@ import java.util.function.Function;
 public class CheckpointWriter<T extends Map> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
-    private UUID streamId;
-    private String author;
+    private final UUID streamId;
+    private final String author;
     @Getter
     private UUID checkpointId;
     private LocalDateTime startTime;
@@ -54,15 +60,15 @@ public class CheckpointWriter<T extends Map> {
     private long numBytes = 0;
 
     // Registry and Timer used for measuring append checkpoint
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     private static final String CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
             "append-checkpoint";
-    private Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
+    private final Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
 
     @SuppressWarnings("checkstyle:abbreviation")
     final UUID checkpointStreamID;
 
-    Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
+    final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
 
     /** Mutator lambda to change map key.  Typically used for
      *  testing but could also be used for type conversion, etc.
@@ -92,16 +98,16 @@ public class CheckpointWriter<T extends Map> {
 
     /** Local ref to the object's runtime.
      */
-    private CorfuRuntime rt;
+    private final CorfuRuntime rt;
 
     /** Local ref to the stream's view.
      */
-    StreamsView sv;
+    final StreamsView sv;
 
     /** Local ref to the object that we're dumping.
      *  TODO: generalize to all SMR objects.
      */
-    private T map;
+    private final T map;
 
     @Getter
     @Setter
@@ -130,37 +136,52 @@ public class CheckpointWriter<T extends Map> {
      * @return Token at which the snapshot for this checkpoint was taken.
      */
     public Token appendCheckpoint() {
-        // Queries the sequencer for the global log tail. We then read the global log tail to
-        // persist the entry on the log unit in turn preventing from a new sequencer from
-        // regressing tokens.
-        Token snapshot = rt.getSequencerView().query().getToken();
-        if (Address.isAddress(snapshot.getSequence())) {
-            appendCheckpointOnSnapshot(snapshot);
-        }
-        return snapshot;
-    }
+        // Queries the sequencer for the stream tail and global log tail.
+        // The global log tail will provide the snapshot for this checkpoint,
+        // while the stream tail will provide the last observed update to this stream at
+        // the given snapshot.
+        TokenResponse response = rt.getSequencerView().query(new UUID[]{streamId});
+        // The checkpoint snapshot is given by the Global Tail
+        Token snapshot = response.getToken();
+        // The checkpoint start log address is given by the stream's tail at snapshot time
+        Long streamTail = response.getStreamTail(streamId);
 
-    /**
-     * Append checkpoint at a specific snapshot. This is visible only for testing.
-     *
-     * @param snapshotTimestamp snapshot at which to take a checkpoint.
-     * @return snapshot time for this checkpoint.
-     */
-    @VisibleForTesting
-    public Token appendCheckpoint(Token snapshotTimestamp) {
-        appendCheckpointOnSnapshot(snapshotTimestamp);
-        return snapshotTimestamp;
+        return appendCheckpoint(snapshot, streamTail);
     }
 
     /**
      * Write a checkpoint which reflects the state at snapshot.
      *
-     * @param snapshotTimestamp snapshot at which the checkpoint is taken.
+     * This API should not be directly invoked.
+     *
+     *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
+     *  @param streamTail tail of the stream to checkpoint at snapshot time.
      */
-    private void appendCheckpointOnSnapshot(Token snapshotTimestamp) {
+    @VisibleForTesting
+    public Token appendCheckpoint(Token snapshotTimestamp, Long streamTail) {
         long start = System.currentTimeMillis();
 
+        // If stream tail is a negative value, we need to enforce a hole to ensure the start log address
+        // is not negative (as MultiCheckpointWriter will select the min of all checkpoints)
+        // Having a negative value will prevent trimming from happening.
+        if (!Address.isAddress(streamTail)) {
+            snapshotTimestamp = forceHole();
+            streamTail = snapshotTimestamp.getSequence();
+        }
+
+        // This read attempts to ensure no future sequencer regression by materializing the global tail, i.e.,
+        // preventing reassignment of tokens on sequencer failover (for the non-materialized space).
         rt.getAddressSpaceView().read(snapshotTimestamp.getSequence());
+
+        // However, we still need to verify there has not been a sequencer regression
+        // from the time the tuple (snapshotTimestamp, streamTail) was acquired and the actual read was performed.
+        // To this end, we query the sequencer for the last observed epoch. This validation
+        // is pessimistic as we might observe the change after the read, but it is safe to retry to avoid data loss.
+        long currentEpoch = rt.getSequencerView().query().getEpoch();
+        if (currentEpoch != snapshotTimestamp.getEpoch()) {
+            throw new WrongEpochException(currentEpoch);
+        }
+
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
                 .snapshot(snapshotTimestamp)
@@ -170,10 +191,12 @@ public class CheckpointWriter<T extends Map> {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
             log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
-            ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
             Set<Map.Entry> entries = this.map.entrySet();
-            long vloVersion = corfuObject.getCorfuSMRProxy().getVersion();
-            startCheckpoint(snapshotTimestamp, vloVersion);
+            // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
+            // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
+            // as the latter discards holes for resolution, hence if last address is a hole it would diverge
+            // from the stream address space maintained by the sequencer.
+            startCheckpoint(snapshotTimestamp, streamTail);
             appendObjectState(entries);
             finishCheckpoint();
             long cpDuration = System.currentTimeMillis() - start;
@@ -184,6 +207,16 @@ public class CheckpointWriter<T extends Map> {
         } finally {
             rt.getObjectsView().TXEnd();
         }
+
+        return snapshotTimestamp;
+    }
+
+    private Token forceHole() {
+        Token writeToken = rt.getSequencerView().next(streamId).getToken();
+        LogData logData = new LogData(DataType.HOLE);
+        logData.useToken(writeToken);
+        rt.getAddressSpaceView().write(writeToken, logData, CacheOption.WRITE_AROUND);
+        return writeToken;
     }
 
     /** Append a checkpoint START record to this object's stream.

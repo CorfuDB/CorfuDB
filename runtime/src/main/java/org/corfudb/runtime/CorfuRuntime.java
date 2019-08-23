@@ -86,17 +86,6 @@ public class CorfuRuntime {
         private final long nettyShutdownTimeout = 300;
 
         // region Object Layer Parameters
-        /**
-         * True, if undo logging is disabled.
-         */
-        @Default
-        boolean undoDisabled = false;
-
-        /**
-         * True, if optimistic undo logging is disabled.
-         */
-        @Default
-        boolean optimisticUndoDisabled = false;
 
         /**
          * Max size for a write request.
@@ -165,6 +154,15 @@ public class CorfuRuntime {
         long maxCacheWeight;
 
         /**
+         * This is a hint to size the AddressSpaceView cache, a higher concurrency
+         * level allows for less lock contention at the cost of more memory overhead.
+         * The default value of zero will result in using the cache's internal default
+         * concurrency level (i.e. 4). 
+         */
+        @Default
+        int cacheConcurrencyLevel = 0;
+
+        /**
          * Sets expireAfterAccess and expireAfterWrite in seconds.
          */
         @Default
@@ -188,12 +186,6 @@ public class CorfuRuntime {
         boolean followBackpointersEnabled = false;
 
         /**
-         * Whether or not to disable backpointers.
-         */
-        @Default
-        boolean backpointersDisabled = false;
-
-        /**
          * Whether or not hole filling should be disabled.
          */
         @Default
@@ -212,6 +204,13 @@ public class CorfuRuntime {
          */
         @Default
         int trimRetry = 2;
+
+        /**
+         * The total number of retries the checkpointer will attempt on sequencer failover to
+         * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
+         */
+        @Default
+        int checkpointRetries = 5;
 
         /**
          * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
@@ -1132,20 +1131,6 @@ public class CorfuRuntime {
         parameters.usernameFile = usernameFile;
         parameters.passwordFile = passwordFile;
         parameters.saslPlainTextEnabled = true;
-        return this;
-    }
-
-    /**
-     * Whether or not to disable backpointers
-     *
-     * @param disable True, if the cache should be disabled, false otherwise.
-     * @return A CorfuRuntime to support chaining.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setBackpointersDisabled(boolean disable) {
-        log.warn("setBackpointersDisabled: Deprecated, please set parameters instead");
-        parameters.setBackpointersDisabled(disable);
         return this;
     }
 
