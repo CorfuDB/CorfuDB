@@ -61,7 +61,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 /**
@@ -103,6 +102,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // This is derived as a percentage of the log's filesystem capacity.
     private final long logSizeLimit;
 
+    // Keep track of the latency for write operation
+    IOLatencyDetector writeMetrics;
+
+    // Keep track of the latency for read operation
+    IOLatencyDetector readMetrics;
+
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
@@ -141,6 +146,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
         logMetadata = new LogMetadata();
         initializeLogMetadata();
+
 
         // This can happen if a prefix trim happens on
         // addresses that haven't been written
@@ -942,9 +948,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // On IOExceptions this class should be reinitialized, so consuming
         // the buffer size and failing on the write should be an issue
         logSizeQuota.consume(buf.remaining());
+
+        // start to record the start time and size of the write operation
+        int size = buf.remaining ();
+        writeMetrics.start();
         while (buf.hasRemaining()) {
             channel.write(buf);
         }
+        writeMetrics.update(size);
     }
 
     /**

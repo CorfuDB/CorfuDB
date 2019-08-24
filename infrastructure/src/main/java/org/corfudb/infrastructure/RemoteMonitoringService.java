@@ -8,6 +8,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.infrastructure.log.IOLatencyDetector;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -408,7 +409,6 @@ public class RemoteMonitoringService implements MonitoringService {
             restoreRedundancyAndMergeSegments(ourLayout);
 
             handleSequencer(ourLayout);
-
             return DetectorTask.COMPLETED;
         }, failureDetectorWorker);
     }
@@ -520,6 +520,15 @@ public class RemoteMonitoringService implements MonitoringService {
         log.trace("Handle failures for the report: {}", pollReport);
 
         try {
+            //** xq check local node logunit write/read latency
+            if (IOLatencyDetector.reportSpike() == true) {
+                //for now we just log it and will enable it later
+                Set<String> failedNodes = new HashSet<>();
+                failedNodes.add(serverContext.getLocalEndpoint());
+                log.info ("detected failure");
+                return detectFailure(layout, failedNodes, pollReport).get ();
+            }
+
             ClusterState clusterState = pollReport.getClusterState();
 
             if (clusterState.size() != layout.getAllServers().size()) {
