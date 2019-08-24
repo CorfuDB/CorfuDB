@@ -2,17 +2,23 @@ package org.corfudb.benchmarks;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
+
+import static java.lang.Thread.sleep;
 
 
 /**
@@ -38,6 +44,9 @@ public class SequencerFlood {
     }
 
     public static void main(String[] args) throws Exception {
+        String metricName = "SequencerFlood";
+        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+        Timer timer = metrics.timer(metricName);
 
         Args cmdArgs = new Args();
         JCommander jc = JCommander.newBuilder()
@@ -76,6 +85,7 @@ public class SequencerFlood {
                     long end = System.nanoTime();
                     traces[id].start();
                     recorder.recordValue(TimeUnit.NANOSECONDS.toMicros(end - start));
+                    timer.update (TimeUnit.NANOSECONDS.toMicros(end - start), TimeUnit.MICROSECONDS);
                     traces[id].end();
                     requestsCompleted.increment();
                 }
@@ -91,6 +101,7 @@ public class SequencerFlood {
                 try {
                     currTs = System.currentTimeMillis ();
                     currMsgCnt = requestsCompleted.intValue ();
+
                     double throughput = (currMsgCnt - prevMsgCnt) / ((currTs - prevTs) / 1000);
                     Histogram histogram = recorder.getIntervalHistogram ();
 
@@ -101,7 +112,6 @@ public class SequencerFlood {
                             histogram.getValueAtPercentile (50) / 1000.0,
                             histogram.getValueAtPercentile (95) / 1000.0,
                             histogram.getValueAtPercentile (99) / 1000.0);
-
                     Sleep.sleepUninterruptibly (Duration.ofMillis (1000 * 3));
                     prevTs = currTs;
                     prevMsgCnt = currMsgCnt;
@@ -118,5 +128,11 @@ public class SequencerFlood {
         service.shutdown();
         service.awaitTermination(Long.MAX_VALUE, TimeUnit.MINUTES);
         SimpleTrace.log(traces, "Recorder Overhead");
+        log.info ("Timer Count {} Latency mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
+                timer.getCount (),
+                timer.getSnapshot ().getMean () / 1000000.0,
+                timer.getSnapshot ().get75thPercentile () / 1000000.0,
+                timer.getSnapshot ().get95thPercentile () / 1000000.0,
+                timer.getSnapshot ().get99thPercentile () / 1000000.0);
     }
 }
