@@ -35,10 +35,14 @@ public class SimpleTrace {
     }
 
     void log(boolean infoMode) {
-        if (infoMode == true)
+        if (infoMode == true) {
+            System.out.printf("{%s} cnt {%d} total {%d} ms  average {%f} micros\n", name, cnt, total/1000, total/(1.0*cnt));
             log.info("{} cnt {} total {} ms  average {} micros", name, cnt, total/1000, total/(1.0*cnt));
-        else
+        }
+        else {
+            System.out.printf("{%s} reset cnt {%d} total {%d} ms  average {%f} micros", name, cnt, total/1000, total/(1.0*cnt));
             log.warn("{} reset cnt {} total {} ms  average {} micros", name, cnt, total/1000, total/(1.0*cnt));
+        }
     }
 
     static void log(SimpleTrace[] traces, String name) {
@@ -48,6 +52,7 @@ public class SimpleTrace {
             totalElapse += traces[i].total;
             totalCnt += traces[i].cnt;
         }
+        System.out.printf("{%s} aggregate cnt {%d} total {%d} ms  average {%f} micros", name, totalCnt, totalElapse/1000, totalElapse/(1.0*totalCnt));
         log.info ("{} aggregate cnt {} total {} ms  average {} micros",
                 name, totalCnt, totalElapse/1000, totalElapse/(1.0*totalCnt));
     }

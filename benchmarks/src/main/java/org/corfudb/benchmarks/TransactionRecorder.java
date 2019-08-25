@@ -1,12 +1,12 @@
 package org.corfudb.benchmarks;
 
-import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.Sleep;
+
 
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -15,65 +15,40 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 
 
-/**
- * Created by Maithem on 8/1/19.
- */
 @Slf4j
-public class SequencerFlood {
-    static class Args {
-        @Parameter(names = {"-h", "--help"}, description = "Help message", help = true)
-        boolean help;
-
-        @Parameter(names = {"--endpoint"}, description = "Cluster endpoint", required = true)
-        String endpoint; //ip:portnum
-
-        @Parameter(names = {"--num-clients"}, description = "Number of clients", required = true)
-        int numClients;
-
-        @Parameter(names = {"--num-threads"}, description = "Total number of threads", required = true)
-        int numThreads;
-
-        @Parameter(names = {"--num-requests"}, description = "Number of requests per thread", required = true)
-        int numRequests;
-    }
-
+public class TransactionRecorder {
     public static void main(String[] args) throws Exception {
-
-        Args cmdArgs = new Args();
-        JCommander jc = JCommander.newBuilder()
-                .addObject(cmdArgs)
-                .build();
-        jc.parse(args);
-
-        if (cmdArgs.help) {
-            jc.usage();
-            System.exit(0);
-        }
-
-        int numRuntimes = cmdArgs.numClients;
-        int numThreads = cmdArgs.numThreads;
-        int numRequests = cmdArgs.numRequests;
+        int numRuntimes = 2;
+        int numRequests = 100000;
+        String endpoint = "localhost:9000";
         CorfuRuntime[] rts = new CorfuRuntime[numRuntimes];
 
         for (int x = 0; x < rts.length; x++) {
-            rts[x] = new CorfuRuntime(cmdArgs.endpoint).connect();
+            rts[x] = new CorfuRuntime(endpoint).connect();
         }
         log.info("Connected {} runtimes...", numRuntimes);
-        System.out.printf("Connected %d runtimes...\n", numRuntimes);
 
-        ExecutorService service = Executors.newFixedThreadPool(numThreads);
+        ExecutorService service = Executors.newFixedThreadPool(numRuntimes);
         LongAdder requestsCompleted = new LongAdder();
         Recorder recorder = new Recorder(TimeUnit.SECONDS.toMillis(120000), 5);
-        SimpleTrace[] traces = new SimpleTrace[numThreads];
+        SimpleTrace[] traces = new SimpleTrace[numRuntimes];
 
-        for (int tNum = 0; tNum < numThreads; tNum++) {
-            CorfuRuntime rt = rts[tNum % rts.length];
-            int id = tNum;
+        for (int rti = 0; rti < numRuntimes; rti++) {
+            CorfuRuntime rt = rts[rti];
+            int id = rti;
             service.submit(() -> {
-                traces[id] = new SimpleTrace ("Recorder");
-                for (int reqId = 0; reqId < numRequests; reqId++) {
+                CorfuTable map = rt.getObjectsView()
+                        .build()
+                        .setStreamName(String.valueOf(id))
+                        .setType(CorfuTable.class)
+                        .open();
+
+                traces[id] = new SimpleTrace("Recorder");
+                for (int i = 1; i <= numRequests; i++) {
                     long start = System.nanoTime();
-                    rt.getSequencerView().query();
+                    rt.getObjectsView().TXBegin();
+                    map.put(i, i);
+                    rt.getObjectsView().TXEnd();
                     long end = System.nanoTime();
                     traces[id].start();
                     recorder.recordValue(TimeUnit.NANOSECONDS.toMicros(end - start));
@@ -82,6 +57,7 @@ public class SequencerFlood {
                 }
             });
         }
+
 
         Thread statusReporter = new Thread(() -> {
             long currTs;
@@ -102,7 +78,7 @@ public class SequencerFlood {
                             histogram.getValueAtPercentile (50) / 1000.0,
                             histogram.getValueAtPercentile (95) / 1000.0,
                             histogram.getValueAtPercentile (99) / 1000.0);
-                    System.out.printf("%f %f %f %f %f %f\n",
+                    System.out.printf("Throughput %f req/sec   Latency{ total{%f}ms  mean{%f}ms fiftyPercent{%f}ms NintyFivePercent{%f}ms NintyNinePercent{%f}ms\n",
                             throughput,
                             histogram.getTotalCount () / 1000.0,
                             histogram.getMean () / 1000.0,
@@ -116,7 +92,6 @@ public class SequencerFlood {
                 } catch (Exception e) {
                     // ignore exception
                     log.warn ("statusReporter: encountered exception", e);
-                    System.out.println("statusReporter: encountered exception" + e);
                 }
             }
         });
@@ -126,6 +101,11 @@ public class SequencerFlood {
 
         service.shutdown();
         service.awaitTermination(Long.MAX_VALUE, TimeUnit.MINUTES);
+        for (int i = 0; i < numRuntimes; i++) {
+            traces[i].log(true);
+        }
         SimpleTrace.log(traces, "Recorder Overhead");
+        System.out.println("TransactionRecorder ends");
     }
 }
+
