@@ -18,24 +18,26 @@ import java.util.concurrent.atomic.LongAdder;
 @Slf4j
 public class TransactionRecorder {
     public static void main(String[] args) throws Exception {
-        int numRuntimes = 2;
+        int numRuntimes = 1;
+        int numThreads = 2;
         int numRequests = 100000;
         String endpoint = "localhost:9000";
         CorfuRuntime[] rts = new CorfuRuntime[numRuntimes];
 
+        // one runtime
         for (int x = 0; x < rts.length; x++) {
             rts[x] = new CorfuRuntime(endpoint).connect();
         }
         log.info("Connected {} runtimes...", numRuntimes);
 
-        ExecutorService service = Executors.newFixedThreadPool(numRuntimes);
+        ExecutorService service = Executors.newFixedThreadPool(numThreads);
         LongAdder requestsCompleted = new LongAdder();
         Recorder recorder = new Recorder(TimeUnit.SECONDS.toMillis(120000), 5);
-        SimpleTrace[] traces = new SimpleTrace[numRuntimes];
+        SimpleTrace[] traces = new SimpleTrace[numThreads];
 
-        for (int rti = 0; rti < numRuntimes; rti++) {
-            CorfuRuntime rt = rts[rti];
-            int id = rti;
+        for (int tNum = 0; tNum < numThreads; tNum++) {
+            CorfuRuntime rt = rts[tNum % numRuntimes];
+            int id = tNum;
             service.submit(() -> {
                 CorfuTable map = rt.getObjectsView()
                         .build()
@@ -105,6 +107,10 @@ public class TransactionRecorder {
             traces[i].log(true);
         }
         SimpleTrace.log(traces, "Recorder Overhead");
+
+        for (int x = 0; x < rts.length; x++) {
+            rts[x].shutdown();
+        }
         System.out.println("TransactionRecorder ends");
     }
 }

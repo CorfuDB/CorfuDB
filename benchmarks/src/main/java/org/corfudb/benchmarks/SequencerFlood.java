@@ -102,7 +102,7 @@ public class SequencerFlood {
                             histogram.getValueAtPercentile (50) / 1000.0,
                             histogram.getValueAtPercentile (95) / 1000.0,
                             histogram.getValueAtPercentile (99) / 1000.0);
-                    System.out.printf("%f %f %f %f %f %f\n",
+                    System.out.printf("Throughput %f req/sec   Latency{ total{%f}ms  mean{%f}ms fiftyPercent{%f}ms NintyFivePercent{%f}ms NintyNinePercent{%f}ms\n",
                             throughput,
                             histogram.getTotalCount () / 1000.0,
                             histogram.getMean () / 1000.0,
