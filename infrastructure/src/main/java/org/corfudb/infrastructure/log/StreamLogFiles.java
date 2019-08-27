@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log;
 
+import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
@@ -59,6 +60,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
@@ -102,11 +104,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // This is derived as a percentage of the log's filesystem capacity.
     private final long logSizeLimit;
 
-    // Keep track of the latency for write operation
-    IOLatencyDetector writeMetrics;
-
-    // Keep track of the latency for read operation
-    IOLatencyDetector readMetrics;
+    Timer writeMetrics;
+    Timer readMetrics;
+    Timer syncMetrics;
 
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
@@ -124,6 +124,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
+        this.readMetrics = serverContext.getIOLatencyDetector ().getReadMetrics ();
+        this.writeMetrics = serverContext.getIOLatencyDetector().getWriteMetrics ();
+        this.syncMetrics = serverContext.getIOLatencyDetector().getSyncMetrics ();
 
         String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
         final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
@@ -146,7 +149,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
         logMetadata = new LogMetadata();
         initializeLogMetadata();
-
 
         // This can happen if a prefix trim happens on
         // addresses that haven't been written
@@ -252,7 +254,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
         writeByteBuffer(fileChannel, buf);
+        long start = System.nanoTime ();
         fileChannel.force(true);
+        IOLatencyDetector.update (syncMetrics, start);
     }
 
     private static Metadata getMetadata(AbstractMessage message) {
@@ -383,7 +387,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void sync(boolean force) throws IOException {
         if (force) {
             for (FileChannel ch : channelsToSync) {
+                long start = System.nanoTime ();
                 ch.force(true);
+                IOLatencyDetector.update (syncMetrics, start);
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
@@ -492,7 +498,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         ByteBuffer buf = ByteBuffer.allocate(METADATA_SIZE);
+        long start = System.nanoTime ();
+        int size = buf.remaining ();
         fileChannel.read(buf);
+        IOLatencyDetector.update(readMetrics, start, size);
         buf.flip();
 
         Metadata metadata;
@@ -541,7 +550,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         ByteBuffer buf = ByteBuffer.allocate(metadata.getLength());
+        long start = System.nanoTime() ;
+        int size = buf.remaining();
         fileChannel.read(buf);
+        IOLatencyDetector.update (readMetrics, start, size);
         buf.flip();
         return buf;
     }
@@ -669,8 +681,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 // bytes than the partially written buffer. In that case, the log unit can't
                 // determine if the bytes correspond to a partially written buffer that needs
                 // to be ignored, or if the bytes correspond to a corrupted metadata field.
+                long start = System.nanoTime ();
                 fileChannel.truncate(fileChannel.position());
                 fileChannel.force(true);
+                IOLatencyDetector.update (syncMetrics, start);
                 return;
             }
 
@@ -701,7 +715,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+            long start = System.nanoTime ();
+            int size = (int)entryBuf.remaining ();
             fileChannel.read(entryBuf, metaData.offset);
+            IOLatencyDetector.update (writeMetrics, start, size);
             return getLogData(LogEntry.parseFrom(entryBuf.array()));
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
@@ -950,12 +967,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         logSizeQuota.consume(buf.remaining());
 
         // start to record the start time and size of the write operation
-        int size = buf.remaining ();
-        writeMetrics.start();
+        long start = System.nanoTime() ;
+        int size = buf.remaining();
+
         while (buf.hasRemaining()) {
             channel.write(buf);
         }
-        writeMetrics.update(size);
+
+        // update the writeMetrics
+        IOLatencyDetector.update (writeMetrics, start, size);
     }
 
     /**
