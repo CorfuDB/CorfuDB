@@ -1,13 +1,18 @@
 package org.corfudb.universe.group.cluster;
 
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 
+import java.util.Set;
+
 /**
  * Provides a Corfu specific cluster of servers
  */
-public interface CorfuCluster extends Cluster {
+public interface CorfuCluster<T extends Node, G extends GroupParams> extends Cluster<T, G> {
 
     /**
      * Provides a corfu client running on local machine
@@ -15,6 +20,13 @@ public interface CorfuCluster extends Cluster {
      * @return local corfu client
      */
     LocalCorfuClient getLocalCorfuClient();
+
+    /**
+     * Provides a corfu client running on local machine with the given metrics port open
+     *
+     * @return local corfu client
+     */
+    LocalCorfuClient getLocalCorfuClient(int metricsPort);
 
     /**
      * Find a corfu server by index in the cluster:
