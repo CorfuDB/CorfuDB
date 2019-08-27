@@ -31,6 +31,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.baseline.IProvider;
+import org.corfudb.baseline.providers.NullProvider;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
@@ -154,6 +156,10 @@ public class ServerContext implements AutoCloseable {
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
+
+    @Getter
+    @Setter
+    IProvider metricsProvider = new NullProvider();
 
     /**
      * Returns a new ServerContext.

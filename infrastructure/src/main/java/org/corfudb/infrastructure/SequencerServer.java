@@ -9,6 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.baseline.StatsLogger;
+import org.corfudb.baseline.metrics.Counter;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -33,7 +35,6 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -128,6 +129,8 @@ public class SequencerServer extends AbstractServer {
     @Setter
     private volatile long sequencerEpoch = Layout.INVALID_EPOCH;
 
+    private StatsLogger statsLogger;
+
     /**
      * The lower bound of the consecutive epoch range that this sequencer
      * observes as the primary sequencer. i.e. this sequencer has been the
@@ -139,6 +142,8 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+    private final Counter tokenCounter;
+
     /**
      * Returns a new SequencerServer.
      *
@@ -147,6 +152,7 @@ public class SequencerServer extends AbstractServer {
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         Config config = Config.parse(serverContext.getServerConfig());
+        statsLogger = this.serverContext.getMetricsProvider().getLogger(getClass().getName());
 
         // Sequencer server is single threaded by current design
         this.executor = Executors.newSingleThreadExecutor(
@@ -156,6 +162,8 @@ public class SequencerServer extends AbstractServer {
         globalLogTail = config.getInitialToken();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
+        this.tokenCounter = statsLogger.getCounter("token-request");
+
 
         setUpTimerNameCache();
     }
@@ -474,6 +482,7 @@ public class SequencerServer extends AbstractServer {
 
         TokenRequest req = msg.getPayload();
         final Timer timer = getTimer(req.getReqType());
+        tokenCounter.inc();
 
         // dispatch request handler according to request type while collecting the timer metrics
         try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {

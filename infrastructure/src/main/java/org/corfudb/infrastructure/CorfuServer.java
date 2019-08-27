@@ -10,12 +10,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.baseline.IProvider;
+import org.corfudb.baseline.loggers.DropWizardLogger;
+import org.corfudb.baseline.providers.PrometheusProvider;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
@@ -229,6 +232,7 @@ public class CorfuServer {
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
+            startMetricsProvider(serverContext);
             try {
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
@@ -379,5 +383,22 @@ public class CorfuServer {
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);
+    }
+
+    /**
+     * Create a centralized metric registry, and set up a provider
+     *
+     * @param serverContext Server Context.
+     */
+    private static void startMetricsProvider(ServerContext serverContext) {
+        //TODO add boolean reportMetrics and int port in ServerContext
+        //TODO modify root logger name to node name or host name
+        int metricsPort = 9999;
+        MetricRegistry metricRegistry = new MetricRegistry();
+        DropWizardLogger dropWizardLogger = new DropWizardLogger("root", metricRegistry);
+        IProvider provider = new PrometheusProvider(metricsPort, dropWizardLogger);
+        log.info("setupMetrics: reporting metrics on port {}", metricsPort);
+        serverContext.setMetricsProvider(provider);
+        provider.start();
     }
 }
