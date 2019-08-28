@@ -6,6 +6,8 @@ import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
+import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.MetricsUtils;
@@ -173,6 +175,24 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         rt.getAddressSpaceView().prefixTrim(trimAddress);
         assertThat(rt.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(trimAddress.getSequence() + 1);
+    }
+
+    @Test
+    public void testSparseTrim() {
+        setupNodes();
+        CorfuRuntime rt = getRuntime().connect();
+        final Token trimAddress = new Token(rt.getLayoutView().getLayout().getEpoch(), 10);
+        Long markerAddress = 0L;
+        int smrRecordSize = 0;
+        UUID streamId = UUID.randomUUID();
+        int index = 0;
+
+        SMRGarbageRecord garbageRecord = new SMRGarbageRecord(markerAddress, smrRecordSize);
+        SMRGarbageEntry smrGarbageEntry = new SMRGarbageEntry();
+        smrGarbageEntry.add(streamId, index, garbageRecord);
+        
+        LogData logData = new LogData(DataType.GARBAGE, smrGarbageEntry);
+        rt.getAddressSpaceView().sparseTrim(trimAddress, logData);
     }
 
     @Test

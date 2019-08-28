@@ -188,6 +188,31 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Asynchronously read garbage information for a list of addresses from the log unit server.
+     * @param addresses a list of addresses that garbage is from.
+     * @return a completableFuture which return a ReadResponse containing garbage information on completion.
+     */
+    public CompletableFuture<ReadResponse> readGarbageEntries(List<Long> addresses) {
+        return sendMessageWithFuture(
+                CorfuMsgType.MULTIPLE_GARBAGE_REQUEST
+                        .payloadMsg(new MultipleReadRequest(addresses, false)));
+    }
+
+    /**
+     * Sends a request to write a list of garbage decisions.
+     *
+     * @param range entries to write to the log unit. Must have at least one entry.
+     * @return a completable future which returns true on success.
+     */
+    public CompletableFuture<Boolean> writeGarbageEntries(List<LogData> range) {
+        if (range.isEmpty()) {
+            throw new IllegalArgumentException("Can't write an empty range");
+        }
+
+        return sendMessageWithFuture(CorfuMsgType.MULTIPLE_GARBAGE_WRITE.payloadMsg(new RangeWriteMsg(range)));
+    }
+
+    /**
      * Get the global tail maximum address the log unit has written.
      *
      * @return a CompletableFuture which will complete with the globalTail once
@@ -248,6 +273,7 @@ public class LogUnitClient extends AbstractClient {
         return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM
                 .payloadMsg(new TrimRequest(address)));
     }
+
 
     /**
      * Send a compact request that will delete the trimmed parts of the log.
