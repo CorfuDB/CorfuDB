@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -30,6 +31,8 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
@@ -40,6 +43,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -48,6 +52,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableSet;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -169,6 +175,67 @@ public class AddressSpaceView extends AbstractView {
         if (!logData.equals(ld)){
             throw new OverwriteException(OverwriteCause.DIFF_DATA);
         }
+    }
+
+    /**
+     * Writes per-address sparse-trim decisions to LogUnit servers.
+     *
+     * @param token         The token to use for the write.
+     * @param garbageEntry  Per-address sparse-trim decisions.
+     */
+    public void sparseTrim(@NonNull IToken token, @NonNull LogData garbageEntry) {
+        log.info("sparseTrim[{}]", token.getSequence());
+        garbageEntry.useToken(token);
+
+        layoutHelper(e -> {
+            List<String> servers = e.getLayout().getStripe(token.getSequence()).getLogServers();
+            int numUnits = servers.size();
+            // Reverse order
+            // TODO(Xin): add more comments to explain why use reverse order.
+            for (int i = numUnits - 1; i >= 0; --i) {
+                log.trace("sparseTrim ChainReplication[{}]: {}/{}",
+                        Token.of(e.getLayout().getEpoch(), token.getSequence()), i + 1, numUnits);
+                String server = servers.get(i);
+                writeGarbageToLogUnit(e, server, token, garbageEntry);
+            }
+            return null;
+        }, true);
+    }
+
+    private void writeGarbageToLogUnit(RuntimeLayout runtimeLayout, String logUnitServer, @NonNull IToken token,
+                                       @NonNull LogData garbageEntry) {
+        LogUnitClient client = runtimeLayout.getLogUnitClient(logUnitServer);
+        garbageEntry.setId(runtime.getParameters().getClientId());
+
+        final int numRetries = 3;
+
+        for (int x = 0; x < numRetries; x++) {
+            try {
+                CFUtils.getUninterruptibly(client.writeGarbageEntries(Collections.singletonList(garbageEntry)),
+                        NetworkException.class, TimeoutException.class, WrongEpochException.class);
+                return;
+            } catch (NetworkException | TimeoutException e) {
+                log.warn("writeGarbageToLogUnit: accessing LogUnit {} encounters a network error. " +
+                                "Invalidate layout for this client and retry, attempt: {}/{}",
+                        logUnitServer, x + 1, numRetries, e);
+                Duration retryRate = runtime.getParameters().getConnectionRetryRate();
+                Sleep.sleepUninterruptibly(retryRate);
+            } catch (WrongEpochException wee) {
+                long serverEpoch = wee.getCorrectEpoch();
+                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
+                log.warn("writeGarbageToLogUnit[{}]: wrongEpochException, runtime is in epoch {}, " +
+                                "while server is in epoch {}. Invalidate layout for this client and retry, attempt: " +
+                                "{}/{}",
+                        token.getSequence(), runtimeEpoch, serverEpoch, x + 1, numRetries);
+                runtime.invalidateLayout();
+            }
+        }
+
+        String errorMsg = String.format("Writing garbage to %s fails after %d attempts",
+                logUnitServer, numRetries);
+
+        log.warn(errorMsg);
+        throw new RetryExhaustedException(errorMsg);
     }
 
     /**
@@ -681,6 +748,50 @@ public class AddressSpaceView extends AbstractView {
         checkLogDataThrowException(address, result);
 
         return result;
+    }
+
+    @Nonnull
+    public Map<Long, LogData> FetchGarbageEntries(Iterable<Long> addresses) {
+        Iterable<List<Long>> batches = Iterables.partition(addresses,
+                runtime.getParameters().getBulkReadSize());
+
+        // The garbage should come from the same log unit servers.
+        // Prevent batch results come from different log unit due to layout change. 
+        return layoutHelper(e -> {
+            Map<Long, LogData> garbageEntries = new TreeMap<>();
+            for (List<Long> batch : batches) {
+                Map<Long, LogData> batchResult = FetchGarbageEntryBatch(batch, e);
+                garbageEntries.putAll(batchResult);
+            }
+            return garbageEntries;
+        });
+    }
+
+    @Nonnull
+    private Map<Long, LogData> FetchGarbageEntryBatch(Iterable<Long> addresses, RuntimeLayout runtimeLayout) {
+        Map<String, List<Long>> serverToAddressMap = new HashMap<>();
+        for (Long address : addresses) {
+            List<String> logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();
+
+            // garbage info is fetched from the last log unit server in the strip.
+            // TODO(xin): add more comments to explain why reading from last log unit.
+            String logServer = logServers.get(logServers.size() - 1);
+            List<Long> addressList = serverToAddressMap.computeIfAbsent(logServer, s -> new ArrayList<>());
+            addressList.add(address);
+        }
+
+        // Send read requests to log unit servers in parallel
+        List<CompletableFuture<ReadResponse>> futures = serverToAddressMap.entrySet().stream()
+                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey()).readGarbageEntries(entry.getValue()))
+                .collect(Collectors.toList());
+
+        // Merge the read responses from different log unit servers
+        return futures.stream()
+                .map(future -> CFUtils.getUninterruptibly(future).getAddresses())
+                .reduce(new HashMap<>(), (map1, map2) -> {
+                    map1.putAll(map2);
+                    return map1;
+                });
     }
 
     private void checkLogDataThrowException(long address, ILogData result) {
