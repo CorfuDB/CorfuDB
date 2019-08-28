@@ -204,6 +204,13 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    @ServerHandler(type = CorfuMsgType.MULTIPLE_GARBAGE_WRITE)
+    private void sparseTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
+                            IServerRouter r) {
+        //TODO(Xin): Complete sparse trim handler
+        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+    }
+
     /**
      * Service an incoming write request.
      */
