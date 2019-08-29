@@ -35,7 +35,7 @@ public class StreamLogParams {
     public boolean verifyChecksum = true;
 
     @Default
-    public int recordsPerSegment = 10_000;
+    public int recordsPerSegment = 20_000;
 
     @Default
     public double logSizeQuotaPercentage = 100.0;
@@ -74,6 +74,9 @@ public class StreamLogParams {
     public double segmentGarbageRatioThreshold = 0.5;
 
     @Default
-    public double segmentGarbageSizeThresholdMB = 200;
+    public double segmentGarbageSizeThresholdMB = 128;
+
+    @Default
+    public double totalGarbageSizeThresholdMB = 5 * 1024;
     // End region
 }
