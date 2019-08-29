@@ -482,7 +482,6 @@ public class StreamViewTest extends AbstractViewTest {
         map.put("k2", "k2");
         map.put("k3", "k3");
 
-
         Map<String, String> mapCopy = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
@@ -506,11 +505,12 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(finalVersion.getSequence());
         assertThat(sv.previous()).isNotNull();
         assertThat(sv.previous()).isNull();
-        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion);
+        // This +1 represents the checkpoint NO_OP entry
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion + 1);
         // Calling previous on a stream when the pointer points to a a base checkpoint
         // should throw a TrimmedException
         assertThatThrownBy(() -> sv.previous()).isInstanceOf(TrimmedException.class);
-        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion);
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion + 1);
     }
 
     /**
