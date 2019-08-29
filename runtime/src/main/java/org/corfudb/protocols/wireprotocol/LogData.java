@@ -59,8 +59,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return logData;
     }
 
-    public static LogData getCompacted(EnumMap<LogUnitMetadataType, Object> metadataMap) {
-        return new LogData(DataType.COMPACTED, metadataMap);
+    public static LogData getCompacted(long address) {
+        LogData logData = new LogData(DataType.COMPACTED);
+        logData.setGlobalAddress(address);
+        return logData;
     }
 
     /**
