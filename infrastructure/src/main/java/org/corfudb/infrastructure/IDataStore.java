@@ -4,6 +4,8 @@ package org.corfudb.infrastructure;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+import java.io.FileFilter;
+
 /**
  * Key Value data store abstraction that provides persistence for variables that need
  * retain values across node restarts or need to be accessed by multiple modules/threads.
@@ -56,6 +58,13 @@ public interface IDataStore {
      * @param key record meta information
      */
     <T> void delete(KvRecord<T> key);
+
+    /**
+     * Deletes all datastore files matching the given filter.
+     *
+     * @param fileFilter a file filter function
+     */
+    void deleteFiles(FileFilter fileFilter);
 
     /**
      * Key-value meta information class, provides all the information for saving and getting data from a data store
