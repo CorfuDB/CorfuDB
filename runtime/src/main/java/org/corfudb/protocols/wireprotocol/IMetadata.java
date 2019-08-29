@@ -1,7 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.esotericsoftware.kryo.NotNull;
-import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 
 import java.util.Arrays;
@@ -100,25 +99,6 @@ public interface IMetadata {
 
     default void setBackpointerMap(Map<UUID, Long> backpointerMap) {
         getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);
-    }
-
-    @SuppressWarnings("unchecked")
-    default Set<UUID> getCompactedStreams() {
-        return (Set<UUID>) getMetadataMap().getOrDefault(LogUnitMetadataType.COMPACTED_STREAMS,
-                Collections.EMPTY_SET);
-    }
-
-    default void setCompactedStreams(Set<UUID> compactedStreams) {
-        getMetadataMap().put(LogUnitMetadataType.COMPACTED_STREAMS, compactedStreams);
-    }
-
-    /**
-     * Get all the streams that belongs to this data including compacted and un-compacted.
-     *
-     * @return a set of all stream identifiers
-     */
-    default Set<UUID> getAllStreams() {
-        return Sets.union(getStreams(), getCompactedStreams());
     }
 
     default void setGlobalAddress(Long address) {

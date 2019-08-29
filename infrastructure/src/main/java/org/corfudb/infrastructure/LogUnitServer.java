@@ -287,7 +287,7 @@ public class LogUnitServer extends AbstractServer {
                 rr.put(address, LogData.getEmpty(address));
             } else {
                 rr.put(address, (LogData) logData);
-                rr.setCompactionMarks(streamLog.getCompactionMarks(logData.getAllStreams()));
+                rr.setCompactionMark(streamLog.getGlobalCompactionMark());
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
@@ -302,7 +302,6 @@ public class LogUnitServer extends AbstractServer {
         log.trace("multiRead: {}, cacheable: {}", msg.getPayload().getAddresses(), cacheable);
 
         ReadResponse rr = new ReadResponse();
-        Set<UUID> streams = new HashSet<>();
         try {
             for (Long address : msg.getPayload().getAddresses()) {
                 ILogData logData = dataCache.get(address, cacheable);
@@ -310,10 +309,9 @@ public class LogUnitServer extends AbstractServer {
                     rr.put(address, LogData.getEmpty(address));
                 } else {
                     rr.put(address, (LogData) logData);
-                    streams.addAll(logData.getAllStreams());
                 }
             }
-            rr.setCompactionMarks(streamLog.getCompactionMarks(streams));
+            rr.setCompactionMark(streamLog.getGlobalCompactionMark());
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
