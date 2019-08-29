@@ -9,7 +9,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.format.Types;
@@ -29,6 +28,8 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.roaringbitmap.longlong.LongIterator;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -53,8 +54,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.StreamLogParams.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.StreamLogParams.VERSION;
@@ -130,7 +129,7 @@ public class StreamLogFiles implements StreamLog {
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
 
-        segmentManager = new SegmentManager(logParams, logDir, logSizeQuota);
+        segmentManager = new SegmentManager(logParams, logDir, logSizeQuota, dataStore);
         segmentManager.deleteExistingCompactionOutputFiles();
 
         verifyLogs();
@@ -214,16 +213,21 @@ public class StreamLogFiles implements StreamLog {
 
         long start = System.currentTimeMillis();
         for (long currentSegment = tailSegment; currentSegment >= startSegment; currentSegment--) {
-            StreamLogSegment streamSegment = segmentManager.getStreamLogSegmentByOridnal(currentSegment);
+            StreamLogSegment streamSegment = segmentManager.getStreamLogSegmentByOrdinal(currentSegment);
 
             for (Long address : streamSegment.getKnownAddresses().keySet()) {
                 LogData logData = read(address);
-                // It is safe to preclude compacted entries when updating stream tails
-                // because each record in it must have been marked garbage by someone
-                // with larger address and still not compacted yet.
-                if (logData.getType() != DataType.COMPACTED) {
-                    logMetadata.update(Collections.singletonList(logData));
-                }
+                logMetadata.update(Collections.singletonList(logData));
+            }
+
+            // Update global tail with compactedAddresses to prevent holes regressing global tail.
+            // It is safe for stream tails and stream address map since holes do not belong to any
+            // stream and if a stream update in a LogData is compacted, it must had been marked
+            // garbage by someone with greater address and still not compacted yet.
+            Roaring64NavigableMap compactedAddresses = streamSegment.getCompactedAddresses();
+            LongIterator iterator = compactedAddresses.getReverseLongIterator();
+            if (iterator.hasNext()) {
+                logMetadata.updateGlobalTail(iterator.next());
             }
 
             // Close and remove the reference of the unprotected segments.
@@ -585,12 +589,8 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public Map<UUID, Long> getCompactionMarks(@NonNull Set<UUID> streams) {
-        Map<UUID, Long> allCompactionMarks = dataStore.getCompactionMarks();
-        return streams
-                .stream()
-                .filter(allCompactionMarks::containsKey)
-                .collect(Collectors.toMap(Function.identity(), allCompactionMarks::get));
+    public long getGlobalCompactionMark() {
+        return dataStore.getGlobalCompactionMark();
     }
 
     @Override
@@ -617,6 +617,8 @@ public class StreamLogFiles implements StreamLog {
 
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
+        dataStore.resetGlobalCompactionMark();
+        dataStore.resetAllCompactedAddresses();
         logMetadata = new LogMetadata();
         segmentsToSync.clear();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);

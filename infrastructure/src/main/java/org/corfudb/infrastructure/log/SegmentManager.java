@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,6 +46,8 @@ public class SegmentManager {
 
     private final ResourceQuota logSizeQuota;
 
+    private final StreamLogDataStore dataStore;
+
     @Getter
     private final Map<Long, StreamLogSegment> streamLogSegments = new ConcurrentHashMap<>();
 
@@ -52,7 +55,7 @@ public class SegmentManager {
     private final Map<Long, GarbageLogSegment> garbageLogSegments = new ConcurrentHashMap<>();
 
     // TODO: replace the old CompactionMetadata when compaction finishes.
-    // A CompactionMetadata is not closed for the whole life time of log unit.
+    // A CompactionMetadata is not removed for the whole life time of log unit.
     @Getter
     private final Map<Long, CompactionMetadata> segmentCompactionMetadata = new ConcurrentHashMap<>();
 
@@ -101,7 +104,7 @@ public class SegmentManager {
      * @param ordinal the ordinal of the segment
      * @return the stream log segment for that ordinal
      */
-    StreamLogSegment getStreamLogSegmentByOridnal(long ordinal) {
+    StreamLogSegment getStreamLogSegmentByOrdinal(long ordinal) {
         return getLogSegment(ordinal, StreamLogSegment.class, streamLogSegments);
     }
 
@@ -124,12 +127,11 @@ public class SegmentManager {
                                                            Map<Long, T> segmentMap) {
         return segmentMap.computeIfAbsent(ordinal, ord -> {
             String filePath = getSegmentFilePath(ordinal, segmentType, false);
-            CompactionMetadata metaData = newCompactionMetadata(ordinal);
+            CompactionMetadata metaData = getCompactionMetaData(ordinal);
 
             AbstractLogSegment segment;
-
             if (segmentType.equals(StreamLogSegment.class)) {
-                segment = new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData);
+                segment = new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData, dataStore);
             } else if (segmentType.equals(GarbageLogSegment.class)) {
                 segment = new GarbageLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData);
             } else {
@@ -144,6 +146,11 @@ public class SegmentManager {
         });
     }
 
+    private CompactionMetadata getCompactionMetaData(long ordinal) {
+        return segmentCompactionMetadata.computeIfAbsent(ordinal, seg ->
+                new CompactionMetadata(ordinal));
+    }
+
     /**
      * Get a new compaction metadata for the segment.
      *
@@ -151,8 +158,7 @@ public class SegmentManager {
      * @return the compaction metadata for the segment
      */
     CompactionMetadata newCompactionMetadata(long ordinal) {
-        return segmentCompactionMetadata.computeIfAbsent(ordinal, seg ->
-                new CompactionMetadata(ordinal));
+        return new CompactionMetadata(ordinal);
     }
 
     /**
@@ -168,7 +174,7 @@ public class SegmentManager {
             throw new IllegalStateException(msg);
         }
 
-        return new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, null);
+        return new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, null, dataStore);
     }
 
     /**
@@ -181,7 +187,7 @@ public class SegmentManager {
 
         // Open a new segment and write header.
         StreamLogSegment streamLogSegment = new StreamLogSegment(
-                ordinal, logParams, filePath, logSizeQuota, metaData);
+                ordinal, logParams, filePath, logSizeQuota, metaData, dataStore);
         streamLogSegment.loadAddressSpace();
 
         return streamLogSegment;
@@ -269,7 +275,6 @@ public class SegmentManager {
      * @return a list of segments that can be selected for compaction
      */
     List<CompactionMetadata> getCompactibleSegments() {
-        // TODO: Any race conditions?
         // Take a snapshot of the current segmentCompactionMetadata.
         Map<Long, CompactionMetadata> metaDataMapCopy = new HashMap<>(segmentCompactionMetadata);
 
@@ -286,7 +291,8 @@ public class SegmentManager {
     }
 
     /**
-     * TODO: add comments.
+     * Close the old segment and rename the new segment file to the old segment file.
+     * After this call, subsequent or pending calls to acquire a segment would return the new segment.
      */
     void remapCompactedSegment(AbstractLogSegment oldSegment, AbstractLogSegment newSegment) {
         long ordinal = newSegment.getOrdinal();
@@ -311,12 +317,17 @@ public class SegmentManager {
             Path newPath = Paths.get(newSegment.getFilePath());
             try {
                 // Rename and replace the old file with the new file.
-                Files.move(newPath, oldPath, StandardCopyOption.REPLACE_EXISTING);
+                Files.move(newPath, oldPath, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
                 log.error("remapCompactedSegment: exception when renaming file " +
                         "{} to {}", newPath, oldPath, e);
                 throw new RuntimeException(e);
             }
+
+            // Update the compactionMetadata map with the new CompactionMetadata.
+            segmentCompactionMetadata.put(ordinal, newSegment.getCompactionMetaData());
+
             // Remove the segment mapping.
             return null;
         });
