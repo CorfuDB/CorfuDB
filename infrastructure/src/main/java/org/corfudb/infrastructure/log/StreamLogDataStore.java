@@ -1,27 +1,31 @@
 package org.corfudb.infrastructure.log;
 
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.KvDataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.apache.commons.io.IOUtils;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Address;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Data access layer for StreamLog.
- * Keeps stream log related meta information: startingAddress, tailSegment
- * and per-segment per-stream compaction marks.
+ * Keeps stream log related meta information: starting address,
+ * tail segment and global compaction mark.
  * Provides access to the stream log related meta information.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class StreamLogDataStore {
     private static final String TAIL_SEGMENT_PREFIX = "TAIL_SEGMENT";
     private static final String TAIL_SEGMENT_KEY = "CURRENT";
@@ -32,6 +36,8 @@ public class StreamLogDataStore {
     private static final String COMPACTION_MARK_PREFIX = "COMPACTION_MARK";
     private static final String COMPACTION_MARK_KEY = "CURRENT";
 
+    private static final String COMPACTED_ADDRESSES_PREFIX = "COMPACTED_ADDRESSES";
+
     private static final KvRecord<Long> TAIL_SEGMENT_RECORD = new KvRecord<>(
             TAIL_SEGMENT_PREFIX, TAIL_SEGMENT_KEY, Long.class
     );
@@ -40,8 +46,8 @@ public class StreamLogDataStore {
             STARTING_ADDRESS_PREFIX, STARTING_ADDRESS_KEY, Long.class
     );
 
-    private static final KvRecord<Map> COMPACTION_MARK_RECORD = new KvRecord<>(
-            COMPACTION_MARK_PREFIX, COMPACTION_MARK_KEY, Map.class
+    private static final KvRecord<Long> COMPACTION_MARK_RECORD = new KvRecord<>(
+            COMPACTION_MARK_PREFIX, COMPACTION_MARK_KEY, Long.class
     );
 
     private static final long ZERO_ADDRESS = 0L;
@@ -50,126 +56,192 @@ public class StreamLogDataStore {
     private final KvDataStore dataStore;
 
     /**
-     * Cached starting address
+     * Cached starting address.
      */
-    private final AtomicLong startingAddress = new AtomicLong(Address.NON_ADDRESS);
-    /**
-     * Cached tail segment
-     */
-    private final AtomicLong tailSegment = new AtomicLong(Address.NON_ADDRESS);
-    /**
-     * Cached stream compaction marks. Any snapshot read on the stream before
-     * compaction mark may result in in-complete history.
-     */
-    private final AtomicReference<Map<UUID, Long>> streamCompactionMarks = new AtomicReference<>(null);
+    private final AtomicLong startingAddress;
 
     /**
-     * Return current cached tail segment or get the segment from the data store if not initialized
+     * Cached tail segment.
+     */
+    private final AtomicLong tailSegment;
+
+    /**
+     * Cached global compaction mark.
+     * Any snapshot read before this may result in in-complete history.
+     */
+    private final AtomicLong globalCompactionMark;
+
+
+    public StreamLogDataStore(KvDataStore dataStore) {
+        this.dataStore = dataStore;
+        this.startingAddress =
+                new AtomicLong(dataStore.get(STARTING_ADDRESS_RECORD, ZERO_ADDRESS));
+        this.tailSegment =
+                new AtomicLong(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
+        this.globalCompactionMark =
+                new AtomicLong(dataStore.get(COMPACTION_MARK_RECORD, Address.NON_ADDRESS));
+    }
+
+    /**
+     * Return the current tail segment.
      *
      * @return tail segment
      */
     long getTailSegment() {
-        if (tailSegment.get() == Address.NON_ADDRESS) {
-            tailSegment.set(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
-        }
-
         return tailSegment.get();
     }
 
     /**
-     * Update current tail segment in the data store
+     * Update current tail segment in the data store.
      *
-     * @param newTailSegment updated tail segment
+     * @param newTailSegment new tail segment to update
      */
     void updateTailSegment(long newTailSegment) {
-        if (tailSegment.get() >= newTailSegment) {
-            log.trace("New tail segment less than or equals to the old one: {}. Ignore", newTailSegment);
-            return;
+        if (updateIfGreater(tailSegment, newTailSegment, TAIL_SEGMENT_RECORD)) {
+            log.debug("Updated tail segment to: {}", newTailSegment);
         }
-
-        log.debug("Update tail segment to: {}", newTailSegment);
-        dataStore.put(TAIL_SEGMENT_RECORD, newTailSegment);
-        tailSegment.set(newTailSegment);
     }
 
     /**
-     * Returns the dataStore starting address.
+     * Reset the current tail segment.
+     */
+    void resetTailSegment() {
+        log.info("Resetting tail segment. Current segment: {}", tailSegment.get());
+        tailSegment.updateAndGet(tail -> {
+            dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
+            return ZERO_ADDRESS;
+        });
+    }
+
+    /**
+     * Return the current starting address.
      *
      * @return the starting address
      */
     long getStartingAddress() {
-        if (startingAddress.get() == Address.NON_ADDRESS) {
-            startingAddress.set(dataStore.get(STARTING_ADDRESS_RECORD, ZERO_ADDRESS));
-        }
-
         return startingAddress.get();
     }
 
     /**
-     * Update current starting address in the data store
+     * Update current starting address in the data store.
      *
      * @param newStartingAddress updated starting address
      */
     void updateStartingAddress(long newStartingAddress) {
-        log.info("Update starting address to: {}", newStartingAddress);
-
-        dataStore.put(STARTING_ADDRESS_RECORD, newStartingAddress);
-        startingAddress.set(newStartingAddress);
+        if (updateIfGreater(startingAddress, newStartingAddress, STARTING_ADDRESS_RECORD)) {
+            log.debug("Updated starting address to: {}", newStartingAddress);
+        }
     }
 
     /**
-     * Reset tail segment
-     */
-    void resetTailSegment() {
-        log.info("Reset tail segment. Current segment: {}", tailSegment.get());
-        dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
-        tailSegment.set(ZERO_ADDRESS);
-    }
-
-    /**
-     * Reset starting address
+     * Reset starting address.
      */
     void resetStartingAddress() {
-        log.info("Reset starting address. Current address: {}", startingAddress.get());
-        dataStore.put(STARTING_ADDRESS_RECORD, ZERO_ADDRESS);
-        startingAddress.set(ZERO_ADDRESS);
-    }
-
-    /**
-     * Update current stream compaction marks with a subset of compaction marks.
-     *
-     * @param compactionMarks a subset of compaction marks to update
-     */
-    void updateCompactionMarks(Map<UUID, Long> compactionMarks) {
-        log.debug("Updating stream compaction mark, current: {}", streamCompactionMarks.get());
-        streamCompactionMarks.updateAndGet(cm -> {
-            Map<UUID, Long> newCompactionMarks = new HashMap<>(cm);
-            compactionMarks.forEach((id, addr) -> newCompactionMarks.merge(id, addr, Math::max));
-            dataStore.put(COMPACTION_MARK_RECORD, newCompactionMarks);
-            return newCompactionMarks;
+        log.info("Resetting starting address. Current address: {}", startingAddress.get());
+        startingAddress.updateAndGet(addr -> {
+            dataStore.put(STARTING_ADDRESS_RECORD, ZERO_ADDRESS);
+            return ZERO_ADDRESS;
         });
-        log.debug("Updated stream compaction mark to: {}", streamCompactionMarks.get());
     }
 
     /**
-     * Return current stream compaction marks.
+     * Return the current global compaction marks.
      */
-    @SuppressWarnings("unchecked")
-    Map<UUID, Long> getCompactionMarks() {
-        if (streamCompactionMarks.get() == null) {
-            streamCompactionMarks.getAndUpdate(
-                    cm -> dataStore.get(COMPACTION_MARK_RECORD, Collections.emptyMap()));
+    long getGlobalCompactionMark() {
+        return globalCompactionMark.get();
+    }
+
+    /**
+     * Update the current global compaction mark if the provided address is greater.
+     *
+     * @param newCompactionMark a new address to update current global compaction mark
+     */
+    void updateGlobalCompactionMark(long newCompactionMark) {
+        if (updateIfGreater(globalCompactionMark, newCompactionMark, COMPACTION_MARK_RECORD)) {
+            log.debug("Updated global compaction mark to: {}", newCompactionMark);
+        }
+    }
+
+    /**
+     * Reset global compaction mark.
+     */
+    void resetGlobalCompactionMark() {
+        log.info("Resetting global compaction mark. Current: {}", globalCompactionMark.get());
+        globalCompactionMark.updateAndGet(addr -> {
+            dataStore.put(COMPACTION_MARK_RECORD, Address.NON_ADDRESS);
+            return Address.NON_ADDRESS;
+        });
+    }
+
+    /**
+     * Set the compacted addresses bitmap.
+     *
+     * @param newBitmap new compacted addresses bitmap.
+     */
+    void updateCompactedAddresses(long segment, Roaring64NavigableMap newBitmap) {
+        Roaring64NavigableMap currBitmap = getCompactedAddresses(segment);
+        newBitmap.or(currBitmap);
+
+        newBitmap.runOptimize();
+        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+        DataOutput output = new DataOutputStream(byteStream);
+
+        try {
+            newBitmap.serialize(output);
+            ByteBuffer buffer = ByteBuffer.wrap(byteStream.toByteArray());
+            dataStore.put(getCompactedAddressesRecord(segment), buffer);
+        } catch (IOException ioe) {
+            throw new RuntimeException("Exception when attempting to " +
+                    "serialize compacted addresses bitmap", ioe);
+        } finally {
+            IOUtils.closeQuietly(byteStream);
+        }
+    }
+
+    /**
+     * Get the current compacted addresses bitmap.
+     * Caching is done on upper layer.
+     */
+    Roaring64NavigableMap getCompactedAddresses(long segment) {
+        ByteBuffer buf = dataStore.get(getCompactedAddressesRecord(segment));
+        if (buf == null) {
+            return new Roaring64NavigableMap();
         }
 
-        return streamCompactionMarks.get();
+        ByteArrayInputStream byteStream = new ByteArrayInputStream(
+                buf.array(), buf.position(), buf.remaining());
+        DataInput input = new DataInputStream(byteStream);
+
+        try {
+            Roaring64NavigableMap bitmap = new Roaring64NavigableMap();
+            bitmap.deserialize(input);
+            return bitmap;
+        } catch (IOException ioe) {
+            throw new SerializerException("Exception when attempting to " +
+                    "deserialize compacted addresses bitmap bitmap.", ioe);
+        } finally {
+            IOUtils.closeQuietly(byteStream);
+        }
     }
 
-    /**
-     * Reset stream compaction marks.
-     */
-    void resetCompactionMarks() {
-        log.info("Reset stream compaction marks.");
-        dataStore.put(COMPACTION_MARK_RECORD, Collections.emptyMap());
-        streamCompactionMarks.set(Collections.emptyMap());
+    void resetAllCompactedAddresses() {
+        dataStore.deleteFiles(file -> file.getName().startsWith(COMPACTED_ADDRESSES_PREFIX));
+    }
+
+    private KvRecord<ByteBuffer> getCompactedAddressesRecord(long segment) {
+        return new KvRecord<>(COMPACTED_ADDRESSES_PREFIX, String.valueOf(segment), ByteBuffer.class);
+    }
+
+
+    private boolean updateIfGreater(AtomicLong target, long newAddress, KvRecord<Long> key) {
+        long updatedAddress = target.updateAndGet(curr -> {
+            if (newAddress <= curr) {
+                return curr;
+            }
+            dataStore.put(key, newAddress);
+            return newAddress;
+        });
+
+        return updatedAddress == newAddress;
     }
 }

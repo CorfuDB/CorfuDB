@@ -220,9 +220,7 @@ public abstract class AbstractLogSegment implements AutoCloseable,
                 throw new FileNotFoundException(filePath);
             }
             return FileChannel.open(
-                    FileSystems.getDefault().getPath(filePath),
-                    EnumSet.of(StandardOpenOption.READ)
-            );
+                    FileSystems.getDefault().getPath(filePath), StandardOpenOption.READ);
         }
 
         try {

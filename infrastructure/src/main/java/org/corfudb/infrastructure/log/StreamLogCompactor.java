@@ -10,8 +10,10 @@ import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.view.Address;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
@@ -80,9 +82,6 @@ public class StreamLogCompactor {
     }
 
     private void compact() {
-        // TODO: update LogMetaData stream address space after compaction
-        // TODO: after a segment is compacted, before deleting in-memory garbage decision,
-        // need to update local datastore for per-stream compaction mark to file: ordinal.CM.ds
         try {
             // Get the segments that should be compacted according to compaction policy.
             List<Long> segmentOrdinals = compactionPolicy
@@ -131,11 +130,12 @@ public class StreamLogCompactor {
                          StreamLogSegment.getSegmentLock().acquireWriteLock(ordinal)) {
                 // Sync the delta updates during the initial compaction.
                 syncSegmentUpdate(inputStreamSegment, outputStreamSegment);
-                // Update compaction marks before remapping to ensure following
-                // reads can return up-to-date compaction marks.
-                dataStore.updateCompactionMarks(compactionFeedback.compactionMarks);
-                segmentManager.remapCompactedSegment(inputStreamSegment, outputStreamSegment);
+                // Update global compaction mark before remapping to ensure following
+                // reads can return the most up-to-date compaction mark.
+                dataStore.updateGlobalCompactionMark(compactionFeedback.segmentCompactionMark);
+                dataStore.updateCompactedAddresses(ordinal, compactionFeedback.compactedAddresses);
                 logMetadata.pruneStreamSpace(compactionFeedback.addressesToPrune);
+                segmentManager.remapCompactedSegment(inputStreamSegment, outputStreamSegment);
             }
 
             // Close input and output stream segment channels.
@@ -179,7 +179,10 @@ public class StreamLogCompactor {
             long address = logData.getGlobalAddress();
             LogData newLogData = compactLogEntry(logData, address,
                     garbageInfoMap.get(address), compactionFeedback);
-            outputStreamSegment.append(address, newLogData);
+            // If the entire LogData is compacted, do not append to new segment.
+            if (newLogData != null) {
+                outputStreamSegment.append(address, newLogData);
+            }
 
             // Flush the compaction output file after a batch to avoid IO burst.
             if (++flushBatchCount >= COMPACTION_FLUSH_BATCH_SIZE) {
@@ -193,11 +196,24 @@ public class StreamLogCompactor {
         return compactionFeedback;
     }
 
+    @Nullable
     private LogData compactLogEntry(LogData logData, long address,
                                     SMRGarbageEntry garbageEntry,
                                     CompactionFeedback compactionFeedback) {
-        // If entry already compacted or no garbage info, return the same LogData.
-        if (logData.getType() == DataType.COMPACTED || garbageEntry == null) {
+        // If it's a hole, return null but add to the compacted address because
+        // a hole might be the global tail and we don't want to regress it.
+        if (logData.getType() == DataType.HOLE) {
+            compactionFeedback.addCompactedAddress(address);
+            return null;
+        }
+
+        // Ignore entries that are not DATA type.
+        if (logData.getType() != DataType.DATA) {
+            return logData;
+        }
+
+        // If no garbage info on this address return the same LogData.
+        if (garbageEntry == null) {
             return logData;
         }
 
@@ -245,16 +261,15 @@ public class StreamLogCompactor {
                 compactedRecords.add(SMRRecord.COMPACTED_RECORD);
                 // Record this garbage record to later prune the GarbageLogSegment.
                 compactionFeedback.addGarbageRecordToPrune(address, streamId, i);
-                // Calculate the largest marker address for this stream in this segment.
+                // Calculate the largest marker address in this segment.
                 // After this segment is compacted, use this to update global compaction mark.
-                compactionFeedback.updateCompactionMark(streamId, garbageRecord.getMarkerAddress());
+                compactionFeedback.updateSegmentCompactionMark(garbageRecord.getMarkerAddress());
             }
 
             // If all records of this stream are compacted, do not add to the entry,
             // but needs to update entry's metadata.
             if (compactedRecords.stream().allMatch(SMRRecord::isCompacted)) {
                 logData.getBackpointerMap().remove(streamId);
-                logData.getCompactedStreams().add(streamId);
                 // Record address and stream id to later prune stream address space and garbage entries.
                 compactionFeedback.addAddressToPrune(streamId, address);
                 compactionFeedback.addGarbageRecordToPrune(address, streamId);
@@ -263,15 +278,15 @@ public class StreamLogCompactor {
             }
         }
 
-        // If no stream updates in this entry after compaction, return a compacted LogData.
+        // If no stream updates in this entry after compaction, return null.
         if (compactedEntry.getStreams().isEmpty()) {
-            logData = LogData.getCompacted(logData.getMetadataMap());
+            compactionFeedback.addCompactedAddress(address);
             compactionFeedback.addGarbageRecordToPrune(address);
-        } else {
-            // Reset the logData payload with the compacted entry.
-            logData.resetPayload(compactedEntry);
+            return null;
         }
 
+        // Reset the logData payload with the compacted entry.
+        logData.resetPayload(compactedEntry);
         return logData;
     }
 
@@ -362,9 +377,14 @@ public class StreamLogCompactor {
      */
     private class CompactionFeedback {
 
+        // Used to prune garbage pointers.
         private Map<Long, Map<UUID, List<Integer>>> garbageEntriesToPrune = new HashMap<>();
+        // Used to prune stream address bitmap.
         private Map<UUID, List<Long>> addressesToPrune = new HashMap<>();
-        private Map<UUID, Long> compactionMarks = new HashMap<>();
+        // Used to book-keep the address whose corresponding LogData was entirely compacted.
+        private Roaring64NavigableMap compactedAddresses = new Roaring64NavigableMap();
+        // Used to update global compaction mark.
+        private long segmentCompactionMark = Address.NON_ADDRESS;
 
         private void addGarbageRecordToPrune(long address, UUID streamId, int index) {
             Map<UUID, List<Integer>> entries = garbageEntriesToPrune.computeIfAbsent(
@@ -390,13 +410,12 @@ public class StreamLogCompactor {
             addresses.add(address);
         }
 
-        private void updateCompactionMark(UUID streamId, long address) {
-            compactionMarks.compute(streamId, (id, cm) -> {
-                if (cm == null) {
-                    return address;
-                }
-                return Math.max(cm, address);
-            });
+        private void updateSegmentCompactionMark(long address) {
+            segmentCompactionMark = Math.max(address, segmentCompactionMark);
+        }
+
+        private void addCompactedAddress(long address) {
+            compactedAddresses.addLong(address);
         }
     }
 }

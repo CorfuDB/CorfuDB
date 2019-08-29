@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -40,13 +41,20 @@ class StreamLogSegment extends AbstractLogSegment {
     @Getter
     private static final MultiReadWriteLock segmentLock = new MultiReadWriteLock();
 
+    private final StreamLogDataStore dataStore;
+
     // Entry index map of the global logical address to physical offset in this file.
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
 
+    // A bitmap contains the addresses whose corresponding LogData was entirely compacted.
+    private Roaring64NavigableMap compactedAddresses = new Roaring64NavigableMap();
+
     StreamLogSegment(long ordinal, StreamLogParams logParams,
                      String filePath, ResourceQuota logSizeQuota,
-                     CompactionMetadata compactionMetaData) {
+                     CompactionMetadata compactionMetaData,
+                     StreamLogDataStore dataStore) {
         super(ordinal, logParams, filePath, logSizeQuota, compactionMetaData);
+        this.dataStore = dataStore;
     }
 
     /**
@@ -75,8 +83,10 @@ class StreamLogSegment extends AbstractLogSegment {
      */
     private LogData readRecord(long address) throws IOException {
         AddressMetaData metaData = knownAddresses.get(address);
-        if (metaData == null) {
+        if (metaData == null && !compactedAddresses.contains(address)) {
             return null;
+        } else if (metaData == null) {
+            return LogData.getCompacted(address);
         }
 
         try {
@@ -99,7 +109,7 @@ class StreamLogSegment extends AbstractLogSegment {
     public void append(long address, LogData entry) {
         try {
             // Check if the entry exists.
-            if (knownAddresses.containsKey(address)) {
+            if (entryExists(address)) {
                 processOverwriteEntry(address, entry);
             }
 
@@ -145,13 +155,12 @@ class StreamLogSegment extends AbstractLogSegment {
         }
     }
 
-    private boolean anyEntryExists(List<LogData> entries) {
-        Set<Long> addresses = entries
-                .stream()
-                .map(LogData::getGlobalAddress)
-                .collect(Collectors.toSet());
+    private boolean entryExists(long address) {
+        return knownAddresses.containsKey(address) || compactedAddresses.contains(address);
+    }
 
-        return !Collections.disjoint(addresses, knownAddresses.keySet());
+    private boolean anyEntryExists(List<LogData> entries) {
+        return entries.stream().anyMatch(entry -> entryExists(entry.getGlobalAddress()));
     }
 
     private void processOverwriteEntry(long address, LogData entry) {
@@ -184,6 +193,7 @@ class StreamLogSegment extends AbstractLogSegment {
             knownAddresses.put(indexedEntry.logEntry.getGlobalAddress(), addressMetadata);
             LogData logData = getLogData(indexedEntry.logEntry);
             compactionMetaData.updateTotalPayloadSize(Collections.singletonList(logData));
+            compactedAddresses = dataStore.getCompactedAddresses(ordinal);
         }
     }
 }

@@ -37,7 +37,15 @@ public abstract class AbstractCompactionPolicy implements CompactionPolicy {
      */
     boolean requireForceCompaction(StreamLogParams logParams,
                                    FileStore fileStore,
-                                   ResourceQuota logSizeQuota) {
+                                   ResourceQuota logSizeQuota,
+                                   List<CompactionMetadata> compactibleSegments) {
+        return quotaExceeded(logParams, fileStore, logSizeQuota)
+                || garbageSizeExceeds(logParams, compactibleSegments);
+    }
+
+    private boolean quotaExceeded(StreamLogParams logParams,
+                                  FileStore fileStore,
+                                  ResourceQuota logSizeQuota) {
         try {
             // Since both logSizeQuota and fileStore are only capable of getting an
             // estimation of the available partition space, we check both for safety.
@@ -48,6 +56,14 @@ public abstract class AbstractCompactionPolicy implements CompactionPolicy {
         } catch (IOException ioe) {
             throw new IllegalStateException(ioe);
         }
+    }
+
+    private boolean garbageSizeExceeds(StreamLogParams logParams,
+                                       List<CompactionMetadata> compactibleSegments) {
+        double totalGarbageSize = compactibleSegments.stream()
+                .map(CompactionMetadata::getTotalGarbageSizeMB)
+                .reduce(0.0, Double::sum);
+        return totalGarbageSize > logParams.totalGarbageSizeThresholdMB;
     }
 
     /**
