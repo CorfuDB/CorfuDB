@@ -6,11 +6,11 @@ import org.corfudb.baseline.metrics.Gauge;
 import org.corfudb.baseline.metrics.Timer;
 
 public class NullStatsLogger implements StatsLogger {
-    public static NullStatsLogger INSTANCE = new NullStatsLogger();
+    public static final NullStatsLogger INSTANCE = new NullStatsLogger();
 
-    private static NullCounter nullCounter = new NullCounter();
-    private static NullTimer nullTimer = new NullTimer();
-    private static NullTimeContext nullTimeContext = new NullTimeContext();
+    private static final NullCounter nullCounter = new NullCounter();
+    private static final NullTimer nullTimer = new NullTimer();
+    private static final NullTimeContext nullTimeContext = new NullTimeContext();
 
     @Override
     public Counter getCounter (String name) {

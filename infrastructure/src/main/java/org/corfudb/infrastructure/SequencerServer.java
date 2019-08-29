@@ -129,7 +129,7 @@ public class SequencerServer extends AbstractServer {
     @Setter
     private volatile long sequencerEpoch = Layout.INVALID_EPOCH;
 
-    private StatsLogger statsLogger;
+    private final StatsLogger statsLogger;
 
     /**
      * The lower bound of the consecutive epoch range that this sequencer

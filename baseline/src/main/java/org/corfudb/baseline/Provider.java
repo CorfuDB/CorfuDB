@@ -1,6 +1,6 @@
 package org.corfudb.baseline;
 
-public interface IProvider {
+public interface Provider {
     StatsLogger getLogger(String name);
     void start();
     void stop();

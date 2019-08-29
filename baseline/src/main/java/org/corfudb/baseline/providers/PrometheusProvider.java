@@ -4,7 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.baseline.IProvider;
+import org.corfudb.baseline.Provider;
 import org.corfudb.baseline.StatsLogger;
 
 import io.prometheus.client.exporter.MetricsServlet;
@@ -15,7 +15,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 
 @Slf4j
-public class PrometheusProvider implements IProvider {
+public class PrometheusProvider implements Provider {
     private final StatsLogger rootLogger;
     private final Server server;
     public PrometheusProvider(int port, StatsLogger logger) {

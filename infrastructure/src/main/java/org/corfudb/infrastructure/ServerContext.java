@@ -31,7 +31,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.baseline.IProvider;
+import org.corfudb.baseline.Provider;
 import org.corfudb.baseline.providers.NullProvider;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
@@ -159,7 +159,7 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     @Setter
-    IProvider metricsProvider = new NullProvider();
+    private Provider metricsProvider = new NullProvider();
 
     /**
      * Returns a new ServerContext.

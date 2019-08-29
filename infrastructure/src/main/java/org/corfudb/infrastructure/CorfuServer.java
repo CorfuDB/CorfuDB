@@ -14,7 +14,7 @@ import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.corfudb.baseline.IProvider;
+import org.corfudb.baseline.Provider;
 import org.corfudb.baseline.loggers.DropWizardLogger;
 import org.corfudb.baseline.providers.PrometheusProvider;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -57,6 +57,7 @@ public class CorfuServer {
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[--metrics] [--metrics-port <metrics_port>]"
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -170,6 +171,10 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the logunit server.\n"
                     + "                                                                          "
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
+                    + " --metrics                                                                "
+                    + "              Enable metrics provider.\n                                  "
+                    + " --metrics-port=<metrics_port>                                            "
+                    + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -232,7 +237,7 @@ public class CorfuServer {
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
-            startMetricsProvider(serverContext);
+            setupMetrics(serverContext, opts);
             try {
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
@@ -390,15 +395,16 @@ public class CorfuServer {
      *
      * @param serverContext Server Context.
      */
-    private static void startMetricsProvider(ServerContext serverContext) {
-        //TODO add boolean reportMetrics and int port in ServerContext
+    private static void setupMetrics(ServerContext serverContext, Map<String, Object> opts) {
         //TODO modify root logger name to node name or host name
-        int metricsPort = 9999;
-        MetricRegistry metricRegistry = new MetricRegistry();
-        DropWizardLogger dropWizardLogger = new DropWizardLogger("root", metricRegistry);
-        IProvider provider = new PrometheusProvider(metricsPort, dropWizardLogger);
-        log.info("setupMetrics: reporting metrics on port {}", metricsPort);
-        serverContext.setMetricsProvider(provider);
-        provider.start();
+        if ((Boolean) opts.get("--metrics")) {
+            int metricsPort = Integer.parseInt((String) opts.get("--metrics-port"));
+            MetricRegistry metricRegistry = new MetricRegistry();
+            DropWizardLogger dropWizardLogger = new DropWizardLogger("root", metricRegistry);
+            Provider provider = new PrometheusProvider(metricsPort, dropWizardLogger);
+            log.info("setupMetrics: reporting metrics on port {}", metricsPort);
+            serverContext.setMetricsProvider(provider);
+            provider.start();
+        }
     }
 }
