@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.NonNull;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -13,7 +12,6 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -53,10 +51,9 @@ public interface StreamLog {
     /**
      * Return the current compaction marks for a list of stream
      *
-     * @param streams set of stream identifiers
      * @return a map of stream to its compaction mark.
      */
-    Map<UUID, Long> getCompactionMarks(@NonNull Set<UUID> streams);
+    long getGlobalCompactionMark();
 
     /**
      * Prefix trim the global log.

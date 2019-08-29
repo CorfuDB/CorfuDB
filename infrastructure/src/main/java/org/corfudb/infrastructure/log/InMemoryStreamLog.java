@@ -1,12 +1,12 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -160,8 +160,8 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
-    public Map<UUID, Long> getCompactionMarks(@NonNull Set<UUID> streams) {
-        return Collections.emptyMap();
+    public long getGlobalCompactionMark() {
+        return Address.NON_ADDRESS;
     }
 
     @Override

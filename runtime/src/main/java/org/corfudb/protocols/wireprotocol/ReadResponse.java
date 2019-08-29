@@ -1,15 +1,14 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.runtime.view.Address;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by mwei on 8/15/16.
@@ -23,16 +22,16 @@ public class ReadResponse implements ICorfuPayload<ReadResponse> {
 
     @Setter
     @Getter
-    Map<UUID, Long> compactionMarks;
+    long compactionMark;
 
     public ReadResponse(ByteBuf buf) {
         addresses = ICorfuPayload.mapFromBuffer(buf, Long.class, LogData.class);
-        compactionMarks = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        compactionMark = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
     public ReadResponse() {
         addresses = new HashMap<>();
-        compactionMarks = new HashMap<>();
+        compactionMark = Address.NON_ADDRESS;
     }
 
     public void put(Long address, LogData data) {
@@ -42,6 +41,6 @@ public class ReadResponse implements ICorfuPayload<ReadResponse> {
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, addresses);
-        ICorfuPayload.serialize(buf, compactionMarks);
+        ICorfuPayload.serialize(buf, compactionMark);
     }
 }
