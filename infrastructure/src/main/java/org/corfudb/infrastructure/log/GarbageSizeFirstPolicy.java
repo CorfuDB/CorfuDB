@@ -34,7 +34,7 @@ public class GarbageSizeFirstPolicy extends AbstractCompactionPolicy {
     @Override
     public List<Long> getSegmentsToCompact(List<CompactionMetadata> compactibleSegments) {
         // Force compaction to override the policy if out of disk quota.
-        if (requireForceCompaction(params, fileStore, logSizeQuota)) {
+        if (requireForceCompaction(params, fileStore, logSizeQuota, compactibleSegments)) {
             log.info("Force compaction needed, ignoring compaction policy.");
             return getSegmentsToForceCompact(compactibleSegments);
         }
