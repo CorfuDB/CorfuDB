@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.datastore;
 
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
-
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -16,16 +14,20 @@ import org.corfudb.util.JsonUtils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Consumer;
+
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 /**
  * Stores data as JSON.
@@ -94,11 +96,11 @@ public class DataStore implements KvDataStore {
     }
 
 
-    public static int getChecksum(byte[] bytes) {
+    private static int getChecksum(ByteBuffer buf) {
         Hasher hasher = Hashing.crc32c().newHasher();
-        for (byte a : bytes) {
-            hasher.putByte(a);
-        }
+        buf.mark();
+        hasher.putBytes(buf);
+        buf.reset();
 
         return hasher.hash().asInt();
     }
@@ -126,18 +128,31 @@ public class DataStore implements KvDataStore {
                             Path path = Paths.get(logDirPath, dsFileName);
                             Path tmpPath = Paths.get(logDirPath, dsFileName + ".tmp");
 
-                            String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
-                            byte[] bytes = jsonPayload.getBytes();
+                            ByteBuffer dataBuf;
+                            if (value instanceof ByteBuffer) {
+                                dataBuf = ((ByteBuffer) value);
+                            } else {
+                                String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
+                                dataBuf = ByteBuffer.wrap(jsonPayload.getBytes());
+                            }
 
-                            ByteBuffer buffer = ByteBuffer.allocate(bytes.length
-                                    + Integer.BYTES);
-                            buffer.putInt(getChecksum(bytes));
-                            buffer.put(bytes);
-                            Files.write(tmpPath, buffer.array(), StandardOpenOption.CREATE,
+                            ByteBuffer checksumBuf = ByteBuffer.allocate(Integer.BYTES);
+                            checksumBuf.putInt(getChecksum(dataBuf));
+                            checksumBuf.flip();
+                            ByteBuffer[] buffers = {checksumBuf, dataBuf};
+
+                            FileChannel writeChannel = FileChannel.open(tmpPath,
+                                    StandardOpenOption.WRITE, StandardOpenOption.CREATE,
                                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+
+                            while (checksumBuf.hasRemaining() || dataBuf.hasRemaining()) {
+                                writeChannel.write(buffers);
+                            }
+
                             Files.move(tmpPath, path, StandardCopyOption.REPLACE_EXISTING,
                                     StandardCopyOption.ATOMIC_MOVE);
                             syncDirectory(logDirPath);
+
                             // Invoking the cleanup on each disk file write is fine for performance
                             // since DataStore files are not supposed to change too frequently
                             cleanupTask.accept(dsFileName);
@@ -168,17 +183,24 @@ public class DataStore implements KvDataStore {
             if (Files.notExists(path)) {
                 return null;
             }
-            byte[] bytes = Files.readAllBytes(path);
-            ByteBuffer buf = ByteBuffer.wrap(bytes);
-            int checksum = buf.getInt();
-            byte[] strBytes = Arrays.copyOfRange(bytes, 4, bytes.length);
-            if (checksum != getChecksum(strBytes)) {
+
+            FileChannel readChannel = FileChannel.open(path, StandardOpenOption.READ);
+            ByteBuffer dataBuf = ByteBuffer.allocate((int) readChannel.size());
+            readChannel.read(dataBuf);
+            dataBuf.flip();
+
+            int checksum = dataBuf.getInt();
+            if (checksum != getChecksum(dataBuf)) {
                 throw new DataCorruptionException();
             }
 
-            String json = new String(strBytes);
-            T val = JsonUtils.parser.fromJson(json, tClass);
-            return val;
+            if (tClass.equals(ByteBuffer.class)) {
+                return (T) dataBuf;
+            }
+
+            String json = new String(dataBuf.array(), Integer.BYTES, dataBuf.remaining());
+            return JsonUtils.parser.fromJson(json, tClass);
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -207,7 +229,6 @@ public class DataStore implements KvDataStore {
                     return loadedVal;
                 }
             }
-
             // We need to maintain a path -> null mapping for keys that were loaded, but
             // were empty. This is required to prevent loading an empty key more than once, which is expensive.
             return NullValue.NULL_VALUE;
@@ -225,5 +246,20 @@ public class DataStore implements KvDataStore {
     @Override
     public synchronized <T> void delete(KvRecord<T> key) {
         cache.invalidate(key.getFullKeyName());
+    }
+
+    @Override
+    public void deleteFiles(FileFilter fileFilter) {
+        File[] files = new File(logDirPath).listFiles(fileFilter);
+
+        if (files == null) {
+            throw new RuntimeException("DataStore: Failed to list files to delete.");
+        }
+
+        for (File file : files) {
+            if (file.delete()) {
+                log.debug("DataStore: Deleted existing DataStore file: {}", file);
+            }
+        }
     }
 }
