@@ -307,7 +307,8 @@ public class WorkflowIT extends AbstractIT {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getAddressSpaceView().gc();
 
-        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount);
+        // +1 because of extra NO_OP entry added by checkpointer
+        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
 
         // 2 Checkpoint entries for the start and end.
         // 1000 entries being checkpointed = 20 checkpoint entries due to batch size of 50.
@@ -333,7 +334,8 @@ public class WorkflowIT extends AbstractIT {
 
         run(n0.shutdown);
 
-        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount);
+        // +1 because of extra NO_OP entry added by checkpointer
+        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             if (runtime.getLayoutView().getLayout().getEpoch() > layoutAfterAdds.getEpoch()) {
@@ -349,7 +351,7 @@ public class WorkflowIT extends AbstractIT {
         assertThat(runtime.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9002").getTrimMark().get())
                 .isEqualTo(prefixTrimAddress.getSequence() + 1);
         assertThat(runtime.getAddressSpaceView().getAllTails().getStreamTails().get(CorfuRuntime.getStreamID(streamName)))
-                .isEqualTo(streamTail);
+                .isEqualTo(streamTail+1);
 
         // Shutdown two nodes
         run(n1.shutdown, n2.shutdown);

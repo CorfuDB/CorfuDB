@@ -72,7 +72,11 @@ public class Helpers{
         // Assert that UnderlyingObjects are at the same version
         // If they are at the same version, a sync on the object will
         // be a no op for the new runtime.
-        assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
+
+        // This utility is used by many checkpoint tests and because new checkpoint
+        // inserts a NO_OP entry, VLO version will differ from original (before checkpoint) to
+        // the VLO after checkpoint and depending on the nature of the test this is not as simple as + 1.
+        // assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
 
         Map<String, String> mapPrime = createMap(streamName, rt2, type);
         assertThat(mapPrime.size()).isEqualTo(map.size());
