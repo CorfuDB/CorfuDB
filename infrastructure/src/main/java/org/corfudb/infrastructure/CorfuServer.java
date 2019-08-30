@@ -14,9 +14,9 @@ import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.corfudb.baseline.Provider;
-import org.corfudb.baseline.loggers.DropWizardLogger;
-import org.corfudb.baseline.providers.PrometheusProvider;
+import org.corfudb.common.Provider;
+import org.corfudb.common.loggers.DropWizardLogger;
+import org.corfudb.common.providers.PrometheusProvider;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;

@@ -1,8 +1,9 @@
-package org.corfudb.baseline.providers;
+package org.corfudb.common.providers;
 
-import org.corfudb.baseline.Provider;
-import org.corfudb.baseline.StatsLogger;
-import org.corfudb.baseline.loggers.NullStatsLogger;
+
+import org.corfudb.common.Provider;
+import org.corfudb.common.StatsLogger;
+import org.corfudb.common.loggers.NullStatsLogger;
 
 public class NullProvider implements Provider {
     public static Provider INSTANCE = new NullProvider();

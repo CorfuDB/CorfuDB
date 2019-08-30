@@ -1,4 +1,4 @@
-package org.corfudb.baseline;
+package org.corfudb.common;
 
 public interface Provider {
     StatsLogger getLogger(String name);

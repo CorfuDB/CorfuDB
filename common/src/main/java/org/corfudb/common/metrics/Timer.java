@@ -1,4 +1,4 @@
-package org.corfudb.baseline.metrics;
+package org.corfudb.common.metrics;
 
 import java.io.Closeable;
 

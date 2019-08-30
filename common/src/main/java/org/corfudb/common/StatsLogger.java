@@ -1,8 +1,8 @@
-package org.corfudb.baseline;
+package org.corfudb.common;
 
-import org.corfudb.baseline.metrics.Counter;
-import org.corfudb.baseline.metrics.Gauge;
-import org.corfudb.baseline.metrics.Timer;
+import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.Gauge;
+import org.corfudb.common.metrics.Timer;
 
 public interface StatsLogger {
     Counter getCounter(String name);

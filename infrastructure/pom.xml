@@ -143,11 +143,6 @@
             <artifactId>format</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>baseline</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
 
         <!-- External Dependencies-->

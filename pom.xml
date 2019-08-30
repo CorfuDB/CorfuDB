@@ -19,7 +19,6 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
-        <module>baseline</module>
     </modules>
 
 

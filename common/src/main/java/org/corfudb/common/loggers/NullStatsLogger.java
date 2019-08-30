@@ -1,9 +1,10 @@
-package org.corfudb.baseline.loggers;
+package org.corfudb.common.loggers;
 
-import org.corfudb.baseline.StatsLogger;
-import org.corfudb.baseline.metrics.Counter;
-import org.corfudb.baseline.metrics.Gauge;
-import org.corfudb.baseline.metrics.Timer;
+
+import org.corfudb.common.StatsLogger;
+import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.Gauge;
+import org.corfudb.common.metrics.Timer;
 
 public class NullStatsLogger implements StatsLogger {
     public static final NullStatsLogger INSTANCE = new NullStatsLogger();

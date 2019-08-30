@@ -9,8 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.baseline.StatsLogger;
-import org.corfudb.baseline.metrics.Counter;
+import org.corfudb.common.StatsLogger;
+import org.corfudb.common.metrics.Counter;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;

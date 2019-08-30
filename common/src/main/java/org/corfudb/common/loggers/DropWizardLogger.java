@@ -1,11 +1,12 @@
-package org.corfudb.baseline.loggers;
+package org.corfudb.common.loggers;
 
 import com.codahale.metrics.MetricRegistry;
 import lombok.Getter;
-import org.corfudb.baseline.StatsLogger;
-import org.corfudb.baseline.metrics.Counter;
-import org.corfudb.baseline.metrics.Gauge;
-import org.corfudb.baseline.metrics.Timer;
+
+import org.corfudb.common.StatsLogger;
+import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.Gauge;
+import org.corfudb.common.metrics.Timer;
 
 import static com.codahale.metrics.MetricRegistry.name;
 

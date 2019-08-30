@@ -1,15 +1,16 @@
-package org.corfudb.baseline.providers;
+package org.corfudb.common.providers;
 
 import com.codahale.metrics.MetricRegistry;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.baseline.Provider;
-import org.corfudb.baseline.StatsLogger;
+
 
 import io.prometheus.client.exporter.MetricsServlet;
 
-import org.corfudb.baseline.loggers.DropWizardLogger;
+import org.corfudb.common.Provider;
+import org.corfudb.common.StatsLogger;
+import org.corfudb.common.loggers.DropWizardLogger;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;

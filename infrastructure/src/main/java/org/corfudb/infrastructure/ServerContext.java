@@ -31,8 +31,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.baseline.Provider;
-import org.corfudb.baseline.providers.NullProvider;
+import org.corfudb.common.Provider;
+import org.corfudb.common.providers.NullProvider;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
