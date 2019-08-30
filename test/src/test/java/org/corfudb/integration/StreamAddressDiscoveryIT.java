@@ -4,7 +4,9 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -16,10 +18,12 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -607,10 +611,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *    first checkpoint has been trimmed.
      *
      *
-     *         S1  S1  S1  S1  S1  [   CP1   ] S1  S1  S1   S1   S1  [    CP2      ]
-     *       +---------------------------------------------------------------------+
-     *       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
-     *       +---------------------------------------------------------------------+
+     *         S1  S1  S1  S1  S1  No [   CP1   ]  S1  S1  S1   S1   S1  No-Op [     CP2      ]
+     *                             Op
+     *       +-------------------------------------------------------------------------------+
+     *       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 |
+     *       +-------------------------------------------------------------------------------+
      *                     ^                       ^
      *                    TRIM                  SNAPSHOT
      *
@@ -631,7 +636,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             final int batchWrite = 5;
             final long trimAddress = 3L;
             final long snapshotAddress = 9L;
-            final int sizeAtSnapshot = 7;
+            final int sizeAtSnapshot = 6;
 
             Map<String, String> map1 = writeRuntime.getObjectsView().build()
                     .setTypeToken(new TypeToken<SMRMap<String, String>>() {
@@ -1182,6 +1187,126 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             if (runtime != null) runtime.shutdown();
             if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    String getConnectionString(int port) {
+        return AbstractIT.DEFAULT_HOST + ":" + port;
+    }
+
+    /**
+     * This test aims to verify sequencer reconfiguration from log units in the event of empty maps.
+     * Steps to reproduce this test:
+     * 1. Open a stream.
+     * 2. Checkpoint the stream (this will force a hole on the empty map from the checkpointer).
+     * 3. Verify Stream Maps from head Log unit and sequencer tails.
+     * 4. PrefixTrim
+     * 5. Enforce sequencer failover (shutdown primary sequencer server).
+     * 6. Verify Stream Maps from log unit and sequencer tails (both regular stream and checkpoint
+     * stream should be present).
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCheckpointEmptyMapAndSequencerFailover() throws Exception {
+        testCheckpointEmptyMapWithSequencerFailover(false);
+    }
+
+    /**
+     * This test is similar to the previous, but enforces the hole from a reader, as reader hole fill
+     * does not contain stream information to build address map.
+     * @throws Exception
+     */
+    @Test
+    public void testCheckpointEmptyMapWithReaderHoleAndSequencerFailover() throws Exception {
+        testCheckpointEmptyMapWithSequencerFailover(true);
+    }
+
+    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception{
+        final int n0Port = 9000;
+        final int n1Port = 9001;
+        final int n2Port = 9002;
+
+        final int clusterSizeN2 = 2;
+        final int clusterSizeN3 = 3;
+
+        final int workflowNumRetry = 3;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofMillis(50);
+
+        // Run 3 Corfu Server
+        Process server_1 = runServer(n0Port, true);
+        Process server_2 = runServer(n1Port, false);
+        Process server_3 = runServer(n2Port, false);
+
+        runtime = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+        runtime.invalidateLayout();
+        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+        runtime.invalidateLayout();
+        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+
+        final long totalEntries = 2L;
+        int extraEntry = 0;
+
+        try {
+            // Instantiate streamA as map
+            final String streamA = "streamA";
+            Map<String, Integer> mA = createMap(runtime, streamA);
+
+            UUID streamID = CorfuRuntime.getStreamID(streamA);
+            UUID checkpointId = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
+
+            if (readerHole) {
+                // Generate hole from a reader
+                runtime.getSequencerView().next(streamID).getToken();
+                assertThat(mA.size()).isEqualTo(0);
+                extraEntry = 1;
+            }
+
+            // Start a CheckpointWriter for streamA
+            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
+                    "checkpointer-Test", mA);
+            Token cpTokenA = cpwA.appendCheckpoint();
+
+            // Verify Address Maps from Log Unit and Sequencer Tails (first node)
+            StreamsAddressResponse logUnitResponse = runtime.getAddressSpaceView().getLogAddressSpace();
+            TokenResponse sequencerTails = runtime.getSequencerView().query(streamID, checkpointId);
+
+            // +1 because checkpointer contributes to a NO_OP entry
+            assertThat(logUnitResponse.getAddressMap().get(checkpointId).getTail()).isEqualTo(totalEntries + extraEntry);
+            assertThat(logUnitResponse.getAddressMap().get(streamID).getTail()).isEqualTo(extraEntry);
+
+            assertThat(sequencerTails.getStreamTail(streamID)).isEqualTo(extraEntry);
+            assertThat(sequencerTails.getStreamTail(checkpointId)).isEqualTo(totalEntries + extraEntry);
+
+            // Trim the log at A's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpTokenA);
+
+            long currentEpoch = runtime.getLayoutView().getLayout().getEpoch();
+
+            // Shutdown A
+            shutdownCorfuServer(server_1);
+
+            waitForLayoutChange(layout -> layout.getEpoch() > currentEpoch, runtime);
+
+            // Verify Address Maps from Log Unit and Sequencer Tails (second node)
+            logUnitResponse = runtime.getAddressSpaceView().getLogAddressSpace();
+            sequencerTails = runtime.getSequencerView().query(streamID, checkpointId);
+
+            assertThat(logUnitResponse.getAddressMap().get(checkpointId).getTail()).isEqualTo(totalEntries + extraEntry);
+            assertThat(logUnitResponse.getAddressMap().get(streamID).getTail()).isEqualTo(extraEntry);
+
+            assertThat(sequencerTails.getStreamTail(streamID)).isEqualTo(extraEntry);
+            assertThat(sequencerTails.getStreamTail(checkpointId)).isEqualTo(totalEntries + extraEntry);
+        } finally {
+            shutdownCorfuServer(server_2);
+            shutdownCorfuServer(server_3);
         }
     }
 }

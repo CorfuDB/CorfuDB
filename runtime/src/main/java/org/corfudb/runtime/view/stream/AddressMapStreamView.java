@@ -13,6 +13,7 @@ import javax.annotation.Nonnull;
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
@@ -87,7 +88,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
-                    if (ld.containsStream(this.id)) {
+                    if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
                         addToResolvedQueue(getCurrentContext(), currentRead, ld);
                         readNext = false;
                     } else {
