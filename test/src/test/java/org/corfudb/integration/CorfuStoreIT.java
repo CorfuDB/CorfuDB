@@ -192,22 +192,6 @@ public class CorfuStoreIT extends AbstractIT {
                     newMetaBuilder.build()));
         }
         assertThat(corfuTable.size()).isEqualTo(1);
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
-                })
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME))
-                .setSerializer(dynamicProtobufSerializer)
-                .addOpenOption(ObjectOpenOption.NO_CACHE)
-                .open();
-
-        mcw.addMap(corfuTable);
-        mcw.addMap(tableRegistry);
-        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
-
-        runtime.getAddressSpaceView().prefixTrim(trimPoint);
-        runtime.getAddressSpaceView().gc();
         runtime.shutdown();
 
         // PHASE 3

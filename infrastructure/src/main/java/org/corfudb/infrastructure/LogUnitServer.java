@@ -7,8 +7,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.StreamLogParams;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -37,7 +37,6 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,9 +44,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.MULTI_GARBAGE_WRITE;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
@@ -97,7 +96,6 @@ public class LogUnitServer extends AbstractServer {
      */
     private final LogUnitServerCache dataCache;
     private final StreamLog streamLog;
-    private final StreamLogCompaction logCleaner;
     private final BatchProcessor batchWriter;
 
     private ExecutorService executor;
@@ -122,14 +120,17 @@ public class LogUnitServer extends AbstractServer {
                     .convertToByteStringRepresentation(config.getMaxCacheSize()));
             streamLog = new InMemoryStreamLog();
         } else {
-            streamLog = new StreamLogFiles(serverContext.getStreamLogParams(), serverContext.getStreamLogDataStore());
+            StreamLogParams streamLogParams = serverContext.getStreamLogParams();
+            streamLog = new StreamLogFiles(streamLogParams, serverContext.getStreamLogDataStore());
+            log.info("Log unit server started with stream log parameters: {}", streamLogParams);
         }
 
         dataCache = new LogUnitServerCache(config, streamLog);
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
-        // TODO: change to new GC, put into StreamLogFile, start after initialization finishes.
-        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        if (config.enableCompaction) {
+            streamLog.startCompactor();
+        }
     }
 
 
@@ -204,13 +205,6 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.MULTIPLE_GARBAGE_WRITE)
-    private void sparseTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-                            IServerRouter r) {
-        //TODO(Xin): Complete sparse trim handler
-        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-    }
-
     /**
      * Service an incoming write request.
      */
@@ -231,10 +225,11 @@ public class LogUnitServer extends AbstractServer {
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
+                }, executor)
+                .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
-        });
+                });
     }
 
     /**
@@ -248,7 +243,21 @@ public class LogUnitServer extends AbstractServer {
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
         batchWriter.addTask(RANGE_WRITE, msg)
-                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
+                .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    @ServerHandler(type = CorfuMsgType.MULTIPLE_GARBAGE_WRITE)
+    private void multiGarbageWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
+                                   ChannelHandlerContext ctx, IServerRouter r) {
+        List<LogData> garbageEntries = msg.getPayload().getEntries();
+        log.debug("multiGarbageWrite: Writing {} garbage entries", garbageEntries.size());
+
+        batchWriter.addTask(MULTI_GARBAGE_WRITE, msg)
+                .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -337,13 +346,6 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
-    private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleCompactRequest: received a compact request {}", msg);
-        streamLog.compact();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
     private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
@@ -404,7 +406,8 @@ public class LogUnitServer extends AbstractServer {
                         dataCache.invalidateAll();
                         log.info("LogUnit Server Reset.");
                         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-                    }).exceptionally(ex -> {
+                    })
+                    .exceptionally(ex -> {
                         handleException(ex, ctx, msg, r);
                         return null;
                     });
@@ -415,7 +418,6 @@ public class LogUnitServer extends AbstractServer {
     }
 
 
-
     /**
      * Shutdown the server.
      */
@@ -423,7 +425,6 @@ public class LogUnitServer extends AbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
-        logCleaner.shutdown();
         batchWriter.close();
     }
 
@@ -448,8 +449,14 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    void prefixTrim(long trimAddress) {
-        streamLog.prefixTrim(trimAddress);
+    public void runCompaction() {
+        if (config.enableCompaction) {
+            throw new IllegalStateException("Cannot manually run compaction since server is " +
+                    "started with compaction enabled.");
+        }
+        if (streamLog instanceof StreamLogFiles) {
+            ((StreamLogFiles) streamLog).getCompactor().compact();
+        }
     }
 
     /**
@@ -462,6 +469,7 @@ public class LogUnitServer extends AbstractServer {
         private final long maxCacheSize;
         private final boolean memoryMode;
         private final boolean noSync;
+        private final boolean enableCompaction;
 
         /**
          * Parse legacy configuration options
@@ -477,6 +485,7 @@ public class LogUnitServer extends AbstractServer {
                     .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
                     .memoryMode(Boolean.valueOf(opts.get("--memory").toString()))
                     .noSync((Boolean) opts.get("--no-sync"))
+                    .enableCompaction(!((Boolean) opts.get("--no-compaction")))
                     .build();
         }
     }

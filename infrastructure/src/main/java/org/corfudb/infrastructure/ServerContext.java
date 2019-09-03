@@ -11,9 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.log.CompactionPolicy;
+import org.corfudb.infrastructure.log.CompactionPolicy.CompactionPolicyType;
 import org.corfudb.infrastructure.log.StreamLogDataStore;
 import org.corfudb.infrastructure.log.StreamLogParams;
-import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -669,14 +670,23 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    /**
-     * Get the user defined log size quota percentage.
-     *
-     * @return log size quota percentage
-     */
-    private double getLogSizeQuotaPercentage() {
-        String logSizeQuotaPercentage = getServerConfig(String.class, "--log-size-quota-percentage");
-        return logSizeQuotaPercentage == null ? 100.0 : Double.valueOf(logSizeQuotaPercentage);
+    private int getCompactionWorkerThreads() {
+        int requested = Integer.parseInt(getServerConfig(String.class, "--compaction-worker-threads"));
+        if (requested != 0) {
+            return requested;
+        }
+
+        return Runtime.getRuntime().availableProcessors();
+    }
+
+    private int getProtectedSegments() {
+        int protectedSegments = Integer.parseInt(getServerConfig(String.class, "--protected-segments"));
+        if (protectedSegments < 1) {
+            throw new IllegalArgumentException("Number of protected segments for compaction " +
+                    "should at least be 1.");
+        }
+
+        return protectedSegments;
     }
 
     /**
@@ -688,8 +698,16 @@ public class ServerContext implements AutoCloseable {
         return StreamLogParams.builder()
                 .logPath(getServerConfig(String.class, "--log-path"))
                 .verifyChecksum(!getServerConfig(Boolean.class, "--no-verify"))
-                .logSizeQuotaPercentage(getLogSizeQuotaPercentage())
-                .compressionCodec(Codec.Type.valueOf(getServerConfig(String.class, "--compression-codec")))
+                .logSizeQuotaPercentage(Double.parseDouble(getServerConfig(String.class, "--log-size-quota-percentage")))
+                .compactionPolicyType(CompactionPolicyType.valueOf(getServerConfig(String.class, "--compaction-policy")))
+                .compactionInitialDelayMin(Integer.parseInt(getServerConfig(String.class, "--compaction-initial-delay")))
+                .compactionPeriodMin(Integer.parseInt(getServerConfig(String.class, "--compaction-period")))
+                .maxSegmentsForCompaction(Integer.parseInt(getServerConfig(String.class, "--max-segments-for-compaction")))
+                .protectedSegments(getProtectedSegments())
+                .compactionWorkers(getCompactionWorkerThreads())
+                .segmentGarbageRatioThreshold(Double.parseDouble(getServerConfig(String.class, "--segment-garbage-ratio-threshold")))
+                .segmentGarbageSizeThresholdMB(Double.parseDouble(getServerConfig(String.class, "--segment-garbage-size-threshold")))
+                .totalGarbageSizeThresholdMB(Double.parseDouble(getServerConfig(String.class, "--total-garbage-size-threshold")))
                 .build();
     }
 

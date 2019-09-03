@@ -26,6 +26,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.CompactionMetadata.currCompactionUpperBound;
@@ -50,6 +51,8 @@ public class StreamLogCompactor {
     // of a garbage entries batch to be rewritten.
     private static final int GARBAGE_COMPACTION_BATCH_SIZE = 10;
 
+    private final StreamLogParams logParams;
+
     private final CompactionPolicy compactionPolicy;
 
     private final SegmentManager segmentManager;
@@ -65,6 +68,7 @@ public class StreamLogCompactor {
     StreamLogCompactor(StreamLogParams logParams, CompactionPolicy compactionPolicy,
                        SegmentManager segmentManager, StreamLogDataStore dataStore,
                        LogMetadata logMetadata) {
+        this.logParams = logParams;
         this.compactionPolicy = compactionPolicy;
         this.segmentManager = segmentManager;
         this.dataStore = dataStore;
@@ -75,13 +79,15 @@ public class StreamLogCompactor {
                         .setDaemon(true)
                         .setNameFormat("LogUnit-Compactor-%d")
                         .build());
-        compactionWorker = Executors.newFixedThreadPool(logParams.compactorWorkers);
-
-        compactionScheduler.scheduleAtFixedRate(this::compact, logParams.compactorInitialDelay,
-                logParams.compactorPeriod, logParams.compactorTimeUnit);
+        compactionWorker = Executors.newFixedThreadPool(logParams.compactionWorkers);
     }
 
-    private void compact() {
+    public void start() {
+        compactionScheduler.scheduleAtFixedRate(this::compact,
+                logParams.compactionInitialDelayMin, logParams.compactionPeriodMin, TimeUnit.MINUTES);
+    }
+
+    public void compact() {
         try {
             // Get the segments that should be compacted according to compaction policy.
             List<Long> segmentOrdinals = compactionPolicy
