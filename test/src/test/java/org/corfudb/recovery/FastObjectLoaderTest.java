@@ -304,47 +304,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThatStreamTailsAreCorrectIgnore(streamTails, "Map1");
     }
 
-    @Test(expected = RuntimeException.class)
-    public void failBecauseOfTrimAnd1Attempt() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
-
-        long firstMileStone = 2;
-        FastObjectLoader incrementalLoader = new FastObjectLoader(rt2);
-        incrementalLoader.setNumberOfAttempt(0);
-        incrementalLoader.setLogTail(firstMileStone);
-        incrementalLoader.setDefaultObjectsType(CorfuTable.class);
-        incrementalLoader.loadMaps();
-
-        Token token = new Token(rt2.getLayoutView().getLayout().getEpoch(), firstMileStone + 2);
-        Helpers.trim(getDefaultRuntime(), token);
-
-        incrementalLoader.setLogHead(firstMileStone + 1);
-        incrementalLoader.setLogTail(getDefaultRuntime().getSequencerView().next().getSequence());
-        incrementalLoader.loadMaps();
-    }
-
-    @Test
-    public void failWhenTrimHappensWhileFastLoading() throws Exception {
-        // 1 tables has 1 entry and 2 tables have 2 entries
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        Token snapShotAddress = checkPointAll(getDefaultRuntime());
-        Helpers.trim(getDefaultRuntime(), snapShotAddress);
-
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
-
-        // Force a read from 0
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setLogHead(0L);
-        fsm.setDefaultObjectsType(CorfuTable.class);
-        fsm.setNumberOfAttempt(0);
-        assertThatThrownBy(fsm::loadMaps).isInstanceOf(RuntimeException.class);
-    }
-
     @Test
     public void doNotReconstructTransactionStreams() throws Exception {
         addSingleServer(SERVERS.PORT_0);

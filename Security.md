@@ -24,8 +24,6 @@ Options:
                                                                                         evicted entries will be auto-trimmed. [default: 1000000000].
  -t <token>, --initial-token=<token>                                                    The first token the sequencer will issue, or -1 to recover
                                                                                         from the log. [default: -1].
- -p <seconds>, --compact=<seconds>                                                      The rate the log unit should compact entries (find the,
-                                                                                        contiguous tail) in seconds [default: 60].
  -d <level>, --log-level=<level>                                                        Set the logging level, valid levels are: 
                                                                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].
  -Q, --quickcheck-test-mode                                                             Run in QuickCheck test mode
