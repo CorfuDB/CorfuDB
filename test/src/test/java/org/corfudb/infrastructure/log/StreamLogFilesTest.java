@@ -26,11 +26,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -157,7 +153,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // A range write that spans two segments
         final int numSegments = 2;
-        final int numIter = params.recordsPerSegment * numSegments;
+        final int numIter = StreamLogParams.RECORDS_PER_SEGMENT * numSegments;
         List<LogData> writeEntries = new ArrayList<>();
         for (int x = 0; x < numIter; x++) {
             writeEntries.add(getEntry(x));
@@ -179,7 +175,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         List<LogData> nonSequentialRange = new ArrayList<>();
         final int numSegments = 3;
         final int skipGap = 10;
-        final int numEntries = numSegments * log.getLogParams().recordsPerSegment;
+        final int numEntries = numSegments * StreamLogParams.RECORDS_PER_SEGMENT;
         // Generate two invalid ranges, a large range and a non-sequential range
         for (long address = 0; address < numEntries; address++) {
             largeRange.add(getEntry(address));
@@ -308,7 +304,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         Serializers.CORFU.serialize(streamEntry, b);
         // Write to two segments
         long address0 = 0;
-        long address1 = log.getLogParams().recordsPerSegment + 1L;
+        long address1 = StreamLogParams.RECORDS_PER_SEGMENT + 1L;
         log.append(address0, new LogData(DataType.DATA, b));
         log.append(address1, new LogData(DataType.DATA, b));
 
@@ -379,9 +375,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        long seg1 = log.getLogParams().recordsPerSegment * 0 + 1;
-        long seg2 = log.getLogParams().recordsPerSegment * 1 + 1;
-        long seg3 = log.getLogParams().recordsPerSegment * 2 + 1;
+        long seg1 = StreamLogParams.RECORDS_PER_SEGMENT * 0 + 1;
+        long seg2 = StreamLogParams.RECORDS_PER_SEGMENT * 1 + 1;
+        long seg3 = StreamLogParams.RECORDS_PER_SEGMENT * 2 + 1;
 
         log.append(seg1, new LogData(DataType.DATA, b));
         log.append(seg2, new LogData(DataType.DATA, b));
@@ -421,7 +417,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Write to multiple segments
         final int segments = 3;
-        long lastAddress = segments * log.getLogParams().recordsPerSegment;
+        long lastAddress = segments * StreamLogParams.RECORDS_PER_SEGMENT;
         for (long x = 0; x <= lastAddress; x++){
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
@@ -443,90 +439,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.getLogTail()).isEqualTo(lastAddress + tailDelta);
     }
 
-    @Test
-    public void testPrefixTrim() {
-        StreamLogParams params = sc.getStreamLogParams();
-        StreamLogFiles log = new StreamLogFiles(params, sc.getStreamLogDataStore());
-
-        // Write 50 segments and trim the first 25
-        final long numSegments = 50;
-        for(long x = 0; x < numSegments * params.recordsPerSegment; x++) {
-            writeToLog(log, x);
-        }
-
-        File logsDir = log.getLogDir().toFile();
-
-        assertThat((long) logsDir.list().length).isEqualTo(numSegments);
-
-        final long endSegment = 25;
-        long trimAddress = endSegment * params.recordsPerSegment + 1;
-
-        // Get references to the segments that will be trimmed
-
-        Set<StreamLogSegment> trimmedSegments = log.getSegmentManager().getStreamLogSegments()
-                .values()
-                .stream()
-                .filter(segment -> segment.getOrdinal() < endSegment)
-                .collect(Collectors.toSet());
-
-        log.prefixTrim(trimAddress);
-        log.compact();
-
-        // Verify that the segments have been removed
-        assertThat(log.getSegmentManager().getStreamLogSegments().size()).isEqualTo((int) endSegment);
-
-        // Verify that first 25 segments have been deleted
-        String[] afterTrimFiles = logsDir.list();
-        assertThat(afterTrimFiles).hasSize((int) (numSegments - endSegment));
-
-        Set<String> fileNames = new HashSet<>(Arrays.asList(afterTrimFiles));
-        for (long x = endSegment + 1; x < numSegments; x++) {
-            String logFile = Long.toString(x) + ".log";
-            assertThat(fileNames).contains(logFile);
-        }
-
-        // Try to trim an address that is less than the new starting address
-        // This shouldn't throw an exception
-        log.prefixTrim(trimAddress);
-    }
-
-    @Test
-    public void testPrefixTrimAndStartUp() {
-        StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-        log.prefixTrim(log.getLogParams().recordsPerSegment / 2);
-        log.compact();
-        log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-        final long midSegmentAddress = log.getLogParams().recordsPerSegment + 5;
-        log.prefixTrim(midSegmentAddress);
-        log.compact();
-        log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-
-        assertThat(log.getLogTail()).isEqualTo(midSegmentAddress);
-        assertThat(log.getTrimMark()).isEqualTo(midSegmentAddress + 1);
-    }
-
-    @Test
-    public void testPrefixTrimAfterRestart() {
-        StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-
-        final long numSegments = 3;
-
-        for (long x  = 0; x < log.getLogParams().recordsPerSegment * numSegments; x++) {
-            writeToLog(log, x);
-        }
-
-        final long trimMark = log.getLogParams().recordsPerSegment * 2 + 100;
-        log.prefixTrim(trimMark);
-        log.close();
-
-        log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-        log.compact();
-
-        File logsDir = log.getLogDir().toFile();
-        final int lastTwoSegmentsFiles = 1;
-        assertThat(logsDir.list()).hasSize(lastTwoSegmentsFiles);
-    }
-
     /**
      * Generates and writes 3 files worth data. Then resets the stream log and verifies that the
      * files and data is cleared.
@@ -536,31 +448,17 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
 
         final long numSegments = 3;
-        for (long x = 0; x < log.getLogParams().recordsPerSegment * numSegments; x++) {
+        for (long x = 0; x < StreamLogParams.RECORDS_PER_SEGMENT * numSegments; x++) {
             writeToLog(log, x);
         }
-        final long filesToBeTrimmed = 1;
 
-        log.prefixTrim(log.getLogParams().recordsPerSegment * filesToBeTrimmed);
-        log.compact();
-
-        File logsDir = log.getLogDir().toFile();
-
-        final int expectedFilesBeforeReset = (int) (numSegments - filesToBeTrimmed);
-        final long globalTailBeforeReset = (log.getLogParams().recordsPerSegment * numSegments) - 1;
-        final long trimMarkBeforeReset = log.getLogParams().recordsPerSegment * filesToBeTrimmed + 1;
-        assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
+        final long globalTailBeforeReset = (StreamLogParams.RECORDS_PER_SEGMENT * numSegments) - 1;
         assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
-        assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
         log.reset();
 
-        final int expectedFilesAfterReset = 0;
         final long globalTailAfterReset = Address.NON_ADDRESS;
-        final long trimMarkAfterReset = 0L;
-        assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
         assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
-        assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 
     @Test

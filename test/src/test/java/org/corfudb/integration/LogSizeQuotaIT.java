@@ -4,10 +4,9 @@ import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogParams;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
@@ -104,7 +103,7 @@ public class LogSizeQuotaIT extends AbstractIT {
 
         // bump up the sequencer counter to create multiple empty segments
         ServerContext sc = new ServerContextBuilder().build();
-        final int emptySlots = sc.getStreamLogParams().recordsPerSegment;
+        final int emptySlots = StreamLogParams.RECORDS_PER_SEGMENT;
         for (int x = 0; x < emptySlots; x++) {
             rt.getSequencerView().next();
         }

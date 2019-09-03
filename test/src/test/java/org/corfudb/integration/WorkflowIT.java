@@ -92,7 +92,6 @@ public class WorkflowIT extends AbstractIT {
 
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getAddressSpaceView().invalidateServerCaches();
-        runtime.getAddressSpaceView().gc();
 
         // Add a third node after compaction
         runtime.getManagementView().addNode(getConnectionString(n3Port), workflowNumRetry,
