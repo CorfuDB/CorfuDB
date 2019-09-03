@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.MetricRegistry;
+import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;
@@ -31,13 +34,14 @@ public class ManagementServerTest extends AbstractServerTest {
                 .setPort(SERVERS.PORT_0)
                 .setServerRouter(getRouter())
                 .build();
+        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         // Required for management server to fetch layout.
         router.addServer(new LayoutServer(serverContext));
         router.addServer(new BaseServer(serverContext));
         // Required to fetch global tails while handling failures.
         router.addServer(new LogUnitServer(serverContext));
         // Required for management server to bootstrap during initialization.
-        router.addServer(new SequencerServer(serverContext));
+        router.addServer(new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-server", metricRegistry)));
         managementServer = new ManagementServer(serverContext);
         return managementServer;
     }

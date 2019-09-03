@@ -14,9 +14,9 @@ import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.corfudb.common.Provider;
-import org.corfudb.common.loggers.DropWizardLogger;
-import org.corfudb.common.providers.PrometheusProvider;
+import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -237,9 +237,10 @@ public class CorfuServer {
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
-            setupMetrics(serverContext, opts);
             try {
-                activeServer = new CorfuServerNode(serverContext);
+                MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+                setupMetrics(opts, metricRegistry);
+                activeServer = new CorfuServerNode(serverContext, metricRegistry);
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
@@ -391,20 +392,13 @@ public class CorfuServer {
     }
 
     /**
-     * Create a centralized metric registry, and set up a provider
+     * Generate metrics server config and start server.
      *
-     * @param serverContext Server Context.
+     * @param opts Command line parameters.
      */
-    private static void setupMetrics(ServerContext serverContext, Map<String, Object> opts) {
-        //TODO modify root logger name to node name or host name
-        if ((Boolean) opts.get("--metrics")) {
-            int metricsPort = Integer.parseInt((String) opts.get("--metrics-port"));
-            MetricRegistry metricRegistry = new MetricRegistry();
-            DropWizardLogger dropWizardLogger = new DropWizardLogger("root", metricRegistry);
-            Provider provider = new PrometheusProvider(metricsPort, dropWizardLogger);
-            log.info("setupMetrics: reporting metrics on port {}", metricsPort);
-            serverContext.setMetricsProvider(provider);
-            provider.start();
-        }
+    private static void setupMetrics(Map<String, Object> opts, MetricRegistry metricRegistry) {
+        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
+        MetricsServer server = new PrometheusMetricsServer(config, metricRegistry);
+        server.start();
     }
 }
