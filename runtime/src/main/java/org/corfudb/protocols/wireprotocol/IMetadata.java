@@ -239,7 +239,6 @@ public interface IMetadata {
     enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
-        COMPACTED_STREAMS(5, new TypeToken<Set<UUID>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),

@@ -2,11 +2,9 @@ package org.corfudb.infrastructure.log;
 
 import lombok.Builder;
 import lombok.Builder.Default;
+import lombok.ToString;
 import org.corfudb.format.Types;
-import org.corfudb.infrastructure.log.compression.Codec;
-
-import java.util.concurrent.TimeUnit;
-
+import org.corfudb.infrastructure.log.CompactionPolicy.CompactionPolicyType;
 
 /**
  * This class specifies parameters for stream log implementation
@@ -15,6 +13,7 @@ import java.util.concurrent.TimeUnit;
  * Created by WenbinZhu on 5/22/19.
  */
 @Builder
+@ToString
 public class StreamLogParams {
 
     // Region: static members
@@ -26,57 +25,47 @@ public class StreamLogParams {
             .setLength(-1)
             .build()
             .getSerializedSize();
+
+    public static final int RECORDS_PER_SEGMENT = 20_000;
+
     // End region
 
     // Region: stream log parameters
     public String logPath;
 
     @Default
-    public boolean verifyChecksum = true;
+    public boolean verifyChecksum;
 
     @Default
-    public int recordsPerSegment = 20_000;
-
-    @Default
-    public double logSizeQuotaPercentage = 100.0;
-
-    @Default
-    public Codec.Type compressionCodec = Codec.Type.None;
+    public double logSizeQuotaPercentage;
     // End region
 
     // Region: compactor parameters
     @Default
-    public String compactionPolicyType = "GARBAGE_SIZE_FIRST";
+    public CompactionPolicyType compactionPolicyType;
 
     @Default
-    public long compactorInitialDelay = 20;
+    public int compactionInitialDelayMin;
 
     @Default
-    public long compactorPeriod = 20;
+    public int compactionPeriodMin;
 
     @Default
-    public TimeUnit compactorTimeUnit = TimeUnit.MINUTES;
+    public int compactionWorkers;
 
     @Default
-    public int compactorWorkers = Runtime.getRuntime().availableProcessors() + 1;
+    public int maxSegmentsForCompaction;
 
     @Default
-    public int maxSegmentsForCompaction = 20;
-
-    /**
-     * Number of newest segments that will not be selected for compaction.
-     * Note: This number should be at least 1.
-     */
-    @Default
-    public int protectedSegments = 1;
+    public int protectedSegments;
 
     @Default
-    public double segmentGarbageRatioThreshold = 0.5;
+    public double segmentGarbageRatioThreshold;
 
     @Default
-    public double segmentGarbageSizeThresholdMB = 128;
+    public double segmentGarbageSizeThresholdMB;
 
     @Default
-    public double totalGarbageSizeThresholdMB = 5 * 1024;
+    public double totalGarbageSizeThresholdMB;
     // End region
 }

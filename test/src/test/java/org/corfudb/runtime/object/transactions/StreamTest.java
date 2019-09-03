@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.UUID;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -57,42 +59,45 @@ public class StreamTest extends AbstractTransactionsTest {
         return new Token(rt.getLayoutView().getLayout().getEpoch(), seq);
     }
 
+    @Before
+    public void setHoleFillNoWait() {
+        getRuntime().getParameters().setHoleFillTimeout(Duration.ZERO);
+    }
+
     @Test
     public void testOverWriteRetry() {
         UUID svId = CorfuRuntime.getStreamID("stream1");
-        final Token trimMark = getTrimMark(getRuntime(), getRuntime().getParameters().getWriteRetry() - 1);
-        getRuntime().getAddressSpaceView().prefixTrim(trimMark);
         final int payloadSize = 100;
-        assertThatThrownBy(() -> getRuntime().getStreamsView().append(
-                new byte[payloadSize], null, svId))
+
+        // Hole fill the next address to create Overwrite.
+        long tail = getRuntime().getSequencerView().query().getSequence();
+        getRuntime().getAddressSpaceView().read(tail + 1);
+
+        int writeRetry = getRuntime().getParameters().getWriteRetry();
+        getRuntime().getParameters().setWriteRetry(0);
+        assertThatThrownBy(() -> getRuntime().getStreamsView().append(new byte[payloadSize], null, svId))
                 .isInstanceOf(AppendException.class);
+
+        getRuntime().getParameters().setWriteRetry(writeRetry);
+        getRuntime().getStreamsView().append(new byte[payloadSize], null, svId);
     }
 
     @Test
     public void testBackpointersSvOverwriteRetry() {
         UUID svId = CorfuRuntime.getStreamID("stream1");
-        final Token trimMark = getTrimMark(getRuntime(), getRuntime().getParameters().getWriteRetry() - 1);
-        getRuntime().getAddressSpaceView().prefixTrim(trimMark);
         final int payloadSize = 100;
+
+        // Hole fill the next address to create Overwrite.
+        long tail = getRuntime().getSequencerView().query().getSequence();
+        getRuntime().getAddressSpaceView().read(tail + 1);
+
+        int writeRetry = getRuntime().getParameters().getWriteRetry();
+        getRuntime().getParameters().setWriteRetry(0);
         IStreamView sv = getRuntime().getStreamsView().get(svId);
-        assertThatThrownBy(() -> sv.append(new byte[payloadSize]))
-        .isInstanceOf(AppendException.class);
-    }
+        assertThatThrownBy(() -> sv.append(new byte[payloadSize])).isInstanceOf(AppendException.class);
 
-    @Test
-    public void testTxnOverwriteRetry() throws Exception {
-        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
-        final Token trimMark = getTrimMark(getRuntime(), getRuntime().getParameters().getWriteRetry() - 1);
-        final String key = "key";
-        final String val = "val";
-        LogUnitClient lu = getRuntime().getLayoutView().getRuntimeLayout()
-                .getLogUnitClient(getDefaultConfigurationString());
-        lu.prefixTrim(trimMark).get();
-        TXBegin();
-        map.put(key, val);
-
-        assertThatThrownBy(() ->TXEnd())
-                .isInstanceOf(TransactionAbortedException.class);
+        getRuntime().getParameters().setWriteRetry(writeRetry);
+        sv.append(new byte[payloadSize]);
     }
 
     @Test
