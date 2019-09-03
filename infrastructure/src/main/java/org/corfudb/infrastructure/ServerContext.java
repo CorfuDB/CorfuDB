@@ -641,14 +641,23 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    /**
-     * Get the user defined log size quota percentage.
-     *
-     * @return log size quota percentage
-     */
-    private double getLogSizeQuotaPercentage() {
-        String logSizeQuotaPercentage = getServerConfig(String.class, "--log-size-quota-percentage");
-        return logSizeQuotaPercentage == null ? 100.0 : Double.valueOf(logSizeQuotaPercentage);
+    private int getCompactionWorkerThreads() {
+        int requested = Integer.parseInt(getServerConfig(String.class, "--compaction-worker-threads"));
+        if (requested != 0) {
+            return requested;
+        }
+
+        return Runtime.getRuntime().availableProcessors();
+    }
+
+    private int getProtectedSegments() {
+        int protectedSegments = Integer.parseInt(getServerConfig(String.class, "--protected-segments"));
+        if (protectedSegments < 1) {
+            throw new IllegalArgumentException("Number of protected segments for compaction " +
+                    "should at least be 1.");
+        }
+
+        return protectedSegments;
     }
 
     /**
@@ -660,7 +669,16 @@ public class ServerContext implements AutoCloseable {
         return StreamLogParams.builder()
                 .logPath(getServerConfig(String.class, "--log-path"))
                 .verifyChecksum(!getServerConfig(Boolean.class, "--no-verify"))
-                .logSizeQuotaPercentage(getLogSizeQuotaPercentage())
+                .logSizeQuotaPercentage(Double.parseDouble(getServerConfig(String.class, "--log-size-quota-percentage")))
+                .compactionPolicyType(getServerConfig(String.class, "--compaction-policy"))
+                .compactionInitialDelayMin(Integer.parseInt(getServerConfig(String.class, "--compaction-initial-delay")))
+                .compactionPeriodMin(Integer.parseInt(getServerConfig(String.class, "--compaction-period")))
+                .maxSegmentsForCompaction(Integer.parseInt(getServerConfig(String.class, "--max-segments-for-compaction")))
+                .protectedSegments(getProtectedSegments())
+                .compactionWorkers(getCompactionWorkerThreads())
+                .segmentGarbageRatioThreshold(Double.parseDouble(getServerConfig(String.class, "--segment-garbage-ratio-threshold")))
+                .segmentGarbageSizeThresholdMB(Double.parseDouble(getServerConfig(String.class, "--segment-garbage-size-threshold")))
+                .totalGarbageSizeThresholdMB(Double.parseDouble(getServerConfig(String.class, "--total-garbage-size-threshold")))
                 .build();
     }
 

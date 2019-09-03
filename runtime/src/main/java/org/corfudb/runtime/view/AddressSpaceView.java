@@ -636,24 +636,6 @@ public class AddressSpaceView extends AbstractView {
         }
     }
 
-    /** Force compaction on an address space, which will force
-     * all log units to free space, and process any outstanding
-     * trim requests.
-     *
-     */
-    public void gc() {
-        log.debug("GarbageCollect");
-        layoutHelper(e -> {
-            e.getLayout().segments.stream()
-                    .flatMap(seg -> seg.getStripes().stream())
-                    .flatMap(stripe -> stripe.getLogServers().stream())
-                    .map(e::getLogUnitClient)
-                    .map(LogUnitClient::compact)
-                    .forEach(CFUtils::getUninterruptibly);
-            return null;
-        });
-    }
-
     /**
      * Force all server caches to be invalidated.
      */

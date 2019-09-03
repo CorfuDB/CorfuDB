@@ -569,7 +569,6 @@ public class ServerRestartIT extends AbstractIT {
 
                 // Trim the log
                 runtime.getAddressSpaceView().prefixTrim(checkpointAddress);
-                runtime.getAddressSpaceView().gc();
                 runtime.getAddressSpaceView().invalidateServerCaches();
                 runtime.getAddressSpaceView().invalidateClientCache();
 

@@ -51,19 +51,6 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.assertEquals;
@@ -443,10 +430,9 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     @Test
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
-        StreamLogParams params = serverContext.getStreamLogParams();
 
         client.write(0, null, testString, Collections.emptyMap()).get();
-        client.write(params.recordsPerSegment + 1, null,
+        client.write(StreamLogParams.RECORDS_PER_SEGMENT + 1, null,
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry
