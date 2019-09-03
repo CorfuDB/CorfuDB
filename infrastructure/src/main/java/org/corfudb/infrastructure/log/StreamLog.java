@@ -63,9 +63,9 @@ public interface StreamLog {
     void prefixTrim(long address);
 
     /**
-     * Remove all trimmed addresses from the StreamLog.
+     * Start running log compactor.
      */
-    void compact();
+    void startCompactor();
 
     /**
      * Get the global tail and stream tails.

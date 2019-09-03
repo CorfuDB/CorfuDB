@@ -131,6 +131,7 @@ public class BatchProcessor implements AutoCloseable {
                 } else if (currOp == BatchWriterOperation.SHUTDOWN) {
                     log.warn("Shutting down the write processor");
                     streamLog.sync(true);
+                    streamLog.close();
                     break;
                 } else if (streamLog.quotaExceeded() && currOp.getMsg().getPriorityLevel() != PriorityLevel.HIGH) {
                     // TODO(Maithem): should the exception include the used/limit metrics?
@@ -163,6 +164,10 @@ public class BatchProcessor implements AutoCloseable {
                             case RANGE_WRITE:
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
                                 streamLog.append(writeRange.getEntries());
+                                break;
+                            case MULTI_GARBAGE_WRITE:
+                                RangeWriteMsg garbageEntries = (RangeWriteMsg) currOp.getMsg().getPayload();
+                                streamLog.append(garbageEntries.getEntries());
                                 break;
                             case RESET:
                                 streamLog.reset();

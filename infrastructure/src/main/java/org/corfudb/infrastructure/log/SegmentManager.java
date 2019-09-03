@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,7 +59,7 @@ public class SegmentManager {
     private final Map<Long, CompactionMetadata> segmentCompactionMetadata = new ConcurrentHashMap<>();
 
     long getSegmentOrdinal(long globalAddress) {
-        return globalAddress / logParams.recordsPerSegment;
+        return globalAddress / logParams.RECORDS_PER_SEGMENT;
     }
 
     private <T extends AbstractLogSegment> String getSegmentFilePath(
