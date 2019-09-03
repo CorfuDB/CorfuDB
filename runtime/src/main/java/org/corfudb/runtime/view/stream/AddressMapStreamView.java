@@ -181,16 +181,15 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 if (isCheckpointCapable()
                         && Address.isAddress(trimMark)
                         && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
-                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                    "trimmed at address %s and this space is not covered by the " +
-                                    "loaded checkpoint with start address %s, while accessing the " +
-                                    "stream at version %s. Looking for a new checkpoint.",this,
-                            trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
-                    log.info(message);
                     if (getReadOptions().isIgnoreTrim()) {
                         log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
                                 this, streamAddressSpace.getTrimMark());
                     } else {
+                        String message = String.format("getStreamAddressMap[{%s}] stream has been " +
+                                        "trimmed at address %s and this space is not covered by the " +
+                                        "loaded checkpoint with start address %s, while accessing the " +
+                                        "stream at version %s. Looking for a new checkpoint.",this,
+                                trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
                         throw new TrimmedException(message);
                     }
                 }
