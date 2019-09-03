@@ -18,6 +18,7 @@ public class BatchWriterOperation<T> {
         SHUTDOWN,
         WRITE,
         RANGE_WRITE,
+        MULTI_GARBAGE_WRITE,
         TRIM,
         PREFIX_TRIM,
         SEAL,
