@@ -97,12 +97,4 @@ public class Helpers{
                 .connect();
         return rt.getAddressSpaceView().getAllTails().getStreamTails();
     }
-
-    static void trim(CorfuRuntime rt, Token address) {
-        Token prefix = new Token(address.getEpoch(), address.getSequence() - 1);
-        rt.getAddressSpaceView().prefixTrim(prefix);
-        rt.getAddressSpaceView().gc();
-        rt.getAddressSpaceView().invalidateServerCaches();
-        rt.getAddressSpaceView().invalidateClientCache();
-    }
 }

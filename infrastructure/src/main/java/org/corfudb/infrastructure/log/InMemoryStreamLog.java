@@ -30,7 +30,6 @@ import static org.corfudb.infrastructure.log.StreamLog.getOverwriteCauseForAddre
 public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
-    private final Set<Long> trimmed;
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
 
@@ -39,7 +38,6 @@ public class InMemoryStreamLog implements StreamLog {
      */
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap<>();
-        trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
         logMetadata = new LogMetadata();
     }
@@ -47,7 +45,7 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public synchronized void append(List<LogData> entries) {
         for (LogData entry : entries) {
-            if (isTrimmed(entry.getGlobalAddress()) || logCache.containsKey(entry.getGlobalAddress())) {
+            if (logCache.containsKey(entry.getGlobalAddress())) {
                 continue;
             }
 
@@ -58,10 +56,6 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public synchronized void append(long address, LogData entry) {
-        if(isTrimmed(address)) {
-            throw new OverwriteException(OverwriteCause.TRIM);
-        }
-
         if (logCache.containsKey(address)) {
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
@@ -69,20 +63,9 @@ public class InMemoryStreamLog implements StreamLog {
         logMetadata.update(Collections.singletonList(entry));
     }
 
-    private boolean isTrimmed(long address) {
-        return address < startingAddress || trimmed.contains(address);
-    }
-
     @Override
     public synchronized void prefixTrim(long address) {
-        if (isTrimmed(address)) {
-            log.warn("prefixTrim: Ignoring repeated trim {}", address);
-        } else {
-            startingAddress = address + 1;
-
-            // Trim address space maps.
-            logMetadata.prefixTrim(address);
-        }
+        // No-op for now, might be used for data migration.
     }
 
     @Override
@@ -152,10 +135,6 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public LogData read(long address) {
-        if (isTrimmed(address)) {
-            return LogData.getTrimmed(address);
-        }
-
         return logCache.get(address);
     }
 
@@ -166,7 +145,7 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public void sync(boolean force){
-        //no-op
+        // No-op
     }
 
     @Override
@@ -175,32 +154,14 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
-    public synchronized void compact() {
-        // Prefix Trim
-        for (long address : logCache.keySet()) {
-            if (address < startingAddress) {
-                logCache.remove(address);
-            }
-        }
-
-        // Sparse trim
-        for (long address : trimmed) {
-            logCache.remove(address);
-        }
-
-        for (long address : trimmed) {
-            if (address < startingAddress) {
-                trimmed.remove(address);
-            }
-        }
+    public void startCompactor() {
+        // No-op
     }
 
     @Override
     public void reset() {
         startingAddress = 0;
         logMetadata = new LogMetadata();
-        // Clear the trimmed addresses record.
-        trimmed.clear();
         // Clearing all data from the cache.
         logCache.clear();
     }

@@ -313,7 +313,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         final long maxAddress = 20000L;
         final long minAddress = 10000L;
-        final long trimMark = 15000L;
         UUID streamID = UUID.randomUUID();
 
         LogUnitServer logUnitServer = new LogUnitServer(new ServerContextBuilder()
@@ -359,13 +358,11 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
 
-        // Trim the log, and verify that trim mark is updated on log unit
-        newServer.prefixTrim(trimMark);
         newServer.getBatchWriter().stopProcessor();
 
         // Retrieve address space from current log unit server (after a prefix trim)
         addressSpace = newServer.getStreamAddressSpace(streamID);
-        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(maxAddress - trimMark);
+        assertThat(addressSpace.getAddressMap().getReverseLongIterator().next()).isEqualTo(maxAddress);
     }
 
     @Test
