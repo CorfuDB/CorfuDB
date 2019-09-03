@@ -8,6 +8,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -82,6 +83,7 @@ public class StreamLogFiles implements StreamLog {
 
     private final StreamLogDataStore dataStore;
 
+    @Getter
     private final StreamLogCompactor compactor;
 
     private final Set<AbstractLogSegment> segmentsToSync;
@@ -143,7 +145,6 @@ public class StreamLogFiles implements StreamLog {
             syncTailSegment(getTrimMark() - 1);
         }
 
-        // Start running compactor.
         compactor = new StreamLogCompactor(logParams, getCompactionPolicy(),
                 segmentManager, dataStore, logMetadata);
     }
@@ -324,26 +325,7 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void prefixTrim(long address) {
-        if (isTrimmed(address)) {
-            log.warn("prefixTrim: Ignoring repeated trim {}", address);
-            return;
-        }
-
-        // TODO(Maithem): Although this operation is persisted to disk,
-        // the startingAddress can be lost even after the method has completed.
-        // This is due to the fact that updates on the local datastore don't
-        // expose disk sync functionality.
-        long newStartingAddress = address + 1;
-        dataStore.updateStartingAddress(newStartingAddress);
-        syncTailSegment(address);
-        log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
-
-        // Trim address space maps.
-        logMetadata.prefixTrim(address);
-    }
-
-    private boolean isTrimmed(long address) {
-        return address < dataStore.getStartingAddress();
+        // No-op for now, might be used for data migration.
     }
 
     private void verifyLogs() {
@@ -404,28 +386,13 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public synchronized void compact() {
-        trimPrefix();
+    public void startCompactor() {
+        compactor.start();
     }
 
     @Override
     public long getTrimMark() {
         return dataStore.getStartingAddress();
-    }
-
-    private void trimPrefix() {
-        // Trim all segments up till the segment that contains the starting address
-        // (i.e. trim only complete segments)
-        long endSegment = segmentManager.getSegmentOrdinal(dataStore.getStartingAddress()) - 1;
-
-        if (endSegment < 0) {
-            log.debug("Only one segment detected, ignoring trim");
-            return;
-        }
-
-        segmentManager.cleanAndClose(endSegment);
-
-        log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
     /**
@@ -589,7 +556,9 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void close() {
+        compactor.shutdown();
         segmentManager.close();
+        segmentsToSync.clear();
     }
 
     /**
