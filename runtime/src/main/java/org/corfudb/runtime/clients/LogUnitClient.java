@@ -274,14 +274,6 @@ public class LogUnitClient extends AbstractClient {
                 .payloadMsg(new TrimRequest(address)));
     }
 
-
-    /**
-     * Send a compact request that will delete the trimmed parts of the log.
-     */
-    public CompletableFuture<Void> compact() {
-        return sendMessageWithFuture(CorfuMsgType.COMPACT_REQUEST.msg());
-    }
-
     /**
      * Send a flush cache request that will flush the logunit cache.
      */
