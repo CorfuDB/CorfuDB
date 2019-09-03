@@ -95,8 +95,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     /** Test Endpoint hostname. */
     private final static String testHostname = "tcp://test";
 
-    private boolean followBackpointers = false;
-
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
         this(false);

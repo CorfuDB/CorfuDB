@@ -21,7 +21,7 @@ import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKe
 public class RecoveryUtils {
 
     // Default read options used by the fast object loader logic
-    public static ReadOptions fastLoaderReadOptions = ReadOptions.builder()
+    public static final ReadOptions fastLoaderReadOptions = ReadOptions.builder()
             .clientCacheable(false)
             .serverCacheable(false)
             .waitForHole(true)
