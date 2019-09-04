@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>WriteSetInfo.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object.transactions</a> &gt; <span class="el_source">WriteSetInfo.java</span></div><h1>WriteSetInfo.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object.transactions;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+import lombok.Getter;
+
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+
+import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
+
+/**
+ * This class captures information about objects mutated (written) during speculative
+ * transaction execution.
+ */
+@Getter
+<span class="nc" id="L20">public class WriteSetInfo extends ConflictSetInfo {</span>
+
+    /** The set of mutated objects. */
+<span class="nc" id="L23">    Set&lt;UUID&gt; affectedStreams = new HashSet&lt;&gt;();</span>
+
+    /** The actual updates to mutated objects. */
+<span class="nc" id="L26">    MultiObjectSMREntry writeSet = new MultiObjectSMREntry();</span>
+
+    public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
+<span class="nc" id="L29">        synchronized (getRootContext().getTransactionID()) {</span>
+
+            // add the SMRentry to the list of updates for this stream
+<span class="nc" id="L32">            writeSet.addTo(proxy.getStreamID(), updateEntry);</span>
+
+<span class="nc" id="L34">            super.add(proxy, conflictObjects);</span>
+
+<span class="nc" id="L36">            return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;</span>
+<span class="nc" id="L37">        }</span>
+    }
+
+    @Override
+    public void mergeInto(ConflictSetInfo other) {
+<span class="nc bnc" id="L42" title="All 2 branches missed.">        if (!(other instanceof WriteSetInfo)) {</span>
+<span class="nc" id="L43">            throw new UnsupportedOperationException(&quot;Merging write set with read set unsupported&quot;);</span>
+        }
+
+<span class="nc" id="L46">        super.mergeInto(other);</span>
+<span class="nc" id="L47">        affectedStreams.addAll(((WriteSetInfo) other).affectedStreams);</span>
+<span class="nc" id="L48">        writeSet.mergeInto(((WriteSetInfo) other).writeSet);</span>
+<span class="nc" id="L49">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

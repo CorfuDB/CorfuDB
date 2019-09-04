@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>WorkflowRequest.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view.workflows</a> &gt; <span class="el_source">WorkflowRequest.java</span></div><h1>WorkflowRequest.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view.workflows;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.WorkflowException;
+import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
+
+/**
+ * An abstract class that defines a generic workflow request structure.
+ * &lt;p&gt;
+ * Created by Maithem on 1/19/18.
+ */
+<span class="nc" id="L26">@Slf4j</span>
+<span class="nc" id="L27">public abstract class WorkflowRequest {</span>
+
+    protected int retry;
+
+    protected Duration timeout;
+
+    protected Duration pollPeriod;
+
+    protected CorfuRuntime runtime;
+
+    @NonNull
+    protected String nodeForWorkflow;
+
+    /**
+     * Send a workflow request
+     *
+     * @param client the client to the selected orchestrator
+     * @return a uuid that corresponds to the created workflow
+     */
+    protected abstract UUID sendRequest(ManagementClient client) throws TimeoutException;
+
+    /**
+     * Select an orchestrator and return a client. Orchestrator's that
+     * are on unresponsive nodes and the affected endpoint by the workflow
+     * will not be selected. The layout might not reflect the state
+     * of responsive servers, so we ping the endpoint before we select it.
+     * An example of this would be a 3 node cluster, with two nodes that
+     * die immediately, the layout won't have those two nodes as unresponsive
+     * because it can't commit to a quorum.
+     *
+     * @param layout the layout that is used to select an orchestrator
+     * @return a management client that is connected to the selected
+     * orchestrator
+     */
+<span class="nc bnc" id="L61" title="All 2 branches missed.">    protected ManagementClient getOrchestrator(@NonNull Layout layout) {</span>
+<span class="nc" id="L62">        List&lt;String&gt; availableLayoutServers = layout.getLayoutServers().stream()</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">                .filter(s -&gt; !s.equals(nodeForWorkflow))</span>
+<span class="nc" id="L64">                .collect(Collectors.toList());</span>
+
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (availableLayoutServers.isEmpty()) {</span>
+<span class="nc" id="L67">            throw new WorkflowException(&quot;getOrchestrator: no available orchestrators &quot; + layout);</span>
+        }
+
+        // Select an available orchestrator
+<span class="nc" id="L71">        ManagementClient managementClient = runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="nc" id="L72">                .getManagementClient(availableLayoutServers.get(0));</span>
+
+<span class="nc bnc" id="L74" title="All 2 branches missed.">        for (String endpoint : availableLayoutServers) {</span>
+<span class="nc" id="L75">            BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="nc" id="L76">                    .getBaseClient(endpoint);</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">            if (client.pingSync()) {</span>
+<span class="nc" id="L78">                log.info(&quot;getOrchestrator: orchestrator selected {}, layout {}&quot;, endpoint, layout);</span>
+<span class="nc" id="L79">                managementClient = runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="nc" id="L80">                        .getManagementClient(endpoint);</span>
+<span class="nc" id="L81">                break;</span>
+            }
+<span class="nc" id="L83">        }</span>
+
+<span class="nc" id="L85">        return managementClient;</span>
+    }
+
+    /**
+     * Infer the completion of the request by inspecting the layout
+     *
+     * @param layout the layout to inspect
+     * @return true if the operation is reflected in the layout, otherwise
+     * return false
+     */
+    protected abstract boolean verifyRequest(Layout layout);
+
+    /**
+     * @param workflow   the workflow id to poll
+     * @param client     a client that is connected to the orchestrator that is
+     *                   running the workflow
+     * @param timeout    the total time to wait for the workflow to complete
+     * @param pollPeriod the poll period to query the completion of the workflow
+     * @throws TimeoutException if the workflow doesn't complete within the timeout
+     *                          period
+     */
+<span class="nc bnc" id="L106" title="All 4 branches missed.">    private void waitForWorkflow(@NonNull UUID workflow, @NonNull ManagementClient client,</span>
+<span class="nc bnc" id="L107" title="All 4 branches missed.">                                 @NonNull Duration timeout, @NonNull Duration pollPeriod)</span>
+            throws TimeoutException {
+<span class="nc" id="L109">        long tries = timeout.toNanos() / pollPeriod.toNanos();</span>
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        for (long x = 0; x &lt; tries; x++) {</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">            if (!client.queryRequest(workflow).isActive()) {</span>
+<span class="nc" id="L112">                return;</span>
+            }
+<span class="nc" id="L114">            Sleep.sleepUninterruptibly(pollPeriod);</span>
+<span class="nc" id="L115">            log.debug(&quot;waitForWorkflow: waiting for {} on attempt {}&quot;, workflow, x);</span>
+        }
+<span class="nc" id="L117">        throw new TimeoutException();</span>
+    }
+
+    /**
+     * Starts executing the workflow request.
+     *
+     * This method will succeed only if the workflow executed successfully, otherwise
+     * it can throw a WorkflowResultUnknownException when the timeouts are exhausted
+     * and the expected side effect cannot be verified.
+     *
+     * @throws WorkflowResultUnknownException when the workflow result cannot be
+     * verified.
+     */
+    public void invoke() {
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        for (int x = 0; x &lt; retry; x++) {</span>
+            try {
+<span class="nc" id="L133">                runtime.invalidateLayout();</span>
+<span class="nc" id="L134">                Layout requestLayout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="nc" id="L135">                ManagementClient orchestrator = getOrchestrator(requestLayout);</span>
+<span class="nc" id="L136">                UUID workflowId = sendRequest(orchestrator);</span>
+<span class="nc" id="L137">                waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);</span>
+<span class="nc" id="L138">            } catch (NetworkException | TimeoutException e) {</span>
+<span class="nc" id="L139">                log.warn(&quot;WorkflowRequest: Error while running {} on attempt {}, cause {}&quot;, this, x, e);</span>
+<span class="nc" id="L140">            }</span>
+
+<span class="nc bnc" id="L142" title="All 2 branches missed.">            for (int y = 0; y &lt; runtime.getParameters().getInvalidateRetry(); y++) {</span>
+<span class="nc" id="L143">                runtime.invalidateLayout();</span>
+<span class="nc" id="L144">                Layout layoutToVerify = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">                if (verifyRequest(layoutToVerify)) {</span>
+<span class="nc" id="L146">                    log.info(&quot;WorkflowRequest: Successfully completed {}&quot;, this);</span>
+<span class="nc" id="L147">                    return;</span>
+                }
+            }
+<span class="nc" id="L150">            log.warn(&quot;WorkflowRequest: Retrying {} on attempt {}&quot;, this, x);</span>
+        }
+
+<span class="nc" id="L153">        throw new WorkflowResultUnknownException();</span>
+    }
+}
+
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

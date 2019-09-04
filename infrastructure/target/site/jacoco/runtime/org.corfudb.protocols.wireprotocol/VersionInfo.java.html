@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>VersionInfo.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">VersionInfo.java</span></div><h1>VersionInfo.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import java.lang.management.ManagementFactory;
+import java.util.HashMap;
+import java.util.Map;
+import javax.annotation.Nonnull;
+import lombok.Getter;
+import org.corfudb.runtime.CorfuRuntime;
+
+/**
+ * Created by mwei on 7/27/16.
+ */
+public class VersionInfo {
+<span class="nc" id="L14">    @Getter</span>
+    Map&lt;String, Object&gt; optionsMap;
+
+<span class="nc" id="L17">    @Getter</span>
+<span class="nc" id="L18">    long upTime = ManagementFactory.getRuntimeMXBean().getUptime();</span>
+
+<span class="nc" id="L20">    @Getter</span>
+<span class="nc" id="L21">    String startupArgs = System.getProperty(&quot;sun.java.command&quot;);</span>
+
+<span class="nc" id="L23">    @Getter</span>
+<span class="nc" id="L24">    String jvmUsed = System.getProperty(&quot;java.home&quot;) + &quot;/bin/java&quot;;</span>
+
+<span class="nc" id="L26">    @Getter</span>
+    String version;
+
+<span class="nc" id="L29">    @Getter</span>
+    String nodeId;
+
+    /** Create a new version info, using the current options map and node id.
+     *
+     * @param optionsMap    The options map used to start the server.
+     * @param nodeId        The current node id.
+     */
+<span class="nc" id="L37">    public VersionInfo(Map&lt;String,Object&gt; optionsMap, @Nonnull String nodeId) {</span>
+<span class="nc" id="L38">        this.optionsMap = new HashMap&lt;&gt;(optionsMap);</span>
+        // Remove any non-serializable objects
+<span class="nc" id="L40">        this.optionsMap.entrySet()</span>
+<span class="nc" id="L41">                .removeIf(e -&gt; {</span>
+<span class="nc" id="L42">                    Object v = e.getValue();</span>
+<span class="nc bnc" id="L43" title="All 6 branches missed.">                    return !(v instanceof Integer || v instanceof Long || v instanceof String);</span>
+                });
+<span class="nc" id="L45">        this.nodeId = nodeId;</span>
+<span class="nc" id="L46">        this.version = CorfuRuntime.getVersionString();</span>
+<span class="nc" id="L47">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

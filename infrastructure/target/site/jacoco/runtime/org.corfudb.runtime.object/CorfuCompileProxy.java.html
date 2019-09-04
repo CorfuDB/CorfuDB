@@ -1,0 +1,519 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CorfuCompileProxy.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object</a> &gt; <span class="el_source">CorfuCompileProxy.java</span></div><h1>CorfuCompileProxy.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object;
+
+import static java.lang.Long.min;
+
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedUpcallException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
+import org.corfudb.util.serializer.ISerializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.Constructor;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * In the Corfu runtime, on top of a stream,
+ * an SMR object layer implements objects whose history of updates
+ * are backed by a stream.
+ * &lt;p&gt;
+ * &lt;p&gt;This class implements the methods that an in-memory corfu-object proxy carries
+ * in order to by in sync with a stream.
+ * &lt;p&gt;
+ * &lt;p&gt;We refer to the program's object as the -corfu object-,
+ * and to the internal object implementation as the -proxy-.
+ * &lt;p&gt;
+ * &lt;p&gt;If a Corfu object's method is an Accessor, it invokes the proxy's
+ * access() method.
+ * &lt;p&gt;
+ * &lt;p&gt;If a Corfu object's method is a Mutator or Accessor-Mutator, it invokes the
+ * proxy's logUpdate() method.
+ * &lt;p&gt;
+ * &lt;p&gt;Finally, if a Corfu object's method is an Accessor-Mutator,
+ * it obtains a result by invoking getUpcallResult().
+ * &lt;p&gt;
+ * &lt;p&gt;Created by mwei on 11/11/16.
+ */
+<span class="nc" id="L61">@Slf4j</span>
+public class CorfuCompileProxy&lt;T&gt; implements ICorfuSMRProxyInternal&lt;T&gt; {
+
+    /**
+     * The underlying object. This object stores the actual
+     * state as well as the version of the object. It also
+     * provides locks to access the object safely from a
+     * multi-threaded context.
+     */
+<span class="nc" id="L70">    @Getter</span>
+    VersionLockedObject&lt;T&gt; underlyingObject;
+
+    /**
+     * The CorfuRuntime. This allows us to interact with the
+     * Corfu log.
+     */
+    final CorfuRuntime rt;
+
+    /**
+     * The ID of the stream of the log.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+    final UUID streamID;
+
+    /**
+     * The type of the underlying object. We use this to instantiate
+     * new instances of the underlying object.
+     */
+    final Class&lt;T&gt; type;
+
+    /**
+     * The serializer SMR entries will use to serialize their
+     * arguments.
+     */
+<span class="nc" id="L95">    @Getter</span>
+    ISerializer serializer;
+
+    /**
+     * The arguments this proxy was created with.
+     */
+    final Object[] args;
+
+    private final MetricRegistry metrics;
+    /**
+     * Metrics: meter (counter), histogram.
+     */
+    private final String mpObj;
+    private final Timer timerAccess;
+    private final Timer timerLogWrite;
+    private final Timer timerTxn;
+    private final Timer timerUpcall;
+    private final Counter counterAccessOptimistic;
+    private final Counter counterAccessLocked;
+    private final Counter counterTxnRetry1;
+    private final Counter counterTxnRetryN;
+
+    /**
+     * Correctness Logging
+     */
+<span class="nc" id="L120">    private final Logger correctnessLogger = LoggerFactory.getLogger(&quot;correctness&quot;);</span>
+
+    /**
+     * Creates a CorfuCompileProxy object on a particular stream.
+     *
+     * @param rt                  Connected CorfuRuntime instance.
+     * @param streamID            StreamID of the log.
+     * @param type                Type of underlying object to instantiate a new instance.
+     * @param args                Arguments to create this proxy.
+     * @param serializer          Serializer used by the SMR entries to serialize the arguments.
+     * @param upcallTargetMap     upCallTargetMap
+     * @param undoTargetMap       undoTargetMap
+     * @param undoRecordTargetMap undoRecordTargetMap
+     * @param resetSet            resetSet
+     */
+    @Deprecated // TODO: Add replacement method that conforms to style
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;) // Due to deprecation
+    public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class&lt;T&gt; type, Object[] args,
+                             ISerializer serializer,
+                             Map&lt;String, ICorfuSMRUpcallTarget&lt;T&gt;&gt; upcallTargetMap,
+                             Map&lt;String, IUndoFunction&lt;T&gt;&gt; undoTargetMap,
+                             Map&lt;String, IUndoRecordFunction&lt;T&gt;&gt; undoRecordTargetMap,
+                             Set&lt;String&gt; resetSet
+<span class="nc" id="L143">    ) {</span>
+<span class="nc" id="L144">        this.rt = rt;</span>
+<span class="nc" id="L145">        this.streamID = streamID;</span>
+<span class="nc" id="L146">        this.type = type;</span>
+<span class="nc" id="L147">        this.args = args;</span>
+<span class="nc" id="L148">        this.serializer = serializer;</span>
+
+        // Since the VLO is thread safe we don't need to use a thread safe stream implementation
+        // because the VLO will control access to the stream
+<span class="nc" id="L152">        underlyingObject = new VersionLockedObject&lt;T&gt;(this::getNewInstance,</span>
+<span class="nc" id="L153">                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),</span>
+                upcallTargetMap, undoRecordTargetMap,
+                undoTargetMap, resetSet);
+
+<span class="nc" id="L157">        metrics = CorfuRuntime.getDefaultMetrics();</span>
+<span class="nc" id="L158">        mpObj = CorfuComponent.OBJECT.toString();</span>
+<span class="nc" id="L159">        timerAccess = metrics.timer(mpObj + &quot;access&quot;);</span>
+<span class="nc" id="L160">        timerLogWrite = metrics.timer(mpObj + &quot;log-write&quot;);</span>
+<span class="nc" id="L161">        timerTxn = metrics.timer(mpObj + &quot;txn&quot;);</span>
+<span class="nc" id="L162">        timerUpcall = metrics.timer(mpObj + &quot;upcall&quot;);</span>
+<span class="nc" id="L163">        counterAccessOptimistic = metrics.counter(mpObj + &quot;access-optimistic&quot;);</span>
+<span class="nc" id="L164">        counterAccessLocked = metrics.counter(mpObj + &quot;access-locked&quot;);</span>
+<span class="nc" id="L165">        counterTxnRetry1 = metrics.counter(mpObj + &quot;txn-first-retry&quot;);</span>
+<span class="nc" id="L166">        counterTxnRetryN = metrics.counter(mpObj + &quot;txn-extra-retries&quot;);</span>
+<span class="nc" id="L167">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public &lt;R&gt; R access(ICorfuSMRAccess&lt;R, T&gt; accessMethod,
+                        Object[] conflictObject) {
+<span class="nc" id="L175">        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();</span>
+<span class="nc" id="L176">        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {</span>
+<span class="nc" id="L177">            return accessInner(accessMethod, conflictObject, isEnabled);</span>
+<span class="nc bnc" id="L178" title="All 8 branches missed.">        }</span>
+    }
+
+    private &lt;R&gt; R accessInner(ICorfuSMRAccess&lt;R, T&gt; accessMethod,
+                              Object[] conflictObject, boolean isMetricsEnabled) {
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
+            try {
+<span class="nc" id="L185">                return TransactionalContext.getCurrentContext()</span>
+<span class="nc" id="L186">                        .access(this, accessMethod, conflictObject);</span>
+<span class="nc" id="L187">            } catch (Exception e) {</span>
+<span class="nc" id="L188">                log.error(&quot;Access[{}]&quot;, this, e);</span>
+<span class="nc" id="L189">                this.abortTransaction(e);</span>
+            }
+        }
+
+        // Perform underlying access
+<span class="nc bnc" id="L194" title="All 2 branches missed.">        for (int x = 0; x &lt; rt.getParameters().getTrimRetry(); x++) {</span>
+            // Linearize this read against a timestamp
+<span class="nc" id="L196">            final long timestamp = rt.getSequencerView()</span>
+<span class="nc" id="L197">                            .query(getStreamID());</span>
+<span class="nc" id="L198">            log.debug(&quot;Access[{}] conflictObj={} version={}&quot;, this, conflictObject, timestamp);</span>
+
+            try {
+<span class="nc bnc" id="L201" title="All 2 branches missed.">                return underlyingObject.access(o -&gt; o.getVersionUnsafe() &gt;= timestamp</span>
+<span class="nc bnc" id="L202" title="All 2 branches missed.">                                &amp;&amp; !o.isOptimisticallyModifiedUnsafe(),</span>
+<span class="nc" id="L203">                        o -&gt; o.syncObjectUnsafe(timestamp),</span>
+<span class="nc" id="L204">                        o -&gt; accessMethod.access(o));</span>
+<span class="nc" id="L205">            } catch (TrimmedException te) {</span>
+<span class="nc" id="L206">                log.warn(&quot;accessInner: Encountered a trim exception while accessing version {} on attempt {}&quot;,</span>
+<span class="nc" id="L207">                        timestamp, x);</span>
+                // We encountered a TRIM during sync, reset the object
+<span class="nc" id="L209">                underlyingObject.update(o -&gt; {</span>
+<span class="nc" id="L210">                    o.resetUnsafe();</span>
+<span class="nc" id="L211">                    return null;</span>
+                });
+            }
+        }
+
+<span class="nc" id="L216">        throw new TrimmedException();</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
+                          Object[] conflictObject, Object... args) {
+<span class="nc" id="L225">        try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {</span>
+<span class="nc" id="L226">            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);</span>
+<span class="nc bnc" id="L227" title="All 8 branches missed.">        }</span>
+    }
+
+    private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
+                                Object[] conflictObject, Object... args) {
+        // If we aren't coming from a transactional context,
+        // redirect us to a transactional context first.
+<span class="nc bnc" id="L234" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
+            try {
+                // We generate an entry to avoid exposing the serializer to the tx context.
+<span class="nc" id="L237">                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);</span>
+<span class="nc" id="L238">                return TransactionalContext.getCurrentContext()</span>
+<span class="nc" id="L239">                        .logUpdate(this, entry, conflictObject);</span>
+<span class="nc" id="L240">            } catch (Exception e) {</span>
+<span class="nc" id="L241">                log.warn(&quot;Update[{}]&quot;, this, e);</span>
+<span class="nc" id="L242">                this.abortTransaction(e);</span>
+            }
+        }
+
+        // If we aren't in a transaction, we can just write the modification.
+        // We need to add the acquired token into the pending upcall list.
+<span class="nc" id="L248">        SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);</span>
+<span class="nc" id="L249">        long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);</span>
+<span class="nc" id="L250">        log.trace(&quot;Update[{}] {}@{} ({}) conflictObj={}&quot;,</span>
+<span class="nc" id="L251">                this, smrUpdateFunction, address, args, conflictObject);</span>
+<span class="nc" id="L252">        correctnessLogger.trace(&quot;Version, {}&quot;, address);</span>
+<span class="nc" id="L253">        return address;</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public &lt;R&gt; R getUpcallResult(long timestamp, Object[] conflictObject) {
+<span class="nc" id="L261">        try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {</span>
+<span class="nc" id="L262">            return getUpcallResultInner(timestamp, conflictObject);</span>
+<span class="nc bnc" id="L263" title="All 8 branches missed.">        }</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void sync() {
+        // Linearize this read against a timestamp
+<span class="nc" id="L272">        TokenResponse response = rt.getSequencerView()</span>
+<span class="nc" id="L273">                .query(new UUID[]{getStreamID()});</span>
+<span class="nc" id="L274">        final Token timestamp = new Token(response.getEpoch(), response.getStreamTail(getStreamID()));</span>
+
+<span class="nc" id="L276">        log.debug(&quot;Sync[{}] {}&quot;, this, timestamp);</span>
+        // Acquire locks and perform read.
+<span class="nc" id="L278">        underlyingObject.update(o -&gt; {</span>
+<span class="nc" id="L279">            o.syncObjectUnsafe(timestamp.getSequence());</span>
+<span class="nc" id="L280">            return null;</span>
+        });
+<span class="nc" id="L282">    }</span>
+
+    private &lt;R&gt; R getUpcallResultInner(long timestamp, Object[] conflictObject) {
+        // If we aren't coming from a transactional context,
+        // redirect us to a transactional context first.
+<span class="nc bnc" id="L287" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
+            try {
+<span class="nc" id="L289">                return (R) TransactionalContext.getCurrentContext()</span>
+<span class="nc" id="L290">                        .getUpcallResult(this, timestamp, conflictObject);</span>
+<span class="nc" id="L291">            } catch (Exception e) {</span>
+<span class="nc" id="L292">                log.warn(&quot;UpcallResult[{}] Exception: {}&quot;, this, e);</span>
+<span class="nc" id="L293">                this.abortTransaction(e);</span>
+            }
+        }
+
+        // Check first if we have the upcall, if we do
+        // we can service the request right away.
+<span class="nc bnc" id="L299" title="All 2 branches missed.">        if (underlyingObject.getUpcallResults().containsKey(timestamp)) {</span>
+<span class="nc" id="L300">            log.trace(&quot;Upcall[{}] {} Direct&quot;, this, timestamp);</span>
+<span class="nc" id="L301">            R ret = (R) underlyingObject.getUpcallResults().get(timestamp);</span>
+<span class="nc" id="L302">            underlyingObject.getUpcallResults().remove(timestamp);</span>
+<span class="nc bnc" id="L303" title="All 2 branches missed.">            return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;</span>
+        }
+
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        for (int x = 0; x &lt; rt.getParameters().getTrimRetry(); x++) {</span>
+            try {
+<span class="nc" id="L308">                return underlyingObject.update(o -&gt; {</span>
+<span class="nc" id="L309">                    o.syncObjectUnsafe(timestamp);</span>
+<span class="nc bnc" id="L310" title="All 2 branches missed.">                    if (o.getUpcallResults().containsKey(timestamp)) {</span>
+<span class="nc" id="L311">                        log.trace(&quot;Upcall[{}] {} Sync'd&quot;, this, timestamp);</span>
+<span class="nc" id="L312">                        R ret = (R) o.getUpcallResults().get(timestamp);</span>
+<span class="nc" id="L313">                        o.getUpcallResults().remove(timestamp);</span>
+<span class="nc bnc" id="L314" title="All 2 branches missed.">                        return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;</span>
+                    }
+
+                    // The version is already ahead, but we don't have the result.
+                    // The only way to get the correct result
+                    // of the upcall would be to rollback. For now, we throw an exception
+                    // since this is generally not expected. --- and probably a bug if it happens.
+<span class="nc" id="L321">                    throw new RuntimeException(&quot;Attempted to get the result &quot;</span>
+                            + &quot;of an upcall@&quot; + timestamp + &quot; but we are @&quot;
+<span class="nc" id="L323">                            + underlyingObject.getVersionUnsafe()</span>
+                            + &quot; and we don't have a copy&quot;);
+                });
+<span class="nc" id="L326">            } catch (TrimmedException ex) {</span>
+<span class="nc" id="L327">                log.warn(&quot;getUpcallResultInner: Encountered a trim exception while accessing version {} on attempt {}&quot;,</span>
+<span class="nc" id="L328">                        timestamp, x);</span>
+                // We encountered a TRIM during sync, reset the object
+<span class="nc" id="L330">                underlyingObject.update(o -&gt; {</span>
+<span class="nc" id="L331">                    o.resetUnsafe();</span>
+<span class="nc" id="L332">                    return null;</span>
+                });
+            }
+        }
+
+<span class="nc" id="L337">        throw new TrimmedUpcallException(timestamp);</span>
+    }
+
+    /**
+     * Get the ID of the stream this proxy is subscribed to.
+     *
+     * @return The UUID of the stream this proxy is subscribed to.
+     */
+    @Override
+    public UUID getStreamID() {
+<span class="nc" id="L347">        return streamID;</span>
+    }
+
+    /**
+     * Run in a transactional context.
+     *
+     * @param txFunction The function to run in a transactional context.
+     * @return The value supplied by the function.
+     */
+    @Override
+    public &lt;R&gt; R TXExecute(Supplier&lt;R&gt; txFunction) {
+<span class="nc" id="L358">        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();</span>
+<span class="nc" id="L359">        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {</span>
+<span class="nc" id="L360">            return TXExecuteInner(txFunction, isEnabled);</span>
+<span class="nc bnc" id="L361" title="All 8 branches missed.">        }</span>
+    }
+
+    @SuppressWarnings({&quot;checkstyle:membername&quot;, &quot;checkstyle:abbreviation&quot;})
+    private &lt;R&gt; R TXExecuteInner(Supplier&lt;R&gt; txFunction, boolean isMetricsEnabled) {
+        // Don't nest transactions if we are already running in a transaction
+<span class="nc bnc" id="L367" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
+            try {
+<span class="nc" id="L369">                return txFunction.get();</span>
+<span class="nc" id="L370">            } catch (Exception e) {</span>
+<span class="nc" id="L371">                log.warn(&quot;TXExecute[{}] Abort with Exception: {}&quot;, this, e);</span>
+<span class="nc" id="L372">                this.abortTransaction(e);</span>
+            }
+        }
+<span class="nc" id="L375">        long sleepTime = 1L;</span>
+<span class="nc" id="L376">        final long maxSleepTime = 1000L;</span>
+<span class="nc" id="L377">        int retries = 1;</span>
+        while (true) {
+            try {
+<span class="nc" id="L380">                rt.getObjectsView().TXBegin();</span>
+<span class="nc" id="L381">                R ret = txFunction.get();</span>
+<span class="nc" id="L382">                rt.getObjectsView().TXEnd();</span>
+<span class="nc" id="L383">                return ret;</span>
+<span class="nc" id="L384">            } catch (TransactionAbortedException e) {</span>
+                // If TransactionAbortedException is due to a 'Network Exception' do not keep
+                // retrying a nested transaction indefinitely (this could go on forever).
+                // If this is part of an outer transaction abort and remove from context.
+                // Re-throw exception to client.
+<span class="nc" id="L389">                log.warn(&quot;TXExecute[{}] Abort with exception {}&quot;, this, e);</span>
+<span class="nc bnc" id="L390" title="All 2 branches missed.">                if (e.getAbortCause() == AbortCause.NETWORK) {</span>
+<span class="nc bnc" id="L391" title="All 2 branches missed.">                    if (TransactionalContext.getCurrentContext() != null) {</span>
+<span class="nc" id="L392">                        TransactionalContext.getCurrentContext().abortTransaction(e);</span>
+<span class="nc" id="L393">                        TransactionalContext.removeContext();</span>
+<span class="nc" id="L394">                        throw e;</span>
+                    }
+                }
+
+<span class="nc bnc" id="L398" title="All 2 branches missed.">                if (retries == 1) {</span>
+<span class="nc" id="L399">                    MetricsUtils</span>
+<span class="nc" id="L400">                            .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);</span>
+                }
+<span class="nc" id="L402">                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);</span>
+<span class="nc" id="L403">                log.debug(&quot;Transactional function aborted due to {}, retrying after {} msec&quot;,</span>
+<span class="nc" id="L404">                        e, sleepTime);</span>
+<span class="nc" id="L405">                Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));</span>
+<span class="nc" id="L406">                sleepTime = min(sleepTime * 2L, maxSleepTime);</span>
+<span class="nc" id="L407">                retries++;</span>
+<span class="nc" id="L408">            } catch (Exception e) {</span>
+<span class="nc" id="L409">                log.warn(&quot;TXExecute[{}] Abort with Exception: {}&quot;, this, e);</span>
+<span class="nc" id="L410">                this.abortTransaction(e);</span>
+<span class="nc" id="L411">            }</span>
+        }
+    }
+
+    /**
+     * Get an object builder to build new objects.
+     *
+     * @return An object which permits the construction of new objects.
+     */
+    @Override
+    public IObjectBuilder&lt;?&gt; getObjectBuilder() {
+<span class="nc" id="L422">        return rt.getObjectsView().build();</span>
+    }
+
+    /**
+     * Return the type of the object being replicated.
+     *
+     * @return The type of the replicated object.
+     */
+    @Override
+    public Class&lt;T&gt; getObjectType() {
+<span class="nc" id="L432">        return type;</span>
+    }
+
+    /**
+     * Get the latest version read by the proxy.
+     *
+     * @return The latest version read by the proxy.
+     */
+    @Override
+    public long getVersion() {
+<span class="nc" id="L442">        return access(o -&gt; underlyingObject.getVersionUnsafe(),</span>
+                null);
+    }
+
+    /**
+     * Get a new instance of the real underlying object.
+     *
+     * @return An instance of the real underlying object
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private T getNewInstance() {
+        try {
+<span class="nc" id="L454">            T ret = null;</span>
+<span class="nc bnc" id="L455" title="All 4 branches missed.">            if (args == null || args.length == 0) {</span>
+<span class="nc" id="L456">                ret = type.newInstance();</span>
+            } else {
+                // This loop is not ideal, but the easiest way to get around Java boxing,
+                // which results in primitive constructors not matching.
+<span class="nc bnc" id="L460" title="All 2 branches missed.">                for (Constructor&lt;?&gt; constructor : type.getDeclaredConstructors()) {</span>
+                    try {
+<span class="nc" id="L462">                        ret = (T) constructor.newInstance(args);</span>
+<span class="nc" id="L463">                        break;</span>
+<span class="nc" id="L464">                    } catch (Exception e) {</span>
+                        // just keep trying until one works.
+                    }
+                }
+            }
+<span class="nc bnc" id="L469" title="All 2 branches missed.">            if (ret instanceof ICorfuSMRProxyWrapper) {</span>
+<span class="nc" id="L470">                ((ICorfuSMRProxyWrapper&lt;T&gt;) ret).setProxy$CORFUSMR(this);</span>
+            }
+<span class="nc" id="L472">            return ret;</span>
+<span class="nc" id="L473">        } catch (InstantiationException | IllegalAccessException e) {</span>
+<span class="nc" id="L474">            throw new RuntimeException(e);</span>
+        }
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L480">        return type.getSimpleName() + &quot;[&quot; + Utils.toReadableId(streamID) + &quot;]&quot;;</span>
+    }
+
+    private void abortTransaction(Exception e) {
+<span class="nc" id="L484">        final AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
+<span class="nc" id="L485">        TransactionalContext.removeContext();</span>
+
+        // Base case: No need to translate, just throw the exception as-is.
+<span class="nc bnc" id="L488" title="All 2 branches missed.">        if (e instanceof TransactionAbortedException) {</span>
+<span class="nc" id="L489">            throw (TransactionAbortedException) e;</span>
+        }
+
+<span class="nc" id="L492">        Token snapshotTimestamp = Token.UNINITIALIZED;</span>
+<span class="nc" id="L493">        AbortCause abortCause = AbortCause.UNDEFINED;</span>
+
+<span class="nc bnc" id="L495" title="All 2 branches missed.">        if (e instanceof NetworkException) {</span>
+            // If a 'NetworkException' was received within a transactional context, an attempt to
+            // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
+            // A new NetworkException would prevent the earliest to be propagated and encapsulated
+            // as a TransactionAbortedException.
+<span class="nc" id="L500">            abortCause = AbortCause.NETWORK;</span>
+<span class="nc bnc" id="L501" title="All 2 branches missed.">        } else if (e instanceof UnsupportedOperationException) {</span>
+<span class="nc" id="L502">            snapshotTimestamp = context.getSnapshotTimestamp();</span>
+<span class="nc" id="L503">            abortCause = AbortCause.UNSUPPORTED;</span>
+        } else {
+<span class="nc" id="L505">            log.error(&quot;abortTransaction[{}] Abort Transaction with Exception {}&quot;, this, e);</span>
+<span class="nc" id="L506">            snapshotTimestamp = context.getSnapshotTimestamp();</span>
+        }
+
+<span class="nc" id="L509">        final TxResolutionInfo txInfo = new TxResolutionInfo(</span>
+<span class="nc" id="L510">                context.getTransactionID(), snapshotTimestamp);</span>
+<span class="nc" id="L511">        final TransactionAbortedException tae = new TransactionAbortedException(txInfo,</span>
+<span class="nc" id="L512">                TokenResponse.NO_CONFLICT_KEY, getStreamID(), Address.NON_ADDRESS,</span>
+                abortCause, e, context);
+<span class="nc" id="L514">        context.abortTransaction(tae);</span>
+
+<span class="nc" id="L516">        throw tae;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

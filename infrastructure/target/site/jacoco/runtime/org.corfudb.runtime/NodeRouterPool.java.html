@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>NodeRouterPool.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime</a> &gt; <span class="el_source">NodeRouterPool.java</span></div><h1>NodeRouterPool.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.util.NodeLocator;
+
+/**
+ * Pool of client routers.
+ *
+ * &lt;p&gt;Created by zlokhandwala on 2/20/18.
+ */
+<span class="nc" id="L20">@Slf4j</span>
+public class NodeRouterPool {
+
+<span class="nc" id="L23">    @Getter(AccessLevel.PROTECTED)</span>
+    private final Map&lt;NodeLocator, IClientRouter&gt; nodeRouters = new ConcurrentHashMap&lt;&gt;();
+
+    /**
+     * A function to handle getting routers. Used by test framework to inject
+     * a test router. Can also be used to provide alternative logic for obtaining
+     * a router.
+     */
+<span class="nc" id="L31">    @Getter</span>
+<span class="nc" id="L32">    @Setter</span>
+    private Function&lt;String, IClientRouter&gt; createRouterFunction;
+
+<span class="nc" id="L35">    NodeRouterPool(Function&lt;String, IClientRouter&gt; createRouterFunction) {</span>
+<span class="nc" id="L36">        this.createRouterFunction = createRouterFunction;</span>
+<span class="nc" id="L37">    }</span>
+
+    /**
+     * Fetches a router from the pool if already present. Else creates a new router using the
+     * provided function and adds it to the pool.
+     *
+     * @param endpoint Endpoint to connect the router.
+     * @return IClientRouter.
+     */
+    public IClientRouter getRouter(NodeLocator endpoint) {
+<span class="nc" id="L47">        return nodeRouters.computeIfAbsent(endpoint,</span>
+<span class="nc" id="L48">                s -&gt; createRouterFunction.apply(s.toEndpointUrl()));</span>
+    }
+
+    /**
+     * Shutdown all the routers in the pool.
+     */
+    public void shutdown() {
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        for (IClientRouter r : nodeRouters.values()) {</span>
+<span class="nc" id="L56">            r.stop();</span>
+<span class="nc" id="L57">        }</span>
+<span class="nc" id="L58">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

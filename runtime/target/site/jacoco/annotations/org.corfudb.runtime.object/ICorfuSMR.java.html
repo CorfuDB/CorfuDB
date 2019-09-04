@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ICorfuSMR.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">runtime</a> &gt; <a href="../index.html" class="el_bundle">annotations</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object</a> &gt; <span class="el_source">ICorfuSMR.java</span></div><h1>ICorfuSMR.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/** The interface for an object interfaced with SMR.
+ * @param &lt;T&gt; The type of the underlying object.
+ * Created by mwei on 11/10/16.
+ */
+public interface ICorfuSMR&lt;T&gt; {
+
+    /** The suffix for all precompiled SMR wrapper classes. */
+    String CORFUSMR_SUFFIX = &quot;$CORFUSMR&quot;;
+
+    /** Get the proxy for this wrapper, to manage the state of the object.
+     * @return The proxy for this wrapper. */
+    ICorfuSMRProxy&lt;T&gt; getCorfuSMRProxy();
+
+    /** Set the proxy for this wrapper, to manage the state of the object.
+     * @param proxy The proxy to set for this wrapper. */
+    void setCorfuSMRProxy(ICorfuSMRProxy&lt;T&gt; proxy);
+
+    /** Get a map from strings (function names) to SMR upcalls.
+     * @return The SMR upcall map. */
+    Map&lt;String, ICorfuSMRUpcallTarget&lt;T&gt;&gt; getCorfuSMRUpcallMap();
+
+    /** Get a map from strings (function names) to undo methods.
+     * @return The undo map. */
+    Map&lt;String, IUndoFunction&lt;T&gt;&gt; getCorfuUndoMap();
+
+    /** Get a map from strings (function names) to undoRecord methods.
+     * @return The undo record map. */
+    Map&lt;String, IUndoRecordFunction&lt;T&gt;&gt; getCorfuUndoRecordMap();
+
+    /** Get a set of strings (function names) which result in a reset
+     * of the object.
+     * @return  The set of strings that cause a reset on the object.
+     */
+    Set&lt;String&gt; getCorfuResetSet();
+
+    /** Return the stream ID that this object belongs to.
+     * @return The stream ID this object belongs to. */
+    default UUID getCorfuStreamID() {
+<span class="nc" id="L45">        return getCorfuSMRProxy().getStreamID();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

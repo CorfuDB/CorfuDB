@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="8.20">
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/StringIndexer.java">
+<error line="6" severity="warning" message="Wrong lexicographical order for &apos;java.util.Iterator&apos; import. Should be before &apos;org.corfudb.runtime.collections.CorfuTable.Index&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="7" severity="warning" message="Wrong lexicographical order for &apos;java.util.Optional&apos; import. Should be before &apos;org.corfudb.runtime.collections.CorfuTable.Index&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="8" severity="warning" message="Wrong lexicographical order for &apos;java.util.stream.Stream&apos; import. Should be before &apos;org.corfudb.runtime.collections.CorfuTable.Index&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="20" severity="warning" message="Line is longer than 100 characters (found 104)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="32" severity="warning" message="Line is longer than 100 characters (found 111)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="33" column="42" severity="warning" message="WhitespaceAround: &apos;?&apos; is not preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/LongevityRun.java">
+<error line="5" severity="warning" message="Wrong lexicographical order for &apos;ch.qos.logback.classic.Level&apos; import. Should be before &apos;java.time.Duration&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="6" severity="warning" message="Wrong lexicographical order for &apos;ch.qos.logback.classic.Logger&apos; import. Should be before &apos;java.time.Duration&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="10" severity="warning" message="&apos;org.apache.commons.cli.CommandLine&apos; should be separated from previous import group by one line." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="36" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="67" column="44" severity="warning" message="&apos;&amp;&amp;&apos; should be on a new line." source="com.puppycrawl.tools.checkstyle.checks.whitespace.OperatorWrapCheck"/>
+<error line="68" column="48" severity="warning" message="&apos;&amp;&amp;&apos; should be on a new line." source="com.puppycrawl.tools.checkstyle.checks.whitespace.OperatorWrapCheck"/>
+<error line="69" column="48" severity="warning" message="WhitespaceAround: &apos;{&apos; is not preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+<error line="83" column="68" severity="warning" message="&apos;?&apos; should be on a new line." source="com.puppycrawl.tools.checkstyle.checks.whitespace.OperatorWrapCheck"/>
+<error line="86" column="56" severity="warning" message="&apos;?&apos; should be on a new line." source="com.puppycrawl.tools.checkstyle.checks.whitespace.OperatorWrapCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/SnapshotTxOperation.java">
+<error line="9" severity="warning" message="Wrong lexicographical order for &apos;java.util.List&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.TransactionAbortedException&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="10" severity="warning" message="Wrong lexicographical order for &apos;java.util.Random&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.TransactionAbortedException&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/WriteAfterWriteTxOperation.java">
+<error line="7" severity="warning" message="Wrong lexicographical order for &apos;java.util.List&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.TransactionAbortedException&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="32" column="13" severity="warning" message="&apos;{&apos; at column 13 should be on the previous line." source="com.puppycrawl.tools.checkstyle.checks.blocks.LeftCurlyCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/Operation.java">
+<error line="6" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="8" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/OptimisticTxOperation.java">
+<error line="10" severity="warning" message="Wrong lexicographical order for &apos;java.util.List&apos; import. Should be before &apos;org.corfudb.runtime.view.Address&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="37" column="17" severity="warning" message="&apos;{&apos; at column 17 should be on the previous line." source="com.puppycrawl.tools.checkstyle.checks.blocks.LeftCurlyCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/CheckpointOperation.java">
+<error line="8" severity="warning" message="Wrong lexicographical order for &apos;lombok.extern.slf4j.Slf4j&apos; import. Should be before &apos;org.corfudb.runtime.MultiCheckpointWriter&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="28" severity="warning" message="Comment has incorrect indentation level 0, expected is 12, indentation should be the same level as line 30." source="com.puppycrawl.tools.checkstyle.checks.indentation.CommentsIndentationCheck"/>
+<error line="34" column="26" severity="warning" message="Should use uppercase &apos;L&apos;." source="com.puppycrawl.tools.checkstyle.checks.UpperEllCheck"/>
+<error line="34" column="34" severity="warning" message="Should use uppercase &apos;L&apos;." source="com.puppycrawl.tools.checkstyle.checks.UpperEllCheck"/>
+<error line="34" column="40" severity="warning" message="Should use uppercase &apos;L&apos;." source="com.puppycrawl.tools.checkstyle.checks.UpperEllCheck"/>
+<error line="42" severity="warning" message="Comment has incorrect indentation level 0, expected is 12, 8, indentation should be the same level as line 38, 43." source="com.puppycrawl.tools.checkstyle.checks.indentation.CommentsIndentationCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/ReadOperation.java">
+<error line="34" column="73" severity="warning" message="&apos;.&apos; should be on a new line." source="SeparatorWrapDot"/>
+<error line="36" column="73" severity="warning" message="&apos;.&apos; should be on a new line." source="SeparatorWrapDot"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/SleepOperation.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/RemoveOperation.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/NestedTxOperation.java">
+<error line="8" severity="warning" message="Wrong lexicographical order for &apos;java.util.List&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.TransactionAbortedException&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="31" column="13" severity="warning" message="WhitespaceAround: &apos;try&apos; is not followed by whitespace. Empty blocks may only be represented as {} when not part of a multi-block statement (4.1.3)" source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+<error line="31" column="16" severity="warning" message="WhitespaceAround: &apos;{&apos; is not preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+<error line="32" severity="warning" message="&apos;try&apos; child has incorrect indentation level 12, expected level should be 16." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="33" severity="warning" message="&apos;try&apos; child has incorrect indentation level 12, expected level should be 16." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="34" severity="warning" message="&apos;try&apos; child has incorrect indentation level 12, expected level should be 16." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="36" severity="warning" message="&apos;for&apos; has incorrect indentation level 12, expected level should be 16." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="37" severity="warning" message="&apos;if&apos; has incorrect indentation level 16, expected level should be 20." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="37" column="72" severity="warning" message="&apos;||&apos; should be on a new line." source="com.puppycrawl.tools.checkstyle.checks.whitespace.OperatorWrapCheck"/>
+<error line="39" severity="warning" message="&apos;if&apos; child has incorrect indentation level 12, expected level should be 24." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="40" severity="warning" message="&apos;if&apos; child has incorrect indentation level 20, expected level should be 24." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="41" severity="warning" message="&apos;if rcurly&apos; has incorrect indentation level 16, expected level should be 20." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="42" severity="warning" message="&apos;for&apos; child has incorrect indentation level 16, expected level should be 20." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+<error line="43" severity="warning" message="&apos;for rcurly&apos; has incorrect indentation level 12, expected level should be 16." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/operations/WriteOperation.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/Correctness.java">
+<error line="24" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="34" severity="warning" message="First sentence of Javadoc is missing an ending period." source="com.puppycrawl.tools.checkstyle.checks.javadoc.SummaryJavadocCheck"/>
+<error line="43" severity="warning" message="Line is longer than 100 characters (found 103)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/LongevityApp.java">
+<error line="10" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.ArrayBlockingQueue&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="11" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.BlockingQueue&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="12" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.CompletableFuture&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="13" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.ExecutorService&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="14" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.Executors&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="15" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.ScheduledExecutorService&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="16" severity="warning" message="Wrong lexicographical order for &apos;java.util.concurrent.TimeUnit&apos; import. Should be before &apos;org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="25" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="53" severity="warning" message="Line is longer than 100 characters (found 109)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="53" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="79" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="84" severity="warning" message="At-clause should have a non-empty description." source="com.puppycrawl.tools.checkstyle.checks.javadoc.NonEmptyAtclauseDescriptionCheck"/>
+<error line="104" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="105" severity="warning" message="Line is longer than 100 characters (found 107)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="107" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="108" severity="warning" message="Line is longer than 100 characters (found 111)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="109" severity="warning" message="Line is longer than 100 characters (found 108)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="115" column="45" severity="warning" message="&apos;.&apos; should be on a new line." source="SeparatorWrapDot"/>
+<error line="133" severity="warning" message="Line is longer than 100 characters (found 120)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="156" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="214" severity="warning" message="At-clause should have a non-empty description." source="com.puppycrawl.tools.checkstyle.checks.javadoc.NonEmptyAtclauseDescriptionCheck"/>
+<error line="215" severity="warning" message="At-clause should have a non-empty description." source="com.puppycrawl.tools.checkstyle.checks.javadoc.NonEmptyAtclauseDescriptionCheck"/>
+<error line="217" column="38" severity="warning" message="&apos;(&apos; is preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.MethodParamPadCheck"/>
+<error line="219" severity="warning" message="Line is longer than 100 characters (found 102)." source="com.puppycrawl.tools.checkstyle.checks.sizes.LineLengthCheck"/>
+<error line="227" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/State.java">
+<error line="20" severity="warning" message="Wrong lexicographical order for &apos;lombok.Getter&apos; import. Should be before &apos;org.corfudb.runtime.object.transactions.TransactionType&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="21" severity="warning" message="Wrong lexicographical order for &apos;lombok.Setter&apos; import. Should be before &apos;org.corfudb.runtime.object.transactions.TransactionType&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="25" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="61" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="80" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="100" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="120" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="128" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="137" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/distributions/OperationCount.java">
+<error line="10" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/distributions/DataSet.java">
+<error line="9" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="12" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/distributions/Operations.java">
+<error line="13" severity="warning" message="Wrong lexicographical order for &apos;java.util.List&apos; import. Should be before &apos;org.corfudb.generator.operations.WriteOperation&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="18" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="26" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="35" severity="warning" message="Comment has incorrect indentation level 0, expected is 8, indentation should be the same level as line 36." source="com.puppycrawl.tools.checkstyle.checks.indentation.CommentsIndentationCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/distributions/Keys.java">
+<error line="11" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="25" column="9" severity="warning" message="WhitespaceAround: &apos;for&apos; is not followed by whitespace. Empty blocks may only be represented as {} when not part of a multi-block statement (4.1.3)" source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/distributions/Streams.java">
+<error line="11" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/generator/src/main/java/org/corfudb/generator/Generator.java">
+<error line="14" severity="warning" message="Import statement for &apos;java.util.concurrent.Executors.newWorkStealingPool&apos; is in the wrong order. Should be in the &apos;STATIC&apos; group, expecting not assigned imports on this line." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="21" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="22" severity="warning" message="Empty line should be followed by &lt;p&gt; tag on the next line." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocParagraphCheck"/>
+<error line="26" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+</file>
+</checkstyle>

@@ -1,0 +1,104 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.actions,RestoreRedundancyMergeSegments,73,0,4,0,18,0,6,0,4,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.actions,StateTransfer,400,0,20,0,88,0,18,0,8,0
+debian/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph.new Object() {...},26,0,0,0,1,0,1,0,1,0
+debian/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph,471,0,41,0,112,0,41,0,20,0
+debian/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph.ClusterGraphBuilder,50,0,0,0,1,0,6,0,6,0
+debian/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph.ClusterGraphHelper,21,0,0,0,9,0,2,0,2,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,RemoveNodeWorkflow,29,0,0,0,9,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,ForceRemoveWorkflow.ForceRemoveNode,111,0,4,0,17,0,5,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,RemoveNodeWorkflow.RemoveNode,25,0,0,0,6,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow.AddNodeToLayout,41,0,0,0,7,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow,38,0,0,0,9,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow.BootstrapNode,18,0,0,0,4,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow.RestoreRedundancy,88,0,4,0,18,0,5,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,RestoreRedundancyMergeSegmentsWorkflow,28,0,0,0,9,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,HealNodeWorkflow,28,0,0,0,6,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,ForceRemoveWorkflow,29,0,0,0,9,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,HealNodeWorkflow.HealNodeToLayout,36,0,0,0,7,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure,LayoutServer,742,0,60,0,164,0,54,0,24,0
+debian/infrastructure,org.corfudb.infrastructure,CorfuServer,342,0,26,0,96,0,24,0,11,0
+debian/infrastructure,org.corfudb.infrastructure,DataStore.NullValue,28,0,0,0,2,0,4,0,4,0
+debian/infrastructure,org.corfudb.infrastructure,SequencerServer,1366,0,104,0,234,0,83,0,30,0
+debian/infrastructure,org.corfudb.infrastructure,SequencerServerCache.new CacheWriter() {...},68,0,4,0,11,0,5,0,3,0
+debian/infrastructure,org.corfudb.infrastructure,BatchProcessor.new Object() {...},47,0,0,0,1,0,1,0,1,0
+debian/infrastructure,org.corfudb.infrastructure,LogUnitServer,859,0,30,0,170,0,55,0,40,0
+debian/infrastructure,org.corfudb.infrastructure,SequencerServerCache.ConflictTxStream,98,0,16,0,6,0,13,0,5,0
+debian/infrastructure,org.corfudb.infrastructure,BatchWriterOperation.Type,108,0,0,0,10,0,4,0,4,0
+debian/infrastructure,org.corfudb.infrastructure,ResourceQuota,82,0,4,0,15,0,11,0,9,0
+debian/infrastructure,org.corfudb.infrastructure,AbstractServer.ServerState,48,0,0,0,2,0,4,0,4,0
+debian/infrastructure,org.corfudb.infrastructure,SequencerServerCache,132,0,4,0,41,0,15,0,13,0
+debian/infrastructure,org.corfudb.infrastructure,RemoteMonitoringService.DetectorTask,54,0,2,0,5,0,6,0,5,0
+debian/infrastructure,org.corfudb.infrastructure,ServerContext,984,0,64,0,228,0,86,0,54,0
+debian/infrastructure,org.corfudb.infrastructure,CorfuServerNode,313,0,6,0,75,0,19,0,16,0
+debian/infrastructure,org.corfudb.infrastructure,Phase2Data,132,0,22,0,5,0,20,0,9,0
+debian/infrastructure,org.corfudb.infrastructure,LogUnitServer.LogUnitServerConfig,74,0,0,0,14,0,8,0,8,0
+debian/infrastructure,org.corfudb.infrastructure,SequencerServer.Config.ConfigBuilder,46,0,2,0,1,0,6,0,5,0
+debian/infrastructure,org.corfudb.infrastructure,ServerThreadFactory.ExceptionHandler,29,0,0,0,6,0,2,0,2,0
+debian/infrastructure,org.corfudb.infrastructure,ManagementAgent,268,0,24,0,77,0,23,0,11,0
+debian/infrastructure,org.corfudb.infrastructure,LogUnitServerCache,98,0,4,0,25,0,12,0,10,0
+debian/infrastructure,org.corfudb.infrastructure,DataStore,257,0,20,0,57,0,28,0,18,0
+debian/infrastructure,org.corfudb.infrastructure,BatchWriterOperation,218,0,38,0,7,0,30,0,11,0
+debian/infrastructure,org.corfudb.infrastructure,RemoteMonitoringService,1073,0,66,0,298,0,71,0,38,0
+debian/infrastructure,org.corfudb.infrastructure,DataStore.new CacheWriter() {...},144,0,2,0,25,0,4,0,3,0
+debian/infrastructure,org.corfudb.infrastructure,RemoteMonitoringService.SequencerNotReadyCounter,29,0,0,0,6,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure,Rank,147,0,28,0,11,0,23,0,9,0
+debian/infrastructure,org.corfudb.infrastructure,LogUnitServer.LogUnitServerConfig.LogUnitServerConfigBuilder,74,0,0,0,1,0,8,0,8,0
+debian/infrastructure,org.corfudb.infrastructure,CorfuMsgHandler,341,0,18,0,68,0,23,0,14,0
+debian/infrastructure,org.corfudb.infrastructure,ManagementServer,656,0,36,0,153,0,37,0,19,0
+debian/infrastructure,org.corfudb.infrastructure,AbstractServer,82,0,10,0,22,0,13,0,8,0
+debian/infrastructure,org.corfudb.infrastructure,CorfuServerNode.new ChannelInitializer() {...},273,0,12,0,51,0,10,0,4,0
+debian/infrastructure,org.corfudb.infrastructure,LocalMonitoringService,139,0,10,0,40,0,15,0,10,0
+debian/infrastructure,org.corfudb.infrastructure,BaseServer,190,0,6,0,44,0,15,0,12,0
+debian/infrastructure,org.corfudb.infrastructure,SequencerServer.Config,45,0,2,0,11,0,7,0,6,0
+debian/infrastructure,org.corfudb.infrastructure,TxResolutionResponse,226,0,32,0,13,0,30,0,14,0
+debian/infrastructure,org.corfudb.infrastructure,ServerThreadFactory,47,0,0,0,12,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure,NettyServerRouter,216,0,12,0,47,0,19,0,13,0
+debian/infrastructure,org.corfudb.infrastructure,BatchProcessor,440,0,40,0,111,0,30,0,7,0
+debian/infrastructure,org.corfudb.infrastructure,IDataStore.KvRecord,34,0,0,0,5,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure,RecoveryHandler,57,0,6,0,12,0,6,0,3,0
+debian/infrastructure,org.corfudb.infrastructure,ServerHandshakeHandler,308,0,28,0,85,0,23,0,9,0
+debian/infrastructure,org.corfudb.infrastructure.log,MultiReadWriteLock.LockReference,115,0,16,0,6,0,17,0,9,0
+debian/infrastructure,org.corfudb.infrastructure.log,MultiReadWriteLock.LockMetadata,113,0,12,0,4,0,15,0,9,0
+debian/infrastructure,org.corfudb.infrastructure.log,AddressMetaData,12,0,0,0,5,0,1,0,1,0
+debian/infrastructure,org.corfudb.infrastructure.log,SegmentHandle,477,0,70,0,26,0,54,0,19,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogWithRankedAddressSpace,58,0,12,0,16,0,7,0,1,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogDataStore,169,0,8,0,31,0,13,0,9,0
+debian/infrastructure,org.corfudb.infrastructure.log,LogMetadata,243,0,18,0,54,0,23,0,14,0
+debian/infrastructure,org.corfudb.infrastructure.log,InMemoryStreamLog,372,0,38,0,74,0,37,0,18,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogFiles.Checksum,39,0,2,0,8,0,4,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLog,36,0,10,0,11,0,7,0,2,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogDataStore.StreamLogDataStoreBuilder,26,0,0,0,1,0,4,0,4,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogFiles,2677,0,206,0,576,0,162,0,59,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogCompaction,136,0,8,0,28,0,8,0,4,0
+debian/infrastructure,org.corfudb.infrastructure.log,MultiReadWriteLock,276,0,26,0,61,0,24,0,11,0
+debian/infrastructure,org.corfudb.infrastructure.log,StreamLogFiles.new SimpleFileVisitor() {...},21,0,0,0,5,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.management,NetworkStretcher,109,0,6,0,20,0,18,0,15,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateAggregator,125,0,16,0,23,0,12,0,4,0
+debian/infrastructure,org.corfudb.infrastructure.management,PollReport,182,0,14,0,23,0,23,0,16,0
+debian/infrastructure,org.corfudb.infrastructure.management,CompleteGraphAdvisor,142,0,16,0,42,0,14,0,6,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateContext.ClusterStateContextBuilder,38,0,0,0,1,0,5,0,5,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateCollector,194,0,12,0,49,0,16,0,10,0
+debian/infrastructure,org.corfudb.infrastructure.management,ReconfigurationEventHandler,139,0,2,0,38,0,9,0,8,0
+debian/infrastructure,org.corfudb.infrastructure.management,PollReport.PollReportBuilder,90,0,4,0,1,0,10,0,8,0
+debian/infrastructure,org.corfudb.infrastructure.management,FailureDetector,384,0,12,0,106,0,21,0,15,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateContext.HeartbeatCounter,16,0,0,0,4,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateAggregator.ClusterStateAggregatorBuilder,50,0,0,0,1,0,6,0,6,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateContext,63,0,8,0,8,0,10,0,6,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterType,38,0,0,0,3,0,4,0,4,0
+debian/infrastructure,org.corfudb.infrastructure.management,NetworkStretcher.NetworkStretcherBuilder,114,0,10,0,1,0,13,0,8,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterStateCollector.ClusterStateCollectorBuilder,50,0,0,0,1,0,6,0,6,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterAdvisorFactory.new Object() {...},19,0,0,0,1,0,1,0,1,0
+debian/infrastructure,org.corfudb.infrastructure.management,ClusterAdvisorFactory,24,0,3,0,6,0,4,0,2,0
+debian/infrastructure,org.corfudb.infrastructure.utils,Persistence,56,0,8,0,6,0,6,0,2,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator,Orchestrator,478,0,23,0,95,0,22,0,8,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator,ActionStatus,58,0,0,0,5,0,4,0,4,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator,Action,61,0,2,0,17,0,6,0,5,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator,IWorkflow,11,0,0,0,2,0,2,0,2,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator,Orchestrator.new ThreadFactory() {...},76,0,0,0,14,0,3,0,3,0
+debian/infrastructure,org.corfudb.infrastructure.orchestrator,Orchestrator.new Object() {...},47,0,0,0,1,0,1,0,1,0
+debian/infrastructure,org.corfudb.infrastructure.paxos,PaxosDataStore,83,0,2,0,9,0,7,0,6,0
+debian/infrastructure,org.corfudb.infrastructure.paxos,PaxosDataStore.PaxosDataStoreBuilder,26,0,0,0,1,0,4,0,4,0
+debian/cmdlets,org.corfudb.metrics,MBeanDumperApp,32,0,4,0,10,0,4,0,2,0
+debian/cmdlets,org.corfudb.metrics,MBeanUtils,306,0,38,0,49,0,24,0,5,0
+debian/cmdlets,org.corfudb.shell,ShellMain,21,0,0,0,6,0,2,0,2,0

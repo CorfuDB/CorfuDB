@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>Sleep.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">Sleep.java</span></div><h1>Sleep.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+
+/** Utils for sleeping with or without interruptions using timeunits, much like
+ *  {@link TimeUnit}'s sleep functionality.
+ *
+ *  Use these methods rather than {@link Thread#sleep(long)} or {@link TimeUnit#sleep(long)}
+ *  because they handle {@linbk InterruptedException} properly.
+ *
+ *  @deprecated Sleep doesn't have any advantages over TimeUnit. Please always use TimeUnit.
+ */
+<span class="nc" id="L16">@Deprecated</span>
+<span class="nc" id="L17">public enum Sleep {</span>
+<span class="nc" id="L18">    NANOSECONDS {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L21">            return TimeUnit.NANOSECONDS.toMillis(duration);</span>
+        }
+    },
+<span class="nc" id="L24">    MICROSECONDS {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L27">            return TimeUnit.MICROSECONDS.toMillis(duration);</span>
+        }
+    },
+<span class="nc" id="L30">    MILLISECONDS {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L33">            return TimeUnit.MILLISECONDS.toMillis(duration);</span>
+        }
+    },
+<span class="nc" id="L36">    SECONDS {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L39">            return TimeUnit.SECONDS.toMillis(duration);</span>
+        }
+    },
+<span class="nc" id="L42">    MINUTES {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L45">            return TimeUnit.MINUTES.toMillis(duration);</span>
+        }
+    },
+<span class="nc" id="L48">    HOURS {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L51">            return TimeUnit.HOURS.toMillis(duration);</span>
+        }
+    },
+<span class="nc" id="L54">    DAYS {</span>
+        @Override
+        long toMillis(long duration) {
+<span class="nc" id="L57">            return TimeUnit.DAYS.toMillis(duration);</span>
+        }
+    };
+
+    /** Convert this duration to millis. Used for the millisecond parameter to sleep.
+     *
+     * @param duration  The duration to convert.
+     * @return          The duration in milliseconds.
+     */
+    abstract long toMillis(long duration);
+
+    /**
+     * Sleep, without recovery logic in case the sleep is interrupted.
+     *
+     * &lt;p&gt;If sleep is interrupted, this method will throw
+     * {@link UnrecoverableCorfuInterruptedError}, which will indicate that Corfu was interrupted
+     * but cannot recover from the interruption.
+     *
+     * @param duration      The duration to sleep.
+     */
+    public static void sleepUninterruptibly(Duration duration) {
+<span class="nc" id="L78">        final long milliseconds = duration.toMillis();</span>
+<span class="nc bnc" id="L79" title="All 2 branches missed.">        if (milliseconds == 0) {</span>
+<span class="nc" id="L80">            sleepUninterruptibly(duration.toNanos(), TimeUnit.NANOSECONDS);</span>
+        } else {
+<span class="nc" id="L82">            sleepUninterruptibly(duration.toMillis(), TimeUnit.MILLISECONDS);</span>
+        }
+<span class="nc" id="L84">    }</span>
+
+    /**
+     * Sleep, without recovery logic in case the sleep is interrupted.
+     *
+     * &lt;p&gt;If sleep is interrupted, this method will throw
+     * {@link UnrecoverableCorfuInterruptedError}, which will indicate that Corfu was interrupted
+     * but cannot recover from the interruption.
+     *
+     * @param duration      The duration to sleep.
+     */
+    @SuppressWarnings(&quot;checkstyle:ThreadSleep&quot;)
+    private static void sleepUninterruptibly(long duration, TimeUnit timeUnit) {
+        try {
+<span class="nc" id="L98">            timeUnit.sleep(duration);</span>
+<span class="nc" id="L99">        } catch (InterruptedException ie) {</span>
+<span class="nc" id="L100">            throw new UnrecoverableCorfuInterruptedError(&quot;Uninterruptible sleep interrupted&quot;, ie);</span>
+<span class="nc" id="L101">        }</span>
+<span class="nc" id="L102">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ForceRemoveWorkflow.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.orchestrator.workflows</a> &gt; <span class="el_source">ForceRemoveWorkflow.java</span></div><h1>ForceRemoveWorkflow.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.orchestrator.workflows;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.FORCE_REMOVE_NODE;
+
+/**
+ *
+ * This workflow removes an endpoint from the cluster forcefully by bypassing consensus. It removes
+ * the endpoint from the current layout, seals the system and then sends a force layout request
+ * to all the endpoints in the new layout.
+ *
+ * Created by Maithem on 12/13/17.
+ */
+<span class="nc" id="L25">@Slf4j</span>
+public class ForceRemoveWorkflow implements IWorkflow {
+
+    final ForceRemoveNodeRequest request;
+
+    /**
+     * The id of this workflow.
+     */
+<span class="nc" id="L33">    @Getter</span>
+    final UUID id;
+
+<span class="nc" id="L36">    @Getter</span>
+    final List&lt;Action&gt; actions;
+    /**
+     * Create this workflow from a force remove request.
+     */
+<span class="nc" id="L41">    public ForceRemoveWorkflow(@Nonnull ForceRemoveNodeRequest request) {</span>
+<span class="nc" id="L42">        this.id = UUID.randomUUID();</span>
+<span class="nc" id="L43">        this.request = request;</span>
+<span class="nc" id="L44">        actions = Collections.singletonList(new ForceRemoveNode());</span>
+<span class="nc" id="L45">    }</span>
+
+    @Override
+    public String getName() {
+<span class="nc" id="L49">        return FORCE_REMOVE_NODE.toString();</span>
+    }
+
+    /**
+     * Remove the endpoint from the current layout bypassing consensus and layout
+     * constraints, sealing the new cluster and then send a force layout to all the
+     * endpoints in the new layout.
+     */
+<span class="nc" id="L57">    class ForceRemoveNode extends Action {</span>
+        @Override
+        public String getName() {
+<span class="nc" id="L60">            return &quot;ForceRemoveNode&quot;;</span>
+        }
+
+        @Override
+        public void impl(@Nonnull CorfuRuntime runtime) {
+<span class="nc" id="L65">            runtime.invalidateLayout();</span>
+<span class="nc" id="L66">            Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="nc" id="L67">            Layout newLayout = new Layout(currentLayout);</span>
+
+<span class="nc" id="L69">            newLayout.setEpoch(newLayout.getEpoch() + 1);</span>
+
+<span class="nc" id="L71">            newLayout.getLayoutServers().remove(request.getEndpoint());</span>
+<span class="nc" id="L72">            newLayout.getSequencers().remove(request.getEndpoint());</span>
+<span class="nc" id="L73">            newLayout.getUnresponsiveServers().remove(request.getEndpoint());</span>
+
+<span class="nc bnc" id="L75" title="All 2 branches missed.">            for (Layout.LayoutSegment segment : newLayout.getSegments()) {</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">                for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
+<span class="nc" id="L77">                    stripe.getLogServers().remove(request.getEndpoint());</span>
+<span class="nc" id="L78">                }</span>
+<span class="nc" id="L79">            }</span>
+
+<span class="nc" id="L81">            log.info(&quot;force removed {} from {},  new layout {}&quot;, request.getEndpoint(),</span>
+                    currentLayout, newLayout);
+
+<span class="nc" id="L84">            runtime.getLayoutManagementView().forceLayout(currentLayout, newLayout);</span>
+<span class="nc" id="L85">        }</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

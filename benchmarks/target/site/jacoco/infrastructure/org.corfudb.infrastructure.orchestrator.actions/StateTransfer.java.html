@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>StateTransfer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.orchestrator.actions</a> &gt; <span class="el_source">StateTransfer.java</span></div><h1>StateTransfer.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.orchestrator.actions;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.ReadOptions;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.RetryNeededException;
+
+/**
+ * State transfer utility.
+ * Created by zlokhandwala on 2019-02-06.
+ */
+<span class="nc" id="L30">@Slf4j</span>
+public class StateTransfer {
+
+<span class="nc" id="L33">    private StateTransfer() {</span>
+        // Hide implicit public constructor.
+<span class="nc" id="L35">    }</span>
+
+    // The exponential backoff will not exceed this max retry timeout.
+<span class="nc" id="L38">    private static final Duration MAX_RETRY_TIMEOUT = Duration.ofSeconds(10);</span>
+
+    // Random factor introduced into the exponential backoff.
+    private static final float RANDOM_FACTOR_BACKOFF = 0.5f;
+
+    // Maximum number of retries after which the Overwrite Exception is rethrown.
+    private static final int OVERWRITE_RETRIES = 3;
+
+    // Default read options for the state read calls
+<span class="nc" id="L47">    private static final ReadOptions readOptions = ReadOptions.builder()</span>
+<span class="nc" id="L48">            .waitForHole(true)</span>
+<span class="nc" id="L49">            .clientCacheable(false)</span>
+<span class="nc" id="L50">            .serverCacheable(false)</span>
+<span class="nc" id="L51">            .build();</span>
+
+    /**
+     * Fetch and propagate the trimMark to the new/healing nodes. Else, a FastLoader reading from
+     * them will have to mark all the already trimmed entries as holes.
+     * Transfer an address segment from a cluster to a set of specified nodes.
+     * There are no cluster reconfigurations, hence no epoch change side effects.
+     *
+     * @param layout   layout
+     * @param endpoint destination node
+     * @param runtime  The runtime to read the segment from
+     * @param segment  segment to transfer
+     */
+    public static void transfer(Layout layout,
+<span class="nc bnc" id="L65" title="All 2 branches missed.">                                @NonNull String endpoint,</span>
+                                CorfuRuntime runtime,
+                                Layout.LayoutSegment segment) throws InterruptedException {
+
+<span class="nc" id="L69">        int chunkSize = runtime.getParameters().getBulkReadSize();</span>
+<span class="nc" id="L70">        final AtomicInteger overwriteRetries = new AtomicInteger();</span>
+
+<span class="nc" id="L72">        IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -&gt; {</span>
+
+            try {
+
+<span class="nc" id="L76">                long trimMark = setTrimOnNewLogUnit(layout, runtime, endpoint);</span>
+
+<span class="nc bnc" id="L78" title="All 2 branches missed.">                if (trimMark &gt; segment.getEnd()) {</span>
+<span class="nc" id="L79">                    log.info(&quot;stateTransfer: Nothing to transfer, trimMark {}&quot;</span>
+                                    + &quot;greater than end of segment {}&quot;,
+<span class="nc" id="L81">                            trimMark, segment.getEnd());</span>
+<span class="nc" id="L82">                    return true;</span>
+                }
+
+                // State transfer should start from segment start address or trim mark
+                // whichever is higher.
+<span class="nc" id="L87">                final long segmentStart = Math.max(trimMark, segment.getStart());</span>
+<span class="nc" id="L88">                final long segmentEnd = segment.getEnd() - 1;</span>
+<span class="nc" id="L89">                log.info(&quot;stateTransfer: Total address range to transfer: [{}-{}] to node {}&quot;,</span>
+<span class="nc" id="L90">                        segmentStart, segmentEnd, endpoint);</span>
+
+                // Transfer non-written chunks of addresses.
+<span class="nc bnc" id="L93" title="All 2 branches missed.">                for (long chunkStart = segmentStart; chunkStart &lt;= segmentEnd</span>
+<span class="nc" id="L94">                        ; chunkStart += chunkSize) {</span>
+
+<span class="nc" id="L96">                    long chunkEnd = Math.min(segmentEnd, chunkStart + chunkSize - 1);</span>
+
+                    // Fetch all missing entries in this range [chunkStart - chunkEnd].
+<span class="nc" id="L99">                    List&lt;Long&gt; chunk = getMissingEntriesChunk(layout, runtime, endpoint,</span>
+                            chunkStart, chunkEnd);
+
+                    // Read and write in chunks of chunkSize.
+<span class="nc" id="L103">                    transferChunk(layout, runtime, endpoint, chunk);</span>
+                }
+<span class="nc" id="L105">            } catch (OverwriteException oe) {</span>
+
+<span class="nc" id="L107">                log.error(&quot;stateTransfer: Overwrite Exception: retried: {} times&quot;,</span>
+<span class="nc" id="L108">                        overwriteRetries.get());</span>
+
+<span class="nc bnc" id="L110" title="All 2 branches missed.">                if (overwriteRetries.getAndIncrement() &gt;= OVERWRITE_RETRIES) {</span>
+<span class="nc" id="L111">                    throw new RetryExhaustedException(&quot;StateTransfer: Retries exhausted.&quot;);</span>
+                }
+<span class="nc" id="L113">                throw new RetryNeededException();</span>
+<span class="nc" id="L114">            }</span>
+
+<span class="nc" id="L116">            return true;</span>
+<span class="nc" id="L117">        }).setOptions(retry -&gt; {</span>
+<span class="nc" id="L118">            retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);</span>
+<span class="nc" id="L119">            retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);</span>
+<span class="nc" id="L120">        }).run();</span>
+<span class="nc" id="L121">    }</span>
+
+    /**
+     * Send the trimMark to the new/healing nodes.
+     * If this times out or fails, the Action performing the stateTransfer
+     * fails and retries.
+     * TrimMark is the first address present on the log unit server.
+     * Perform the prefix trim on the preceding address = (trimMark - 1).
+     * Since the LU will reject trim decisions made from older epochs, we
+     * need to adjust the new trim mark to have the new layout's epoch.
+     *
+     * @param layout   Current layout.
+     * @param runtime  Corfu runtime instance.
+     * @param endpoint Endpoint ot transfer data to.
+     * @return Trim Address.
+     */
+    private static long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
+                                            String endpoint) {
+
+<span class="nc" id="L140">        long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();</span>
+
+<span class="nc" id="L142">        Token prefixToken = new Token(layout.getEpoch(), trimMark - 1);</span>
+<span class="nc" id="L143">        CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="nc" id="L144">                .getLogUnitClient(endpoint)</span>
+<span class="nc" id="L145">                .prefixTrim(prefixToken));</span>
+<span class="nc" id="L146">        return trimMark;</span>
+    }
+
+    /**
+     * Get the missing entries from the destination log unit in a specific range.
+     * Partition the missing entries into chunks of chunkSize so that they can be
+     * read from the cluster and written to the destination log unit server within
+     * the RPC timeout.
+     *
+     * @param layout     Current layout.
+     * @param runtime    Corfu runtime instance.
+     * @param endpoint   Endpoint ot transfer data to.
+     * @param chunkStart Start address of batch of missing entries.
+     * @param chunkEnd   End address of batch of missing entries.
+     * @return Iterable list of partitioned entries.
+     */
+    private static List&lt;Long&gt; getMissingEntriesChunk(Layout layout,
+                                                     CorfuRuntime runtime,
+                                                     String endpoint,
+                                                     long chunkStart,
+                                                     long chunkEnd) {
+
+        // For each batch request known addresses in this batch.
+        // This is an optimization in case the state transfer is repeated to
+        // prevent redundant transfer.
+<span class="nc" id="L171">        Set&lt;Long&gt; knownAddresses = CFUtils.getUninterruptibly(runtime.getLayoutView()</span>
+<span class="nc" id="L172">                .getRuntimeLayout(layout)</span>
+<span class="nc" id="L173">                .getLogUnitClient(endpoint)</span>
+<span class="nc" id="L174">                .requestKnownAddresses(chunkStart, chunkEnd))</span>
+<span class="nc" id="L175">                .getKnownAddresses();</span>
+<span class="nc" id="L176">        List&lt;Long&gt; missingEntries = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">        for (long address = chunkStart; address &lt;= chunkEnd; address++) {</span>
+<span class="nc bnc" id="L178" title="All 2 branches missed.">            if (!knownAddresses.contains(address)) {</span>
+<span class="nc" id="L179">                missingEntries.add(address);</span>
+            }
+        }
+
+<span class="nc" id="L183">        log.info(&quot;Addresses to be transferred in range [{}-{}] = {}&quot;,</span>
+<span class="nc" id="L184">                chunkStart, chunkEnd, missingEntries.size());</span>
+
+<span class="nc" id="L186">        return missingEntries;</span>
+    }
+
+    /**
+     * Read the chunk of data from the cluster and write to the destination log unit.
+     *
+     * @param layout   Current layout.
+     * @param runtime  Corfu runtime instance.
+     * @param endpoint Endpoint ot transfer data to.
+     * @param chunk    List of addresses to be read and transferred.
+     */
+    private static void transferChunk(Layout layout,
+                                      CorfuRuntime runtime,
+                                      String endpoint,
+                                      List&lt;Long&gt; chunk) {
+
+<span class="nc bnc" id="L202" title="All 2 branches missed.">        if (chunk.isEmpty()) {</span>
+<span class="nc" id="L203">            return;</span>
+        }
+
+<span class="nc" id="L206">        long ts1 = System.currentTimeMillis();</span>
+
+        // Don't cache the read results on server for state transfer.
+<span class="nc" id="L209">        Map&lt;Long, ILogData&gt; dataMap = runtime.getAddressSpaceView().read(chunk, readOptions);</span>
+
+<span class="nc" id="L211">        long ts2 = System.currentTimeMillis();</span>
+
+<span class="nc" id="L213">        log.info(&quot;stateTransfer: read [{}-{}] in {} ms&quot;,</span>
+<span class="nc" id="L214">                chunk.get(0), chunk.get(chunk.size() - 1), (ts2 - ts1));</span>
+
+<span class="nc" id="L216">        List&lt;LogData&gt; entries = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L217" title="All 2 branches missed.">        for (long address : chunk) {</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">            if (!dataMap.containsKey(address)) {</span>
+<span class="nc" id="L219">                log.error(&quot;Missing address {} in batch {}&quot;, address, chunk);</span>
+<span class="nc" id="L220">                throw new IllegalStateException(&quot;Missing address&quot;);</span>
+            }
+<span class="nc" id="L222">            entries.add((LogData) dataMap.get(address));</span>
+<span class="nc" id="L223">        }</span>
+
+        try {
+            // Write segment chunk to the new log unit
+<span class="nc" id="L227">            ts1 = System.currentTimeMillis();</span>
+<span class="nc" id="L228">            boolean transferSuccess = CFUtils.getUninterruptibly(runtime.getLayoutView()</span>
+<span class="nc" id="L229">                    .getRuntimeLayout(layout)</span>
+<span class="nc" id="L230">                    .getLogUnitClient(endpoint)</span>
+<span class="nc" id="L231">                    .writeRange(entries), OverwriteException.class);</span>
+
+<span class="nc" id="L233">            ts2 = System.currentTimeMillis();</span>
+
+<span class="nc bnc" id="L235" title="All 2 branches missed.">            if (!transferSuccess) {</span>
+<span class="nc" id="L236">                log.error(&quot;stateTransfer: Failed to transfer {} to {}&quot;,</span>
+                        chunk, endpoint);
+<span class="nc" id="L238">                throw new IllegalStateException(&quot;Failed to transfer!&quot;);</span>
+            }
+
+<span class="nc" id="L241">        } catch (OverwriteException oe) {</span>
+<span class="nc" id="L242">            log.error(&quot;stateTransfer: Overwrite Exception on transfer of chunk: {}&quot;, chunk);</span>
+<span class="nc" id="L243">            throw oe;</span>
+<span class="nc" id="L244">        }</span>
+
+<span class="nc" id="L246">        log.info(&quot;stateTransfer: Transferred address chunk [{}-{}] to {} in {} ms&quot;,</span>
+<span class="nc" id="L247">                chunk.get(0), chunk.get(chunk.size() - 1), endpoint, (ts2 - ts1));</span>
+<span class="nc" id="L248">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

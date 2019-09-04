@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CorfuCompileWrapperBuilder.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object</a> &gt; <span class="el_source">CorfuCompileWrapperBuilder.java</span></div><h1>CorfuCompileWrapperBuilder.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object;
+
+import java.lang.reflect.Constructor;
+import java.util.UUID;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.ISerializer;
+
+/**
+ * Builds a wrapper for the underlying SMR Object.
+ *
+ * &lt;p&gt;Created by mwei on 11/11/16.
+ */
+<span class="nc" id="L14">public class CorfuCompileWrapperBuilder {</span>
+
+    /**
+     * Returns a wrapper for the underlying SMR Object
+     *
+     * @param type       Type of SMR object.
+     * @param rt         Connected instance of the CorfuRuntime.
+     * @param streamID   StreamID of the SMR Object.
+     * @param args       Arguments passed to instantiate the object.
+     * @param serializer Serializer to be used to serialize the object arguments.
+     * @param &lt;T&gt;        Type
+     * @return Returns the wrapper to the object.
+     * @throws ClassNotFoundException Class T not found.
+     * @throws IllegalAccessException Illegal Access to the Object.
+     * @throws InstantiationException Cannot instantiate the object using the arguments and class.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+    public static &lt;T&gt; T getWrapper(Class&lt;T&gt; type, CorfuRuntime rt,
+                                   UUID streamID, Object[] args,
+                                   ISerializer serializer)
+            throws ClassNotFoundException, IllegalAccessException,
+            InstantiationException {
+        // Do we have a compiled wrapper for this type?
+<span class="nc" id="L37">        Class&lt;ICorfuSMR&lt;T&gt;&gt; wrapperClass = (Class&lt;ICorfuSMR&lt;T&gt;&gt;)</span>
+<span class="nc" id="L38">                Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);</span>
+
+        // Instantiate a new instance of this class.
+<span class="nc" id="L41">        ICorfuSMR&lt;T&gt; wrapperObject = null;</span>
+<span class="nc bnc" id="L42" title="All 4 branches missed.">        if (args == null || args.length == 0) {</span>
+<span class="nc" id="L43">            wrapperObject = wrapperClass.newInstance();</span>
+        } else {
+            // This loop is not ideal, but the easiest way to get around Java
+            // boxing, which results in primitive constructors not matching.
+<span class="nc bnc" id="L47" title="All 2 branches missed.">            for (Constructor&lt;?&gt; constructor : wrapperClass</span>
+<span class="nc" id="L48">                    .getDeclaredConstructors()) {</span>
+                try {
+<span class="nc" id="L50">                    wrapperObject = (ICorfuSMR&lt;T&gt;) constructor</span>
+<span class="nc" id="L51">                            .newInstance(args);</span>
+<span class="nc" id="L52">                    break;</span>
+<span class="nc" id="L53">                } catch (Exception e) {</span>
+                    // just keep trying until one works.
+                }
+            }
+        }
+
+        // Now we create the proxy, which actually manages
+        // instances of this object. The wrapper delegates calls to the proxy.
+<span class="nc" id="L61">        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy&lt;&gt;(rt, streamID,</span>
+                type, args, serializer,
+<span class="nc" id="L63">                wrapperObject.getCorfuSMRUpcallMap(),</span>
+<span class="nc" id="L64">                wrapperObject.getCorfuUndoMap(),</span>
+<span class="nc" id="L65">                wrapperObject.getCorfuUndoRecordMap(),</span>
+<span class="nc" id="L66">                wrapperObject.getCorfuResetSet()));</span>
+
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        if (wrapperObject instanceof ICorfuSMRProxyWrapper) {</span>
+<span class="nc" id="L69">            ((ICorfuSMRProxyWrapper) wrapperObject)</span>
+<span class="nc" id="L70">                    .setProxy$CORFUSMR(wrapperObject.getCorfuSMRProxy());</span>
+        }
+
+<span class="nc" id="L73">        return (T) wrapperObject;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

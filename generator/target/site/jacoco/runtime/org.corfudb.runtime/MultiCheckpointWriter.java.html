@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MultiCheckpointWriter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime</a> &gt; <span class="el_source">MultiCheckpointWriter.java</span></div><h1>MultiCheckpointWriter.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime;
+
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.serializer.ISerializer;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
+ */
+<span class="nc" id="L24">@Slf4j</span>
+<span class="nc" id="L25">public class MultiCheckpointWriter&lt;T extends Map&gt; {</span>
+<span class="nc" id="L26">    @Getter</span>
+    private List&lt;ICorfuSMR&lt;T&gt;&gt; maps = new ArrayList&lt;&gt;();
+
+    // Registry and Timer used for measuring append checkpoints
+<span class="nc" id="L30">    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
+<span class="nc" id="L31">    private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +</span>
+            &quot;append-several-checkpoints&quot;;
+<span class="nc" id="L33">    private final Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);</span>
+
+    /** Add a map to the list of maps to be checkpointed by this class. */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public void addMap(T map) {
+<span class="nc" id="L38">        maps.add((ICorfuSMR&lt;T&gt;) map);</span>
+<span class="nc" id="L39">    }</span>
+
+    /** Add map(s) to the list of maps to be checkpointed by this class. */
+
+    public void addAllMaps(Collection&lt;T&gt; maps) {
+<span class="nc bnc" id="L44" title="All 2 branches missed.">        for (T map : maps) {</span>
+<span class="nc" id="L45">            addMap(map);</span>
+<span class="nc" id="L46">        }</span>
+<span class="nc" id="L47">    }</span>
+
+    /** Checkpoint multiple SMRMaps. Since this method is Map specific
+     *  then the keys are unique and the order doesn't matter.
+     *
+     * @param rt CorfuRuntime
+     * @param author Author's name, stored in checkpoint metadata
+     * @return Global log address of the first record of
+     */
+    public Token appendCheckpoints(CorfuRuntime rt, String author) {
+<span class="nc" id="L57">        int numRetries = rt.getParameters().getCheckpointRetries();</span>
+<span class="nc" id="L58">        int retry = 0;</span>
+<span class="nc" id="L59">        log.info(&quot;appendCheckpoints: appending checkpoints for {} maps&quot;, maps.size());</span>
+
+<span class="nc" id="L61">        Token minSnapshot = Token.UNINITIALIZED;</span>
+
+<span class="nc" id="L63">        final long cpStart = System.currentTimeMillis();</span>
+<span class="nc" id="L64">        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointsTimer)) {</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">            for (ICorfuSMR&lt;T&gt; map : maps) {</span>
+<span class="nc" id="L66">                UUID streamId = map.getCorfuStreamID();</span>
+
+<span class="nc" id="L68">                CheckpointWriter&lt;T&gt; cpw = new CheckpointWriter(rt, streamId, author, (T) map);</span>
+<span class="nc" id="L69">                ISerializer serializer =</span>
+<span class="nc" id="L70">                        ((CorfuCompileProxy&lt;Map&gt;) map.getCorfuSMRProxy())</span>
+<span class="nc" id="L71">                                .getSerializer();</span>
+<span class="nc" id="L72">                cpw.setSerializer(serializer);</span>
+
+<span class="nc" id="L74">                Token minCPSnapshot = Token.UNINITIALIZED;</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">                while (retry &lt; numRetries) {</span>
+                    try {
+<span class="nc" id="L77">                        minCPSnapshot = cpw.appendCheckpoint();</span>
+<span class="nc" id="L78">                        break;</span>
+<span class="nc" id="L79">                    } catch (WrongEpochException wee) {</span>
+<span class="nc" id="L80">                        log.info(&quot;Epoch changed to {} during append checkpoint snapshot resolution. Sequencer&quot; +</span>
+<span class="nc" id="L81">                                &quot; failover can lead to potential epoch regression, retry {}/{}&quot;, wee.getCorrectEpoch(),</span>
+<span class="nc" id="L82">                                retry, numRetries);</span>
+<span class="nc" id="L83">                        retry++;</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                        if (retry == numRetries) {</span>
+<span class="nc" id="L85">                            String msg = String.format(&quot;Epochs changed during checkpoint cycle, &quot; +</span>
+                                    &quot;over more than %s times. Potential sequencer regressions can lead to data loss. &quot; +
+<span class="nc" id="L87">                                    &quot;Aborting.&quot;, numRetries);</span>
+<span class="nc" id="L88">                            throw new IllegalStateException(msg);</span>
+                        }
+<span class="nc" id="L90">                    }</span>
+                }
+
+<span class="nc bnc" id="L93" title="All 2 branches missed.">                if (minSnapshot == Token.UNINITIALIZED) {</span>
+<span class="nc" id="L94">                    minSnapshot = minCPSnapshot;</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">                } else if (minCPSnapshot.compareTo(minSnapshot) &lt; 0) {</span>
+                    // Given that the snapshot returned by appendCheckpoint is a global snapshot that shouldn't regress.
+<span class="nc" id="L97">                    String msg = String.format(&quot;Potential epoch regression. Subsequent checkpoint returned a greater&quot; +</span>
+                            &quot;snapshot {} than previous {}.&quot;, minCPSnapshot, minSnapshot);
+<span class="nc" id="L99">                    throw new IllegalStateException(msg);</span>
+                }
+<span class="nc" id="L101">            }</span>
+<span class="nc bnc" id="L102" title="All 8 branches missed.">        } finally {</span>
+            // TODO(Maithem): print cp id?
+<span class="nc" id="L104">            log.trace(&quot;appendCheckpoints: finished, author '{}' at min globalAddress {}&quot;,</span>
+                    author, minSnapshot);
+<span class="nc" id="L106">            rt.getObjectsView().TXEnd();</span>
+<span class="nc" id="L107">        }</span>
+<span class="nc" id="L108">        final long cpStop = System.currentTimeMillis();</span>
+
+<span class="nc" id="L110">        log.info(&quot;appendCheckpoints: took {} ms to append {} checkpoints&quot;, cpStop - cpStart,</span>
+<span class="nc" id="L111">                maps.size());</span>
+<span class="nc" id="L112">        return minSnapshot;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

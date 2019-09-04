@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ImmuableListSetWrapper.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">ImmuableListSetWrapper.java</span></div><h1>ImmuableListSetWrapper.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import javax.annotation.Nonnull;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+import java.util.Spliterator;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
+
+/**
+ * An immutable set implementation that is backed by a list. This type is useful when
+ * we have lists that we know conform to the set constraints, but creating the set is
+ * too expensive.
+ *
+ */
+
+public class ImmuableListSetWrapper&lt;E&gt; implements Set&lt;E&gt; {
+    final List&lt;E&gt; internalList;
+
+<span class="nc" id="L23">    public ImmuableListSetWrapper(@Nonnull List&lt;E&gt; internalList) {</span>
+<span class="nc" id="L24">        this.internalList = internalList;</span>
+<span class="nc" id="L25">    }</span>
+
+    @Override
+    public int size() {
+<span class="nc" id="L29">        return internalList.size();</span>
+    }
+
+    @Override
+    public boolean isEmpty() {
+<span class="nc" id="L34">        return internalList.isEmpty();</span>
+    }
+
+    @Override
+    public boolean contains(Object o) {
+<span class="nc" id="L39">        return internalList.contains(o);</span>
+    }
+
+    @Override
+    public Iterator&lt;E&gt; iterator() {
+<span class="nc" id="L44">        return internalList.iterator();</span>
+    }
+
+    @Override
+    public void forEach(Consumer&lt;? super E&gt; action) {
+<span class="nc" id="L49">        internalList.forEach(action);</span>
+<span class="nc" id="L50">    }</span>
+
+    @Override
+    public Object[] toArray() {
+<span class="nc" id="L54">        return internalList.toArray();</span>
+    }
+
+    @Override
+    public &lt;T&gt; T[] toArray(T[] a) {
+<span class="nc" id="L59">        return internalList.toArray(a);</span>
+    }
+
+    @Override
+    public boolean add(E e) {
+<span class="nc" id="L64">        throw new UnsupportedOperationException(&quot;Immutable set can't add&quot;);</span>
+    }
+
+    @Override
+    public boolean remove(Object o) {
+<span class="nc" id="L69">        throw new UnsupportedOperationException(&quot;Immutable set can't remove&quot;);</span>
+    }
+
+    @Override
+    public boolean containsAll(Collection&lt;?&gt; c) {
+<span class="nc" id="L74">        return internalList.containsAll(c);</span>
+    }
+
+    @Override
+    public boolean addAll(Collection&lt;? extends E&gt; c) {
+<span class="nc" id="L79">        throw new UnsupportedOperationException(&quot;Immutable set can't add&quot;);</span>
+    }
+
+    @Override
+    public boolean retainAll(Collection&lt;?&gt; c) {
+<span class="nc" id="L84">        throw new UnsupportedOperationException(&quot;Immutable set can't remove&quot;);</span>
+    }
+
+    @Override
+    public boolean removeAll(Collection&lt;?&gt; c) {
+<span class="nc" id="L89">        throw new UnsupportedOperationException(&quot;Immutable set can't remove&quot;);</span>
+    }
+
+    @Override
+    public boolean removeIf(Predicate&lt;? super E&gt; filter) {
+<span class="nc" id="L94">        throw new UnsupportedOperationException(&quot;Immutable set can't remove&quot;);</span>
+    }
+
+    @Override
+    public void clear() {
+<span class="nc" id="L99">        throw new UnsupportedOperationException(&quot;Immutable set can't clear&quot;);</span>
+    }
+
+    @Override
+    public Spliterator&lt;E&gt; spliterator() {
+<span class="nc" id="L104">        return internalList.spliterator();</span>
+    }
+
+    @Override
+    public Stream&lt;E&gt; stream() {
+<span class="nc" id="L109">        return internalList.stream();</span>
+    }
+
+    @Override
+    public Stream&lt;E&gt; parallelStream() {
+<span class="nc" id="L114">        return internalList.stream();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

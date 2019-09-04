@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>JsonUtils.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">JsonUtils.java</span></div><h1>JsonUtils.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+
+/**
+ * Created by mdhawan on 6/28/16.
+ */
+public class JsonUtils {
+
+<span class="nc" id="L13">    private JsonUtils() {</span>
+        // prevent instantiation of this class
+<span class="nc" id="L15">    }</span>
+
+<span class="nc" id="L17">    public static final Gson parser = new GsonBuilder().setPrettyPrinting().create();</span>
+<span class="nc" id="L18">    private static final Gson REGULAR_PARSER = new GsonBuilder().create();</span>
+
+
+    /**
+     * Return an indented json string.
+     * @param jsonString Json String
+     * @return           Pretty json string
+     */
+    public static String prettyPrint(String jsonString) {
+<span class="nc" id="L27">        JsonParser p = new JsonParser();</span>
+<span class="nc" id="L28">        JsonElement e = p.parse(jsonString);</span>
+<span class="nc" id="L29">        return parser.toJson(e);</span>
+    }
+
+    public static &lt;T&gt; String toJson(T obj){
+<span class="nc" id="L33">        return REGULAR_PARSER.toJson(obj);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

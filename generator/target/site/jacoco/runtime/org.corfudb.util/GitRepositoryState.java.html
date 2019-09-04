@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>GitRepositoryState.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">GitRepositoryState.java</span></div><h1>GitRepositoryState.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import java.io.IOException;
+import java.util.Properties;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Created by mwei on 8/12/15.
+ */
+<span class="nc" id="L10">@Slf4j</span>
+public class GitRepositoryState {
+
+<span class="nc" id="L13">    private static GitRepositoryState _gitRepositoryState = null;</span>
+
+    public final String tags;
+    public final String branch;
+    public final String dirty;
+    public final String remoteOriginUrl;
+    public final String commitId;
+    public final String commitIdAbbrev;
+    public final String describe;
+    public final String describeShort;
+    public final String commitUserName;
+    public final String commitUserEmail;
+    public final String commitMessageFull;
+    public final String commitMessageShort;
+    public final String commitTime;
+    public final String closestTagName;
+    public final String closestTagCommitCount;
+    public final String buildUserName;
+    public final String buildUserEmail;
+    public final String buildTime;
+    public final String buildHost;
+    public final String buildVersion;
+
+<span class="nc" id="L36">    private GitRepositoryState(Properties properties) {</span>
+<span class="nc" id="L37">        this.tags = properties.get(&quot;git.tags&quot;).toString();</span>
+<span class="nc" id="L38">        this.branch = properties.get(&quot;git.branch&quot;).toString();</span>
+<span class="nc" id="L39">        this.dirty = properties.get(&quot;git.dirty&quot;).toString();</span>
+<span class="nc" id="L40">        this.remoteOriginUrl = properties.get(&quot;git.remote.origin.url&quot;).toString();</span>
+
+<span class="nc" id="L42">        this.commitId = properties.get(&quot;git.commit.id&quot;).toString();</span>
+<span class="nc" id="L43">        this.commitIdAbbrev = properties.get(&quot;git.commit.id.abbrev&quot;).toString();</span>
+<span class="nc" id="L44">        this.describe = properties.get(&quot;git.commit.id.describe&quot;).toString();</span>
+<span class="nc" id="L45">        this.describeShort = properties.get(&quot;git.commit.id.describe-short&quot;).toString();</span>
+<span class="nc" id="L46">        this.commitUserName = properties.get(&quot;git.commit.user.name&quot;).toString();</span>
+<span class="nc" id="L47">        this.commitUserEmail = properties.get(&quot;git.commit.user.email&quot;).toString();</span>
+<span class="nc" id="L48">        this.commitMessageFull = properties.get(&quot;git.commit.message.full&quot;).toString();</span>
+<span class="nc" id="L49">        this.commitMessageShort = properties.get(&quot;git.commit.message.short&quot;).toString();</span>
+<span class="nc" id="L50">        this.commitTime = properties.get(&quot;git.commit.time&quot;).toString();</span>
+<span class="nc" id="L51">        this.closestTagName = properties.get(&quot;git.closest.tag.name&quot;).toString();</span>
+<span class="nc" id="L52">        this.closestTagCommitCount = properties.get(&quot;git.closest.tag.commit.count&quot;).toString();</span>
+
+<span class="nc" id="L54">        this.buildUserName = properties.get(&quot;git.build.user.name&quot;).toString();</span>
+<span class="nc" id="L55">        this.buildUserEmail = properties.get(&quot;git.build.user.email&quot;).toString();</span>
+<span class="nc" id="L56">        this.buildTime = properties.get(&quot;git.build.time&quot;).toString();</span>
+<span class="nc" id="L57">        this.buildHost = properties.get(&quot;git.build.host&quot;).toString();</span>
+<span class="nc" id="L58">        this.buildVersion = properties.get(&quot;git.build.version&quot;).toString();</span>
+<span class="nc" id="L59">    }</span>
+
+    /**
+     * Return git repo state.
+     * @return git repo state
+     */
+    public static GitRepositoryState getRepositoryState() {
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (_gitRepositoryState == null) {</span>
+<span class="nc" id="L67">            Properties properties = new Properties();</span>
+            try {
+<span class="nc" id="L69">                properties.load(GitRepositoryState.class.getClassLoader()</span>
+<span class="nc" id="L70">                        .getResourceAsStream(&quot;git.properties&quot;));</span>
+<span class="nc" id="L71">            } catch (IOException ie) {</span>
+<span class="nc" id="L72">                log.error(&quot;Failed to get repository state&quot;, ie);</span>
+<span class="nc" id="L73">            }</span>
+<span class="nc" id="L74">            _gitRepositoryState = new GitRepositoryState(properties);</span>
+        }
+<span class="nc" id="L76">        return _gitRepositoryState;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

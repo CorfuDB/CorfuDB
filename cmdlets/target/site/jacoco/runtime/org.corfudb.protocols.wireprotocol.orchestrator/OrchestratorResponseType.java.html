@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>OrchestratorResponseType.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol.orchestrator</a> &gt; <span class="el_source">OrchestratorResponseType.java</span></div><h1>OrchestratorResponseType.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol.orchestrator;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+import java.util.Arrays;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ *
+ * The type of responses that the orchestrator replies with.
+ *
+ * Created by Maithem on 1/2/18.
+ */
+<span class="nc" id="L17">@AllArgsConstructor</span>
+public enum OrchestratorResponseType {
+    /**
+     * The status of a workflow
+     */
+<span class="nc" id="L22">    WORKFLOW_STATUS(0, QueryResponse::new),</span>
+
+    /**
+     * Id of a created workflow
+     */
+<span class="nc" id="L27">    WORKFLOW_CREATED(1, CreateWorkflowResponse::new);</span>
+
+<span class="nc" id="L29">    @Getter</span>
+    public final int type;
+
+<span class="nc" id="L32">    @Getter</span>
+    final Function&lt;byte[], Response&gt; responseGenerator;
+
+    /**
+     * Map an int to an enum.
+     */
+<span class="nc" id="L38">    static final Map&lt;Integer, OrchestratorResponseType&gt; typeMap =</span>
+<span class="nc" id="L39">            Arrays.stream(OrchestratorResponseType.values())</span>
+<span class="nc" id="L40">                    .collect(Collectors.toMap(OrchestratorResponseType::getType,</span>
+<span class="nc" id="L41">                            java.util.function.Function.identity()));</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

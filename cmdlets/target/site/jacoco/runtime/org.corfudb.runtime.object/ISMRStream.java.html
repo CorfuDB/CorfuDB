@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ISMRStream.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object</a> &gt; <span class="el_source">ISMRStream.java</span></div><h1>ISMRStream.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Stream;
+
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+
+/**
+ * On top of a stream, an SMR object layer implements objects whose history of updates are backed
+ * by a stream.
+ *
+ * &lt;p&gt;This class defines an API for supporting stream operations on the SMR layer.
+ * ISMRStream wraps a pure stream and provides a similar API: append, remainingTo, current,
+ * previous, pos and seek.
+ * Different from a stream, the entries returned from methods that obtain stream entries,
+ * like current, previous, are of type SMREntry.
+ *
+ * &lt;p&gt;Created by mwei on 3/13/17.
+ */
+@SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+public interface ISMRStream {
+
+
+    List&lt;SMREntry&gt; remainingUpTo(long maxGlobal);
+
+    List&lt;SMREntry&gt; current();
+
+    List&lt;SMREntry&gt; previous();
+
+    long pos();
+
+    void reset();
+
+    void seek(long globalAddress);
+
+    void gc(long trimMark);
+
+    Stream&lt;SMREntry&gt; stream();
+
+    Stream&lt;SMREntry&gt; streamUpTo(long maxGlobal);
+
+    /**
+     * Append a SMREntry to the stream, returning the global address
+     * it was written at.
+     *
+     * &lt;p&gt;Optionally, provide a method to be called when an address is acquired,
+     * and also a method to be called when an address is released (due to
+     * an unsuccessful append).
+     * &lt;/p&gt;
+     *
+     * @param entry                 The SMR entry to append.
+     * @param acquisitionCallback   A function to call when an address is
+     *                              acquired.
+     *                              It should return true to continue with the
+     *                              append.
+     * @param deacquisitionCallback A function to call when an address is
+     *                              released. It should return true to retry
+     *                              writing.
+     * @return The (global) address the object was written at.
+     */
+    long append(SMREntry entry,
+                Function&lt;TokenResponse, Boolean&gt; acquisitionCallback,
+                Function&lt;TokenResponse, Boolean&gt; deacquisitionCallback);
+
+    /**
+     * Get the UUID for this stream (optional operation).
+     *
+     * @return The UUID for this stream.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+    default UUID getID() {
+<span class="nc" id="L75">        return new UUID(0L, 0L);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

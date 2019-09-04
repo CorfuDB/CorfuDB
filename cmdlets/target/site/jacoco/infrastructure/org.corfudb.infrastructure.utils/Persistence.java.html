@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>Persistence.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.utils</a> &gt; <span class="el_source">Persistence.java</span></div><h1>Persistence.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.utils;
+
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+/**
+ * Utils class for classes that need to write to the filesystem.
+ * &lt;p&gt;
+ * Created by maithem on 4/4/18.
+ */
+
+<span class="nc" id="L14">public class Persistence {</span>
+
+    /**
+     * This method fsyncs a directory. It should be called whenever
+     * a new file is created. It is required because syncing the child
+     * file doesn't ensure that the entry in the parent directory
+     * file has also reached disk. A side effect of not doing this is
+     * writes that disappear from the replica.
+     *
+     * @param dir the directory to be synced
+     * @throws IOException
+     */
+    public static void syncDirectory(String dir) throws IOException {
+<span class="nc" id="L27">        Path dirPath = Paths.get(dir);</span>
+<span class="nc" id="L28">        try (FileChannel channel = FileChannel.open(dirPath)) {</span>
+<span class="nc" id="L29">            channel.force(true);</span>
+<span class="nc bnc" id="L30" title="All 8 branches missed.">        }</span>
+<span class="nc" id="L31">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

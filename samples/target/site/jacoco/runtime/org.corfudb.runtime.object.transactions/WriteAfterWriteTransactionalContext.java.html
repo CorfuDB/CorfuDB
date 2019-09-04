@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>WriteAfterWriteTransactionalContext.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object.transactions</a> &gt; <span class="el_source">WriteAfterWriteTransactionalContext.java</span></div><h1>WriteAfterWriteTransactionalContext.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object.transactions;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+
+/** A write-after-write transactional context.
+ *
+ * &lt;p&gt;A write-after-write transactional context behaves like an optimistic
+ * context, except behavior during commit (for writes):
+ *
+ *   &lt;p&gt;(1) Reads behave the same as in a regular optimistic
+ *     transaction.
+ *
+ *   &lt;p&gt;(2) Writes in a write-after-write transaction are guaranteed
+ *     to commit atomically, if and only if none of the objects
+ *     written (the &quot;write set&quot;) were modified between the first read
+ *     (&quot;first read timestamp&quot;) and the time of commit.
+ *
+ * &lt;p&gt;Created by mwei on 11/21/16.
+ */
+<span class="nc" id="L22">@Slf4j</span>
+public class WriteAfterWriteTransactionalContext
+        extends OptimisticTransactionalContext {
+
+    WriteAfterWriteTransactionalContext(Transaction transaction) {
+<span class="nc" id="L27">        super(transaction);</span>
+<span class="nc" id="L28">        getSnapshotTimestamp();</span>
+<span class="nc" id="L29">    }</span>
+
+    @Override
+    public long commitTransaction() throws TransactionAbortedException {
+<span class="nc" id="L33">        log.debug(&quot;TX[{}] request write-write commit&quot;, this);</span>
+
+<span class="nc" id="L35">        return getConflictSetAndCommit(getWriteSetInfo());</span>
+    }
+
+    @Override
+    /** Add the proxy and conflict-params information to our read set.
+     * @param proxy             The proxy to add
+     * @param conflictObjects    The fine-grained conflict information, if
+     *                          available.
+     */
+    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+        // do nothing! write-write conflict TXs do not need to keep track of
+        // read sets.
+<span class="nc" id="L47">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

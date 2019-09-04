@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>LogUnitServerCache.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">LogUnitServerCache.java</span></div><h1>LogUnitServerCache.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.google.common.annotations.VisibleForTesting;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
+import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+
+/**
+ * LogUnit server cache.
+ * &lt;p&gt;
+ * All reads and writes go through this cache. But in some cases, messages can
+ * specify non-cacheable read/write, then they will not go through this cache.
+ * &lt;p&gt;
+ * Created by WenbinZhu on 5/30/19.
+ */
+<span class="nc" id="L21">@Slf4j</span>
+public class LogUnitServerCache {
+
+    private final LoadingCache&lt;Long, ILogData&gt; dataCache;
+    private final StreamLog streamLog;
+
+<span class="nc" id="L27">    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {</span>
+<span class="nc" id="L28">        this.streamLog = streamLog;</span>
+<span class="nc" id="L29">        this.dataCache = Caffeine.newBuilder()</span>
+<span class="nc" id="L30">                .&lt;Long, ILogData&gt;weigher((addr, logData) -&gt; logData.getSizeEstimate())</span>
+<span class="nc" id="L31">                .maximumWeight(config.getMaxCacheSize())</span>
+<span class="nc" id="L32">                .removalListener(this::handleEviction)</span>
+<span class="nc" id="L33">                .build(this::handleRetrieval);</span>
+<span class="nc" id="L34">    }</span>
+
+    /**
+     * Retrieves the LogUnitEntry from disk, given an address.
+     *
+     * @param address the address to retrieve the entry from
+     * @return the log unit entry to retrieve into the cache
+     * &lt;p&gt;
+     * This function should not care about trimmed addresses, as that is handled
+     * in the streamLog. Any address that cannot be retrieved should be returned
+     * as un-written (null).
+     */
+    private ILogData handleRetrieval(long address) {
+<span class="nc" id="L47">        LogData entry = streamLog.read(address);</span>
+<span class="nc" id="L48">        log.trace(&quot;handleRetrieval: Retrieved[{} : {}]&quot;, address, entry);</span>
+<span class="nc" id="L49">        return entry;</span>
+    }
+
+    private void handleEviction(long address, ILogData entry, RemovalCause cause) {
+<span class="nc" id="L53">        log.trace(&quot;handleEviction: Eviction[{}]: {}&quot;, address, cause);</span>
+<span class="nc" id="L54">    }</span>
+
+    /**
+     * Returns the log entry form the cache or retrieves it from the underlying storage.
+     * &lt;p&gt;
+     * If the log entry is not cacheable and it does not exist in cache, it will not be
+     * cached when retrieved from the underlying storage.
+     *
+     * @param address   the address of the log entry to retrieve
+     * @param cacheable if the log entry should be cached when retrieved from underlying storage
+     * @return the log entry read from cache or retrieved the underlying storage
+     */
+    public ILogData get(long address, boolean cacheable) {
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        if (!cacheable) {</span>
+<span class="nc" id="L68">            ILogData ld = dataCache.getIfPresent(address);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">            return ld != null ? ld : handleRetrieval(address);</span>
+        }
+
+<span class="nc" id="L72">        return dataCache.get(address);</span>
+    }
+
+    /**
+     * Returns the log entry form the cache or retrieves it from the underlying storage.
+     *
+     * @param address the address of the log entry to retrieve
+     * @return the log entry read from cache or retrieved the underlying storage
+     */
+    public ILogData get(long address) {
+<span class="nc" id="L82">        return get(address, true);</span>
+    }
+
+    /**
+     * Puts the log entry into the cache.
+     * {@link LoadingCache#put(Object, Object)}
+     *
+     * @param address the address to write entry to
+     * @param entry   the log entry to write
+     */
+    public void put(long address, ILogData entry) {
+<span class="nc" id="L93">        log.trace(&quot;LogUnitServerCache.put: Cache write[{} : {}]&quot;, address, entry);</span>
+<span class="nc" id="L94">        dataCache.put(address, entry);</span>
+<span class="nc" id="L95">    }</span>
+
+    /**
+     * Discards all the entries in the cache.
+     * {@link LoadingCache#invalidateAll()}
+     */
+    public void invalidateAll() {
+<span class="nc" id="L102">        dataCache.invalidateAll();</span>
+<span class="nc" id="L103">    }</span>
+
+    @VisibleForTesting
+    public int getSize() {
+<span class="nc" id="L107">        return dataCache.asMap().size();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

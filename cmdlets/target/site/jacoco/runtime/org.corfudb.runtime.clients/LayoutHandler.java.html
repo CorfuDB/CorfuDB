@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>LayoutHandler.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.clients</a> &gt; <span class="el_source">LayoutHandler.java</span></div><h1>LayoutHandler.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.clients;
+
+import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.MethodHandles;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.LayoutMsg;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
+import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
+import org.corfudb.runtime.exceptions.OutrankedException;
+
+/**
+ * A client to the layout server.
+ * &lt;p&gt;
+ * Used by clients to obtain the layout and to report errors.
+ * &lt;/p&gt;
+ * &lt;p&gt;Created by zlokhandwala on 2/20/18.
+ */
+<span class="nc" id="L27">public class LayoutHandler implements IClient, IHandler&lt;LayoutClient&gt; {</span>
+
+<span class="nc" id="L29">    @Setter</span>
+<span class="nc" id="L30">    @Getter</span>
+    IClientRouter router;
+
+    @Override
+    public LayoutClient getClient(long epoch) {
+<span class="nc" id="L35">        return new LayoutClient(router, epoch);</span>
+    }
+
+    /**
+     * The handler and handlers which implement this client.
+     */
+<span class="nc" id="L41">    @Getter</span>
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+<span class="nc" id="L43">            .generateHandlers(MethodHandles.lookup(), this);</span>
+
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_RESPONSE)
+    private static Object handleLayoutResponse(CorfuMsg msg,
+                                               ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L49">        return ((LayoutMsg) msg).getLayout();</span>
+    }
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_PREPARE_ACK)
+    private static Object handleLayoutPrepareAck(CorfuPayloadMsg&lt;LayoutPrepareRequest&gt; msg,
+                                                 ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L55">        return msg.getPayload();</span>
+    }
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_NOBOOTSTRAP)
+    private static Object handleNoBootstrap(CorfuMsg msg,
+                                            ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L62">        throw new NoBootstrapException();</span>
+    }
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_PREPARE_REJECT)
+    private static Object handlePrepareReject(CorfuPayloadMsg&lt;LayoutPrepareResponse&gt; msg,
+                                              ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L69">        LayoutPrepareResponse response = msg.getPayload();</span>
+<span class="nc" id="L70">        throw new OutrankedException(response.getRank(), response.getLayout());</span>
+    }
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_PROPOSE_REJECT)
+    private static Object handleProposeReject(CorfuPayloadMsg&lt;LayoutProposeResponse&gt; msg,
+                                              ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L77">        LayoutProposeResponse response = msg.getPayload();</span>
+<span class="nc" id="L78">        throw new OutrankedException(response.getRank());</span>
+    }
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP)
+    private static Object handleAlreadyBootstrap(CorfuMsg msg,
+                                                 ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L85">        throw new AlreadyBootstrappedException();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

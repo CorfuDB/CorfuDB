@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SerializerException.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.exceptions</a> &gt; <span class="el_source">SerializerException.java</span></div><h1>SerializerException.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.exceptions;
+
+/**
+ * Created by annym on 04/12/19
+ */
+public class SerializerException extends RuntimeException {
+
+    /**
+     * Constructor for SerializerException specifying serializer type.
+     *
+     * @param type serializer type not found for client.
+     */
+    public SerializerException(Byte type) {
+<span class="nc" id="L14">        super(&quot;Serializer type code &quot; + type.intValue() + &quot; not found.&quot;);</span>
+<span class="nc" id="L15">    }</span>
+
+    /**
+     * Constructor for SerializerException specifying exception message.
+     *
+     * @param message exception message.
+     */
+    public SerializerException(String message) {
+<span class="nc" id="L23">        super(message);</span>
+<span class="nc" id="L24">    }</span>
+
+    /**
+     * Constructor for SerializerException with specified message and cause.
+     *
+     * @param message exception message
+     * @param cause throwable
+     */
+    public SerializerException(String message, Throwable cause) {
+<span class="nc" id="L33">        super(message, cause);</span>
+<span class="nc" id="L34">    }</span>
+
+    /**
+     * Constructor for SerializerException with specified cause.
+     *
+     * @param cause throwable
+     */
+    public SerializerException(Throwable cause) {
+<span class="nc" id="L42">        super(cause);</span>
+<span class="nc" id="L43">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

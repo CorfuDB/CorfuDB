@@ -1,0 +1,15 @@
+org/corfudb/samples/BatchedWriteTransaction.class
+org/corfudb/samples/CorfuSharedCounter$CORFUSMR.class
+org/corfudb/samples/CorfuSharedCounter.class
+org/corfudb/samples/CorfuCompoundObject$CORFUSMR.class
+org/corfudb/samples/SimpleUseBaseCorfuCollections$1.class
+org/corfudb/samples/SimpleUseCustomBaseCorfuObject.class
+org/corfudb/samples/HelloCorfu.class
+org/corfudb/samples/CorfuCompoundObject.class
+org/corfudb/samples/SimpleUseBaseCorfuCollections$2.class
+org/corfudb/samples/WriteWriteTXs.class
+org/corfudb/samples/BaseCorfuAppUtils.class
+org/corfudb/samples/SimpleAtomicTransaction.class
+org/corfudb/samples/SimpleUseBaseCorfuCollections.class
+org/corfudb/samples/WriteOnlySimpleTransaction.class
+org/corfudb/samples/CorfuCompoundObject$Inner.class

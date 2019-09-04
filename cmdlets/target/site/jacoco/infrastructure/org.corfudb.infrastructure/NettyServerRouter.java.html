@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>NettyServerRouter.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">NettyServerRouter.java</span></div><h1>NettyServerRouter.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import com.google.common.collect.ImmutableList;
+
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+
+
+/**
+ * The netty server router routes incoming messages to registered roles using
+ * the
+ * Created by mwei on 12/1/15.
+ */
+<span class="nc" id="L27">@Slf4j</span>
+@ChannelHandler.Sharable
+public class NettyServerRouter extends ChannelInboundHandlerAdapter implements IServerRouter {
+
+    /**
+     * This map stores the mapping from message type to netty server handler.
+     */
+    private final Map&lt;CorfuMsgType, AbstractServer&gt; handlerMap;
+
+    /**
+     * The epoch of this router. This is managed by the base server implementation.
+     */
+<span class="nc" id="L39">    @Getter</span>
+<span class="nc" id="L40">    @Setter</span>
+    volatile long serverEpoch;
+
+    /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
+    final List&lt;AbstractServer&gt; servers;
+
+    /** Construct a new {@link NettyServerRouter}.
+     *
+     * @param servers   A list of {@link AbstractServer}s this router will route
+     *                  messages for.
+     */
+<span class="nc" id="L51">    public NettyServerRouter(List&lt;AbstractServer&gt; servers) {</span>
+        // Initialize the router epoch from the persisted server epoch
+<span class="nc" id="L53">        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();</span>
+<span class="nc" id="L54">        this.servers = ImmutableList.copyOf(servers);</span>
+<span class="nc" id="L55">        handlerMap = new EnumMap&lt;&gt;(CorfuMsgType.class);</span>
+<span class="nc" id="L56">        servers.forEach(server -&gt; server.getHandler().getHandledTypes()</span>
+<span class="nc" id="L57">            .forEach(x -&gt; handlerMap.put(x, server)));</span>
+<span class="nc" id="L58">    }</span>
+
+    /**
+     * {@inheritDoc}
+     *
+     * @deprecated This operation is no longer supported. The router will only route messages for
+     * servers provided at construction time.
+     */
+    @Override
+    @Deprecated
+    public void addServer(AbstractServer server) {
+<span class="nc" id="L69">        throw new UnsupportedOperationException(&quot;No longer supported&quot;);</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List&lt;AbstractServer&gt; getServers() {
+<span class="nc" id="L77">        return servers;</span>
+    }
+
+    /**
+     * Send a netty message through this router, setting the fields in the outgoing message.
+     *
+     * @param ctx    Channel handler context to use.
+     * @param inMsg  Incoming message to respond to.
+     * @param outMsg Outgoing message.
+     */
+    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
+<span class="nc" id="L88">        outMsg.copyBaseFields(inMsg);</span>
+<span class="nc" id="L89">        ctx.writeAndFlush(outMsg, ctx.voidPromise());</span>
+<span class="nc" id="L90">        log.trace(&quot;Sent response: {}&quot;, outMsg);</span>
+<span class="nc" id="L91">    }</span>
+
+    /**
+     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
+     * the server is in the wrong epoch. Ignored if the message type is reset (which
+     * is valid in any epoch).
+     *
+     * @param msg The incoming message to validate.
+     * @param ctx The context of the channel handler.
+     * @return True, if the epoch is correct, but false otherwise.
+     */
+    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
+<span class="nc" id="L103">        long serverEpoch = getServerEpoch();</span>
+<span class="nc bnc" id="L104" title="All 4 branches missed.">        if (!msg.getMsgType().ignoreEpoch &amp;&amp; msg.getEpoch() != serverEpoch) {</span>
+<span class="nc" id="L105">            sendResponse(ctx, msg, new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.WRONG_EPOCH,</span>
+<span class="nc" id="L106">                    serverEpoch));</span>
+<span class="nc" id="L107">            log.trace(&quot;Incoming message with wrong epoch, got {}, expected {}, message was: {}&quot;,</span>
+<span class="nc" id="L108">                    msg.getEpoch(), serverEpoch, msg);</span>
+<span class="nc" id="L109">            return false;</span>
+        }
+<span class="nc" id="L111">        return true;</span>
+    }
+
+    /**
+     * Handle an incoming message read on the channel.
+     *
+     * @param ctx Channel handler context
+     * @param msg The incoming message on that channel.
+     */
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        try {
+            // The incoming message should have been transformed to a CorfuMsg earlier in the
+            // pipeline.
+<span class="nc" id="L125">            CorfuMsg m = ((CorfuMsg) msg);</span>
+            // We get the handler for this message from the map
+<span class="nc" id="L127">            AbstractServer handler = handlerMap.get(m.getMsgType());</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">            if (handler == null) {</span>
+                // The message was unregistered, we are dropping it.
+<span class="nc" id="L130">                log.warn(&quot;Received unregistered message {}, dropping&quot;, m);</span>
+            } else {
+<span class="nc bnc" id="L132" title="All 2 branches missed.">                if (validateEpoch(m, ctx)) {</span>
+                    // Route the message to the handler.
+<span class="nc bnc" id="L134" title="All 2 branches missed.">                    if (log.isTraceEnabled()) {</span>
+<span class="nc" id="L135">                        log.trace(&quot;Message routed to {}: {}&quot;, handler.getClass().getSimpleName(), msg);</span>
+                    }
+
+<span class="nc" id="L138">                    handler.getExecutor(m.getMsgType()).submit(() -&gt; {</span>
+                        try {
+<span class="nc" id="L140">                            handler.handleMessage(m, ctx, this);</span>
+<span class="nc" id="L141">                        } catch (Throwable t) {</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">                            log.error(&quot;channelRead: Handling {} failed due to {}:{}&quot;,</span>
+<span class="nc" id="L143">                                    m != null ? m.getMsgType() : &quot;UNKNOWN&quot;,</span>
+<span class="nc" id="L144">                                    t.getClass().getSimpleName(),</span>
+<span class="nc" id="L145">                                    t.getMessage(),</span>
+                                    t);
+<span class="nc" id="L147">                        }</span>
+<span class="nc" id="L148">                    });</span>
+                }
+            }
+<span class="nc" id="L151">        } catch (Exception e) {</span>
+<span class="nc" id="L152">            log.error(&quot;Exception during read!&quot;, e);</span>
+<span class="nc" id="L153">        }</span>
+<span class="nc" id="L154">    }</span>
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+<span class="nc" id="L158">        log.error(&quot;Error in handling inbound message, {}&quot;, cause);</span>
+<span class="nc" id="L159">        ctx.close();</span>
+<span class="nc" id="L160">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

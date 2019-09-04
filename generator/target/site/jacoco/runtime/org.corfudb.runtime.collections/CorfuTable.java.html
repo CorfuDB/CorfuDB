@@ -1,0 +1,789 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CorfuTable.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.collections</a> &gt; <span class="el_source">CorfuTable.java</span></div><h1>CorfuTable.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.collections;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.reflect.TypeToken;
+
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.ConcurrentModificationException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import javax.annotation.Nonnull;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.ConflictParameter;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.DontInstrument;
+import org.corfudb.annotations.Mutator;
+import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.util.ImmuableListSetWrapper;
+
+/** The CorfuTable implements a simple key-value store.
+ *
+ * &lt;p&gt;The primary interface to the CorfuTable is a Map, where the keys must be unique and
+ * each key is mapped to exactly one value. Null values are not permitted.
+ *
+ * &lt;p&gt;The CorfuTable also supports an unlimited number of secondary indexes, which
+ * the user provides at construction time as an enum which implements the IndexSpecification
+ * interface. An index specification consists of a IndexFunction, which returns a set of secondary
+ * keys (indexes) the value should be mapped to. Secondary indexes are many-to-many: values
+ * can be mapped to multiple indexes, and indexes can be mapped to multiples values. Each
+ * IndexSpecification also specifies a projection function, which specifies a transformation
+ * that can be done on a retrieval on the index. A common projection is to emit only the
+ * values.
+ *
+ * @param &lt;K&gt;   The type of the primary key.
+ * @param &lt;V&gt;   The type of the values to be mapped.
+ */
+<span class="nc" id="L59">@Slf4j</span>
+@CorfuObject
+public class CorfuTable&lt;K ,V&gt; implements ICorfuMap&lt;K, V&gt; {
+
+    /**
+     * Denotes a function that supplies the unique name of an index registered to
+     * {@link CorfuTable}.
+     */
+    @FunctionalInterface
+    public interface IndexName extends Supplier&lt;String&gt; {
+    }
+
+    /**
+     * Denotes a function that takes as input the key and value of an {@link CorfuTable}
+     * record, and computes the associated index value for the record.
+     *
+     * @param &lt;K&gt; type of the record key.
+     * @param &lt;V&gt; type of the record value.
+     * @param &lt;I&gt; type of the index value computed.
+     */
+    @FunctionalInterface
+    public interface IndexFunction&lt;K, V, I extends Comparable&lt;?&gt;&gt; extends BiFunction&lt;K, V, I&gt; {
+    }
+
+    @FunctionalInterface
+    public interface MultiValueIndexFunction&lt;K, V, I extends Comparable&lt;?&gt;&gt;
+            extends BiFunction&lt;K, V, Iterable&lt;I&gt;&gt; {
+    }
+
+    /**
+     * Descriptor of named indexing function entry. The indexing function can
+     * be single indexer {@link CorfuTable.IndexFunction} mapping a value to single
+     * secondary index value, or a multi indexer {@link CorfuTable.MultiValueIndexFunction}
+     * mapping a value to multiple secondary index values.
+     *
+     * @param &lt;K&gt; type of the record key associated with {@code IndexKey}.
+     * @param &lt;V&gt; type of the record value associated with {@code IndexKey}.
+     * @param &lt;I&gt; type of the index value computed using the {@code IndexKey}.
+     */
+    public static class Index&lt;K, V, I extends Comparable&lt;?&gt;&gt; {
+        private final CorfuTable.IndexName name;
+        private final CorfuTable.MultiValueIndexFunction&lt;K, V, I&gt; indexFunction;
+
+
+<span class="nc" id="L103">        public Index(CorfuTable.IndexName name, CorfuTable.IndexFunction&lt;K, V, I&gt; indexFunction) {</span>
+<span class="nc" id="L104">            this.name = name;</span>
+<span class="nc" id="L105">            this.indexFunction =</span>
+<span class="nc" id="L106">                    (k, v) -&gt; Collections.singletonList(indexFunction.apply(k, v));</span>
+<span class="nc" id="L107">        }</span>
+
+        public Index(CorfuTable.IndexName name,
+<span class="nc" id="L110">                     CorfuTable.MultiValueIndexFunction&lt;K, V, I&gt; indexFunction) {</span>
+<span class="nc" id="L111">            this.name = name;</span>
+<span class="nc" id="L112">            this.indexFunction = indexFunction;</span>
+<span class="nc" id="L113">        }</span>
+
+        public CorfuTable.IndexName getName() {
+<span class="nc" id="L116">            return name;</span>
+        }
+
+        public CorfuTable.MultiValueIndexFunction&lt;K, V, I&gt; getMultiValueIndexFunction() {
+<span class="nc" id="L120">            return indexFunction;</span>
+        }
+
+
+        @Override
+        public boolean equals(Object o) {
+<span class="nc bnc" id="L126" title="All 2 branches missed.">            if (this == o) return true;</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">            if (!(o instanceof CorfuTable.Index)) return false;</span>
+<span class="nc" id="L128">            CorfuTable.Index&lt;?, ?, ?&gt; index = (CorfuTable.Index&lt;?, ?, ?&gt;) o;</span>
+<span class="nc" id="L129">            return Objects.equals(name.get(), index.name.get());</span>
+        }
+
+        @Override
+        public int hashCode() {
+<span class="nc" id="L134">            return Objects.hash(name.get());</span>
+        }
+    }
+
+    /**
+     * Registry hosting of a collection of {@link CorfuTable.Index}.
+     *
+     * @param &lt;K&gt; type of the record key associated with {@code Index}.
+     * @param &lt;V&gt; type of the record value associated with {@code Index}.
+     */
+    public interface IndexRegistry&lt;K, V&gt;
+            extends Iterable&lt;CorfuTable.Index&lt;K, V, ? extends Comparable&lt;?&gt;&gt;&gt; {
+
+<span class="nc" id="L147">        CorfuTable.IndexRegistry&lt;?, ?&gt; EMPTY = new CorfuTable.IndexRegistry&lt;Object, Object&gt;() {</span>
+            @Override
+            public &lt;I extends Comparable&lt;?&gt;&gt; Optional&lt;CorfuTable.Index&lt;Object, Object, I&gt;&gt; get(CorfuTable.IndexName name) {
+<span class="nc" id="L150">                return Optional.empty();</span>
+            }
+
+            @Override
+            public Iterator&lt;CorfuTable.Index&lt;Object, Object, ? extends Comparable&lt;?&gt;&gt;&gt; iterator() {
+<span class="nc" id="L155">                return Collections.emptyIterator();</span>
+            }
+        };
+
+        /**
+         * Obtain the {@link CorfuTable.IndexFunction} via its registered {@link CorfuTable.IndexName}.
+         *
+         * @param name name of the {@code IndexKey} previously registered.
+         * @return the instance of {@link CorfuTable.IndexFunction} registered to the lookup name.
+         */
+        &lt;I extends Comparable&lt;?&gt;&gt; Optional&lt;CorfuTable.Index&lt;K, V, I&gt;&gt; get(CorfuTable.IndexName name);
+
+        /**
+         * Obtain a static {@link CorfuTable.IndexRegistry} with no registered {@link CorfuTable.IndexFunction}s.
+         *
+         * @param &lt;K&gt; type of the record key associated with {@code Index}.
+         * @param &lt;V&gt; type of the record value associated with {@code Index}.
+         * @return a static instance of {@link CorfuTable.IndexRegistry}.
+         */
+        static &lt;K, V&gt; CorfuTable.IndexRegistry&lt;K, V&gt; empty() {
+            @SuppressWarnings(&quot;unchecked&quot;)
+<span class="nc" id="L176">            CorfuTable.IndexRegistry&lt;K, V&gt; result = (CorfuTable.IndexRegistry&lt;K, V&gt;) EMPTY;</span>
+<span class="nc" id="L177">            return result;</span>
+        }
+
+
+    }
+
+    /** Helper function to get a map (non-secondary index) Corfu table.
+     *
+     * @param &lt;K&gt;           Key type
+     * @param &lt;V&gt;           Value type
+     * @return              A type token to pass to the builder.
+     */
+    static &lt;K, V&gt; TypeToken&lt;CorfuTable&lt;K, V&gt;&gt;
+        getMapType() {
+<span class="nc" id="L191">            return new TypeToken&lt;CorfuTable&lt;K, V&gt;&gt;() {};</span>
+    }
+
+    /** Helper function to get a Corfu Table.
+     *
+     * @param &lt;K&gt;                   Key type
+     * @param &lt;V&gt;                   Value type
+     * @return                      A type token to pass to the builder.
+     */
+    static &lt;K, V&gt;
+    TypeToken&lt;CorfuTable&lt;K, V&gt;&gt;
+        getTableType() {
+<span class="nc" id="L203">            return new TypeToken&lt;CorfuTable&lt;K, V&gt;&gt;() {};</span>
+    }
+
+    /**
+     * The interface for a projection function.
+     *
+     * &lt;p&gt; NOTE: The projection function MUST return a new (preferably immutable) collection,
+     * the collection of entries passed during this function are NOT safe to use
+     * outside the context of this function.
+     *
+     * @param &lt;K&gt;   The type of the key used in projection.
+     * @param &lt;V&gt;   The type of the value used in projection.
+     * @param &lt;I&gt;   The type of the index used in projection.
+     * @param &lt;P&gt;   The type of the projection returned.
+     */
+    @FunctionalInterface
+    public interface ProjectionFunction&lt;K, V, I, P&gt; {
+        @Nonnull
+        Stream&lt;P&gt; generateProjection(I index,
+                                     @Nonnull Stream&lt;Map.Entry&lt;K, V&gt;&gt; entryStream);
+    }
+
+    // The &quot;main&quot; map which contains the primary key-value mappings.
+    private final Map&lt;K,V&gt; mainMap;
+<span class="nc" id="L227">    private final Set&lt;Index&lt;K, V, ? extends Comparable&gt;&gt; indexSpec = new HashSet&lt;&gt;();</span>
+<span class="nc" id="L228">    private final Map&lt;String, Map&lt;Comparable, Map&lt;K, V&gt;&gt;&gt; secondaryIndexes = new HashMap&lt;&gt;();</span>
+
+    /**
+     * Generate a table with a given implementation for the mainMap
+     */
+<span class="nc" id="L233">    public CorfuTable(IndexRegistry&lt;K, V&gt; indices, Map&lt;K, V&gt; mapImpl) {</span>
+<span class="nc" id="L234">        indices.forEach(index -&gt; {</span>
+<span class="nc" id="L235">            secondaryIndexes.put(index.getName().get(), new HashMap&lt;&gt;());</span>
+<span class="nc" id="L236">            indexSpec.add(index);</span>
+<span class="nc" id="L237">        });</span>
+<span class="nc" id="L238">        log.info(&quot;CorfuTable: creating CorfuTable with the following indexes: {}&quot;,</span>
+<span class="nc" id="L239">                secondaryIndexes.keySet());</span>
+<span class="nc" id="L240">        mainMap = mapImpl;</span>
+<span class="nc" id="L241">    }</span>
+
+    /**
+     * Generate a table with the given set of indexes.
+     */
+    public CorfuTable(IndexRegistry&lt;K, V&gt; indices) {
+<span class="nc" id="L247">        this(indices, new HashMap&lt;&gt;());</span>
+<span class="nc" id="L248">    }</span>
+
+    /**
+     * Default constructor. Generates a table without any secondary indexes.
+     */
+    public CorfuTable() {
+<span class="nc" id="L254">        this(IndexRegistry.empty(), new HashMap&lt;&gt;());</span>
+<span class="nc" id="L255">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public int size() {
+<span class="nc" id="L261">        return mainMap.size();</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public boolean isEmpty() {
+<span class="nc" id="L268">        return mainMap.isEmpty();</span>
+    }
+
+    /** Return whether this table has secondary indexes or not.
+     *
+     * @return  True, if secondary indexes are present. False otherwise.
+     */
+    @Accessor
+    public boolean hasSecondaryIndices() {
+<span class="nc bnc" id="L277" title="All 2 branches missed.">        return !secondaryIndexes.isEmpty();</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public boolean containsKey(@ConflictParameter Object key) {
+<span class="nc" id="L284">        return mainMap.containsKey(key);</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public boolean containsValue(Object value) {
+<span class="nc" id="L291">        return mainMap.containsValue(value);</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public V get(@ConflictParameter Object key) {
+<span class="nc" id="L298">        return mainMap.get(key);</span>
+    }
+
+    /**
+     * Get a mapping using the specified index function.
+     *
+     * @param indexName Name of the the secondary index to query.
+     * @param indexKey  The index key used to query the secondary index
+     * @return A collection of Map.Entry&lt;K, V&gt;
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    @Accessor
+    public @Nonnull
+    &lt;I extends Comparable&lt;I&gt;&gt;
+    Collection&lt;Entry&lt;K, V&gt;&gt; getByIndex(@Nonnull IndexName indexName, I indexKey) {
+<span class="nc" id="L313">        String secondaryIndex = indexName.get();</span>
+        Map&lt;Comparable, Map&lt;K, V&gt;&gt; secondaryMap;
+<span class="nc bnc" id="L315" title="All 2 branches missed.">        if (secondaryIndexes.containsKey(secondaryIndex) &amp;&amp;</span>
+<span class="nc bnc" id="L316" title="All 2 branches missed.">                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {</span>
+            // If secondary index exists and function for this index is not null
+<span class="nc" id="L318">            Map&lt;K, V&gt; res = secondaryMap.get(indexKey);</span>
+
+<span class="nc bnc" id="L320" title="All 2 branches missed.">            return res == null ?</span>
+<span class="nc" id="L321">                    Collections.emptySet() :</span>
+<span class="nc" id="L322">                    new HashSet&lt;&gt;(res.entrySet());</span>
+        }
+
+        // If index is not specified, the lookup by index API must fail.
+<span class="nc" id="L326">        log.error(&quot;CorfuTable: secondary index &quot; + secondaryIndex + &quot; does not exist for this table, cannot complete the get by index.&quot;);</span>
+<span class="nc" id="L327">        throw new IllegalArgumentException(&quot;Secondary Index &quot; + secondaryIndex + &quot; is not defined.&quot;);</span>
+    }
+
+    /**
+     * Scan and filter using the specified index function and projection.
+     *
+     * @param indexName      Name of the the secondary index to query.
+     * @param entryPredicate The predicate to scan and filter with.
+     * @param indexKey       A collection of Map.Entry&lt;K, V&gt;
+     * @return
+     */
+    @Accessor
+    public @Nonnull
+    &lt;I extends Comparable&lt;I&gt;&gt;
+    Collection&lt;Map.Entry&lt;K, V&gt;&gt; getByIndexAndFilter(@Nonnull IndexName indexName,
+                                                    @Nonnull Predicate&lt;? super Entry&lt;K, V&gt;&gt;
+                                                            entryPredicate,
+                                                    I indexKey) {
+        Stream&lt;Entry&lt;K, V&gt;&gt; entryStream;
+<span class="nc" id="L346">        String secondaryIndex = indexName.get();</span>
+        Map&lt;Comparable, Map&lt;K, V&gt;&gt; secondaryMap;
+
+<span class="nc bnc" id="L349" title="All 2 branches missed.">        if (secondaryIndexes.containsKey(secondaryIndex) &amp;&amp;</span>
+<span class="nc bnc" id="L350" title="All 2 branches missed.">                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {</span>
+<span class="nc bnc" id="L351" title="All 2 branches missed.">            if (secondaryMap.get(indexKey) == null) {</span>
+<span class="nc" id="L352">                entryStream = Stream.empty();</span>
+            } else {
+<span class="nc" id="L354">                entryStream = secondaryMap.get(indexKey).entrySet().stream();</span>
+            }
+
+<span class="nc" id="L357">            return entryStream.filter(entryPredicate).collect(Collectors.toCollection(ArrayList::new));</span>
+        }
+
+        // If there are is no index function available, fail
+<span class="nc" id="L361">        log.error(&quot;CorfuTable: secondary index &quot; + secondaryIndex + &quot; does not exist for this table, cannot complete the get by index and filter.&quot;);</span>
+<span class="nc" id="L362">        throw new IllegalArgumentException(&quot;Secondary Index &quot; + secondaryIndex + &quot; is not defined.&quot;);</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @MutatorAccessor(name = &quot;put&quot;, undoFunction = &quot;undoPut&quot;, undoRecordFunction = &quot;undoPutRecord&quot;)
+    public V put(@ConflictParameter K key, V value) {
+<span class="nc" id="L369">        V previous = mainMap.put(key, value);</span>
+        // If we have index functions, update the secondary indexes.
+<span class="nc bnc" id="L371" title="All 2 branches missed.">        if (!secondaryIndexes.isEmpty()) {</span>
+<span class="nc" id="L372">            unmapSecondaryIndexes(key, previous);</span>
+<span class="nc" id="L373">            mapSecondaryIndexes(key, value);</span>
+        }
+<span class="nc" id="L375">        return previous;</span>
+    }
+
+    @DontInstrument
+    protected V undoPutRecord(CorfuTable&lt;K, V&gt; table, K key, V value) {
+<span class="nc" id="L380">        return table.mainMap.get(key);</span>
+    }
+
+    @DontInstrument
+    protected void undoPut(CorfuTable&lt;K, V&gt; table, V undoRecord, K key, V value) {
+        // Same as undoRemove (restore previous value)
+<span class="nc" id="L386">        undoRemove(table, undoRecord, key);</span>
+<span class="nc" id="L387">    }</span>
+
+    @DontInstrument
+    Object[] putAllConflictFunction(Map&lt;? extends K, ? extends V&gt; m) {
+<span class="nc" id="L391">        return m.keySet().stream()</span>
+<span class="nc" id="L392">                .map(Object::hashCode)</span>
+<span class="nc" id="L393">                .toArray(Object[]::new);</span>
+    }
+
+<span class="nc" id="L396">    enum UndoNullable {</span>
+<span class="nc" id="L397">        NULL;</span>
+    }
+
+    /** Generate an undo record for putAll, given the previous state of the map
+     * and the parameters to the putAll call.
+     *
+     * @param previousState     The previous state of the map
+     * @param m                 The map from the putAll call
+     * @return                  An undo record, which for a putAll is all the
+     *                          previous entries in the map.
+     */
+    @DontInstrument
+    @SuppressWarnings(&quot;unchecked&quot;)
+    Map&lt;K,V&gt; undoPutAllRecord(CorfuTable&lt;K, V&gt; previousState,
+                              Map&lt;? extends K, ? extends V&gt; m) {
+<span class="nc" id="L412">        ImmutableMap.Builder&lt;K,V&gt; builder = ImmutableMap.builder();</span>
+<span class="nc" id="L413">        m.keySet().forEach(k -&gt; builder.put(k,</span>
+<span class="nc bnc" id="L414" title="All 2 branches missed.">                (previousState.get(k) == null</span>
+                        ? (V) CorfuTable.UndoNullable.NULL
+<span class="nc" id="L416">                        : previousState.get(k))));</span>
+<span class="nc" id="L417">        return builder.build();</span>
+    }
+
+    /** Undo a remove, given the current state of the map, an undo record
+     * and the arguments to the remove command to undo.
+     *
+     * @param table           The state of the map after the put to undo
+     * @param undoRecord    The undo record generated by undoRemoveRecord
+     */
+    @DontInstrument
+     void undoPutAll(CorfuTable&lt;K, V&gt; table, Map&lt;K,V&gt; undoRecord,
+                            Map&lt;? extends K, ? extends V&gt; m) {
+<span class="nc" id="L429">        undoRecord.entrySet().forEach(e -&gt; {</span>
+<span class="nc bnc" id="L430" title="All 2 branches missed.">                    if (e.getValue() == CorfuTable.UndoNullable.NULL) {</span>
+<span class="nc" id="L431">                        undoRemove(table, null, e.getKey());</span>
+                    } else {
+<span class="nc" id="L433">                        undoRemove(table, e.getValue(), e.getKey());</span>
+                    }
+<span class="nc" id="L435">                }</span>
+        );
+<span class="nc" id="L437">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @Mutator(name = &quot;put&quot;, noUpcall = true)
+    public void insert(@ConflictParameter K key, V value) {
+<span class="nc" id="L443">        V previous = mainMap.put(key, value);</span>
+        // If we have index functions, update the secondary indexes.
+<span class="nc bnc" id="L445" title="All 2 branches missed.">        if (!secondaryIndexes.isEmpty()) {</span>
+<span class="nc" id="L446">            unmapSecondaryIndexes(key, previous);</span>
+<span class="nc" id="L447">            mapSecondaryIndexes(key, value);</span>
+        }
+<span class="nc" id="L449">    }</span>
+
+    /**
+     * Returns a filtered {@link List} view of the values contained in this map.
+     * This method has a memory/CPU advantage over the map iterators as no deep copy
+     * is actually performed.
+     *
+     * @param p java predicate (function to evaluate)
+     * @return a view of the values contained in this map meeting the predicate condition.
+     */
+    @Accessor
+    public List&lt;V&gt; scanAndFilter(Predicate&lt;? super V&gt; p) {
+<span class="nc" id="L461">        return mainMap.values().parallelStream()</span>
+<span class="nc" id="L462">                                    .filter(p)</span>
+<span class="nc" id="L463">                                    .collect(Collectors.toCollection(ArrayList::new));</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public Collection&lt;Map.Entry&lt;K, V&gt;&gt; scanAndFilterByEntry(Predicate&lt;? super Map.Entry&lt;K, V&gt;&gt;
+                                                                    entryPredicate) {
+<span class="nc" id="L471">        return mainMap.entrySet().parallelStream()</span>
+<span class="nc" id="L472">                                    .filter(entryPredicate)</span>
+<span class="nc" id="L473">                                    .collect(Collectors.toCollection(ArrayList::new));</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @MutatorAccessor(name = &quot;remove&quot;, undoFunction = &quot;undoRemove&quot;,
+                                undoRecordFunction = &quot;undoRemoveRecord&quot;)
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public V remove(@ConflictParameter Object key) {
+<span class="nc" id="L482">        V previous =  mainMap.remove(key);</span>
+<span class="nc" id="L483">        unmapSecondaryIndexes((K) key, previous);</span>
+<span class="nc" id="L484">        return previous;</span>
+    }
+
+    @DontInstrument
+    protected V undoRemoveRecord(CorfuTable&lt;K, V&gt; table, K key) {
+<span class="nc" id="L489">        return table.mainMap.get(key);</span>
+    }
+
+    @DontInstrument
+    protected void undoRemove(CorfuTable&lt;K, V&gt; table, V undoRecord, K key) {
+<span class="nc bnc" id="L494" title="All 2 branches missed.">        if (undoRecord == null) {</span>
+<span class="nc" id="L495">            V previous =  table.mainMap.remove(key);</span>
+<span class="nc" id="L496">            table.unmapSecondaryIndexes(key, previous);</span>
+<span class="nc" id="L497">        } else {</span>
+<span class="nc" id="L498">            V previous = table.mainMap.put(key, undoRecord);</span>
+<span class="nc bnc" id="L499" title="All 2 branches missed.">            if (!table.secondaryIndexes.isEmpty()) {</span>
+<span class="nc" id="L500">                table.unmapSecondaryIndexes(key, previous);</span>
+<span class="nc" id="L501">                table.mapSecondaryIndexes(key, undoRecord);</span>
+            }
+        }
+<span class="nc" id="L504">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @Mutator(name = &quot;remove&quot;, noUpcall = true)
+    public void delete(@ConflictParameter K key) {
+<span class="nc" id="L510">        V previous =  mainMap.remove(key);</span>
+<span class="nc" id="L511">        unmapSecondaryIndexes(key, previous);</span>
+<span class="nc" id="L512">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @Mutator(name = &quot;putAll&quot;,
+            undoFunction = &quot;undoPutAll&quot;,
+            undoRecordFunction = &quot;undoPutAllRecord&quot;,
+            conflictParameterFunction = &quot;putAllConflictFunction&quot;)
+    public void putAll(@Nonnull Map&lt;? extends K, ? extends V&gt; m) {
+        // If we have no index functions, then just directly put all
+<span class="nc bnc" id="L522" title="All 2 branches missed.">        if (secondaryIndexes.isEmpty()) {</span>
+<span class="nc" id="L523">            mainMap.putAll(m);</span>
+        } else {
+            // Otherwise we must update all secondary indexes
+            // TODO: Do this in parallel (need to acquire update locks, potentially)
+<span class="nc" id="L527">            m.entrySet().stream()</span>
+<span class="nc" id="L528">                    .forEach(e -&gt; {</span>
+<span class="nc" id="L529">                        V previous = mainMap.put(e.getKey(), e.getValue());</span>
+<span class="nc" id="L530">                        unmapSecondaryIndexes(e.getKey(), previous);</span>
+<span class="nc" id="L531">                        mapSecondaryIndexes(e.getKey(), e.getValue());</span>
+<span class="nc" id="L532">                    });</span>
+        }
+<span class="nc" id="L534">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @Mutator(name = &quot;clear&quot;, reset = true)
+    public void clear() {
+<span class="nc" id="L540">        mainMap.clear();</span>
+<span class="nc" id="L541">        secondaryIndexes.values().forEach(Map::clear);</span>
+<span class="nc" id="L542">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public @Nonnull Set&lt;K&gt; keySet() {
+<span class="nc" id="L548">        return ImmutableSet.copyOf(mainMap.keySet());</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public @Nonnull Collection&lt;V&gt; values() {
+<span class="nc" id="L555">        return ImmutableList.copyOf(mainMap.values());</span>
+    }
+
+    /**
+     * Makes a shallow copy of the map (i.e. all map entries), but not the
+     * key/values (i.e only the mappings are copied).
+     **/
+    @Override
+    @Accessor
+    public @Nonnull Set&lt;Entry&lt;K, V&gt;&gt; entrySet() {
+<span class="nc" id="L565">        List&lt;Entry&lt;K, V&gt;&gt; copy = new ArrayList&lt;&gt;(mainMap.size());</span>
+<span class="nc bnc" id="L566" title="All 2 branches missed.">        for (Map.Entry&lt;K, V&gt; entry : mainMap.entrySet()) {</span>
+<span class="nc" id="L567">            copy.add(new AbstractMap.SimpleImmutableEntry&lt;&gt;(entry.getKey(),</span>
+<span class="nc" id="L568">                    entry.getValue()));</span>
+<span class="nc" id="L569">        }</span>
+<span class="nc" id="L570">        return new ImmuableListSetWrapper&lt;&gt;(copy);</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public V getOrDefault(Object key, V defaultValue) {
+<span class="nc" id="L577">        return mainMap.getOrDefault(key, defaultValue);</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public void forEach(BiConsumer&lt;? super K, ? super V&gt; action) {
+<span class="nc" id="L584">        mainMap.forEach(action);</span>
+<span class="nc" id="L585">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public void replaceAll(BiFunction&lt;? super K, ? super V, ? extends V&gt; function) {
+<span class="nc" id="L591">        Objects.requireNonNull(function);</span>
+<span class="nc bnc" id="L592" title="All 2 branches missed.">        for (Map.Entry&lt;K, V&gt; entry : entrySet()) {</span>
+            K k;
+            V v;
+            try {
+<span class="nc" id="L596">                k = entry.getKey();</span>
+<span class="nc" id="L597">                v = entry.getValue();</span>
+<span class="nc" id="L598">            } catch (IllegalStateException ise) {</span>
+                // this usually means the entry is no longer in the map.
+<span class="nc" id="L600">                throw new ConcurrentModificationException(ise);</span>
+<span class="nc" id="L601">            }</span>
+
+            // ise thrown from function is not a cme.
+<span class="nc" id="L604">            v = function.apply(k, v);</span>
+
+            try {
+<span class="nc" id="L607">                insert(k, v);</span>
+<span class="nc" id="L608">            } catch (IllegalStateException ise) {</span>
+                // this usually means the entry is no longer in the map.
+<span class="nc" id="L610">                throw new ConcurrentModificationException(ise);</span>
+<span class="nc" id="L611">            }</span>
+<span class="nc" id="L612">        }</span>
+<span class="nc" id="L613">    }</span>
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V putIfAbsent(K key, V value) {
+<span class="nc" id="L619">        V v = get(key);</span>
+<span class="nc bnc" id="L620" title="All 2 branches missed.">        if (v == null) {</span>
+<span class="nc" id="L621">            v = put(key, value);</span>
+        }
+
+<span class="nc" id="L624">        return v;</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public boolean remove(Object key, Object value) {
+<span class="nc" id="L631">        Object curValue = get(key);</span>
+<span class="nc bnc" id="L632" title="All 4 branches missed.">        if (!Objects.equals(curValue, value)</span>
+<span class="nc bnc" id="L633" title="All 2 branches missed.">                || (curValue == null &amp;&amp; !containsKey(key))) {</span>
+<span class="nc" id="L634">            return false;</span>
+        }
+<span class="nc" id="L636">        remove(key);</span>
+<span class="nc" id="L637">        return true;</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V replace(K key, V value) {
+        V curValue;
+<span class="nc bnc" id="L645" title="All 4 branches missed.">        if (((curValue = get(key)) != null) || containsKey(key)) {</span>
+<span class="nc" id="L646">            curValue = put(key, value);</span>
+        }
+<span class="nc" id="L648">        return curValue;</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V computeIfAbsent(K key, Function&lt;? super K, ? extends V&gt; mappingFunction) {
+
+<span class="nc" id="L656">        Objects.requireNonNull(mappingFunction);</span>
+        V v;
+<span class="nc bnc" id="L658" title="All 2 branches missed.">        if ((v = get(key)) == null) {</span>
+            V newValue;
+<span class="nc bnc" id="L660" title="All 2 branches missed.">            if ((newValue = mappingFunction.apply(key)) != null) {</span>
+<span class="nc" id="L661">                put(key, newValue);</span>
+<span class="nc" id="L662">                return newValue;</span>
+            }
+        }
+
+<span class="nc" id="L666">        return v;</span>
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V computeIfPresent(K key, BiFunction&lt;? super K, ? super V, ? extends V&gt;
+            remappingFunction) {
+<span class="nc" id="L674">        Objects.requireNonNull(remappingFunction);</span>
+        V oldValue;
+<span class="nc bnc" id="L676" title="All 2 branches missed.">        if ((oldValue = get(key)) != null) {</span>
+<span class="nc" id="L677">            V newValue = remappingFunction.apply(key, oldValue);</span>
+<span class="nc bnc" id="L678" title="All 2 branches missed.">            if (newValue != null) {</span>
+<span class="nc" id="L679">                put(key, newValue);</span>
+<span class="nc" id="L680">                return newValue;</span>
+            } else {
+<span class="nc" id="L682">                remove(key);</span>
+<span class="nc" id="L683">                return null;</span>
+            }
+        } else {
+<span class="nc" id="L686">            return null;</span>
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V merge(K key, V value, BiFunction&lt;? super V, ? super V, ? extends V&gt;
+            remappingFunction) {
+<span class="nc" id="L695">        Objects.requireNonNull(remappingFunction);</span>
+<span class="nc" id="L696">        Objects.requireNonNull(value);</span>
+<span class="nc" id="L697">        V oldValue = get(key);</span>
+<span class="nc bnc" id="L698" title="All 2 branches missed.">        V newValue = (oldValue == null) ? value :</span>
+<span class="nc" id="L699">                remappingFunction.apply(oldValue, value);</span>
+<span class="nc bnc" id="L700" title="All 2 branches missed.">        if (newValue == null) {</span>
+<span class="nc" id="L701">            remove(key);</span>
+        } else {
+<span class="nc" id="L703">            put(key, newValue);</span>
+        }
+<span class="nc" id="L705">        return newValue;</span>
+    }
+
+    /**
+     * Unmaps the secondary indexes for a given key value pair.
+     *
+     * @param key   The primary key (index) for the mapping.
+     * @param value The value to unmap.
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected void unmapSecondaryIndexes(K key, V value) {
+<span class="nc bnc" id="L716" title="All 2 branches missed.">        if (value == null) {</span>
+<span class="nc" id="L717">            log.warn(&quot;Attempting to build an index with a null value, skipping.&quot;);</span>
+<span class="nc" id="L718">            return;</span>
+        }
+
+        try {
+            // Map entry into secondary indexes
+<span class="nc bnc" id="L723" title="All 2 branches missed.">            for (Index&lt;K, V, ? extends Comparable&gt; index : indexSpec) {</span>
+<span class="nc" id="L724">                String indexName = index.getName().get();</span>
+<span class="nc" id="L725">                Map&lt;Comparable, Map&lt;K, V&gt;&gt; secondaryIndex = secondaryIndexes.get(indexName);</span>
+<span class="nc bnc" id="L726" title="All 2 branches missed.">                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {</span>
+<span class="nc" id="L727">                    Map&lt;K, V&gt; slot = secondaryIndex.get(indexKey);</span>
+<span class="nc bnc" id="L728" title="All 2 branches missed.">                    if (slot != null) {</span>
+<span class="nc" id="L729">                        slot.remove(key, value);</span>
+                    }
+<span class="nc" id="L731">                }</span>
+<span class="nc" id="L732">            }</span>
+<span class="nc" id="L733">        } catch (Exception e) {</span>
+<span class="nc" id="L734">            log.error(&quot;Received an exception while computing the index. &quot; +</span>
+                    &quot;This is most likely an issue with the client's indexing function. {}&quot;, e);
+            // The index might be corrupt, and the only way to ensure safety is to disable
+            // indexing for this table.
+<span class="nc" id="L738">            clearIndex();</span>
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+<span class="nc" id="L741">            throw e;</span>
+<span class="nc" id="L742">        }</span>
+<span class="nc" id="L743">    }</span>
+
+    /**
+     * Maps the secondary indexes for a given key value pair.
+     *
+     * @param key   the primary key associated with the indexing.
+     * @param value the value to map.
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected void mapSecondaryIndexes(K key, V value) {
+<span class="nc bnc" id="L753" title="All 2 branches missed.">        if (value == null) {</span>
+<span class="nc" id="L754">            log.warn(&quot;Attempting to build an index with a null value, skipping.&quot;);</span>
+<span class="nc" id="L755">            return;</span>
+        }
+
+        try {
+            // Map entry into secondary indexes
+<span class="nc bnc" id="L760" title="All 2 branches missed.">            for (Index&lt;K, V, ? extends Comparable&gt; index : indexSpec) {</span>
+<span class="nc" id="L761">                String indexName = index.getName().get();</span>
+<span class="nc" id="L762">                Map&lt;Comparable, Map&lt;K, V&gt;&gt; secondaryIndex = secondaryIndexes.get(indexName);</span>
+<span class="nc bnc" id="L763" title="All 2 branches missed.">                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {</span>
+<span class="nc" id="L764">                    Map&lt;K, V&gt; slot = secondaryIndex.computeIfAbsent(indexKey, k -&gt; new HashMap&lt;&gt;());</span>
+<span class="nc" id="L765">                    slot.put(key, value);</span>
+<span class="nc" id="L766">                }</span>
+<span class="nc" id="L767">            }</span>
+<span class="nc" id="L768">        } catch (Exception e) {</span>
+<span class="nc" id="L769">            log.error(&quot;Received an exception while computing the index. &quot; +</span>
+                    &quot;This is most likely an issue with the client's indexing function.&quot;, e);
+            // The index might be corrupt, and the only way to ensure safety is to disable
+            // indexing for this table.
+<span class="nc" id="L773">            clearIndex();</span>
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+<span class="nc" id="L776">            throw e;</span>
+<span class="nc" id="L777">        }</span>
+<span class="nc" id="L778">    }</span>
+
+    /**
+     *  Disable all secondary indices for this table. Only used during error-recovery.
+     */
+    protected void clearIndex() {
+<span class="nc" id="L784">        indexSpec.clear();</span>
+<span class="nc" id="L785">        secondaryIndexes.clear();</span>
+<span class="nc" id="L786">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

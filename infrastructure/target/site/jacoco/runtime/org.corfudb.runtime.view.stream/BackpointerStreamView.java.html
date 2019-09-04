@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>BackpointerStreamView.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view.stream</a> &gt; <span class="el_source">BackpointerStreamView.java</span></div><h1>BackpointerStreamView.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view.stream;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.StreamOptions;
+
+import javax.annotation.Nonnull;
+import java.util.NavigableSet;
+import java.util.UUID;
+import java.util.function.Function;
+
+/** A view of a stream implemented with backpointers.
+ *
+ * &lt;p&gt;In this implementation, all addresses are global (log) addresses.
+ *
+ * &lt;p&gt;All method calls of this class are thread-safe.
+ *
+ * &lt;p&gt;Created by mwei on 12/11/15.
+ */
+<span class="nc" id="L23">@Slf4j</span>
+public class BackpointerStreamView extends AbstractQueuedStreamView {
+
+    /** Create a new backpointer stream view.
+     *
+     * @param runtime   The runtime to use for accessing the log.
+     * @param streamId  The ID of the stream to view.
+     */
+    public BackpointerStreamView(final CorfuRuntime runtime,
+                                 final UUID streamId,
+                                 @Nonnull final StreamOptions options) {
+<span class="nc" id="L34">        super(runtime, streamId, options);</span>
+<span class="nc" id="L35">    }</span>
+
+    public BackpointerStreamView(final CorfuRuntime runtime,
+                                 final UUID streamId) {
+<span class="nc" id="L39">        this(runtime, streamId, StreamOptions.DEFAULT);</span>
+<span class="nc" id="L40">    }</span>
+
+    @Override
+    protected ILogData removeFromQueue(NavigableSet&lt;Long&gt; queue) {
+        boolean readNext;
+        Long thisRead;
+        ILogData ld;
+
+        do {
+<span class="nc bnc" id="L49" title="All 2 branches missed.">            if (queue.isEmpty()) {</span>
+                // nothing to read, return.
+<span class="nc" id="L51">                readNext = false;</span>
+<span class="nc" id="L52">                continue;</span>
+            }
+
+<span class="nc" id="L55">            thisRead = queue.pollFirst();</span>
+            try {
+<span class="nc" id="L57">                ld = read(thisRead);</span>
+<span class="nc" id="L58">            } catch (TrimmedException te) {</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">                if (!getReadOptions().isIgnoreTrim()) {</span>
+<span class="nc" id="L60">                    throw te;</span>
+                }
+
+<span class="nc" id="L63">                readNext = true;</span>
+<span class="nc" id="L64">                continue;</span>
+<span class="nc" id="L65">            }</span>
+
+<span class="nc bnc" id="L67" title="All 4 branches missed.">            if (queue == getCurrentContext().readQueue &amp;&amp; ld != null) {</span>
+<span class="nc" id="L68">                addToResolvedQueue(getCurrentContext(), thisRead, ld);</span>
+            }
+<span class="nc" id="L70">            return ld;</span>
+<span class="nc bnc" id="L71" title="All 2 branches missed.">        } while (readNext);</span>
+
+<span class="nc" id="L73">        return null;</span>
+    }
+
+<span class="nc" id="L76">    private long backpointerCount = 0L;</span>
+
+    @Override
+    public long getTotalUpdates() {
+<span class="nc" id="L80">        return backpointerCount;</span>
+    }
+
+    protected boolean discoverAddressSpace(final UUID streamId,
+                                           final NavigableSet&lt;Long&gt; queue,
+                                           final long startAddress,
+                                           final long stopAddress,
+                                           final Function&lt;ILogData, Boolean&gt; filter,
+                                           final boolean checkpoint,
+                                           final long maxGlobal) {
+        // Now we start traversing backpointers, if they are available. We
+        // start at the latest token and go backward, until we reach the
+        // log pointer -or- the checkpoint snapshot address, because all
+        // values from the beginning of the stream up to the snapshot address
+        // should be reflected. For each address which is less than
+        // maxGlobalAddress, we insert it into the read queue.
+
+<span class="nc" id="L97">        log.trace(&quot;followBackpointers: streamId[{}], queue[{}], startAddress[{}], stopAddress[{}],&quot; +</span>
+<span class="nc" id="L98">                &quot;filter[{}]&quot;, streamId, queue, startAddress, stopAddress, filter);</span>
+<span class="nc" id="L99">        long readStartTime = System.currentTimeMillis();</span>
+
+        // The current address which we are reading from.
+<span class="nc" id="L102">        long currentAddress = startAddress;</span>
+
+<span class="nc" id="L104">        boolean startingSingleStep = true;</span>
+
+        // Loop until we have reached the stop address.
+<span class="nc bnc" id="L107" title="All 4 branches missed.">        while (currentAddress &gt; stopAddress  &amp;&amp; Address.isAddress(currentAddress)) {</span>
+<span class="nc" id="L108">            backpointerCount++;</span>
+
+            // Read the current address
+            ILogData d;
+            try {
+<span class="nc" id="L113">                log.trace(&quot;followBackpointers: readAddress[{}]&quot;, currentAddress);</span>
+<span class="nc" id="L114">                d = read(currentAddress, readStartTime);</span>
+<span class="nc" id="L115">            } catch (TrimmedException e) {</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">                if (getReadOptions().isIgnoreTrim()) {</span>
+<span class="nc" id="L117">                    log.warn(&quot;followBackpointers: Ignoring trimmed exception for address[{}],&quot; +</span>
+<span class="nc" id="L118">                            &quot; stream[{}]&quot;, currentAddress, id);</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">                    return !queue.isEmpty();</span>
+                } else {
+<span class="nc" id="L121">                    throw e;</span>
+                }
+<span class="nc" id="L123">            }</span>
+
+            // If it contains the stream we are interested in
+<span class="nc bnc" id="L126" title="All 2 branches missed.">            if (d.containsStream(streamId)) {</span>
+<span class="nc" id="L127">                log.trace(&quot;followBackpointers: address[{}] contains streamId[{}], apply filter&quot;, currentAddress,</span>
+                        streamId);
+
+                // Check whether we should include the address
+<span class="nc" id="L131">                filter.apply(d);</span>
+
+<span class="nc bnc" id="L133" title="All 2 branches missed.">                if (!checkpoint) {</span>
+<span class="nc" id="L134">                    log.trace(&quot;followBackpointers: Adding backpointer to address[{}] to queue&quot;, currentAddress);</span>
+<span class="nc" id="L135">                    queue.add(currentAddress);</span>
+                }
+            }
+
+<span class="nc" id="L139">            boolean singleStep = true;</span>
+            // Now calculate the next address
+            // Try using backpointers first
+
+<span class="nc" id="L143">            log.trace(&quot;followBackpointers: calculate the next address&quot;);</span>
+
+<span class="nc bnc" id="L145" title="All 2 branches missed.">            if (d.hasBackpointer(streamId)) {</span>
+<span class="nc" id="L146">                long tmp = d.getBackpointer(streamId);</span>
+<span class="nc" id="L147">                log.trace(&quot;followBackpointers: backpointer points to {}&quot;, tmp);</span>
+                // if backpointer is a valid log address or Address.NON_EXIST
+                // (beginning of the stream), do not single step back on the log
+<span class="nc bnc" id="L150" title="All 4 branches missed.">                if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {</span>
+<span class="nc" id="L151">                    currentAddress = tmp;</span>
+<span class="nc" id="L152">                    singleStep = false;</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">                    if (!startingSingleStep) {</span>
+                        // A started single step period finishes here, refresh flag for next cycle.
+<span class="nc" id="L155">                        log.info(&quot;followBackpointers[{}]: Found backpointer for this stream at address {}.&quot;</span>
+<span class="nc" id="L156">                                + &quot;Stop single step downgrade.&quot;, this, currentAddress);</span>
+<span class="nc" id="L157">                        startingSingleStep = true;</span>
+                    }
+                }
+            }
+
+<span class="nc bnc" id="L162" title="All 2 branches missed.">            if (singleStep) {</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">                if (startingSingleStep) {</span>
+<span class="nc" id="L164">                    startingSingleStep = false;</span>
+<span class="nc" id="L165">                    log.info(&quot;followBackpointers[{}]: Found hole at address {}. Starting single step downgrade.&quot;,</span>
+<span class="nc" id="L166">                            this, currentAddress);</span>
+                }
+                // backpointers failed, so we're
+                // downgrading to a linear scan
+<span class="nc" id="L170">                log.trace(&quot;followBackpointers[{}]: downgrading to single step, found hole at {}&quot;, this, currentAddress);</span>
+<span class="nc" id="L171">                currentAddress = currentAddress - 1;</span>
+            }
+<span class="nc" id="L173">        }</span>
+
+<span class="nc bnc" id="L175" title="All 2 branches missed.">        if (checkpoint) {</span>
+<span class="nc" id="L176">            queue.addAll(resolveCheckpoint(getCurrentContext()));</span>
+        }
+
+<span class="nc bnc" id="L179" title="All 2 branches missed.">        return !queue.isEmpty();</span>
+    }
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

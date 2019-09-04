@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ConservativeFailureHandlerPolicy.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">ConservativeFailureHandlerPolicy.java</span></div><h1>ConservativeFailureHandlerPolicy.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import java.util.Set;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+
+/**
+ * Conserves the failures.
+ *
+ * &lt;p&gt;Created by zlokhandwala on 11/21/16.
+ */
+<span class="nc" id="L13">@Slf4j</span>
+<span class="nc" id="L14">public class ConservativeFailureHandlerPolicy implements IReconfigurationHandlerPolicy {</span>
+
+    /**
+     * Modifies the layout by marking the failed nodes as unresponsive but still keeping them in
+     * the layout and sequencer servers lists.
+     * Removes these failed nodes from the log unit segments.
+     *
+     * @param originalLayout Original Layout which needs to be modified.
+     * @param corfuRuntime   Connected runtime to attach to the new layout.
+     * @param failedNodes    Set of all failed/defected servers.
+     * @param healedNodes    Set of all healed/responsive servers.
+     * @return The new and modified layout.
+     */
+    @Override
+    public Layout generateLayout(Layout originalLayout,
+                                 CorfuRuntime corfuRuntime,
+                                 Set&lt;String&gt; failedNodes,
+                                 Set&lt;String&gt; healedNodes) {
+<span class="nc" id="L32">        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);</span>
+<span class="nc" id="L33">        Layout newLayout = layoutBuilder</span>
+<span class="nc" id="L34">                .assignResponsiveSequencerAsPrimary(failedNodes)</span>
+<span class="nc" id="L35">                .removeLogunitServers(failedNodes)</span>
+<span class="nc" id="L36">                .removeUnresponsiveServers(healedNodes)</span>
+<span class="nc" id="L37">                .addUnresponsiveServers(failedNodes)</span>
+<span class="nc" id="L38">                .build();</span>
+<span class="nc" id="L39">        newLayout.setEpoch(newLayout.getEpoch() + 1);</span>
+<span class="nc" id="L40">        log.info(&quot;generateLayout: new Layout {}&quot;, newLayout);</span>
+<span class="nc" id="L41">        return newLayout;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

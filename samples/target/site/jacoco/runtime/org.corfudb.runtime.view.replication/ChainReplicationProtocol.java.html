@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ChainReplicationProtocol.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view.replication</a> &gt; <span class="el_source">ChainReplicationProtocol.java</span></div><h1>ChainReplicationProtocol.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view.replication;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+/**
+ * Created by mwei on 4/6/17.
+ */
+<span class="nc" id="L27">@Slf4j</span>
+public class ChainReplicationProtocol extends AbstractReplicationProtocol {
+
+    public ChainReplicationProtocol(IHoleFillPolicy holeFillPolicy) {
+<span class="nc" id="L31">        super(holeFillPolicy);</span>
+<span class="nc" id="L32">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException {
+<span class="nc" id="L39">        final long globalAddress = data.getGlobalAddress();</span>
+<span class="nc" id="L40">        int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);</span>
+
+        // To reduce the overhead of serialization, we serialize only the
+        // first time we write, saving when we go down the chain.
+<span class="nc" id="L44">        try (ILogData.SerializationHandle sh =</span>
+<span class="nc" id="L45">                     data.getSerializedForm()) {</span>
+<span class="nc" id="L46">            log.trace(&quot;Write[{}]: chain head {}/{}&quot;, globalAddress, 1, numUnits);</span>
+            // In chain replication, we start at the chain head.
+            try {
+<span class="nc" id="L49">                CFUtils.getUninterruptibly(</span>
+<span class="nc" id="L50">                        runtimeLayout.getLogUnitClient(globalAddress, 0)</span>
+<span class="nc" id="L51">                                .write(sh.getSerialized()),</span>
+                        OverwriteException.class);
+<span class="nc" id="L53">                propagate(runtimeLayout, globalAddress, sh.getSerialized());</span>
+<span class="nc" id="L54">            } catch (OverwriteException oe) {</span>
+                // Some other wrote here (usually due to hole fill)
+                // We need to invoke the recovery protocol, in case
+                // the write wasn't driven to completion.
+<span class="nc" id="L58">                recover(runtimeLayout, globalAddress);</span>
+<span class="nc" id="L59">                throw oe;</span>
+<span class="nc" id="L60">            }</span>
+<span class="nc bnc" id="L61" title="All 8 branches missed.">        }</span>
+<span class="nc" id="L62">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ILogData peek(RuntimeLayout runtimeLayout, long globalAddress) {
+<span class="nc" id="L69">        int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);</span>
+<span class="nc" id="L70">        log.trace(&quot;Read[{}]: chain {}/{}&quot;, globalAddress, numUnits, numUnits);</span>
+        // In chain replication, we read from the last unit, though we can optimize if we
+        // know where the committed tail is.
+<span class="nc" id="L73">        ILogData peekResult = CFUtils.getUninterruptibly(runtimeLayout</span>
+<span class="nc" id="L74">                .getLogUnitClient(globalAddress, numUnits - 1)</span>
+<span class="nc" id="L75">                .read(globalAddress)).getAddresses().get(globalAddress);</span>
+
+<span class="nc bnc" id="L77" title="All 2 branches missed.">        return peekResult.isEmpty() ? null : peekResult;</span>
+    }
+
+    /**
+     * Reads a list of global addresses from the chain of log unit servers.
+     *
+     * - This method optimizes for the time to wait to hole fill in case empty addresses
+     * are encountered.
+     * - If the waitForWrite flag is set to true, when an empty address is encountered,
+     * it waits for one hole to be filled. All the rest empty addresses within the list
+     * are hole filled directly and the reader does not wait.
+     * - In case the flag is set to false, none of the reads wait for write completion and
+     * the empty addresses are hole filled right away.
+     *
+     * @param runtimeLayout runtime layout.
+     * @param addresses     list of addresses to read.
+     * @param waitForWrite  flag whether wait for write is required or hole fill directly.
+     * @param cacheOnServer flag whether the fetch results should be cached on log unit server.
+     * @return Map of read addresses.
+     */
+    @Override
+    @Nonnull
+    public Map&lt;Long, ILogData&gt; readAll(RuntimeLayout runtimeLayout,
+                                       List&lt;Long&gt; addresses,
+                                       boolean waitForWrite,
+                                       boolean cacheOnServer) {
+
+        // A map of log unit server endpoint to addresses it's responsible for
+<span class="nc" id="L105">        Map&lt;String, List&lt;Long&gt;&gt; serverAddressMap = new HashMap&lt;&gt;();</span>
+
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        for (Long address : addresses) {</span>
+<span class="nc" id="L108">            List&lt;String&gt; logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();</span>
+<span class="nc" id="L109">            String logServer = logServers.get(logServers.size() - 1);</span>
+<span class="nc" id="L110">            List&lt;Long&gt; addressList = serverAddressMap.computeIfAbsent(logServer, s -&gt; new ArrayList&lt;&gt;());</span>
+<span class="nc" id="L111">            addressList.add(address);</span>
+<span class="nc" id="L112">        }</span>
+
+        // Send read requests to log unit servers in parallel
+<span class="nc" id="L115">        List&lt;CompletableFuture&lt;ReadResponse&gt;&gt; futures = serverAddressMap.entrySet().stream()</span>
+<span class="nc" id="L116">                .map(entry -&gt; runtimeLayout.getLogUnitClient(entry.getKey())</span>
+<span class="nc" id="L117">                        .readAll(entry.getValue(), cacheOnServer))</span>
+<span class="nc" id="L118">                .collect(Collectors.toList());</span>
+
+        // Merge the read responses from different log unit servers
+<span class="nc" id="L121">        Map&lt;Long, LogData&gt; readResult = futures.stream()</span>
+<span class="nc" id="L122">                .map(future -&gt; CFUtils.getUninterruptibly(future).getAddresses())</span>
+<span class="nc" id="L123">                .reduce(new HashMap&lt;&gt;(), (map1, map2) -&gt; {</span>
+<span class="nc" id="L124">                    map1.putAll(map2);</span>
+<span class="nc" id="L125">                    return map1;</span>
+                });
+
+<span class="nc" id="L128">        return waitOrHoleFill(runtimeLayout, readResult, waitForWrite);</span>
+    }
+
+    private Map&lt;Long, ILogData&gt; waitOrHoleFill(RuntimeLayout runtimeLayout,
+                                               Map&lt;Long, LogData&gt; readResult,
+                                               boolean waitForWrite) {
+<span class="nc" id="L134">        Map&lt;Long, ILogData&gt; returnResult = new HashMap&lt;&gt;(readResult);</span>
+
+        // If waiting not required for writer, hole fill directly
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        if (!waitForWrite) {</span>
+<span class="nc" id="L138">            readResult.forEach((address, value) -&gt; {</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">                if (value.isEmpty()) {</span>
+<span class="nc" id="L140">                    holeFill(runtimeLayout, address);</span>
+<span class="nc" id="L141">                    returnResult.put(address, peek(runtimeLayout, address));</span>
+                }
+<span class="nc" id="L143">            });</span>
+<span class="nc" id="L144">            return returnResult;</span>
+        }
+
+        // In case of holes, use the standard backoff policy for hole fill for
+        // the first entry in the list. All subsequent holes in the list can be
+        // hole filled without waiting as we have already waited for the first hole.
+<span class="nc" id="L150">        boolean wait = true;</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">        for (Map.Entry&lt;Long, LogData&gt; entry : readResult.entrySet()) {</span>
+<span class="nc" id="L152">            long address = entry.getKey();</span>
+<span class="nc" id="L153">            ILogData value = entry.getValue();</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">            if (value.isEmpty()) {</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">                if (wait) {</span>
+<span class="nc" id="L156">                    value = read(runtimeLayout, address);</span>
+                    // Next iteration can directly read and hole fill, as we've already
+                    // fulfilled the read through the hole fill policy (back-off / wait for write)
+<span class="nc" id="L159">                    wait = false;</span>
+                } else {
+                    // try to read the value
+<span class="nc" id="L162">                    value = peek(runtimeLayout, address);</span>
+                    // if value is empty, fill the hole and get the value.
+<span class="nc bnc" id="L164" title="All 2 branches missed.">                    if (value == null) {</span>
+<span class="nc" id="L165">                        holeFill(runtimeLayout, address);</span>
+<span class="nc" id="L166">                        value = peek(runtimeLayout, address);</span>
+                    }
+                }
+<span class="nc" id="L169">                returnResult.put(address, value);</span>
+            }
+<span class="nc" id="L171">        }</span>
+
+<span class="nc" id="L173">        return returnResult;</span>
+    }
+
+    /**
+     * Propagate a write down the chain, ignoring
+     * any overwrite errors. It is expected that the
+     * write has already successfully completed at
+     * the head of the chain.
+     *
+     * @param runtimeLayout the epoch stamped client containing the layout to use for propagation.
+     * @param globalAddress the global address to start writing at.
+     * @param data          the data to propagate, or NULL, if it is to be a hole.
+     */
+    private void propagate(RuntimeLayout runtimeLayout,
+                           long globalAddress,
+                           @Nullable ILogData data) {
+<span class="nc" id="L189">        int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);</span>
+
+<span class="nc bnc" id="L191" title="All 2 branches missed.">        for (int i = 1; i &lt; numUnits; i++) {</span>
+<span class="nc" id="L192">            log.trace(&quot;Propagate[{}]: chain {}/{}&quot;, Token.of(runtimeLayout.getLayout().getEpoch(),</span>
+                    globalAddress),
+<span class="nc" id="L194">                    i + 1, numUnits);</span>
+            // In chain replication, we write synchronously to every unit
+            // in the chain.
+            try {
+<span class="nc bnc" id="L198" title="All 2 branches missed.">                if (data != null) {</span>
+<span class="nc" id="L199">                    CFUtils.getUninterruptibly(</span>
+<span class="nc" id="L200">                            runtimeLayout.getLogUnitClient(globalAddress, i)</span>
+<span class="nc" id="L201">                                    .write(data),</span>
+                            OverwriteException.class);
+                } else {
+<span class="nc" id="L204">                    Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);</span>
+<span class="nc" id="L205">                    LogData hole = LogData.getHole(token);</span>
+<span class="nc" id="L206">                    CFUtils.getUninterruptibly(runtimeLayout</span>
+<span class="nc" id="L207">                            .getLogUnitClient(globalAddress, i)</span>
+<span class="nc" id="L208">                            .write(hole), OverwriteException.class);</span>
+                }
+<span class="nc" id="L210">            } catch (OverwriteException oe) {</span>
+<span class="nc" id="L211">                log.info(&quot;Propagate[{}]: Completed by other writer&quot;, globalAddress);</span>
+<span class="nc" id="L212">            }</span>
+        }
+<span class="nc" id="L214">    }</span>
+
+    /**
+     * Recover a failed write at the given global address,
+     * driving it to completion by invoking the recovery
+     * protocol.
+     *
+     * &lt;p&gt;When this function returns the given globalAddress
+     * is guaranteed to contain a committed value.
+     *
+     * &lt;p&gt;If there was no data previously written at the address,
+     * this function will throw a runtime exception. The
+     * recovery protocol should -only- be invoked if we
+     * previously were overwritten.
+     *
+     * @param runtimeLayout the RuntimeLayout to use for the recovery.
+     * @param globalAddress the global address to drive the recovery protocol
+     */
+    private void recover(RuntimeLayout runtimeLayout, long globalAddress) {
+<span class="nc" id="L233">        final Layout layout = runtimeLayout.getLayout();</span>
+        // In chain replication, we started writing from the head,
+        // and propagated down to the tail. To recover, we start
+        // reading from the head, which should have the data
+        // we are trying to recover
+<span class="nc" id="L238">        int numUnits = layout.getSegmentLength(globalAddress);</span>
+<span class="nc" id="L239">        log.warn(&quot;Recover[{}]: read chain head {}/{}&quot;, Token.of(runtimeLayout.getLayout().getEpoch()</span>
+                , globalAddress),
+<span class="nc" id="L241">                1, numUnits);</span>
+<span class="nc" id="L242">        ILogData ld = CFUtils.getUninterruptibly(runtimeLayout</span>
+<span class="nc" id="L243">                .getLogUnitClient(globalAddress, 0)</span>
+<span class="nc" id="L244">                .read(globalAddress)).getAddresses().getOrDefault(globalAddress, null);</span>
+        // If nothing was at the head, this is a bug and we
+        // should fail with a runtime exception, as there
+        // was nothing to recover - if the head was removed
+        // due to a reconfiguration, a network exception
+        // would have been thrown and the client should have
+        // retried it's operation (in this case of a write,
+        // it should have read to determine whether the
+        // write was successful or not.
+<span class="nc bnc" id="L253" title="All 4 branches missed.">        if (ld == null || ld.isEmpty()) {</span>
+<span class="nc" id="L254">            throw new RecoveryException(&quot;Failed to read data during recovery at chain head.&quot;);</span>
+        }
+        // now we go down the chain and write, ignoring any overwrite exception we get.
+<span class="nc bnc" id="L257" title="All 2 branches missed.">        for (int i = 1; i &lt; numUnits; i++) {</span>
+<span class="nc" id="L258">            log.debug(&quot;Recover[{}]: write chain {}/{}&quot;, layout, i + 1, numUnits);</span>
+            // In chain replication, we write synchronously to every unit in the chain.
+            try {
+<span class="nc" id="L261">                CFUtils.getUninterruptibly(</span>
+<span class="nc" id="L262">                        runtimeLayout.getLogUnitClient(globalAddress, i).write(ld),</span>
+                        OverwriteException.class);
+                // We successfully recovered a write to this member of the chain
+<span class="nc" id="L265">                log.debug(&quot;Recover[{}]: recovered write at chain {}/{}&quot;, layout, i + 1, numUnits);</span>
+<span class="nc" id="L266">            } catch (OverwriteException oe) {</span>
+                // This member already had this data (in some cases, the write might have
+                // been committed to all members, so this is normal).
+<span class="nc" id="L269">                log.debug(&quot;Recover[{}]: overwritten at chain {}/{}&quot;, layout, i + 1, numUnits);</span>
+<span class="nc" id="L270">            }</span>
+        }
+<span class="nc" id="L272">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected void holeFill(RuntimeLayout runtimeLayout, long globalAddress) {
+<span class="nc" id="L279">        int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);</span>
+<span class="nc" id="L280">        log.warn(&quot;fillHole[{}]: chain head {}/{}&quot;, Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),</span>
+<span class="nc" id="L281">                1, numUnits);</span>
+        // In chain replication, we write synchronously to every unit in
+        // the chain.
+        try {
+<span class="nc" id="L285">            Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);</span>
+<span class="nc" id="L286">            LogData hole = LogData.getHole(token);</span>
+<span class="nc" id="L287">            CFUtils.getUninterruptibly(runtimeLayout</span>
+<span class="nc" id="L288">                    .getLogUnitClient(globalAddress, 0)</span>
+<span class="nc" id="L289">                    .write(hole), OverwriteException.class);</span>
+<span class="nc" id="L290">            propagate(runtimeLayout, globalAddress, null);</span>
+<span class="nc" id="L291">        } catch (OverwriteException oe) {</span>
+            // The hole-fill failed. We must ensure the other writer's
+            // value is adopted before returning.
+<span class="nc" id="L294">            recover(runtimeLayout, globalAddress);</span>
+<span class="nc" id="L295">        }</span>
+<span class="nc" id="L296">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

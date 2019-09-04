@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ManagementAgent.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">ManagementAgent.java</span></div><h1>ManagementAgent.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.concurrent.SingletonResource;
+
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
+
+/**
+ * Instantiates and performs failure detection and handling asynchronously.
+ *
+ * &lt;p&gt;Failure Detector:
+ * Executes detection policy to detect failed and healed nodes.
+ * It then checks for status of the nodes. If there are failed or healed nodes to be addressed,
+ * this then triggers the respective handler which then responds to these reconfiguration changes
+ * based on a policy.
+ *
+ * &lt;p&gt;Created by zlokhandwala on 1/15/18.
+ */
+<span class="nc" id="L31">@Slf4j</span>
+public class ManagementAgent {
+
+    private final ServerContext serverContext;
+
+
+    /**
+     * Interval in checking presence of management layout to start management agent tasks.
+     */
+<span class="nc" id="L40">    @Getter</span>
+<span class="nc" id="L41">    private static final Duration CHECK_BOOTSTRAP_INTERVAL = Duration.ofSeconds(1);</span>
+
+    /**
+     * Interval in retrying layout recovery when management server started.
+     */
+<span class="nc" id="L46">    private static final Duration RECOVERY_RETRY_INTERVAL = Duration.ofSeconds(1);</span>
+
+    /**
+     * To dispatch initialization tasks for recovery and sequencer bootstrap.
+     */
+<span class="nc" id="L51">    @Getter</span>
+    private final Thread initializationTaskThread;
+
+<span class="nc" id="L54">    private boolean recovered = false;</span>
+
+    private final SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource;
+
+<span class="nc" id="L58">    private volatile boolean shutdown = false;</span>
+
+    //  Locally collected server metrics polling interval.
+<span class="nc" id="L61">    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);</span>
+
+    /**
+     * MonitoringService to poll local server metrics:
+     * Sequencer ready/not ready state.
+     */
+<span class="nc" id="L67">    @Getter(AccessLevel.PROTECTED)</span>
+    private final LocalMonitoringService localMonitoringService;
+
+    /**
+     * Interval in executing the failure detection policy.
+     * In milliseconds.
+     */
+<span class="nc" id="L74">    @Getter</span>
+<span class="nc" id="L75">    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofSeconds(1);</span>
+
+    /**
+     * MonitoringService to detect faults and generate a cluster connectivity graph.
+     */
+<span class="nc" id="L80">    @Getter</span>
+    private final RemoteMonitoringService remoteMonitoringService;
+
+    /**
+     * Checks and restores if a layout is present in the local datastore to recover from.
+     * Spawns an initialization task which recovers if required, and start monitoring services.
+     *
+     * @param runtimeSingletonResource Singleton resource to fetch runtime.
+     * @param serverContext            Server Context.
+     */
+<span class="nc bnc" id="L90" title="All 2 branches missed.">    ManagementAgent(@NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource,</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">                    @NonNull ServerContext serverContext,</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">                    @NonNull ClusterStateContext clusterContext,</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">                    @NonNull FailureDetector failureDetector,</span>
+<span class="nc" id="L94">                    Layout managementLayout) {</span>
+<span class="nc" id="L95">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
+<span class="nc" id="L96">        this.serverContext = serverContext;</span>
+<span class="nc" id="L97">        this.localMonitoringService = new LocalMonitoringService(serverContext, runtimeSingletonResource);</span>
+
+        // If no state was preserved, there is no layout to recover.
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (managementLayout == null) {</span>
+<span class="nc" id="L101">            recovered = true;</span>
+        }
+
+        // The management server needs to check both the Layout Server's persisted layout as well
+        // as the Management Server's previously persisted layout. We try to recover from both of
+        // these as the more recent layout (with higher epoch is retained).
+        // When a node does not contain a layout server component and is trying to recover, we
+        // would completely rely on recovering from the management server's persisted layout.
+        // Else in every other case, the layout server is active and will contain the latest layout
+        // (In case of trailing layout server, the management server's persisted layout helps.)
+<span class="nc" id="L111">        serverContext.installSingleNodeLayoutIfAbsent();</span>
+<span class="nc" id="L112">        serverContext.saveManagementLayout(serverContext.getCurrentLayout());</span>
+<span class="nc" id="L113">        serverContext.saveManagementLayout(managementLayout);</span>
+
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (!recovered) {</span>
+<span class="nc" id="L116">            log.info(&quot;Attempting to recover. Layout before shutdown: {}&quot;, managementLayout);</span>
+        }
+
+<span class="nc" id="L119">        this.remoteMonitoringService = new RemoteMonitoringService(</span>
+                serverContext,
+                runtimeSingletonResource,
+                clusterContext,
+                failureDetector,
+                localMonitoringService
+        );
+
+        // Creating the initialization task thread.
+        // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
+        // One these tasks finish successfully, they initiate the detection tasks.
+<span class="nc" id="L130">        this.initializationTaskThread = new Thread(this::initializationTask, &quot;initializationTaskThread&quot;);</span>
+<span class="nc" id="L131">        this.initializationTaskThread.setUncaughtExceptionHandler(</span>
+                (thread, throwable) -&gt; {
+<span class="nc" id="L133">                    log.error(&quot;Error in initialization task: {}&quot;, throwable);</span>
+<span class="nc" id="L134">                    shutdown();</span>
+<span class="nc" id="L135">                });</span>
+<span class="nc" id="L136">        this.initializationTaskThread.start();</span>
+<span class="nc" id="L137">    }</span>
+
+    /**
+     * Initialization task.
+     * This task is blocked until the management server is bootstrapped and has a connected runtime.
+     * Performs recovery if required.
+     * Initiates the monitoring services which performs failure detection and healing detection tasks.
+     */
+    private void initializationTask() {
+<span class="nc" id="L146">        log.info(&quot;Start initialization task&quot;);</span>
+
+        // Wait for management server to be bootstrapped.
+        try {
+<span class="nc bnc" id="L150" title="All 4 branches missed.">            while (!shutdown &amp;&amp; serverContext.getManagementLayout() == null) {</span>
+<span class="nc" id="L151">                log.warn(&quot;initializationTask: Management Server waiting to be bootstrapped&quot;);</span>
+<span class="nc" id="L152">                TimeUnit.MILLISECONDS.sleep(CHECK_BOOTSTRAP_INTERVAL.toMillis());</span>
+            }
+<span class="nc" id="L154">        } catch (InterruptedException e) {</span>
+            // Due to shutdown, which interrupts this thread
+<span class="nc" id="L156">            log.debug(&quot;initializationTask: Initialization task interrupted without &quot; +</span>
+                    &quot;management server bootstrapped&quot;);
+<span class="nc" id="L158">            return;</span>
+<span class="nc" id="L159">        }</span>
+
+        // Retry layout recovery if need until success.
+<span class="nc" id="L162">        long recoveryAttempts = 0;</span>
+<span class="nc bnc" id="L163" title="All 4 branches missed.">        while (!shutdown &amp;&amp; !recovered) {</span>
+            try {
+<span class="nc" id="L165">                boolean recoveredSuccesfully = runRecoveryReconfiguration(</span>
+<span class="nc" id="L166">                        serverContext.copyManagementLayout(), getCorfuRuntime()</span>
+                );
+
+<span class="nc bnc" id="L169" title="All 2 branches missed.">                if (recoveredSuccesfully) {</span>
+                    // If recovery succeeds, reconfiguration was successful.
+                    // Save the latest management layout.
+<span class="nc" id="L172">                    serverContext.saveManagementLayout(getCorfuRuntime().getLayoutView().getLayout());</span>
+<span class="nc" id="L173">                    log.info(&quot;initializationTask: Recovery completed&quot;);</span>
+<span class="nc" id="L174">                    this.recovered = true;</span>
+<span class="nc" id="L175">                    continue;</span>
+                }
+
+<span class="nc" id="L178">                log.error(&quot;initializationTask: Recovery failed {} times. Retrying in {}s.&quot;,</span>
+<span class="nc" id="L179">                        ++recoveryAttempts, RECOVERY_RETRY_INTERVAL);</span>
+<span class="nc" id="L180">                TimeUnit.MILLISECONDS.sleep(RECOVERY_RETRY_INTERVAL.toMillis());</span>
+<span class="nc" id="L181">            } catch (InterruptedException e) {</span>
+                // Due to shutdown, which interrupts this thread
+<span class="nc" id="L183">                log.debug(&quot;initializationTask: Initialization task interrupted without being recovered&quot;);</span>
+<span class="nc" id="L184">                return;</span>
+<span class="nc" id="L185">            } catch (Exception e) {</span>
+                // Retry recovering for any exception encountered.
+<span class="nc" id="L187">                log.error(&quot;initializationTask: exception happened during layout recovery, {}&quot;, e);</span>
+<span class="nc" id="L188">            }</span>
+        }
+
+        // Start monitoring services that deals with failure and healing detection.
+<span class="nc bnc" id="L192" title="All 2 branches missed.">        if (!shutdown) {</span>
+<span class="nc" id="L193">            localMonitoringService.start(METRICS_POLL_INTERVAL);</span>
+<span class="nc" id="L194">            remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);</span>
+        }
+<span class="nc" id="L196">    }</span>
+
+    /**
+     * Returns a connected instance of the CorfuRuntime.
+     *
+     * @return A connected instance of runtime.
+     */
+    public CorfuRuntime getCorfuRuntime() {
+<span class="nc" id="L204">        return runtimeSingletonResource.get();</span>
+    }
+
+    /**
+     * Shutdown the initializationTaskThread and monitoring services.
+     */
+    public void shutdown() {
+        // Shutting the fault detector.
+<span class="nc" id="L212">        shutdown = true;</span>
+
+        try {
+<span class="nc" id="L215">            initializationTaskThread.interrupt();</span>
+<span class="nc" id="L216">            initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());</span>
+<span class="nc" id="L217">        } catch (InterruptedException ie) {</span>
+<span class="nc" id="L218">            log.error(&quot;initializationTask interrupted : {}&quot;, ie);</span>
+<span class="nc" id="L219">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
+<span class="nc" id="L220">        }</span>
+
+<span class="nc" id="L222">        remoteMonitoringService.shutdown();</span>
+<span class="nc" id="L223">        localMonitoringService.shutdown();</span>
+
+<span class="nc" id="L225">        log.info(&quot;Management Agent shutting down.&quot;);</span>
+<span class="nc" id="L226">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ObjectsView.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">ObjectsView.java</span></div><h1>ObjectsView.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import com.codahale.metrics.Timer;
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.Transaction;
+import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
+import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+
+import javax.annotation.Nonnull;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * A view of the objects inside a Corfu instance.
+ * Created by mwei on 1/7/16.
+ */
+<span class="nc" id="L37">@Slf4j</span>
+public class ObjectsView extends AbstractView {
+
+<span class="nc" id="L40">    private static final String TXN_COMMIT_TIMER_NAME =</span>
+<span class="nc" id="L41">            CorfuComponent.OBJECT.toString() + &quot;txn-commit-duration&quot;;</span>
+    /**
+     * The Transaction stream is used to log/write successful transactions from different clients.
+     * Transaction data and meta data can be obtained by reading this stream.
+     */
+<span class="nc" id="L46">    public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID(&quot;Transaction_Stream&quot;);</span>
+
+<span class="nc" id="L48">    @Getter</span>
+<span class="nc" id="L49">    @Setter</span>
+    boolean transactionLogging = false;
+
+
+<span class="nc" id="L53">    @Getter</span>
+    Map&lt;ObjectID, Object&gt; objectCache = new ConcurrentHashMap&lt;&gt;();
+
+    public ObjectsView(@Nonnull final CorfuRuntime runtime) {
+<span class="nc" id="L57">        super(runtime);</span>
+<span class="nc" id="L58">    }</span>
+
+    /**
+     * Return an object builder which builds a new object.
+     *
+     * @return An object builder to open an object with.
+     */
+    public ObjectBuilder&lt;?&gt; build() {
+<span class="nc" id="L66">        return new ObjectBuilder(runtime);</span>
+    }
+
+    /**
+     * Begins a transaction on the current thread.
+     * Automatically selects the correct transaction strategy.
+     * Modifications to objects will not be visible
+     * to other threads or clients until TXEnd is called.
+     */
+    @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
+    public void TXBegin() {
+<span class="nc" id="L77">        TransactionType type = TransactionType.OPTIMISTIC;</span>
+
+        /* If it is a nested transaction, inherit type of parent */
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
+<span class="nc" id="L81">            type = TransactionalContext.getCurrentContext().getTransaction().getType();</span>
+<span class="nc" id="L82">            log.trace(&quot;Inheriting parent's transaction type {}&quot;, type);</span>
+        }
+
+<span class="nc" id="L85">        TXBuild()</span>
+<span class="nc" id="L86">                .type(type)</span>
+<span class="nc" id="L87">                .build()</span>
+<span class="nc" id="L88">                .begin();</span>
+<span class="nc" id="L89">    }</span>
+
+    /**
+     * Builds a new transaction using the transaction
+     * builder.
+     *
+     * @return A transaction builder to build a transaction with.
+     */
+    @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
+    public TransactionBuilder TXBuild() {
+<span class="nc" id="L99">        TransactionBuilder builder = Transaction.builder();</span>
+<span class="nc" id="L100">        builder.runtime(runtime);</span>
+<span class="nc" id="L101">        return builder;</span>
+    }
+
+    /**
+     * Aborts a transaction on the current thread.
+     * Modifications to objects in the current transactional
+     * context will be discarded.
+     */
+    @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
+    public void TXAbort() {
+<span class="nc" id="L111">        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (context == null) {</span>
+<span class="nc" id="L113">            log.warn(&quot;Attempted to abort a transaction, but no transaction active!&quot;);</span>
+        } else {
+<span class="nc" id="L115">            TxResolutionInfo txInfo = new TxResolutionInfo(</span>
+<span class="nc" id="L116">                    context.getTransactionID(), context.getSnapshotTimestamp());</span>
+<span class="nc" id="L117">            context.abortTransaction(new TransactionAbortedException(</span>
+                    txInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,
+<span class="nc" id="L119">                    Address.NON_ADDRESS, AbortCause.USER, context));</span>
+<span class="nc" id="L120">            TransactionalContext.removeContext();</span>
+        }
+<span class="nc" id="L122">    }</span>
+
+    /**
+     * Query whether a transaction is currently running.
+     *
+     * @return True, if called within a transactional context,
+     * False, otherwise.
+     */
+    @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
+    public boolean TXActive() {
+<span class="nc" id="L132">        return TransactionalContext.isInTransaction();</span>
+    }
+
+    /**
+     * End a transaction on the current thread.
+     *
+     * @return The address of the transaction, if it commits.
+     * @throws TransactionAbortedException If the transaction could not be executed successfully.
+     */
+    @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
+    public long TXEnd() throws TransactionAbortedException {
+<span class="nc" id="L143">        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
+<span class="nc bnc" id="L144" title="All 2 branches missed.">        if (context == null) {</span>
+<span class="nc" id="L145">            log.warn(&quot;Attempted to end a transaction, but no transaction active!&quot;);</span>
+<span class="nc" id="L146">            return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;</span>
+        }
+
+        // Continue with ending the transaction if the context is not null
+<span class="nc" id="L150">        long totalTime = System.currentTimeMillis() - context.getStartTime();</span>
+<span class="nc" id="L151">        log.trace(&quot;TXEnd[{}] time={} ms&quot;, context, totalTime);</span>
+
+        // If exist, stop the timer for timing the beginning of transaction to start of commit.
+<span class="nc bnc" id="L154" title="All 2 branches missed.">        if (context.getTxOpDurationContext() != null) {</span>
+<span class="nc" id="L155">            context.getTxOpDurationContext().stop();</span>
+        }
+
+        // Create a timer to measure the transaction commit duration
+<span class="nc" id="L159">        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);</span>
+<span class="nc" id="L160">        try (Timer.Context txCommitDuration =</span>
+<span class="nc" id="L161">                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){</span>
+<span class="nc" id="L162">            return TransactionalContext.getCurrentContext().commitTransaction();</span>
+<span class="nc bnc" id="L163" title="All 8 branches missed.">        } catch (TransactionAbortedException e) {</span>
+<span class="nc" id="L164">            log.warn(&quot;TXEnd[{}] Aborted Exception {}&quot;, context, e);</span>
+<span class="nc" id="L165">            TransactionalContext.getCurrentContext().abortTransaction(e);</span>
+<span class="nc" id="L166">            throw e;</span>
+<span class="nc" id="L167">        } catch (NetworkException | WriteSizeException | QuotaExceededException e) {</span>
+
+            Token snapshotTimestamp;
+            try {
+<span class="nc" id="L171">                snapshotTimestamp = context.getSnapshotTimestamp();</span>
+<span class="nc" id="L172">            } catch (NetworkException ne) {</span>
+<span class="nc" id="L173">                snapshotTimestamp = Token.UNINITIALIZED;</span>
+<span class="nc" id="L174">            }</span>
+<span class="nc" id="L175">            TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),</span>
+                    snapshotTimestamp);
+
+<span class="nc" id="L178">            AbortCause cause = AbortCause.UNDEFINED;</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">            if (e instanceof NetworkException) {</span>
+<span class="nc" id="L180">                log.warn(&quot;TXEnd[{}] Network Exception {}&quot;, context, e);</span>
+<span class="nc" id="L181">                cause = AbortCause.NETWORK;</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">            } else if (e instanceof WriteSizeException) {</span>
+<span class="nc" id="L183">                log.error(&quot;TXEnd[{}] transaction size limit exceeded {}&quot;, context, e);</span>
+<span class="nc" id="L184">                cause = AbortCause.SIZE_EXCEEDED;</span>
+<span class="nc bnc" id="L185" title="All 2 branches missed.">            } else if (e instanceof QuotaExceededException){</span>
+<span class="nc" id="L186">                log.error(&quot;TXEnd[{}] server quota exceeded {}&quot;, context, e);</span>
+<span class="nc" id="L187">                cause = AbortCause.QUOTA_EXCEEDED;</span>
+            }
+
+<span class="nc" id="L190">            TransactionAbortedException tae = new TransactionAbortedException(</span>
+                    txInfo, cause, e, context);
+<span class="nc" id="L192">            context.abortTransaction(tae);</span>
+<span class="nc" id="L193">            throw tae;</span>
+
+<span class="nc" id="L195">        } catch (Exception e) {</span>
+<span class="nc" id="L196">            log.error(&quot;TXEnd[{}]: Unexpected exception&quot;, context, e);</span>
+<span class="nc" id="L197">            TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),</span>
+                    Token.UNINITIALIZED);
+<span class="nc" id="L199">            TransactionAbortedException tae = new TransactionAbortedException(</span>
+                    txInfo, AbortCause.UNDEFINED, e, context);
+<span class="nc" id="L201">            context.abortTransaction(tae);</span>
+<span class="nc" id="L202">            throw new UnrecoverableCorfuError(&quot;Unexpected exception during commit&quot;, e);</span>
+        } finally {
+<span class="nc" id="L204">            TransactionalContext.removeContext();</span>
+<span class="nc" id="L205">        }</span>
+    }
+
+    /**
+     * Run garbage collection on all opened objects. Note that objects
+     * open with the NO_CACHE options will not be gc'd
+     */
+    public void gc(long trimMark) {
+<span class="nc bnc" id="L213" title="All 2 branches missed.">        for (Object obj : getObjectCache().values()) {</span>
+<span class="nc" id="L214">            ((CorfuCompileProxy) ((ICorfuSMR) obj).</span>
+<span class="nc" id="L215">                    getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);</span>
+<span class="nc" id="L216">        }</span>
+<span class="nc" id="L217">    }</span>
+
+<span class="nc bnc" id="L219" title="All 22 branches missed.">    @Data</span>
+    @SuppressWarnings({&quot;checkstyle:abbreviation&quot;})
+    public static class ObjectID&lt;T&gt; {
+<span class="nc" id="L222">        final UUID streamID;</span>
+<span class="nc" id="L223">        final Class&lt;T&gt; type;</span>
+
+        public String toString() {
+<span class="nc" id="L226">            return &quot;[&quot; + streamID + &quot;, &quot; + type.getSimpleName() + &quot;]&quot;;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

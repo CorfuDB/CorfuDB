@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ClientMsgHandler.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.clients</a> &gt; <span class="el_source">ClientMsgHandler.java</span></div><h1>ClientMsgHandler.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.clients;
+
+import io.netty.channel.ChannelHandlerContext;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+
+import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Invokes the message handler to handle incoming messages.
+ *
+ * &lt;p&gt;Created by mwei on 7/27/16.
+ */
+<span class="nc" id="L24">@Slf4j</span>
+public class ClientMsgHandler {
+
+    @FunctionalInterface
+    public interface Handler&lt;T extends CorfuMsg&gt; {
+        Object handle(T corfuMsg, ChannelHandlerContext ctx, IClientRouter r) throws Exception;
+    }
+
+    /**
+     * The handler map.
+     */
+    private final Map&lt;CorfuMsgType, ClientMsgHandler.Handler&gt; handlerMap;
+
+    /**
+     * The client.
+     */
+    private final IClient client;
+
+    /**
+     * Construct a new instance of ClientMsgHandler.
+     */
+<span class="nc" id="L45">    public ClientMsgHandler(IClient client) {</span>
+<span class="nc" id="L46">        this.client = client;</span>
+<span class="nc" id="L47">        handlerMap = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L48">    }</span>
+
+    /**
+     * Add a handler to this message handler.
+     *
+     * @param messageType The type of CorfuMsg this handler will handle.
+     * @param handler     The handler itself.
+     * @param &lt;T&gt;         A CorfuMsg type.
+     * @return This handler, to support chaining.
+     */
+    public &lt;T extends CorfuMsg&gt; ClientMsgHandler addHandler(CorfuMsgType messageType,
+                                                            ClientMsgHandler.Handler&lt;T&gt; handler) {
+<span class="nc" id="L60">        handlerMap.put(messageType, handler);</span>
+<span class="nc" id="L61">        return this;</span>
+    }
+
+    /**
+     * Handle an incoming CorfuMsg.
+     *
+     * @param message The message to handle.
+     * @param ctx     The channel handler context.
+     * @return True, if the message was handled. False otherwise.
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx) {
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (handlerMap.containsKey(message.getMsgType())) {</span>
+            try {
+<span class="nc" id="L75">                Object ret = handlerMap.get(message.getMsgType())</span>
+<span class="nc" id="L76">                        .handle(message, ctx, client.getRouter());</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">                if (ret != null) {</span>
+<span class="nc" id="L78">                    client.getRouter().completeRequest(message.getRequestID(), ret);</span>
+                }
+<span class="nc" id="L80">            } catch (Exception ex) {</span>
+<span class="nc" id="L81">                client.getRouter().completeExceptionally(message.getRequestID(), ex);</span>
+<span class="nc" id="L82">            }</span>
+<span class="nc" id="L83">            return true;</span>
+        }
+<span class="nc" id="L85">        return false;</span>
+    }
+
+
+    /**
+     * Generate handlers for a particular client.
+     *
+     * @param caller The context that is being used. Call MethodHandles.lookup() to obtain.
+     * @param o      The object that implements the client.
+     * @return Returns a handler to handle incoming messages to clients.
+     */
+<span class="nc bnc" id="L96" title="All 2 branches missed.">    public ClientMsgHandler generateHandlers(@NonNull final MethodHandles.Lookup caller,</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">                                             @NonNull final Object o) {</span>
+<span class="nc" id="L98">        Arrays.stream(o.getClass().getDeclaredMethods())</span>
+<span class="nc" id="L99">                .filter(x -&gt; x.isAnnotationPresent(ClientHandler.class))</span>
+<span class="nc" id="L100">                .forEach(x -&gt; {</span>
+<span class="nc" id="L101">                    ClientHandler a = x.getAnnotation(ClientHandler.class);</span>
+<span class="nc" id="L102">                    if (!x.getParameterTypes()[0]</span>
+<span class="nc bnc" id="L103" title="All 2 branches missed.">                            .isAssignableFrom(a.type().messageType.getRawType())) {</span>
+<span class="nc" id="L104">                        throw new RuntimeException(&quot;Incorrect message type, expected &quot;</span>
+<span class="nc" id="L105">                                + a.type().messageType.getRawType() + &quot; but provided &quot;</span>
+<span class="nc" id="L106">                                + x.getParameterTypes()[0]);</span>
+                    }
+<span class="nc bnc" id="L108" title="All 2 branches missed.">                    if (handlerMap.containsKey(a.type())) {</span>
+<span class="nc" id="L109">                        throw new RuntimeException(&quot;Handler for &quot; + a.type()</span>
+                                + &quot; already registered!&quot;);
+                    }
+                    // convert the method into a Java8 Lambda for maximum execution speed...
+                    try {
+<span class="nc bnc" id="L114" title="All 2 branches missed.">                        if (Modifier.isStatic(x.getModifiers())) {</span>
+<span class="nc" id="L115">                            MethodHandle mh = caller.unreflect(x);</span>
+<span class="nc" id="L116">                            MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);</span>
+<span class="nc" id="L117">                            handlerMap.put(a.type(), (ClientMsgHandler.Handler) LambdaMetafactory</span>
+<span class="nc" id="L118">                                    .metafactory(caller, &quot;handle&quot;,</span>
+<span class="nc" id="L119">                                            MethodType.methodType(ClientMsgHandler.Handler.class),</span>
+<span class="nc" id="L120">                                            mt, mh, mh.type())</span>
+<span class="nc" id="L121">                                    .getTarget().invokeExact());</span>
+<span class="nc" id="L122">                        } else {</span>
+                            // instance method, so we need to capture the type.
+<span class="nc" id="L124">                            MethodType mt = MethodType</span>
+<span class="nc" id="L125">                                    .methodType(x.getReturnType(), x.getParameterTypes());</span>
+<span class="nc" id="L126">                            MethodHandle mh = caller.findVirtual(o.getClass(), x.getName(), mt);</span>
+<span class="nc" id="L127">                            MethodType mtGeneric = mh.type()</span>
+<span class="nc" id="L128">                                    .changeParameterType(1, CorfuMsg.class)</span>
+<span class="nc" id="L129">                                    .changeReturnType(Object.class);</span>
+<span class="nc" id="L130">                            handlerMap.put(a.type(), (ClientMsgHandler.Handler) LambdaMetafactory</span>
+<span class="nc" id="L131">                                    .metafactory(caller, &quot;handle&quot;,</span>
+<span class="nc" id="L132">                                            MethodType.methodType(ClientMsgHandler.Handler.class,</span>
+<span class="nc" id="L133">                                                    o.getClass()),</span>
+<span class="nc" id="L134">                                            mtGeneric.dropParameterTypes(0, 1), mh, mh.type()</span>
+<span class="nc" id="L135">                                                    .dropParameterTypes(0, 1))</span>
+<span class="nc" id="L136">                                    .getTarget().bindTo(o).invoke());</span>
+                        }
+<span class="nc" id="L138">                    } catch (Throwable e) {</span>
+<span class="nc" id="L139">                        log.error(&quot;Exception during incoming message handling&quot;, e);</span>
+<span class="nc" id="L140">                        throw new RuntimeException(e);</span>
+<span class="nc" id="L141">                    }</span>
+<span class="nc" id="L142">                });</span>
+<span class="nc" id="L143">        return this;</span>
+    }
+
+    /**
+     * Get the types this handler will handle.
+     *
+     * @return The types this handler will handle.
+     */
+    public Set&lt;CorfuMsgType&gt; getHandledTypes() {
+<span class="nc" id="L152">        return handlerMap.keySet();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

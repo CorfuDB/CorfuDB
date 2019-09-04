@@ -1,0 +1,4 @@
+/Users/lidong/vmware_proj/CorfuDB/runtime/src/test/java/org/corfudb/protocols/wireprotocol/NodeStateTest.java
+/Users/lidong/vmware_proj/CorfuDB/runtime/src/test/java/org/corfudb/runtime/view/LayoutTest.java
+/Users/lidong/vmware_proj/CorfuDB/runtime/src/test/java/org/corfudb/protocols/wireprotocol/ICorfuPayloadTest.java
+/Users/lidong/vmware_proj/CorfuDB/runtime/src/test/java/org/corfudb/protocols/wireprotocol/failuredetector/NodeConnectivityTest.java

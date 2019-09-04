@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SMREntry.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.logprotocol</a> &gt; <span class="el_source">SMREntry.java</span></div><h1>SMREntry.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.logprotocol;
+
+import io.netty.buffer.ByteBuf;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
+
+/**
+ * Created by mwei on 1/8/16.
+ */
+@SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+<span class="nc" id="L22">@ToString(callSuper = true)</span>
+<span class="nc" id="L23">@NoArgsConstructor</span>
+public class SMREntry extends LogEntry implements ISMRConsumable {
+
+    /**
+     * The name of the SMR method. Note that this is limited to the size of a short.
+     */
+    @SuppressWarnings(&quot;checkstyle:MemberName&quot;)
+<span class="nc" id="L30">    @Getter</span>
+    private String SMRMethod;
+
+    /**
+     * The arguments to the SMR method, which could be 0.
+     */
+    @SuppressWarnings(&quot;checkstyle:MemberName&quot;)
+<span class="nc" id="L37">    @Getter</span>
+    private Object[] SMRArguments;
+
+    /**
+     * The serializer used to serialize the SMR arguments.
+     */
+<span class="nc" id="L43">    @Getter</span>
+    private ISerializer serializerType;
+
+    /** An undo record, which can be used to undo this method.
+     *
+     */
+<span class="nc" id="L49">    @Getter</span>
+    public transient Object undoRecord;
+
+    /** A flag indicating whether an undo record is present. Necessary
+     * because undo records may be NULL.
+     */
+<span class="nc" id="L55">    @Getter</span>
+    public boolean undoable;
+
+    /** The upcall result, if present. */
+<span class="nc" id="L59">    @Getter</span>
+    public transient Object upcallResult;
+
+    /** If there is an upcall result for this modification. */
+<span class="nc" id="L63">    @Getter</span>
+    public transient boolean haveUpcallResult = false;
+
+    /** Set the upcall result for this entry. */
+    public void setUpcallResult(Object result) {
+<span class="nc" id="L68">        upcallResult = result;</span>
+<span class="nc" id="L69">        haveUpcallResult = true;</span>
+<span class="nc" id="L70">    }</span>
+
+    /** Set the undo record for this entry. */
+    public void setUndoRecord(Object object) {
+<span class="nc" id="L74">        this.undoRecord = object;</span>
+<span class="nc" id="L75">        undoable = true;</span>
+<span class="nc" id="L76">    }</span>
+
+    /** Clear the undo record for this entry. */
+    public void clearUndoRecord() {
+<span class="nc" id="L80">        this.undoRecord = null;</span>
+<span class="nc" id="L81">        undoable = false;</span>
+<span class="nc" id="L82">    }</span>
+
+
+    /** SMREntry constructor. */
+<span class="nc bnc" id="L86" title="All 2 branches missed.">    public SMREntry(String smrMethod, @NonNull Object[] smrArguments, ISerializer serializer) {</span>
+<span class="nc" id="L87">        super(LogEntryType.SMR);</span>
+<span class="nc" id="L88">        this.SMRMethod = smrMethod;</span>
+<span class="nc" id="L89">        this.SMRArguments = smrArguments;</span>
+<span class="nc" id="L90">        this.serializerType = serializer;</span>
+<span class="nc" id="L91">    }</span>
+
+    /**
+     * This function provides the remaining buffer. Child entries
+     * should initialize their contents based on the buffer.
+     *
+     * @param b The remaining buffer.
+     */
+    @Override
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+<span class="nc" id="L101">        super.deserializeBuffer(b, rt);</span>
+<span class="nc" id="L102">        short methodLength = b.readShort();</span>
+<span class="nc" id="L103">        byte[] methodBytes = new byte[methodLength];</span>
+<span class="nc" id="L104">        b.readBytes(methodBytes, 0, methodLength);</span>
+<span class="nc" id="L105">        SMRMethod = new String(methodBytes);</span>
+<span class="nc" id="L106">        serializerType = Serializers.getSerializer(b.readByte());</span>
+<span class="nc" id="L107">        byte numArguments = b.readByte();</span>
+<span class="nc" id="L108">        Object[] arguments = new Object[numArguments];</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        for (byte arg = 0; arg &lt; numArguments; arg++) {</span>
+<span class="nc" id="L110">            int len = b.readInt();</span>
+<span class="nc" id="L111">            ByteBuf objBuf = b.slice(b.readerIndex(), len);</span>
+<span class="nc" id="L112">            arguments[arg] = serializerType.deserialize(objBuf, rt);</span>
+<span class="nc" id="L113">            b.skipBytes(len);</span>
+        }
+<span class="nc" id="L115">        SMRArguments = arguments;</span>
+<span class="nc" id="L116">    }</span>
+
+    @Override
+    public void serialize(ByteBuf b) {
+<span class="nc" id="L120">        super.serialize(b);</span>
+<span class="nc" id="L121">        b.writeShort(SMRMethod.length());</span>
+<span class="nc" id="L122">        b.writeBytes(SMRMethod.getBytes());</span>
+<span class="nc" id="L123">        b.writeByte(serializerType.getType());</span>
+<span class="nc" id="L124">        b.writeByte(SMRArguments.length);</span>
+<span class="nc" id="L125">        Arrays.stream(SMRArguments)</span>
+<span class="nc" id="L126">                .forEach(x -&gt; {</span>
+<span class="nc" id="L127">                    int lengthIndex = b.writerIndex();</span>
+<span class="nc" id="L128">                    b.writeInt(0);</span>
+<span class="nc" id="L129">                    serializerType.serialize(x, b);</span>
+<span class="nc" id="L130">                    int length = b.writerIndex() - lengthIndex - 4;</span>
+<span class="nc" id="L131">                    b.writerIndex(lengthIndex);</span>
+<span class="nc" id="L132">                    b.writeInt(length);</span>
+<span class="nc" id="L133">                    b.writerIndex(lengthIndex + length + 4);</span>
+<span class="nc" id="L134">                });</span>
+<span class="nc" id="L135">    }</span>
+
+    @Override
+    public List&lt;SMREntry&gt; getSMRUpdates(UUID id) {
+        // TODO: we should check that the id matches the id of this entry,
+        // but replex erases this information.
+<span class="nc" id="L141">        return Collections.singletonList(this);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

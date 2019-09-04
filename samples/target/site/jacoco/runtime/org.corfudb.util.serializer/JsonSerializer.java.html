@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>JsonSerializer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util.serializer</a> &gt; <span class="el_source">JsonSerializer.java</span></div><h1>JsonSerializer.java</h1><pre class="source lang-java linenums">package org.corfudb.util.serializer;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
+
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.util.UUID;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMR;
+
+
+/**
+ * Created by mwei on 2/10/16.
+ */
+<span class="nc" id="L23">@Slf4j</span>
+public class JsonSerializer implements ISerializer {
+    private final byte type;
+
+<span class="nc" id="L27">    private static final Gson gson = new GsonBuilder()</span>
+<span class="nc" id="L28">            .create();</span>
+
+<span class="nc" id="L30">    public JsonSerializer(byte type) {</span>
+<span class="nc" id="L31">        this.type = type;</span>
+<span class="nc" id="L32">    }</span>
+
+    @Override
+    public byte getType() {
+<span class="nc" id="L36">        return type;</span>
+    }
+
+    /**
+     * Deserialize an object from a given byte buffer.
+     *
+     * @param b The bytebuf to deserialize.
+     * @return The deserialized object.
+     */
+    @Override
+    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+<span class="nc" id="L47">        int classNameLength = b.readShort();</span>
+<span class="nc" id="L48">        byte[] classNameBytes = new byte[classNameLength];</span>
+<span class="nc" id="L49">        b.readBytes(classNameBytes, 0, classNameLength);</span>
+<span class="nc" id="L50">        String className = new String(classNameBytes);</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        if (className.equals(&quot;null&quot;)) {</span>
+<span class="nc" id="L52">            return null;</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        } else if (className.equals(&quot;CorfuObject&quot;)) {</span>
+<span class="nc" id="L54">            int smrClassNameLength = b.readShort();</span>
+<span class="nc" id="L55">            byte[] smrClassNameBytes = new byte[smrClassNameLength];</span>
+<span class="nc" id="L56">            b.readBytes(smrClassNameBytes, 0, smrClassNameLength);</span>
+<span class="nc" id="L57">            String smrClassName = new String(smrClassNameBytes);</span>
+            try {
+<span class="nc" id="L59">                return rt.getObjectsView().build()</span>
+<span class="nc" id="L60">                        .setStreamID(new UUID(b.readLong(), b.readLong()))</span>
+<span class="nc" id="L61">                        .setType(Class.forName(smrClassName))</span>
+<span class="nc" id="L62">                        .open();</span>
+<span class="nc" id="L63">            } catch (ClassNotFoundException cnfe) {</span>
+<span class="nc" id="L64">                log.error(&quot;Exception during deserialization!&quot;, cnfe);</span>
+<span class="nc" id="L65">                throw new RuntimeException(cnfe);</span>
+            }
+        } else {
+<span class="nc" id="L68">            try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {</span>
+<span class="nc" id="L69">                try (InputStreamReader r = new InputStreamReader(bbis)) {</span>
+<span class="nc" id="L70">                    return gson.fromJson(r, Class.forName(className));</span>
+<span class="nc bnc" id="L71" title="All 8 branches missed.">                }</span>
+<span class="nc bnc" id="L72" title="All 8 branches missed.">            } catch (IOException | ClassNotFoundException ie) {</span>
+<span class="nc" id="L73">                log.error(&quot;Exception during deserialization!&quot;, ie);</span>
+<span class="nc" id="L74">                throw new RuntimeException(ie);</span>
+            }
+        }
+    }
+
+    /**
+     * Serialize an object into a given byte buffer.
+     *
+     * @param o The object to serialize.
+     * @param b The bytebuf to serialize it into.
+     */
+    @Override
+    public void serialize(Object o, ByteBuf b) {
+<span class="nc bnc" id="L87" title="All 2 branches missed.">        String className = o == null ? &quot;null&quot; : o.getClass().getName();</span>
+<span class="nc bnc" id="L88" title="All 2 branches missed.">        if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {</span>
+<span class="nc" id="L89">            className = &quot;CorfuObject&quot;;</span>
+<span class="nc" id="L90">            byte[] classNameBytes = className.getBytes();</span>
+<span class="nc" id="L91">            b.writeShort(classNameBytes.length);</span>
+<span class="nc" id="L92">            b.writeBytes(classNameBytes);</span>
+<span class="nc" id="L93">            String smrClass = className.split(&quot;\\$&quot;)[0];</span>
+<span class="nc" id="L94">            byte[] smrClassNameBytes = smrClass.getBytes();</span>
+<span class="nc" id="L95">            b.writeShort(smrClassNameBytes.length);</span>
+<span class="nc" id="L96">            b.writeBytes(smrClassNameBytes);</span>
+<span class="nc" id="L97">            UUID id = ((ICorfuSMR) o).getCorfuStreamID();</span>
+<span class="nc" id="L98">            log.trace(&quot;Serializing a CorfuObject of type {} as a stream pointer to {}&quot;,</span>
+                    smrClass, id);
+<span class="nc" id="L100">            b.writeLong(id.getMostSignificantBits());</span>
+<span class="nc" id="L101">            b.writeLong(id.getLeastSignificantBits());</span>
+<span class="nc" id="L102">        } else {</span>
+<span class="nc" id="L103">            byte[] classNameBytes = className.getBytes();</span>
+<span class="nc" id="L104">            b.writeShort(classNameBytes.length);</span>
+<span class="nc" id="L105">            b.writeBytes(classNameBytes);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">            if (o == null) {</span>
+<span class="nc" id="L107">                return;</span>
+            }
+<span class="nc" id="L109">            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b)) {</span>
+<span class="nc" id="L110">                try (OutputStreamWriter osw = new OutputStreamWriter(bbos)) {</span>
+<span class="nc" id="L111">                    gson.toJson(o, o.getClass(), osw);</span>
+<span class="nc bnc" id="L112" title="All 8 branches missed.">                }</span>
+<span class="nc bnc" id="L113" title="All 8 branches missed.">            } catch (IOException ie) {</span>
+<span class="nc" id="L114">                log.error(&quot;Exception during serialization!&quot;, ie);</span>
+<span class="nc" id="L115">            }</span>
+        }
+<span class="nc" id="L117">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

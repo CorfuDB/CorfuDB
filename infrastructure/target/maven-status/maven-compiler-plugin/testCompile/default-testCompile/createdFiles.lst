@@ -1,0 +1,15 @@
+org/corfudb/infrastructure/management/ClusterStateCollectorTest.class
+org/corfudb/infrastructure/management/NetworkStretcherTest.class
+org/corfudb/infrastructure/management/ClusterGraphTest.class
+org/corfudb/infrastructure/log/StreamLogDataStoreTest.class
+org/corfudb/infrastructure/management/NodeStateTestUtil$NodeName.class
+org/corfudb/infrastructure/management/ClusterStateAggregatorTest.class
+org/corfudb/infrastructure/management/NodeStateTestUtil.class
+org/corfudb/infrastructure/management/ClusterStateTest.class
+org/corfudb/infrastructure/management/CompleteGraphAdvisorTest.class
+org/corfudb/infrastructure/CorfuAbstractServerTest$1.class
+org/corfudb/infrastructure/management/PollReportTest.class
+org/corfudb/infrastructure/CorfuAbstractServerTest.class
+org/corfudb/infrastructure/management/FailureDetectorTest.class
+org/corfudb/infrastructure/log/StreamLogChecksumTest.class
+org/corfudb/infrastructure/management/NodeRankTest.class

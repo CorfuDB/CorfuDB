@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MBeanUtils.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">cmdlets</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.metrics</a> &gt; <span class="el_source">MBeanUtils.java</span></div><h1>MBeanUtils.java</h1><pre class="source lang-java linenums">package org.corfudb.metrics;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+
+import javax.management.AttributeList;
+import javax.management.InstanceNotFoundException;
+import javax.management.IntrospectionException;
+import javax.management.MBeanAttributeInfo;
+import javax.management.MBeanInfo;
+import javax.management.MBeanServerConnection;
+import javax.management.MalformedObjectNameException;
+import javax.management.ObjectName;
+import javax.management.ReflectionException;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * A utility class to access a JMX server. Provides methods to retrieve attributes
+ * as well as to export them to files.
+ *
+ * Created by Sam Behnam on 4/4/18.
+ */
+
+<span class="nc" id="L35">@Slf4j</span>
+class MBeanUtils {
+<span class="nc" id="L37">    private MBeanUtils() {</span>
+        // prevent instantiation of this class
+<span class="nc" id="L39">    }</span>
+
+    /**
+     * Fetches the MBean objects and their attributes from a JMX server at the provided
+     * service URL. It filters the results based on the provided domains. If the attributes
+     * for an MBean object can not be fetched it will emit a warning to the default logger
+     * and adds an empty entry for that object.
+     *
+     * @param serviceURL A well-formed JMX server's service URL. for example:
+     *                   &quot;service:jmx:rmi:///jndi/rmi://SERVER-IP:PORT/jmxrmi&quot;
+     *
+     * @param domains An array of domains for which attributes will be fetched from the
+     *                JMX server. An empty array results in returning attributes for all
+     *                domains.
+     *
+     * @return A map of MBean object names and their corresponding attributes.
+     *
+     * @throws IOException
+     * @throws MalformedObjectNameException
+     * @throws IntrospectionException
+     */
+<span class="nc bnc" id="L60" title="All 2 branches missed.">    static Map&lt;ObjectName, AttributeList&gt; getMBeanAttributes(@NonNull String serviceURL,</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">                                                             @NonNull String[] domains)</span>
+            throws IOException,
+            MalformedObjectNameException,
+            IntrospectionException {
+
+<span class="nc" id="L66">        final JMXServiceURL url = new JMXServiceURL(serviceURL);</span>
+        final Map&lt;ObjectName, AttributeList&gt; jmxDump;
+
+<span class="nc" id="L69">        try (JMXConnector connectorClient = JMXConnectorFactory.connect(url, null)) {</span>
+<span class="nc" id="L70">            final MBeanServerConnection mBeanServerConnection = connectorClient.getMBeanServerConnection();</span>
+<span class="nc" id="L71">            final Set&lt;ObjectName&gt; objectNames = getObjectNamesForDomains(mBeanServerConnection, domains);</span>
+<span class="nc" id="L72">            jmxDump = new HashMap&lt;&gt;(objectNames.size());</span>
+
+<span class="nc bnc" id="L74" title="All 2 branches missed.">            for (ObjectName objectName : objectNames) {</span>
+<span class="nc" id="L75">                AttributeList attributeList = new AttributeList();</span>
+                try {
+<span class="nc" id="L77">                    final MBeanInfo beanInfo = mBeanServerConnection.getMBeanInfo(objectName);</span>
+<span class="nc" id="L78">                    final MBeanAttributeInfo[] beanInfoAttributes = beanInfo.getAttributes();</span>
+<span class="nc" id="L79">                    String[] attributeNames = new String[beanInfoAttributes.length];</span>
+<span class="nc bnc" id="L80" title="All 2 branches missed.">                    for (int i = 0; i &lt; beanInfoAttributes.length; i++) {</span>
+<span class="nc" id="L81">                        attributeNames[i] = beanInfoAttributes[i].getName();</span>
+                    }
+<span class="nc" id="L83">                    Arrays.sort(attributeNames);</span>
+
+<span class="nc" id="L85">                    attributeList = mBeanServerConnection.getAttributes(objectName, attributeNames);</span>
+<span class="nc" id="L86">                } catch (InstanceNotFoundException |</span>
+                        ReflectionException |
+                        IOException e) {
+<span class="nc" id="L89">                    log.warn(&quot;Unable to fetch attributes for {}&quot;, objectName.toString());</span>
+<span class="nc" id="L90">                }</span>
+<span class="nc" id="L91">                jmxDump.put(objectName, attributeList);</span>
+<span class="nc" id="L92">            }</span>
+<span class="nc bnc" id="L93" title="All 8 branches missed.">        }</span>
+
+<span class="nc" id="L95">        return jmxDump;</span>
+    }
+
+    /**
+     * Fetches the MBean object names from a JMX server. It filters the results
+     * by retrieving attributed for the provided domains
+     *
+     * @param mBeanServerConnection an open connection to a server.
+     * @param domains An array of domains for which attributes will be fetched from the
+     *                JMX server. An empty array result in returning object names for all
+     *                the domains.
+     * @return A set of MBean ObjectNames
+     *
+     * @throws IOException
+     * @throws MalformedObjectNameException
+     */
+<span class="nc bnc" id="L111" title="All 2 branches missed.">    private static Set&lt;ObjectName&gt; getObjectNamesForDomains(@NonNull MBeanServerConnection mBeanServerConnection,</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">                                                            @NonNull String[] domains)</span>
+            throws IOException, MalformedObjectNameException {
+
+        // In case there are no domains, ObjectNames of all MBeans will be returned
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        if (domains.length == 0) {</span>
+<span class="nc" id="L117">            return mBeanServerConnection.queryNames(null, null);</span>
+        }
+
+        // In case domains are provided, all the ObjectNames within the provided domain will be returned
+<span class="nc" id="L121">        final Set&lt;ObjectName&gt; objectNames = new HashSet&lt;&gt;();</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        for (String domain : domains) {</span>
+<span class="nc" id="L123">            final ObjectName objectNameFilter = new ObjectName(domain + &quot;:*&quot;);</span>
+<span class="nc" id="L124">            objectNames.addAll(mBeanServerConnection.queryNames(objectNameFilter, null));</span>
+        }
+<span class="nc" id="L126">        return objectNames;</span>
+    }
+
+    /**
+     * A convenience method for exporting a map of MBean object names and their attributes to
+     * a file.
+     *
+     * @param jmxDump A map of MBean object names along with their attributes.
+     * @param dumpFile A file name which along with operation timestamp will be
+     *                 used as the target dump file name.
+     *
+     * @throws FileNotFoundException
+     */
+<span class="nc bnc" id="L139" title="All 2 branches missed.">    static void dumpMBeanAttributes(@NonNull Map&lt;ObjectName, AttributeList&gt; jmxDump,</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">                                    @NonNull String dumpFile)</span>
+            throws FileNotFoundException {
+
+<span class="nc" id="L143">        final File file = new File(dumpFile + System.currentTimeMillis());</span>
+
+<span class="nc" id="L145">        try (PrintStream printStream = new PrintStream(file)) {</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">            for (Map.Entry&lt;ObjectName, AttributeList&gt; dumpEntry : jmxDump.entrySet()) {</span>
+<span class="nc" id="L147">                final String mBeanAttributes = new StringBuilder()</span>
+<span class="nc" id="L148">                        .append(dumpEntry.getKey())</span>
+<span class="nc" id="L149">                        .append(&quot;:&quot;)</span>
+<span class="nc" id="L150">                        .append(dumpEntry.getValue())</span>
+<span class="nc" id="L151">                        .toString();</span>
+<span class="nc" id="L152">                printStream.println(mBeanAttributes);</span>
+<span class="nc" id="L153">            }</span>
+<span class="nc bnc" id="L154" title="All 8 branches missed.">        }</span>
+<span class="nc" id="L155">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

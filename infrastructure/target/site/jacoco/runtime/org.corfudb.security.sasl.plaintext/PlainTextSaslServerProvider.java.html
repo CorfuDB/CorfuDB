@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>PlainTextSaslServerProvider.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.security.sasl.plaintext</a> &gt; <span class="el_source">PlainTextSaslServerProvider.java</span></div><h1>PlainTextSaslServerProvider.java</h1><pre class="source lang-java linenums">package org.corfudb.security.sasl.plaintext;
+
+import java.security.Provider;
+import java.security.Security;
+
+import org.corfudb.security.sasl.plaintext.PlainTextSaslServer.PlainTextSaslServerFactory;
+
+/**
+ * Created by sneginhal on 01/27/2017.
+ * Implementation of the plain text SASL server provider.
+ * Please refer to the following resources for more information:
+ * https://docs.oracle.com/javase/8/docs/technotes/guides/security/sasl/sasl-refguide.html
+ * https://docs.oracle.com/javase/8/docs/technotes/guides/security/crypto/HowToImplAProvider.html
+ */
+public class PlainTextSaslServerProvider extends Provider {
+
+    protected PlainTextSaslServerProvider() {
+<span class="nc" id="L18">        super(&quot;PlainTextSaslServerProvider&quot;, 1.0,</span>
+                &quot;Plain Text Sasl Server Provider for CorfuDB&quot;);
+<span class="nc" id="L20">        super.put(&quot;SaslServerFactory.&quot; + PlainTextSaslServer.MECHANISM,</span>
+<span class="nc" id="L21">                PlainTextSaslServerFactory.class.getName());</span>
+<span class="nc" id="L22">    }</span>
+
+    public static void initialize() {
+<span class="nc" id="L25">        Security.addProvider(new PlainTextSaslServerProvider());</span>
+<span class="nc" id="L26">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

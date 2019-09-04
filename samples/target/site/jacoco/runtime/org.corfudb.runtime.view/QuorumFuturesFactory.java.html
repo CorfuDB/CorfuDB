@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>QuorumFuturesFactory.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">QuorumFuturesFactory.java</span></div><h1>QuorumFuturesFactory.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+/**
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.TreeMultimap;
+
+import java.util.Comparator;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+
+/**
+ * Factory for custom futures used by the quorum replication.
+ * Created by Konstantin Spirov on 2/3/2017.
+ */
+<span class="nc" id="L30">@Slf4j</span>
+<span class="nc" id="L31">public class QuorumFuturesFactory {</span>
+
+    /**
+     * Get a thread safe future that will complete only when (n/2)+1 futures complete
+     * or if there is no hope (if n/2+1 futures are canceled or have conflicting value).
+     *
+     * &lt;p&gt;The future returned does not block explicitly, it aggregates the futures and delegates
+     * the blocking.&lt;/p&gt;
+     *
+     * &lt;p&gt;In case of normal execution, any of the compete futures can be used to return the result.
+     * In case of termination, the cancel flag will be updated and if any of the futures threw
+     * an exception, ExecutionException will be thrown,  otherwise the future will return null.&lt;/p&gt;
+     *
+     * @param comparator Any comparator consistent with equals that is able to distinguish
+     *                   the results
+     * @param futures The N futures
+     * @return The composite future
+     */
+    static &lt;R&gt; CompositeFuture&lt;R&gt; getQuorumFuture(Comparator&lt;R&gt; comparator,
+                                                  CompletableFuture&lt;R&gt;... futures) {
+<span class="nc" id="L51">        return new CompositeFuture&lt;R&gt;(comparator, (futures.length / 2) + 1, futures);</span>
+    }
+
+
+    /**
+     * Get a thread safe future that will complete only when n/2+1 futures complete or if there
+     * is no hope (if n/2+1 futures are canceled or have conflicting value).
+     *
+     * &lt;p&gt;The future returned does not block explicitly, it aggregates the futures and delegates
+     * the blocking.&lt;/p&gt;
+     *
+     * &lt;p&gt;In case of normal execution, any of the compete futures can be used to return the result.
+     * In case of termination, the cancel flag will be updated and if any of the futures threw an
+     * exception, ExecutionException will be thrown,  otherwise the future will return null.&lt;/p&gt;
+     *
+     * @param comparator Any comparator consistent with equals that is able to distinguish the
+     *                   results
+     * @param futures The N futures
+     * @param failFastThrowables list of exceptions that will cause the future to complete
+     *                           immediately. All fail fast exceptions are directly propagated and
+     *                           thrown outside.
+     * @return The composite future
+     */
+
+    public static &lt;R&gt; CompositeFuture&lt;R&gt; getQuorumFuture(Comparator&lt;R&gt; comparator,
+                                                         CompletableFuture&lt;R&gt;[] futures,
+                                                         Class... failFastThrowables) {
+<span class="nc" id="L78">        return new CompositeFuture(comparator, (futures.length / 2) + 1, futures,</span>
+                failFastThrowables);
+    }
+
+
+    /**
+     * Get a thread safe future that will complete only when a single futures complete.
+     *
+     * &lt;p&gt;The future returned does not block explicitly, it aggregates the futures and delegates
+     * the blocking.&lt;/p&gt;
+     *
+     * &lt;p&gt;In case if some future completes successfully its value will be returned.
+     * In case of termination, the cancel flag will be updated and if any of the futures
+     * threw an exception, ExecutionException will be thrown,  otherwise the future will
+     * return null&lt;/p&gt;
+     *
+     * @param comparator Any comparator consistent with equals that is able to distinguish
+     *                   the results
+     * @param futures The N futures
+     * @return The composite future
+     */
+    static &lt;R&gt; CompositeFuture&lt;R&gt; getFirstWinsFuture(Comparator&lt;R&gt; comparator,
+                                                     CompletableFuture&lt;R&gt;... futures) {
+<span class="nc" id="L101">        return new CompositeFuture&lt;R&gt;(comparator, 1, futures);</span>
+    }
+
+
+
+    public static class CompositeFuture&lt;R&gt; implements Future&lt;R&gt; {
+        private final Comparator&lt;R&gt; comparator;
+        private final int quorum;
+        private final CompletableFuture&lt;R&gt;[] futures;
+        private final Set&lt;Class&gt; failFastThrowables;
+<span class="nc" id="L111">        private final Set&lt;Throwable&gt; throwables = ConcurrentHashMap.newKeySet();</span>
+<span class="nc" id="L112">        private volatile boolean done = false;</span>
+<span class="nc" id="L113">        private volatile boolean canceled = false;</span>
+<span class="nc" id="L114">        private volatile boolean conflict = false;</span>
+
+        private CompositeFuture(Comparator&lt;R&gt; comparator,  int quorum,
+<span class="nc" id="L117">                                CompletableFuture&lt;R&gt;[] futures,  Class... failFastThrowables) {</span>
+<span class="nc" id="L118">            this.failFastThrowables =  ImmutableSet.copyOf(failFastThrowables);</span>
+<span class="nc" id="L119">            this.comparator = comparator;</span>
+<span class="nc" id="L120">            this.quorum = quorum;</span>
+<span class="nc" id="L121">            this.futures = futures;</span>
+<span class="nc" id="L122">        }</span>
+
+        @Override
+        public R get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException,
+                TimeoutException {
+
+<span class="nc" id="L128">            Comparator&lt;Integer&gt; ic = Integer::compareTo;</span>
+<span class="nc" id="L129">            TreeMultimap&lt;Integer, R&gt; valuesSortedByCount = TreeMultimap.create(ic.reversed(),</span>
+                    comparator);
+<span class="nc" id="L131">            TreeMultimap&lt;R, Integer&gt; indexesByValue = TreeMultimap.create(comparator, ic);</span>
+
+<span class="nc" id="L133">            long until = 0;</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">            boolean infinite = (timeout == Long.MAX_VALUE);</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">            if (!infinite) {</span>
+<span class="nc" id="L136">                until = System.nanoTime() + unit.toNanos(timeout);</span>
+            }
+<span class="nc bnc" id="L138" title="All 4 branches missed.">            while (infinite || System.nanoTime() &lt; until) {</span>
+<span class="nc" id="L139">                int numIncompleteFutures = 0;</span>
+<span class="nc" id="L140">                CompletableFuture aggregatedFuture = null; // block until some future completes</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">                for (int i = 0; i &lt; futures.length; i++) {</span>
+<span class="nc" id="L142">                    CompletableFuture&lt;R&gt; c = futures[i];</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">                    if (!c.isDone()) {</span>
+<span class="nc" id="L144">                        numIncompleteFutures++;</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">                        if (aggregatedFuture == null) {</span>
+<span class="nc" id="L146">                            aggregatedFuture = c;</span>
+                        } else {
+<span class="nc" id="L148">                            aggregatedFuture = CompletableFuture.anyOf(aggregatedFuture, c);</span>
+                        }
+                    } else {
+<span class="nc bnc" id="L151" title="All 2 branches missed.">                        if (!c.isCancelled()) {</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">                            if (c.isCompletedExceptionally()) {</span>
+                                try {
+<span class="nc" id="L154">                                    futures[i].get(); // this will throw the ExecutionException</span>
+<span class="nc" id="L155">                                } catch (ExecutionException e) {</span>
+<span class="nc" id="L156">                                    Throwable t = e.getCause();</span>
+<span class="nc" id="L157">                                    throwables.add(t);</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">                                    if (failFastThrowables.contains(t.getClass())) {</span>
+<span class="nc" id="L159">                                        done = canceled = true;</span>
+<span class="nc" id="L160">                                        throw e;</span>
+                                    }
+<span class="nc" id="L162">                                }</span>
+                            } else {
+<span class="nc" id="L164">                                R value = c.get();</span>
+<span class="nc" id="L165">                                Set&lt;Integer&gt; indexes = indexesByValue.get(value);</span>
+<span class="nc bnc" id="L166" title="All 2 branches missed.">                                if (!indexes.contains(i)) {</span>
+<span class="nc" id="L167">                                    valuesSortedByCount.remove(indexes.size(), value);</span>
+<span class="nc" id="L168">                                    indexes.add(i);</span>
+<span class="nc" id="L169">                                    valuesSortedByCount.put(indexes.size(), value);</span>
+                                }
+<span class="nc bnc" id="L171" title="All 2 branches missed.">                                if (indexesByValue.keySet().size() &gt; 1) {</span>
+<span class="nc" id="L172">                                    conflict = true;</span>
+                                }
+                            }
+                        }
+                    }
+                }
+
+<span class="nc bnc" id="L179" title="All 2 branches missed.">                int greatestNumCompleteFutures = valuesSortedByCount.size() == 0 ? 0 :</span>
+<span class="nc" id="L180">                        valuesSortedByCount.keySet().iterator().next();</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">                if (greatestNumCompleteFutures &gt;= quorum) { // normal exit, quorum</span>
+<span class="nc" id="L182">                    done = true;</span>
+<span class="nc" id="L183">                    return valuesSortedByCount.entries().iterator().next().getValue();</span>
+                }
+<span class="nc bnc" id="L185" title="All 2 branches missed.">                boolean noMoreHope = numIncompleteFutures + greatestNumCompleteFutures &lt; quorum;</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">                if (noMoreHope) {</span>
+<span class="nc" id="L187">                    done = canceled = true;</span>
+                    // Check if we have a quorum over any exception type
+<span class="nc" id="L189">                    Multiset&lt;Throwable&gt; exceptionCounter = HashMultiset.create();</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">                    for (Throwable t: getThrowables()) {</span>
+<span class="nc" id="L191">                        log.debug(&quot;QuorumGet: Exception {}&quot;, t.getClass().getSimpleName());</span>
+<span class="nc" id="L192">                        exceptionCounter.add(t);</span>
+<span class="nc" id="L193">                    }</span>
+                    // Iterate over each exception type, and throw the first one with a quorum
+<span class="nc bnc" id="L195" title="All 2 branches missed.">                    for (Throwable t : exceptionCounter.elementSet()) {</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">                        if (exceptionCounter.count(t) &gt;= quorum) {</span>
+<span class="nc" id="L197">                            throw new ExecutionException(t);</span>
+                        }
+<span class="nc" id="L199">                    }</span>
+<span class="nc" id="L200">                    throw new ExecutionException(</span>
+                            new QuorumUnreachableException(greatestNumCompleteFutures, quorum));
+                }
+                try {
+<span class="nc bnc" id="L204" title="All 2 branches missed.">                    if (infinite) {</span>
+<span class="nc" id="L205">                        aggregatedFuture.get();</span>
+                    } else {
+<span class="nc" id="L207">                        aggregatedFuture.get(timeout, unit);</span>
+                    }
+<span class="nc" id="L209">                } catch (ExecutionException t) {</span>
+                    // The exceptions after after constructing the future will be handled on
+                    // the next loop
+<span class="nc" id="L212">                }</span>
+<span class="nc" id="L213">            } // while</span>
+<span class="nc" id="L214">            throw new TimeoutException();</span>
+        }
+
+
+        @Override
+        public R get() throws InterruptedException, ExecutionException {
+            try {
+<span class="nc" id="L221">                return get(Long.MAX_VALUE, null);</span>
+<span class="nc" id="L222">            } catch (TimeoutException e) {</span>
+<span class="nc" id="L223">                log.error(e.getMessage(), e); // not likely to happen in near future</span>
+<span class="nc" id="L224">                return null;</span>
+            }
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+<span class="nc bnc" id="L230" title="All 2 branches missed.">            for (CompletableFuture f : futures) {</span>
+<span class="nc" id="L231">                f.cancel(mayInterruptIfRunning);</span>
+            }
+<span class="nc" id="L233">            done = canceled = true;</span>
+<span class="nc" id="L234">            return canceled;</span>
+        }
+
+        /**
+         * @return true the future was canceled explicitly, or if the future was unable to
+         *         reach quorum due to conflicts, canceled futures or futures that have
+         *         thrown exception.
+         */
+        @Override
+        public boolean isCancelled() {
+<span class="nc" id="L244">            return canceled;</span>
+        }
+
+        @Override
+        public boolean isDone() {
+<span class="nc" id="L249">            return done;</span>
+        }
+
+        /**
+         * Returns true if there were two successful results with different values, otherwise false.
+         */
+        public boolean isConflict() {
+<span class="nc" id="L256">            return conflict;</span>
+        }
+
+        /**
+         * Returns a set of Throwable classes from all futures that completed in any exceptional
+         * fashion.
+         *
+         * @return Read-only set containing the Throwable classes
+         */
+        public Set&lt;Throwable&gt; getThrowables() {
+<span class="nc" id="L266">            return ImmutableSet.copyOf(throwables);</span>
+        }
+
+        /**
+         * Checks whether one of the exceptions is throwable from the given type.
+         *
+         * @param check - the throwable to search for
+         * @return true if there is a throwable from the given type, otherwise false
+         */
+        public boolean containsThrowableFrom(Class&lt;? extends Throwable&gt; check) {
+<span class="nc bnc" id="L276" title="All 2 branches missed.">            for (Throwable t: throwables) {</span>
+<span class="nc bnc" id="L277" title="All 2 branches missed.">                if (t.getClass().isAssignableFrom(check)) {</span>
+<span class="nc" id="L278">                    return true;</span>
+                }
+<span class="nc" id="L280">            }</span>
+<span class="nc" id="L281">            return false;</span>
+        }
+
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

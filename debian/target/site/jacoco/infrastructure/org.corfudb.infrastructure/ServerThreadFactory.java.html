@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ServerThreadFactory.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">ServerThreadFactory.java</span></div><h1>ServerThreadFactory.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+
+<span class="nc" id="L9">@Slf4j</span>
+public class ServerThreadFactory implements ThreadFactory {
+
+<span class="nc" id="L12">    private static final ThreadFactory defaultFactory = Executors.defaultThreadFactory();</span>
+
+    private final Thread.UncaughtExceptionHandler handler;
+
+    private final String threadPrefix;
+
+<span class="nc" id="L18">    final AtomicInteger threadNumber = new AtomicInteger(0);</span>
+
+<span class="nc" id="L20">    public ServerThreadFactory(String threadPrefix, Thread.UncaughtExceptionHandler handler) {</span>
+<span class="nc" id="L21">        this.threadPrefix = threadPrefix;</span>
+<span class="nc" id="L22">        this.handler = handler;</span>
+<span class="nc" id="L23">    }</span>
+
+    @Override
+    public Thread newThread(Runnable run) {
+<span class="nc" id="L27">        Thread thread = defaultFactory.newThread(run);</span>
+<span class="nc" id="L28">        thread.setName(threadPrefix + threadNumber.getAndIncrement());</span>
+<span class="nc" id="L29">        thread.setUncaughtExceptionHandler(handler);</span>
+<span class="nc" id="L30">        thread.setDaemon(true);</span>
+<span class="nc" id="L31">        return thread;</span>
+    }
+
+<span class="nc" id="L34">    public static class ExceptionHandler implements Thread.UncaughtExceptionHandler {</span>
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+<span class="nc" id="L37">            log.error(&quot;handleUncaughtException[{}]: Uncaught {}:{}&quot;,</span>
+<span class="nc" id="L38">                    t.getName(),</span>
+<span class="nc" id="L39">                    e.getClass().getSimpleName(),</span>
+<span class="nc" id="L40">                    e.getMessage(),</span>
+                    e);
+<span class="nc" id="L42">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

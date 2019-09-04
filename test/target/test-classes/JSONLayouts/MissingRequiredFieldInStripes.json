@@ -1,0 +1,16 @@
+{
+  "layoutServers": [
+    "localhost:9000"
+  ],
+  "sequencers": [
+    "localhost:9000"
+  ],
+  "segments": [
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 0,
+      "end": -1
+    }
+  ],
+  "epoch": 0
+}

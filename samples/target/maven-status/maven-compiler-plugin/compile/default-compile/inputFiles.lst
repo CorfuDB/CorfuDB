@@ -1,0 +1,10 @@
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/BatchedWriteTransaction.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/WriteOnlySimpleTransaction.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/SimpleUseBaseCorfuCollections.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/CorfuCompoundObject.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/BaseCorfuAppUtils.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/SimpleAtomicTransaction.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/CorfuSharedCounter.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/WriteWriteTXs.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/SimpleUseCustomBaseCorfuObject.java
+/Users/lidong/vmware_proj/CorfuDB/samples/src/main/java/org/corfudb/samples/HelloCorfu.java

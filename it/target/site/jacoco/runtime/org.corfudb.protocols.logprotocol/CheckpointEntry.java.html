@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CheckpointEntry.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.logprotocol</a> &gt; <span class="el_source">CheckpointEntry.java</span></div><h1>CheckpointEntry.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.logprotocol;
+
+import io.netty.buffer.ByteBuf;
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
+
+
+/**
+ * Object &amp; serialization methods for in-stream checkpoint
+ * summarization of SMR object state.
+ */
+<span class="nc" id="L24">@ToString(callSuper = true)</span>
+<span class="nc" id="L25">@NoArgsConstructor</span>
+public class CheckpointEntry extends LogEntry {
+
+<span class="nc" id="L28">    @RequiredArgsConstructor</span>
+    public enum CheckpointEntryType {
+<span class="nc" id="L30">        START(0),           // Mandatory: 1st record in checkpoint</span>
+<span class="nc" id="L31">        CONTINUATION(1),    // Optional: 2nd through (n-1)th record</span>
+<span class="nc" id="L32">        END(2);             // Mandatory: final record checkpoint</span>
+
+        public final int type;
+
+        public byte asByte() {
+<span class="nc" id="L37">            return (byte) type;</span>
+        }
+
+<span class="nc" id="L40">        public static final Map&lt;Byte, CheckpointEntryType&gt; typeMap =</span>
+<span class="nc" id="L41">                Arrays.stream(CheckpointEntryType.values())</span>
+<span class="nc" id="L42">                        .collect(Collectors.toMap(</span>
+<span class="nc" id="L43">                                CheckpointEntryType::asByte, Function.identity()));</span>
+    }
+
+<span class="nc" id="L46">    @RequiredArgsConstructor</span>
+    public enum CheckpointDictKey {
+<span class="nc" id="L48">        START_TIME(0),</span>
+<span class="nc" id="L49">        END_TIME(1),</span>
+<span class="nc" id="L50">        START_LOG_ADDRESS(2),</span>
+<span class="nc" id="L51">        ENTRY_COUNT(3),</span>
+<span class="nc" id="L52">        BYTE_COUNT(4),</span>
+<span class="nc" id="L53">        SNAPSHOT_ADDRESS(5);</span>
+
+        public final int type;
+
+        public byte asByte() {
+<span class="nc" id="L58">            return (byte) type;</span>
+        }
+
+<span class="nc" id="L61">        public static final Map&lt;Byte, CheckpointDictKey&gt; typeMap =</span>
+<span class="nc" id="L62">                Arrays.stream(CheckpointDictKey.values())</span>
+<span class="nc" id="L63">                        .collect(Collectors.toMap(</span>
+<span class="nc" id="L64">                                CheckpointDictKey::asByte, Function.identity()));</span>
+    }
+
+    /** Type of entry.
+     */
+<span class="nc" id="L69">    @Getter</span>
+    CheckpointEntryType cpType;
+
+    /**
+     * Unique identifier for this checkpoint.  All entries
+     * for the same checkpoint state must use the same ID.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+<span class="nc" id="L77">    @Getter</span>
+    UUID checkpointId;
+
+<span class="nc" id="L80">    @Getter</span>
+    UUID streamId;
+
+    /** Author/cause/trigger of this checkpoint
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+<span class="nc" id="L86">    @Getter</span>
+    String checkpointAuthorId;
+
+    /** Map of checkpoint metadata, see key constants above.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+<span class="nc" id="L92">    @Getter</span>
+    Map&lt;CheckpointDictKey, String&gt; dict;
+
+    /** Optional: SMREntry objects that contain SMR
+     *  object state of the stream that we're checkpointing.
+     *  May be present in any CheckpointEntryType, but typically
+     *  used by CONTINUATION entries.
+     */
+<span class="nc" id="L100">    @Getter</span>
+<span class="nc" id="L101">    @Setter</span>
+    MultiSMREntry smrEntries;
+
+    /** Byte count of smrEntries in serialized form, zero
+     *  if smrEntries.size() is zero or if value is unknown.
+     */
+<span class="nc" id="L107">    @Getter</span>
+    int smrEntriesBytes = 0;
+
+    public CheckpointEntry(CheckpointEntryType type, String authorId, UUID checkpointId,
+                           UUID streamId, Map&lt;CheckpointDictKey,String&gt; dict, MultiSMREntry smrEntries) {
+<span class="nc" id="L112">        super(LogEntryType.CHECKPOINT);</span>
+<span class="nc" id="L113">        this.cpType = type;</span>
+<span class="nc" id="L114">        this.checkpointId = checkpointId;</span>
+<span class="nc" id="L115">        this.streamId = streamId;</span>
+<span class="nc" id="L116">        this.checkpointAuthorId = authorId;</span>
+<span class="nc" id="L117">        this.dict = dict;</span>
+<span class="nc" id="L118">        this.smrEntries = smrEntries;</span>
+<span class="nc" id="L119">    }</span>
+
+    /**
+     * This function provides the remaining buffer. Child entries
+     * should initialize their contents based on the buffer.
+     *
+     * @param b The remaining buffer.
+     * @param rt The CorfuRuntime used by the SMR object.
+     * @return A CheckpointEntry.
+     */
+    @Override
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+<span class="nc" id="L131">        super.deserializeBuffer(b, rt);</span>
+<span class="nc" id="L132">        cpType = CheckpointEntryType.typeMap.get(b.readByte());</span>
+<span class="nc" id="L133">        checkpointId = new UUID(b.readLong(), b.readLong());</span>
+<span class="nc" id="L134">        streamId = new UUID(b.readLong(), b.readLong());</span>
+<span class="nc" id="L135">        checkpointAuthorId = deserializeString(b);</span>
+<span class="nc" id="L136">        dict = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L137">        short mapEntries = b.readShort();</span>
+<span class="nc bnc" id="L138" title="All 2 branches missed.">        for (short i = 0; i &lt; mapEntries; i++) {</span>
+<span class="nc" id="L139">            CheckpointDictKey k = CheckpointDictKey.typeMap.get(b.readByte());</span>
+<span class="nc" id="L140">            String v = deserializeString(b);</span>
+<span class="nc" id="L141">            dict.put(k, v);</span>
+        }
+<span class="nc" id="L143">        smrEntries = null;</span>
+<span class="nc" id="L144">        byte hasSmrEntries = b.readByte();</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        if (hasSmrEntries &gt; 0) {</span>
+<span class="nc" id="L146">            smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime);</span>
+        }
+<span class="nc" id="L148">        smrEntriesBytes = b.readInt();</span>
+<span class="nc" id="L149">    }</span>
+
+    /**
+     * Serialize the given LogEntry into a given byte buffer.
+     *
+     * &lt;p&gt;NOTE: This method has a side-effect of updating the
+     *          this.smrEntriesBytes field.
+     *
+     * @param b The buffer to serialize into.
+     */
+    @Override
+    public void serialize(ByteBuf b) {
+<span class="nc" id="L161">        super.serialize(b);</span>
+
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        if (cpType == CheckpointEntryType.END</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">                &amp;&amp; getDict().get(CheckpointDictKey.START_LOG_ADDRESS) == null) {</span>
+<span class="nc" id="L165">            throw new IllegalArgumentException(dict.get(CheckpointDictKey.START_LOG_ADDRESS));</span>
+        }
+
+<span class="nc" id="L168">        b.writeByte(cpType.asByte());</span>
+<span class="nc" id="L169">        b.writeLong(checkpointId.getMostSignificantBits());</span>
+<span class="nc" id="L170">        b.writeLong(checkpointId.getLeastSignificantBits());</span>
+<span class="nc" id="L171">        b.writeLong(streamId.getMostSignificantBits());</span>
+<span class="nc" id="L172">        b.writeLong(streamId.getLeastSignificantBits());</span>
+<span class="nc" id="L173">        serializeString(checkpointAuthorId, b);</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">        b.writeShort(dict == null ? 0 : dict.size());</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">        if (dict != null) {</span>
+<span class="nc" id="L176">            dict.entrySet().stream()</span>
+<span class="nc" id="L177">                    .forEach(x -&gt; {</span>
+<span class="nc" id="L178">                        b.writeByte(x.getKey().asByte());</span>
+<span class="nc" id="L179">                        serializeString(x.getValue(), b);</span>
+<span class="nc" id="L180">                    });</span>
+        }
+<span class="nc bnc" id="L182" title="All 2 branches missed.">        if (smrEntries != null) {</span>
+<span class="nc" id="L183">            b.writeByte(1);</span>
+<span class="nc" id="L184">            int byteStart = b.readableBytes();</span>
+<span class="nc" id="L185">            smrEntries.serialize(b);</span>
+<span class="nc" id="L186">            smrEntriesBytes = b.readableBytes() - byteStart;</span>
+<span class="nc" id="L187">        } else {</span>
+<span class="nc" id="L188">            b.writeShort(0);</span>
+<span class="nc" id="L189">            smrEntriesBytes = 0;</span>
+        }
+<span class="nc" id="L191">        b.writeInt(smrEntriesBytes);</span>
+<span class="nc" id="L192">    }</span>
+
+    /** Helper function to deserialize a String.
+     *
+     * @param b Source buffer
+     * @return A String.
+     */
+    private String deserializeString(ByteBuf b) {
+<span class="nc" id="L200">        short len = b.readShort();</span>
+<span class="nc" id="L201">        byte[] bytes = new byte[len];</span>
+<span class="nc" id="L202">        b.readBytes(bytes, 0, len);</span>
+<span class="nc" id="L203">        return new String(bytes);</span>
+    }
+
+    /** Helper function to serialize a String.
+     *
+     * @param b Target buffer
+     */
+    private void serializeString(String s, ByteBuf b) {
+<span class="nc" id="L211">        b.writeShort(s.length());</span>
+<span class="nc" id="L212">        b.writeBytes(s.getBytes());</span>
+<span class="nc" id="L213">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

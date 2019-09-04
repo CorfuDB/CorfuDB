@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SequencerMetrics.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">SequencerMetrics.java</span></div><h1>SequencerMetrics.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import io.netty.buffer.ByteBuf;
+
+import lombok.Data;
+
+/**
+ * Sequencer metrics for a node.
+ *
+ * &lt;p&gt;Created by zlokhandwala on 4/12/18.
+ */
+<span class="nc bnc" id="L12" title="All 14 branches missed.">@Data</span>
+public class SequencerMetrics implements ICorfuPayload&lt;SequencerMetrics&gt; {
+
+<span class="nc" id="L15">    public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);</span>
+<span class="nc" id="L16">    public static final SequencerMetrics NOT_READY = new SequencerMetrics(SequencerStatus.NOT_READY);</span>
+<span class="nc" id="L17">    public static final SequencerMetrics UNKNOWN = new SequencerMetrics(SequencerStatus.UNKNOWN);</span>
+
+<span class="nc" id="L19">    public enum SequencerStatus {</span>
+        // Sequencer is in READY state, and can dispatch tokens.
+<span class="nc" id="L21">        READY,</span>
+        // Sequencer is in a NOT_READY state.
+<span class="nc" id="L23">        NOT_READY,</span>
+        // Unknown state.
+<span class="nc" id="L25">        UNKNOWN</span>
+    }
+
+    /**
+     * Ready state ofN a sequencer to determine its READY/NOT_READY state.
+     */
+<span class="nc" id="L31">    private final SequencerStatus sequencerStatus;</span>
+
+<span class="nc" id="L33">    public SequencerMetrics(SequencerStatus sequencerStatus) {</span>
+<span class="nc" id="L34">        this.sequencerStatus = sequencerStatus;</span>
+<span class="nc" id="L35">    }</span>
+
+<span class="nc" id="L37">    public SequencerMetrics(ByteBuf buf) {</span>
+<span class="nc" id="L38">        sequencerStatus = SequencerStatus.valueOf(ICorfuPayload.fromBuffer(buf, String.class));</span>
+<span class="nc" id="L39">    }</span>
+
+    @Override
+    public void doSerialize(ByteBuf buf) {
+<span class="nc" id="L43">        ICorfuPayload.serialize(buf, sequencerStatus.toString());</span>
+<span class="nc" id="L44">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

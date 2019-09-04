@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>Orchestrator.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.orchestrator</a> &gt; <span class="el_source">Orchestrator.java</span></div><h1>Orchestrator.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.orchestrator;
+
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import com.google.common.collect.Maps;
+import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.Response;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.concurrent.SingletonResource;
+
+import javax.annotation.Nonnull;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+/**
+ * The orchestrator is a stateless service that runs on all management servers and its purpose
+ * is to execute workflows. A workflow defines multiple smaller actions that must run in order
+ * that is specified by Workflow.getActions() to achieve a bigger goal. For example, growing the
+ * cluster. Initiated through RPC, the orchestrator will create a workflow instance and attempt
+ * to execute all its actions.
+ * &lt;p&gt;
+ * Created by Maithem on 10/25/17.
+ */
+
+<span class="nc" id="L56">@Slf4j</span>
+public class Orchestrator {
+
+    /**
+     * The number of times to retry an action before failing the workflow.
+     */
+    private static final int ACTION_RETRY = 3;
+
+    final ServerContext serverContext;
+
+    final SingletonResource&lt;CorfuRuntime&gt; getRuntime;
+
+<span class="nc" id="L68">    final BiMap&lt;UUID, String&gt; activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());</span>
+
+    final ExecutorService executor;
+
+    public Orchestrator(@Nonnull SingletonResource&lt;CorfuRuntime&gt; runtime,
+<span class="nc" id="L73">                        @Nonnull ServerContext serverContext) {</span>
+<span class="nc" id="L74">        this.serverContext = serverContext;</span>
+<span class="nc" id="L75">        this.getRuntime = runtime;</span>
+
+<span class="nc" id="L77">        executor = Executors.newFixedThreadPool(Runtime.getRuntime()</span>
+<span class="nc" id="L78">                .availableProcessors(), new ThreadFactory() {</span>
+
+<span class="nc" id="L80">            final AtomicInteger threadNumber = new AtomicInteger(0);</span>
+
+            @Override
+            public Thread newThread(Runnable r) {
+<span class="nc" id="L84">                Thread thread = new Thread(r);</span>
+<span class="nc" id="L85">                thread.setDaemon(true);</span>
+<span class="nc" id="L86">                String threadName = serverContext.getThreadPrefix() + &quot;orchestrator-&quot;</span>
+<span class="nc" id="L87">                        + threadNumber.getAndIncrement();</span>
+<span class="nc" id="L88">                thread.setName(threadName);</span>
+<span class="nc" id="L89">                thread.setUncaughtExceptionHandler(this::handleUncaughtException);</span>
+<span class="nc" id="L90">                return new Thread(r);</span>
+            }
+
+            void handleUncaughtException(Thread t, @Nonnull Throwable e) {
+<span class="nc" id="L94">                log.error(&quot;handleUncaughtException[{}]: Uncaught {}:{}&quot;,</span>
+<span class="nc" id="L95">                        t.getName(),</span>
+<span class="nc" id="L96">                        e.getClass().getSimpleName(),</span>
+<span class="nc" id="L97">                        e.getMessage(),</span>
+                        e);
+<span class="nc" id="L99">            }</span>
+        });
+<span class="nc" id="L101">    }</span>
+
+    public void handle(@Nonnull CorfuPayloadMsg&lt;OrchestratorMsg&gt; msg,
+                       @Nonnull ChannelHandlerContext ctx,
+                       @Nonnull IServerRouter r) {
+
+<span class="nc" id="L107">        OrchestratorMsg orchReq = msg.getPayload();</span>
+        IWorkflow workflow;
+<span class="nc bnc" id="L109" title="All 7 branches missed.">        switch (orchReq.getRequest().getType()) {</span>
+            case QUERY:
+<span class="nc" id="L111">                query(msg, ctx, r);</span>
+<span class="nc" id="L112">                break;</span>
+            case ADD_NODE:
+<span class="nc" id="L114">                workflow = new AddNodeWorkflow((AddNodeRequest) orchReq.getRequest());</span>
+<span class="nc" id="L115">                dispatch(workflow, msg, ctx, r);</span>
+<span class="nc" id="L116">                break;</span>
+            case REMOVE_NODE:
+<span class="nc" id="L118">                workflow = new RemoveNodeWorkflow((RemoveNodeRequest) orchReq.getRequest());</span>
+<span class="nc" id="L119">                dispatch(workflow, msg, ctx, r);</span>
+<span class="nc" id="L120">                break;</span>
+            case HEAL_NODE:
+<span class="nc" id="L122">                workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest());</span>
+<span class="nc" id="L123">                dispatch(workflow, msg, ctx, r);</span>
+<span class="nc" id="L124">                break;</span>
+            case FORCE_REMOVE_NODE:
+<span class="nc" id="L126">                workflow = new ForceRemoveWorkflow((ForceRemoveNodeRequest) orchReq.getRequest());</span>
+<span class="nc" id="L127">                dispatch(workflow, msg, ctx, r);</span>
+<span class="nc" id="L128">                break;</span>
+            case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
+<span class="nc" id="L130">                workflow = new RestoreRedundancyMergeSegmentsWorkflow((RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest());</span>
+<span class="nc" id="L131">                dispatch(workflow, msg, ctx, r);</span>
+<span class="nc" id="L132">                break;</span>
+            default:
+<span class="nc" id="L134">                log.error(&quot;handle: Unknown request type {}&quot;, orchReq.getRequest().getType());</span>
+        }
+<span class="nc" id="L136">    }</span>
+
+    /**
+     * Query a workflow id.
+     * &lt;p&gt;
+     * Queries a workflow id and returns true if this orchestrator is still
+     * executing the workflow, otherwise return false.
+     *
+     * @param msg corfu message containing the query request
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    void query(CorfuPayloadMsg&lt;OrchestratorMsg&gt; msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc" id="L149">        QueryRequest req = (QueryRequest) msg.getPayload().getRequest();</span>
+
+        Response resp;
+<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (activeWorkflows.containsKey(req.getId())) {</span>
+<span class="nc" id="L153">            resp = new QueryResponse(true);</span>
+<span class="nc" id="L154">            log.trace(&quot;handleQuery: returning active for id {}&quot;, req.getId());</span>
+        } else {
+<span class="nc" id="L156">            resp = new QueryResponse(false);</span>
+<span class="nc" id="L157">            log.trace(&quot;handleQuery: returning not active for id {}&quot;, req.getId());</span>
+        }
+
+<span class="nc" id="L160">        r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE</span>
+<span class="nc" id="L161">                .payloadMsg(new OrchestratorResponse(resp)));</span>
+<span class="nc" id="L162">    }</span>
+
+    /**
+     * Run a workflow on this orchestrator, if there is an existing workflow
+     * that is executing on the same endpoint, then just return the corresponding
+     * workflow id. Dispatch is the only place where workflows are executed based
+     * on reading activeWorkflows and therefore needs to be synchronized to prevent
+     * launching multiple workflows for the same endpoint concurrently.
+     *
+     * @param workflow the workflow to execute
+     * @param msg      corfu message containing the create workflow request
+     * @param ctx      netty ChannelHandlerContext
+     * @param r        server router
+     */
+    synchronized void dispatch(@Nonnull IWorkflow workflow,
+                               @Nonnull CorfuPayloadMsg&lt;OrchestratorMsg&gt; msg,
+                               @Nonnull ChannelHandlerContext ctx,
+                               @Nonnull IServerRouter r) {
+<span class="nc" id="L180">        CreateRequest req = (CreateRequest) msg.getPayload().getRequest();</span>
+
+<span class="nc" id="L182">        UUID id = activeWorkflows.inverse().get(req.getEndpoint());</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        if (id != null) {</span>
+            // A workflow is already executing for this endpoint, return
+            // existing workflow id.
+<span class="nc" id="L186">            OrchestratorResponse resp = new OrchestratorResponse(</span>
+                    new CreateWorkflowResponse(id));
+<span class="nc" id="L188">            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE</span>
+<span class="nc" id="L189">                    .payloadMsg(resp));</span>
+<span class="nc" id="L190">            return;</span>
+        } else {
+            // Create a new workflow for this endpoint and return a new workflow id
+<span class="nc" id="L193">            activeWorkflows.put(workflow.getId(), req.getEndpoint());</span>
+
+<span class="nc" id="L195">            executor.execute(() -&gt; run(workflow, ACTION_RETRY));</span>
+
+<span class="nc" id="L197">            OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));</span>
+<span class="nc" id="L198">            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE</span>
+<span class="nc" id="L199">                    .payloadMsg(resp));</span>
+        }
+<span class="nc" id="L201">    }</span>
+
+    /**
+     * Run a particular workflow, which entails executing all its defined
+     * actions
+     *
+     * @param workflow    instance to run
+     * @param actionRetry the number of times to retry an action before failing the workflow.
+     */
+    void run(@Nonnull IWorkflow workflow, int actionRetry) {
+<span class="nc" id="L211">        CorfuRuntime rt = null;</span>
+        try {
+<span class="nc" id="L213">            getRuntime.get().invalidateLayout();</span>
+<span class="nc" id="L214">            Layout currLayout = getRuntime.get().getLayoutView().getLayout();</span>
+
+<span class="nc" id="L216">            List&lt;NodeLocator&gt; servers = currLayout.getAllActiveServers().stream()</span>
+<span class="nc" id="L217">                    .map(NodeLocator::parseString)</span>
+<span class="nc" id="L218">                    .collect(Collectors.toList());</span>
+
+            // Create a new runtime for this workflow. Since this runtime will
+            // only be used to execute this workflow, it doesn't need a cache and has
+            // the default authentication config parameters as the ManagementServer's
+            // runtime
+<span class="nc" id="L224">            CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();</span>
+<span class="nc" id="L225">            params.setCacheDisabled(true);</span>
+<span class="nc" id="L226">            params.setUseFastLoader(false);</span>
+<span class="nc" id="L227">            params.setLayoutServers(servers);</span>
+
+<span class="nc" id="L229">            rt = CorfuRuntime.fromParameters(params).connect();</span>
+
+<span class="nc" id="L231">            log.info(&quot;run: Started workflow {} id {}&quot;, workflow.getName(), workflow.getId());</span>
+<span class="nc" id="L232">            long workflowStart = System.currentTimeMillis();</span>
+<span class="nc bnc" id="L233" title="All 2 branches missed.">            for (Action action : workflow.getActions()) {</span>
+
+<span class="nc" id="L235">                log.debug(&quot;run: Started action {} for workflow {}&quot;, action.getName(), workflow.getId());</span>
+<span class="nc" id="L236">                long actionStart = System.currentTimeMillis();</span>
+<span class="nc" id="L237">                action.execute(rt, actionRetry);</span>
+<span class="nc" id="L238">                long actionEnd = System.currentTimeMillis();</span>
+<span class="nc" id="L239">                log.info(&quot;run: finished action {} for workflow {} in {} ms&quot;,</span>
+<span class="nc" id="L240">                        action.getName(), workflow.getId(), actionEnd - actionStart);</span>
+
+<span class="nc bnc" id="L242" title="All 2 branches missed.">                if (action.getStatus() != ActionStatus.COMPLETED) {</span>
+<span class="nc" id="L243">                    log.error(&quot;run: Failed to execute action {} for workflow {}, status {}, &quot;,</span>
+<span class="nc" id="L244">                            action.getName(), workflow.getId(),</span>
+<span class="nc" id="L245">                            action.getStatus());</span>
+<span class="nc" id="L246">                    return;</span>
+                }
+<span class="nc" id="L248">            }</span>
+
+<span class="nc" id="L250">            long workflowEnd = System.currentTimeMillis();</span>
+<span class="nc" id="L251">            log.info(&quot;run: Completed workflow {} in {} ms&quot;, workflow.getId(), workflowEnd - workflowStart);</span>
+<span class="nc" id="L252">        } catch (Exception e) {</span>
+<span class="nc" id="L253">            log.error(&quot;run: Encountered an error while running workflow {}&quot;, workflow.getId(), e);</span>
+        } finally {
+<span class="nc" id="L255">            activeWorkflows.remove(workflow.getId());</span>
+<span class="nc" id="L256">            log.debug(&quot;run: removed {} from {}&quot;, workflow.getId(), activeWorkflows);</span>
+<span class="nc bnc" id="L257" title="All 8 branches missed.">            if (rt != null) {</span>
+<span class="nc" id="L258">                rt.shutdown();</span>
+            }
+<span class="nc" id="L260">        }</span>
+<span class="nc" id="L261">    }</span>
+
+    /**
+     * Shuts down the orchestrator executor.
+     */
+    public void shutdown() {
+<span class="nc" id="L267">        executor.shutdownNow();</span>
+        try {
+<span class="nc" id="L269">            executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);</span>
+<span class="nc" id="L270">        } catch (InterruptedException ie) {</span>
+<span class="nc" id="L271">            log.debug(&quot;Orchestrator executor awaitTermination interrupted : {}&quot;, ie);</span>
+<span class="nc" id="L272">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
+<span class="nc" id="L273">        }</span>
+<span class="nc" id="L274">        log.info(&quot;Orchestrator shutting down.&quot;);</span>
+<span class="nc" id="L275">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

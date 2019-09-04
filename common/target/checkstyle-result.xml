@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="8.20">
+<file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/result/Result.java">
+<error line="33" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="36" column="38" severity="warning" message="WhitespaceAround: &apos;{&apos; is not preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+<error line="120" severity="warning" message="Line continuation have incorrect indentation level, expected level should be 4." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocTagContinuationIndentationCheck"/>
+<error line="130" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="130" column="11" severity="warning" message="GenericWhitespace &apos;&lt;&apos; is not preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.GenericWhitespaceCheck"/>
+<error line="132" column="9" severity="warning" message="WhitespaceAround: &apos;if&apos; is not followed by whitespace. Empty blocks may only be represented as {} when not part of a multi-block statement (4.1.3)" source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/util/ClassUtils.java">
+</file>
+</checkstyle>

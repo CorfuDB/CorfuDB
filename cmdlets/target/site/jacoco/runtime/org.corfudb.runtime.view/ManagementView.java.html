@@ -1,0 +1,604 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ManagementView.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">ManagementView.java</span></div><h1>ManagementView.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import javax.annotation.Nonnull;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.WorkflowException;
+import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
+import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.workflows.AddNode;
+import org.corfudb.runtime.view.workflows.ForceRemoveNode;
+import org.corfudb.runtime.view.workflows.HealNode;
+import org.corfudb.runtime.view.workflows.RestoreRedundancyMergeSegments;
+import org.corfudb.runtime.view.workflows.RemoveNode;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
+
+/**
+ * A view of the Management Service to manage reconfigurations of the Corfu Cluster.
+ * &lt;p&gt;
+ * &lt;p&gt;Created by zlokhandwala on 11/20/17.&lt;/p&gt;
+ */
+<span class="nc" id="L47">@Slf4j</span>
+public class ManagementView extends AbstractView {
+
+    /**
+     * Number of attempts to ping a node to query the cluster status.
+     */
+    private static final int CLUSTER_STATUS_QUERY_ATTEMPTS = 3;
+
+<span class="nc bnc" id="L55" title="All 2 branches missed.">    public ManagementView(@NonNull CorfuRuntime runtime) {</span>
+<span class="nc" id="L56">        super(runtime);</span>
+<span class="nc" id="L57">    }</span>
+
+    /**
+     * Remove a node from the cluster.
+     *
+     * @param endpointToRemove Endpoint of the node to be removed from the cluster.
+     * @param retry            the number of times to retry a workflow if it fails
+     * @param timeout          total time to wait before the workflow times out
+     * @param pollPeriod       the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     * @throws WorkflowException              when the remove operation fails
+     */
+    public void removeNode(@Nonnull String endpointToRemove, int retry,
+                           @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
+
+<span class="nc" id="L73">        new RemoveNode(endpointToRemove, runtime, retry, timeout, pollPeriod).invoke();</span>
+<span class="nc" id="L74">    }</span>
+
+    /**
+     * Force remove a node from the cluster.
+     *
+     * @param endpointToRemove Endpoint of the node to be removed from the cluster.
+     * @param retry            the number of times to retry a workflow if it fails
+     * @param timeout          total time to wait before the workflow times out
+     * @param pollPeriod       the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     * @throws WorkflowException              when the remove operation fails
+     */
+    public void forceRemoveNode(@Nonnull String endpointToRemove, int retry,
+                                @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
+<span class="nc" id="L89">        new ForceRemoveNode(endpointToRemove, runtime, retry, timeout, pollPeriod).invoke();</span>
+<span class="nc" id="L90">    }</span>
+
+    /**
+     * Add a new node to the existing cluster.
+     *
+     * @param endpointToAdd Endpoint of the new node to be added to the cluster.
+     * @param retry         the number of times to retry a workflow if it fails
+     * @param timeout       total time to wait before the workflow times out
+     * @param pollPeriod    the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void addNode(@Nonnull String endpointToAdd, int retry,
+                        @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
+<span class="nc" id="L104">        new AddNode(endpointToAdd, runtime, retry, timeout, pollPeriod)</span>
+<span class="nc" id="L105">                .invoke();</span>
+<span class="nc" id="L106">    }</span>
+
+    /**
+     * Heal an unresponsive node.
+     *
+     * @param endpointToHeal Endpoint of the new node to be healed in the cluster.
+     * @param retry          the number of times to retry a workflow if it fails
+     * @param timeout        total time to wait before the workflow times out
+     * @param pollPeriod     the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void healNode(@Nonnull String endpointToHeal, int retry, @Nonnull Duration timeout,
+                         @Nonnull Duration pollPeriod) {
+<span class="nc" id="L120">        new HealNode(endpointToHeal, runtime, retry, timeout, pollPeriod).invoke();</span>
+<span class="nc" id="L121">    }</span>
+
+    /**
+     * Restore redundancy and merge all split segments.
+     *
+     * @param endpointToRestoreRedundancy Endpoint whose redundancy is to be restored.
+     * @param retry                       the number of times to retry a workflow if it fails
+     * @param timeout                     total time to wait before the workflow times out
+     * @param pollPeriod                  the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void mergeSegments(@Nonnull String endpointToRestoreRedundancy, int retry, @Nonnull Duration timeout,
+                              @Nonnull Duration pollPeriod) {
+<span class="nc" id="L135">        new RestoreRedundancyMergeSegments(endpointToRestoreRedundancy, runtime, retry, timeout, pollPeriod).invoke();</span>
+<span class="nc" id="L136">    }</span>
+
+    /**
+     * If all the layout servers are responsive the cluster status is STABLE,
+     * if a minority of them are unresponsive then the status is DEGRADED,
+     * else the cluster is UNAVAILABLE.
+     *
+     * @param layout              Current layout on which responsiveness was checked.
+     * @param peerResponsiveNodes responsive nodes in the current layout.
+     * @return ClusterStatus
+     */
+    private ClusterStatus getLayoutServersClusterHealth(Layout layout,
+                                                        Set&lt;String&gt; peerResponsiveNodes) {
+<span class="nc" id="L149">        ClusterStatus clusterStatus = ClusterStatus.STABLE;</span>
+        // A quorum of layout servers need to be responsive for the cluster to be STABLE.
+<span class="nc" id="L151">        List&lt;String&gt; responsiveLayoutServers = new ArrayList&lt;&gt;(layout.getLayoutServers());</span>
+        // Retain only the responsive servers.
+<span class="nc" id="L153">        responsiveLayoutServers.retainAll(peerResponsiveNodes);</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">        if (responsiveLayoutServers.size() != layout.getLayoutServers().size()) {</span>
+<span class="nc" id="L155">            clusterStatus = ClusterStatus.DEGRADED;</span>
+<span class="nc" id="L156">            int quorumSize = (layout.getLayoutServers().size() / 2) + 1;</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">            if (responsiveLayoutServers.size() &lt; quorumSize) {</span>
+<span class="nc" id="L158">                clusterStatus = ClusterStatus.UNAVAILABLE;</span>
+            }
+        }
+<span class="nc" id="L161">        return clusterStatus;</span>
+    }
+
+    /**
+     * If the primary sequencer is unresponsive then the cluster is UNAVAILABLE.
+     *
+     * @param layout              Current layout on which responsiveness was checked.
+     * @param peerResponsiveNodes responsive nodes in the current layout.
+     * @return ClusterStatus
+     */
+    private ClusterStatus getSequencerServersClusterHealth(Layout layout,
+                                                           Set&lt;String&gt; peerResponsiveNodes) {
+        // The primary sequencer should be reachable for the cluster to be STABLE.
+<span class="nc bnc" id="L174" title="All 2 branches missed.">        return !peerResponsiveNodes.contains(layout.getPrimarySequencer())</span>
+                ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
+    }
+
+    /**
+     * Gets the log unit cluster status based on the replication protocol.
+     *
+     * @param layout              Current layout on which responsiveness was checked.
+     * @param peerResponsiveNodes responsive nodes in the current layout.
+     * @return ClusterStatus
+     */
+    private ClusterStatus getLogUnitServersClusterHealth(Layout layout,
+                                                         Set&lt;String&gt; peerResponsiveNodes) {
+        // logUnitRedundancyStatus marks the cluster as DB_SYNCING if any of the nodes is performing
+        // stateTransfer and is in process of achieving full redundancy.
+<span class="nc" id="L189">        ClusterStatus logUnitRedundancyStatus = peerResponsiveNodes.stream()</span>
+<span class="nc bnc" id="L190" title="All 4 branches missed.">                .anyMatch(s -&gt; getLogUnitNodeStatusInLayout(layout, s) == NodeStatus.DB_SYNCING)</span>
+                ? ClusterStatus.DB_SYNCING : ClusterStatus.STABLE;
+        // Check the availability of the log servers in all segments as reads to all addresses
+        // should be accessible.
+<span class="nc" id="L194">        ClusterStatus logunitClusterStatus = layout.getSegments().stream()</span>
+<span class="nc" id="L195">                .map(segment -&gt; segment.getReplicationMode()</span>
+<span class="nc" id="L196">                        .getClusterHealthForSegment(segment, peerResponsiveNodes))</span>
+<span class="nc" id="L197">                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))</span>
+<span class="nc" id="L198">                .orElse(ClusterStatus.UNAVAILABLE);</span>
+        // Gets max of cluster status and logUnitRedundancyStatus.
+<span class="nc" id="L200">        return Stream.of(logunitClusterStatus, logUnitRedundancyStatus)</span>
+<span class="nc" id="L201">                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))</span>
+<span class="nc" id="L202">                .orElse(ClusterStatus.UNAVAILABLE);</span>
+    }
+
+    /**
+     * Analyzes the health of the cluster based on the views of the cluster of all the
+     * ManagementAgents.
+     * STABLE: if all nodes in the layout are responsive.
+     * DEGRADED: if a minority of Layout servers
+     * or a minority of LogUnit servers - in QUORUM_REPLICATION mode only are unresponsive.
+     * UNAVAILABLE: if a majority of Layout servers or the Primary Sequencer
+     * or a node in the CHAIN_REPLICATION or a majority of nodes in QUORUM_REPLICATION is
+     * unresponsive.
+     *
+     * @param layout              Layout based on which the health is analyzed.
+     * @param peerResponsiveNodes Responsive nodes according to the management services.
+     * @return ClusterStatus
+     */
+    private ClusterStatus getClusterHealth(Layout layout, Set&lt;String&gt; peerResponsiveNodes) {
+
+<span class="nc" id="L221">        return Stream.of(getLayoutServersClusterHealth(layout, peerResponsiveNodes),</span>
+<span class="nc" id="L222">                getSequencerServersClusterHealth(layout, peerResponsiveNodes),</span>
+<span class="nc" id="L223">                getLogUnitServersClusterHealth(layout, peerResponsiveNodes))</span>
+                // Gets cluster status from the layout, sequencer and log unit clusters.
+                // The status is then aggregated by the max of the 3 statuses acquired.
+<span class="nc" id="L226">                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))</span>
+<span class="nc" id="L227">                .orElse(ClusterStatus.UNAVAILABLE);</span>
+    }
+
+    /**
+     * Returns a LogUnit Server's status in the layout. It is marked as:
+     * UP if it is present in all segments or none of the segments and not in the unresponsive list,
+     * NOTE: A node is UP if its not in any of the segments as it might not be a LogUnit component
+     * but has only the Layout or the Sequencer (or both) component(s) active.
+     * DB_SYNCING if it is present in some but not all or none of the segments,
+     * DOWN if it is present in the unresponsive servers list.
+     *
+     * @param layout Layout to check.
+     * @param server LogUnit Server endpoint.
+     * @return NodeState with respect to the layout specified.
+     */
+    private NodeStatus getLogUnitNodeStatusInLayout(Layout layout, String server) {
+<span class="nc bnc" id="L243" title="All 2 branches missed.">        if (layout.getUnresponsiveServers().contains(server)) {</span>
+<span class="nc" id="L244">            return NodeStatus.DOWN;</span>
+        }
+<span class="nc" id="L246">        final int segmentsCount = layout.getSegments().size();</span>
+<span class="nc" id="L247">        int nodeInSegments = 0;</span>
+<span class="nc bnc" id="L248" title="All 2 branches missed.">        for (LayoutSegment layoutSegment : layout.getSegments()) {</span>
+<span class="nc bnc" id="L249" title="All 2 branches missed.">            if (layoutSegment.getAllLogServers().contains(server)) {</span>
+<span class="nc" id="L250">                nodeInSegments++;</span>
+            }
+<span class="nc" id="L252">        }</span>
+<span class="nc bnc" id="L253" title="All 4 branches missed.">        return nodeInSegments == segmentsCount || nodeInSegments == 0</span>
+                ? NodeStatus.UP : NodeStatus.DB_SYNCING;
+    }
+
+    /**
+     * Get the Cluster Status.
+     *
+     * This is reported as follows:
+     * - (1) The status of the cluster itself (regardless of clients connectivity) as reflected in the
+     *   layout. This information is presented along each node's status (up, down, db_sync).
+     *
+     *   It is important to note that as the cluster state is obtained from the layout,
+     *   when quorum is not available (majority of nodes) there are lower guarantees on the
+     *   reliability of this state.
+     *   For example, in the absence of quorum the system might be in an unstable state which
+     *   cannot converge due to lack of consensus. This is reflected in the
+     *   cluster status report as clusterStatusReliability.
+     *
+     * - (2) The connectivity status of the client to every node in the cluster,
+     *   i.e., can the client connect to the cluster. This will be obtained by
+     *   ping(ing) every node and show as RESPONSIVE, for successful connections or UNRESPONSIVE for
+     *   clients unable to communicate.
+     *
+     *  In this sense a cluster can be STABLE with all nodes UP, while not being available for a
+     *  client, as all connections from the client to the cluster nodes are down, showing in this
+     *  case connectivity status to all nodes as UNRESPONSIVE.
+     *
+     *  The ClusterStatusReport consists of the following:
+     *
+     *  CLUSTER-SPECIFIC STATUS
+     *  - clusterStatus: the cluster status a perceived by the system's layout.
+     *  STABLE, DEGRADED, DB_SYNCING or UNAVAILABLE
+     *  - nodeStatusMap: each node's status as perceived by the system's layout.
+     *  (UP, DOWN or DB_SYNC)
+     *  - Cluster Status Reliability: STRONG_QUORUM, WEAK_NO_QUORUM or UNAVAILABLE
+     *
+     *  CLIENT-CLUSTER SPECIFIC STATUS:
+     *  - clientServerConnectivityStatusMap: the connectivity status of this client to the cluster.
+     *    (RESPONSIVE, UNRESPONSIVE).
+     *
+     * @return ClusterStatusReport
+     */
+    public ClusterStatusReport getClusterStatus() {
+        Layout layout;
+<span class="nc" id="L297">        ClusterStatusReliability statusReliability = ClusterStatusReliability.STRONG_QUORUM;</span>
+
+        // Get layout servers from runtime set of layout servers (specified in connection string).
+        // This list is refreshed whenever a new layout is fetched.
+<span class="nc" id="L301">        List&lt;String&gt; layoutServers = runtime.getLayoutServers().stream()</span>
+<span class="nc" id="L302">                .map(endpoint -&gt; NodeLocator.parseString(endpoint).toEndpointUrl())</span>
+<span class="nc" id="L303">                .collect(Collectors.toList());</span>
+
+        try {
+            // Obtain Layout from layout servers:
+            //      Attempt to get layout from quorum (majority of nodes),
+            //            ---if we fail to get from quorum----
+            //      we are unable to provide a reliable state of the cluster from the layout,
+            //      therefore, the cluster status is UNAVAILABLE.
+
+            // The initial list of layoutServers is obtained from the runtime, this list might
+            // not be complete as it can be based on a a minimum of servers required for bootstrap,
+            // by setting the discoverLayoutServers flag, we request layouts from all available
+            // layout servers present in the actual layout file.
+<span class="nc" id="L316">            Map&lt;String, Layout&gt; layoutMap = getLayouts(layoutServers, true);</span>
+
+<span class="nc" id="L318">            int quorum = runtime.getLayoutView().getQuorumNumber();</span>
+
+<span class="nc bnc" id="L320" title="All 2 branches missed.">            if (layoutMap.isEmpty()) {</span>
+                // If no layout server responded with a Layout, report cluster status as UNAVAILABLE.
+<span class="nc" id="L322">                log.debug(&quot;getClusterStatus: all layout servers {} failed to respond with layouts.&quot;, layoutServers);</span>
+                // Even if we weren't able to obtain any layout from LayoutServers, we attempt to ping all
+                // layoutServers for this runtime, to provide info of connectivity.
+                // Note: layout should be null, as this is not the layout that leads to cluster status.
+<span class="nc" id="L326">                Map&lt;String, ConnectivityStatus&gt; connectivityStatusMap = getConnectivityStatusMap(runtime.getLayoutView().getLayout());</span>
+<span class="nc" id="L327">                return getUnavailableClusterStatusReport(layoutServers, ClusterStatusReliability.UNAVAILABLE,</span>
+<span class="nc" id="L328">                        connectivityStatusMap.entrySet().stream()</span>
+<span class="nc" id="L329">                                .filter(x -&gt; x.getValue().equals(ConnectivityStatus.RESPONSIVE))</span>
+<span class="nc" id="L330">                                .map(x -&gt; x.getKey()).collect(Collectors.toSet()), null);</span>
+            } else {
+<span class="nc" id="L332">                int serversLayoutResponses = layoutMap.size();</span>
+
+<span class="nc bnc" id="L334" title="All 2 branches missed.">                if (serversLayoutResponses &lt; quorum) {</span>
+                    // If quorum unreachable, report cluster status unavailable, but still for debug purposes provide
+                    // information of the highest epoch layout in the system.
+<span class="nc" id="L337">                    log.info(&quot;getClusterStatus: Quorum unreachable, reachable={}, required={}. Cluster status in unavailable.&quot;,</span>
+<span class="nc" id="L338">                            serversLayoutResponses, quorum);</span>
+<span class="nc" id="L339">                    layout = getHighestEpochLayout(layoutMap);</span>
+                    // Note: we can't pass the list of layoutServers obtained from the CorfuRuntime,
+                    // as this might only reflect the servers used for initialization of RT.
+                    // (which does not necessarily mean all), so we should retrieve from the available layout(s)
+<span class="nc" id="L343">                    return getUnavailableClusterStatusReport(getLayoutServers(layoutMap.values()),</span>
+<span class="nc" id="L344">                            ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);</span>
+                } else {
+<span class="nc" id="L346">                    layout = getLayoutFromQuorum(layoutMap, quorum);</span>
+
+<span class="nc bnc" id="L348" title="All 2 branches missed.">                    if (layout == null) {</span>
+                        // No quorum nodes with same layout
+                        // Report cluster status unavailable, but still for debug purposes provide
+                        // information of the highest epoch layout in the system.
+<span class="nc" id="L352">                        log.info(&quot;getClusterStatus: majority of nodes sharing the same layout not found. Cluster status is unavailable.&quot;);</span>
+<span class="nc" id="L353">                        layout = getHighestEpochLayout(layoutMap);</span>
+<span class="nc" id="L354">                        return getUnavailableClusterStatusReport(getLayoutServers(layoutMap.values()),</span>
+<span class="nc" id="L355">                                ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);</span>
+                    }
+
+<span class="nc" id="L358">                    log.debug(&quot;getClusterStatus: quorum layout {}&quot;, layout);</span>
+                }
+            }
+
+            // Get Cluster Status from Layout
+<span class="nc" id="L363">            ClusterStatus clusterStatus = getClusterHealth(layout, layout.getAllActiveServers());</span>
+
+            // Get Node Status from Layout
+<span class="nc" id="L366">            Map&lt;String, NodeStatus&gt; nodeStatusMap = getNodeStatusMap(layout);</span>
+
+            // To complete cluster status with connectivity information of this
+            // client to every node in the cluster, ping all servers
+            // TODO: we could eventually skip pinging the nodes, as the layout fetch is indirectly a measure of connectivity.
+<span class="nc" id="L371">            Map &lt;String, ClusterStatusReport.ConnectivityStatus&gt; connectivityStatusMap = getConnectivityStatusMap(layout);</span>
+
+<span class="nc" id="L373">            log.debug(&quot;getClusterStatus: successful. Overall cluster status: {}&quot;, clusterStatus);</span>
+
+<span class="nc" id="L375">            return new ClusterStatusReport(layout, clusterStatus, statusReliability, nodeStatusMap, connectivityStatusMap);</span>
+<span class="nc" id="L376">        } catch (Exception e) {</span>
+<span class="nc" id="L377">            log.error(&quot;getClusterStatus[{}]: cluster status unavailable. Exception: {}&quot;,</span>
+<span class="nc" id="L378">                    this.runtime.getParameters().getClientId(), e);</span>
+<span class="nc" id="L379">            return getUnavailableClusterStatusReport(layoutServers);</span>
+        }
+    }
+
+    private ClusterStatusReport getUnavailableClusterStatusReport(List&lt;String&gt; layoutServers, ClusterStatusReliability reliability, @Nonnull Set&lt;String&gt; responsiveServers, Layout layout) {
+<span class="nc" id="L384">        return new ClusterStatusReport(layout,</span>
+                ClusterStatus.UNAVAILABLE,
+                reliability,
+<span class="nc" id="L387">                layoutServers.stream().collect(Collectors.toMap(</span>
+<span class="nc" id="L388">                        endpoint -&gt; endpoint,</span>
+<span class="nc" id="L389">                        node -&gt; NodeStatus.NA)),</span>
+<span class="nc" id="L390">                layoutServers.stream().collect(Collectors.toMap(</span>
+<span class="nc" id="L391">                        endpoint -&gt; endpoint,</span>
+<span class="nc bnc" id="L392" title="All 2 branches missed.">                        endpoint -&gt; responsiveServers.contains(endpoint) ? ConnectivityStatus.RESPONSIVE : ConnectivityStatus.UNRESPONSIVE)));</span>
+    }
+
+    private ClusterStatusReport getUnavailableClusterStatusReport(List&lt;String&gt; layoutServers) {
+<span class="nc" id="L396">        return getUnavailableClusterStatusReport(layoutServers, ClusterStatusReliability.UNAVAILABLE, Collections.emptySet(), null);</span>
+    }
+
+    /**
+     * Get Layouts from list of specified layout servers.
+     *
+     * @param layoutServers list of initial layout servers to retrieve layouts from.
+     * @param discoverLayoutServers flag to indicate if we want to discover new layout servers from
+     *                              the layouts retrieved from initial set of layout servers.
+     *                              Note: this is required as runtime.getBootstrapLayoutServers might have been
+     *                              initialized with a single server (from all in cluster).
+     * @return Map of endpoint id and layout.
+     */
+    private Map&lt;String, Layout&gt; getLayouts(List&lt;String&gt; layoutServers, Boolean discoverLayoutServers) {
+<span class="nc" id="L410">        Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; layoutFuturesMap = getLayoutFutures(layoutServers);</span>
+<span class="nc" id="L411">        Map&lt;String, Layout&gt; layoutMap = new HashMap&lt;&gt;();</span>
+
+        // Wait on the Completable futures
+<span class="nc bnc" id="L414" title="All 2 branches missed.">        for (Entry&lt;String, CompletableFuture&lt;Layout&gt;&gt; entry : layoutFuturesMap.entrySet()) {</span>
+            try {
+<span class="nc" id="L416">                Layout nodeLayout = entry.getValue().get();</span>
+<span class="nc" id="L417">                log.debug(&quot;Server:{} responded with layout: {}&quot;, entry.getKey(), nodeLayout);</span>
+<span class="nc" id="L418">                layoutMap.put(entry.getKey(), nodeLayout);</span>
+<span class="nc" id="L419">            } catch (Exception e) {</span>
+<span class="nc" id="L420">                log.error(&quot;getClusterStatus: Error while fetching layout from {}. Exception: &quot;,</span>
+<span class="nc" id="L421">                        entry.getKey(), e);</span>
+<span class="nc" id="L422">            }</span>
+<span class="nc" id="L423">        }</span>
+
+        // If discoverLayoutServers is set, fetch layouts from all other layout servers
+        // discovered in the first search which are not contained in the initial list.
+<span class="nc bnc" id="L427" title="All 2 branches missed.">        if (discoverLayoutServers) {</span>
+<span class="nc" id="L428">            List&lt;String&gt; discoveredLayoutServers = layoutMap.values().stream()</span>
+<span class="nc" id="L429">                    .map(layout -&gt; layout.getLayoutServers())</span>
+<span class="nc" id="L430">                    .flatMap(servers -&gt; servers.stream())</span>
+<span class="nc" id="L431">                    .distinct()</span>
+<span class="nc bnc" id="L432" title="All 2 branches missed.">                    .filter(servers -&gt; !layoutServers.contains(servers))</span>
+<span class="nc" id="L433">                    .collect(Collectors.toList());</span>
+
+<span class="nc bnc" id="L435" title="All 2 branches missed.">            if (!discoveredLayoutServers.isEmpty()) {</span>
+<span class="nc" id="L436">                log.debug(&quot;Get layout from discovered layout servers: {} &quot;, discoveredLayoutServers);</span>
+<span class="nc" id="L437">                Map &lt;String, Layout&gt; recursiveLayouts = getLayouts(new ArrayList&lt;&gt;(discoveredLayoutServers), false);</span>
+<span class="nc" id="L438">                layoutMap.putAll(recursiveLayouts);</span>
+            }
+        }
+
+<span class="nc" id="L442">        return layoutMap;</span>
+    }
+
+    private Layout getLayoutFromQuorum(@Nonnull Map&lt;String, Layout&gt; layoutMap, int quorum) {
+<span class="nc" id="L446">        Layout layout = null;</span>
+        // Map of layout to number of nodes containing this layout.
+<span class="nc" id="L448">        Map&lt;Layout, Integer&gt; uniqueLayoutMap = new HashMap&lt;&gt;();</span>
+
+        // Find if layouts are the same in all nodes (at least quorum nodes should agree in the
+        // same layout) - count occurrences of each layout in cluster nodes.
+<span class="nc bnc" id="L452" title="All 2 branches missed.">        for (Layout nodeLayout : layoutMap.values()) {</span>
+<span class="nc bnc" id="L453" title="All 2 branches missed.">            if (uniqueLayoutMap.keySet().contains(nodeLayout)) {</span>
+<span class="nc" id="L454">                uniqueLayoutMap.merge(nodeLayout, 1, Integer::sum);</span>
+            } else {
+<span class="nc" id="L456">                uniqueLayoutMap.put(nodeLayout, 1);</span>
+            }
+<span class="nc" id="L458">        }</span>
+
+        // Filter layouts present in quorum number of nodes
+<span class="nc" id="L461">        Map&lt;Layout, Integer&gt; uniqueLayoutsQuorumMap = uniqueLayoutMap.entrySet().stream()</span>
+<span class="nc bnc" id="L462" title="All 2 branches missed.">                .filter(uniqueLayout -&gt; uniqueLayout.getValue() &gt;= quorum)</span>
+<span class="nc" id="L463">                .collect(Collectors.toMap(uniqueLayout -&gt; uniqueLayout.getKey(),</span>
+<span class="nc" id="L464">                        uniqueLayout -&gt; uniqueLayout.getValue()));</span>
+
+        // Select layout with greater number of occurrences.
+<span class="nc bnc" id="L467" title="All 2 branches missed.">        if (!uniqueLayoutsQuorumMap.isEmpty()) {</span>
+<span class="nc" id="L468">            Map.Entry&lt;Layout, Integer&gt; maxEntry = null;</span>
+<span class="nc bnc" id="L469" title="All 2 branches missed.">            for (Map.Entry&lt;Layout, Integer&gt; entry : uniqueLayoutsQuorumMap.entrySet()) {</span>
+<span class="nc bnc" id="L470" title="All 4 branches missed.">                if (maxEntry == null || entry.getValue().compareTo(maxEntry.getValue()) &gt; 0) {</span>
+<span class="nc" id="L471">                    maxEntry = entry;</span>
+                }
+<span class="nc" id="L473">            }</span>
+<span class="nc" id="L474">            layout = maxEntry.getKey();</span>
+        }
+
+<span class="nc" id="L477">        return layout;</span>
+    }
+
+    private Layout getHighestEpochLayout(Map&lt;String, Layout&gt; layoutMap) {
+<span class="nc" id="L481">        Layout layout  = null;</span>
+<span class="nc bnc" id="L482" title="All 2 branches missed.">        for (Entry&lt;String, Layout&gt; entry : layoutMap.entrySet()) {</span>
+<span class="nc" id="L483">            Layout nodeLayout = entry.getValue();</span>
+<span class="nc bnc" id="L484" title="All 4 branches missed.">            if (layout == null || nodeLayout.getEpoch() &gt; layout.getEpoch()) {</span>
+<span class="nc" id="L485">                layout = nodeLayout;</span>
+            }
+<span class="nc" id="L487">        }</span>
+
+<span class="nc" id="L489">        return layout;</span>
+    }
+
+
+    private Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; getLayoutFutures(List&lt;String&gt; layoutServers) {
+
+<span class="nc" id="L495">        Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; layoutFuturesMap = new HashMap&lt;&gt;();</span>
+
+        // Get layout futures for layout requests from all layout servers.
+<span class="nc bnc" id="L498" title="All 2 branches missed.">        for (String server : layoutServers) {</span>
+<span class="nc" id="L499">            IClientRouter router = runtime.getRouter(server);</span>
+<span class="nc" id="L500">            layoutFuturesMap.put(server, new LayoutClient(router, Layout.INVALID_EPOCH).getLayout());</span>
+<span class="nc" id="L501">        }</span>
+
+<span class="nc" id="L503">        return layoutFuturesMap;</span>
+    }
+
+    private Map&lt;String, ClusterStatusReport.ConnectivityStatus&gt; getConnectivityStatusMap(Layout layout) {
+<span class="nc" id="L507">        Map&lt;String, ClusterStatusReport.ConnectivityStatus&gt; connectivityStatusMap = new HashMap&lt;&gt;();</span>
+
+        // Initialize connectivity status map to all servers as unresponsive
+<span class="nc bnc" id="L510" title="All 2 branches missed.">        for (String serverEndpoint : layout.getAllServers()) {</span>
+<span class="nc" id="L511">            connectivityStatusMap.put(serverEndpoint, ClusterStatusReport.ConnectivityStatus.UNRESPONSIVE);</span>
+<span class="nc" id="L512">        }</span>
+
+<span class="nc" id="L514">        RuntimeLayout runtimeLayout = new RuntimeLayout(layout, runtime);</span>
+<span class="nc" id="L515">        Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; pingFutureMap = new HashMap&lt;&gt;();</span>
+
+
+<span class="nc bnc" id="L518" title="All 2 branches missed.">        for (int i = 0; i &lt; CLUSTER_STATUS_QUERY_ATTEMPTS; i++) {</span>
+            // If a server is unresponsive attempt to ping for cluster_status_query_attempts
+<span class="nc bnc" id="L520" title="All 2 branches missed.">            if(connectivityStatusMap.containsValue(ConnectivityStatus.UNRESPONSIVE)) {</span>
+                // Ping only unresponsive endpoints
+<span class="nc" id="L522">                List&lt;String&gt; endpoints = connectivityStatusMap.entrySet()</span>
+<span class="nc" id="L523">                        .stream()</span>
+<span class="nc" id="L524">                        .filter(entry -&gt; entry.getValue().equals(ClusterStatusReport.ConnectivityStatus.UNRESPONSIVE))</span>
+<span class="nc" id="L525">                        .map(Entry::getKey)</span>
+<span class="nc" id="L526">                        .collect(Collectors.toList());</span>
+
+<span class="nc bnc" id="L528" title="All 2 branches missed.">                for (String serverEndpoint : endpoints) {</span>
+                    // Ping all nodes asynchronously
+<span class="nc" id="L530">                    CompletableFuture&lt;Boolean&gt; cf = runtimeLayout.getBaseClient(serverEndpoint).ping();</span>
+<span class="nc" id="L531">                    pingFutureMap.put(serverEndpoint, cf);</span>
+<span class="nc" id="L532">                }</span>
+
+                // Accumulate all responses.
+<span class="nc" id="L535">                pingFutureMap.forEach((endpoint, pingFuture) -&gt; {</span>
+                    try {
+<span class="nc bnc" id="L537" title="All 2 branches missed.">                        ClusterStatusReport.ConnectivityStatus connectivityStatus = CFUtils.getUninterruptibly(pingFuture,</span>
+                                WrongEpochException.class) ? ConnectivityStatus.RESPONSIVE : ConnectivityStatus.UNRESPONSIVE;
+<span class="nc" id="L539">                        connectivityStatusMap.put(endpoint, connectivityStatus);</span>
+<span class="nc" id="L540">                    } catch (WrongEpochException wee) {</span>
+<span class="nc" id="L541">                        connectivityStatusMap.put(endpoint, ConnectivityStatus.RESPONSIVE);</span>
+<span class="nc" id="L542">                    } catch (Exception e) {</span>
+<span class="nc" id="L543">                        connectivityStatusMap.put(endpoint, ConnectivityStatus.UNRESPONSIVE);</span>
+<span class="nc" id="L544">                    }</span>
+<span class="nc" id="L545">                });</span>
+            }
+        }
+
+<span class="nc" id="L549">        return connectivityStatusMap;</span>
+    }
+
+    private Map&lt;String, NodeStatus&gt; getNodeStatusMap(Layout layout) {
+<span class="nc" id="L553">        Map&lt;String, NodeStatus&gt; nodeStatusMap = new HashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L554" title="All 2 branches missed.">        for (String endpoint: layout.getAllServers()) {</span>
+<span class="nc bnc" id="L555" title="All 2 branches missed.">            if (layout.getUnresponsiveServers().contains(endpoint)) {</span>
+<span class="nc" id="L556">                nodeStatusMap.put(endpoint, NodeStatus.DOWN);</span>
+<span class="nc bnc" id="L557" title="All 2 branches missed.">            } else if (layout.getSegments().size() != layout.getSegmentsForEndpoint(endpoint).size()) {</span>
+                // Note: this is based on the assumption that all nodes in the layout are log unit servers
+                // (TODO) We can go ahead with this assumption, but in the future we should change this accordingly.
+<span class="nc" id="L560">                nodeStatusMap.put(endpoint, NodeStatus.DB_SYNCING);</span>
+            } else {
+<span class="nc" id="L562">                nodeStatusMap.put(endpoint, NodeStatus.UP);</span>
+            }
+<span class="nc" id="L564">        }</span>
+
+<span class="nc" id="L566">        return nodeStatusMap;</span>
+    }
+
+    private List&lt;String&gt; getLayoutServers(Collection&lt;Layout&gt; layouts) {
+<span class="nc" id="L570">        List&lt;String&gt; allLayoutServers = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L571" title="All 2 branches missed.">        for (Layout layout : layouts) {</span>
+<span class="nc" id="L572">            allLayoutServers.addAll(layout.getLayoutServers());</span>
+<span class="nc" id="L573">        }</span>
+
+<span class="nc" id="L575">        return allLayoutServers.stream().distinct().collect(Collectors.toList());</span>
+    }
+
+    /**
+     * Bootstraps the management server if not already bootstrapped.
+     * If already bootstrapped, it completes silently.
+     *
+     * @param endpoint Endpoint ot bootstrap.
+     * @param layout   Layout to bootstrap with.
+     * @return Completable Future which completes with True when the management server is bootstrapped.
+     */
+    CompletableFuture&lt;Boolean&gt; bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
+<span class="nc" id="L587">        return runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="nc" id="L588">                .getManagementClient(endpoint)</span>
+<span class="nc" id="L589">                .bootstrapManagement(layout)</span>
+<span class="nc" id="L590">                .exceptionally(throwable -&gt; {</span>
+                    try {
+<span class="nc" id="L592">                        CFUtils.unwrap(throwable, AlreadyBootstrappedException.class);</span>
+<span class="nc" id="L593">                    } catch (AlreadyBootstrappedException e) {</span>
+<span class="nc" id="L594">                        log.info(&quot;bootstrapManagementServer: Management Server {} already bootstrapped.&quot;, endpoint);</span>
+<span class="nc" id="L595">                    }</span>
+<span class="nc" id="L596">                    return true;</span>
+                })
+<span class="nc" id="L598">                .thenApply(result -&gt; {</span>
+<span class="nc" id="L599">                    log.info(&quot;bootstrapManagementServer: Management Server {} bootstrap successful.&quot;, endpoint);</span>
+<span class="nc" id="L600">                    return true;</span>
+                });
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

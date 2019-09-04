@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>RuntimeLayout.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">RuntimeLayout.java</span></div><h1>RuntimeLayout.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import lombok.Data;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.IClient;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+
+import javax.annotation.Nonnull;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * This is a wrapper over the layout to provide the clients required to communicate with the nodes.
+ * &lt;p&gt;Created by zlokhandwala on 3/8/18.
+ */
+<span class="nc" id="L32">@Slf4j</span>
+<span class="nc bnc" id="L33" title="All 30 branches missed.">@Data</span>
+public class RuntimeLayout {
+
+<span class="nc" id="L36">    @Getter</span>
+    private final Layout layout;
+
+    /**
+     * The org.corfudb.runtime this layout is associated with.
+     */
+<span class="nc" id="L42">    @Getter</span>
+    private final CorfuRuntime runtime;
+
+    /**
+     * Constructor taking a reference of the layout to stamp the clients.
+     */
+<span class="nc" id="L48">    public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {</span>
+<span class="nc" id="L49">        this.layout = layout;</span>
+<span class="nc" id="L50">        this.runtime = corfuRuntime;</span>
+<span class="nc" id="L51">    }</span>
+
+    /**
+     * Attempts to move all servers in the system to the epoch of this layout.
+     * The seal however waits only for a response from a quorum of layout servers (n/2 + 1),
+     * a quorum of log unit servers in every stripe in case of QUORUM_REPLICATION or
+     * at least one log unit server in every stripe in case of CHAIN_REPLICATION.
+     * The fault detector eventually corrects out of phase epochs by resealing the servers.
+     *
+     * @throws WrongEpochException        If any server is in a higher epoch.
+     * @throws QuorumUnreachableException If enough number of servers cannot be sealed.
+     */
+    public void sealMinServerSet()
+            throws WrongEpochException, QuorumUnreachableException {
+<span class="nc" id="L65">        log.debug(&quot;Requested move of servers to new epoch {} servers are {}&quot;, layout.getEpoch(),</span>
+<span class="nc" id="L66">                layout.getAllServers());</span>
+
+        // Set remote epoch on all servers in layout.
+<span class="nc" id="L69">        Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; resultMap = SealServersHelper.asyncSealServers(this);</span>
+
+        // Validate if we received enough layout server responses.
+<span class="nc" id="L72">        SealServersHelper.waitForLayoutSeal(layout.getLayoutServers(), resultMap);</span>
+        // Validate if we received enough log unit server responses depending on the
+        // replication mode.
+<span class="nc bnc" id="L75" title="All 2 branches missed.">        for (LayoutSegment layoutSegment : layout.getSegments()) {</span>
+<span class="nc" id="L76">            layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);</span>
+<span class="nc" id="L77">        }</span>
+
+<span class="nc" id="L79">        log.debug(&quot;Layout has been sealed successfully.&quot;);</span>
+<span class="nc" id="L80">    }</span>
+
+
+    /**
+     * Sender Client Map.
+     * map(client type -&gt; map(Endpoint -&gt; senderClient))
+     * This ensures that a client for a particular endpoint stamped with the required epoch is
+     * created only once.
+     */
+<span class="nc" id="L89">    private final Map&lt;Class&lt;? extends IClient&gt;,</span>
+<span class="nc" id="L90">            Map&lt;String, IClient&gt;&gt; senderClientMap = new ConcurrentHashMap&lt;&gt;();</span>
+
+    /**
+     * Updates the local map of clients.
+     * The epoch, client tuple is invalidated and overwritten when there is an epoch mismatch.
+     * This ensures that a client for a particular endpoint stamped with the required epoch is
+     * created only once.
+     *
+     * @param clientClass Class of client to be fetched.
+     * @param endpoint    Router endpoint to create the client.
+     * @return client
+     */
+    private IClient getClient(final Class&lt;? extends IClient&gt; clientClass,
+                              final String endpoint) {
+<span class="nc" id="L104">        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -&gt; {</span>
+<span class="nc" id="L105">            Map&lt;String, IClient&gt; endpointClientMap = stringEntryMap;</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">            if (endpointClientMap == null) {</span>
+<span class="nc" id="L107">                endpointClientMap = new HashMap&lt;&gt;();</span>
+            }
+
+<span class="nc" id="L110">            endpointClientMap.computeIfAbsent(endpoint, s -&gt; {</span>
+                try {
+<span class="nc" id="L112">                    Constructor&lt;? extends IClient&gt; ctor =</span>
+<span class="nc" id="L113">                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class);</span>
+<span class="nc" id="L114">                    IClient inst = ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());</span>
+<span class="nc" id="L115">                    inst.setPriorityLevel(getRuntime().getParameters().getPriorityLevel());</span>
+<span class="nc" id="L116">                    return inst;</span>
+<span class="nc" id="L117">                } catch (NoSuchMethodException | IllegalAccessException | InstantiationException</span>
+                        | InvocationTargetException e) {
+<span class="nc" id="L119">                    throw new UnrecoverableCorfuError(e);</span>
+                }
+            });
+<span class="nc" id="L122">            return endpointClientMap;</span>
+<span class="nc" id="L123">        }).get(endpoint);</span>
+    }
+
+    public BaseClient getBaseClient(String endpoint) {
+<span class="nc" id="L127">        return (BaseClient) getClient(BaseClient.class, endpoint);</span>
+    }
+
+    public LayoutClient getLayoutClient(String endpoint) {
+<span class="nc" id="L131">        return (LayoutClient) getClient(LayoutClient.class, endpoint);</span>
+    }
+
+    public SequencerClient getPrimarySequencerClient() {
+<span class="nc" id="L135">        return getSequencerClient(layout.getSequencers().get(0));</span>
+    }
+
+    public SequencerClient getSequencerClient(String endpoint) {
+<span class="nc" id="L139">        return (SequencerClient) getClient(SequencerClient.class, endpoint);</span>
+    }
+
+    public LogUnitClient getLogUnitClient(long address, int index) {
+<span class="nc" id="L143">        return getLogUnitClient(layout.getStripe(address).getLogServers().get(index));</span>
+    }
+
+    public LogUnitClient getLogUnitClient(String endpoint) {
+<span class="nc" id="L147">        return ((LogUnitClient) getClient(LogUnitClient.class, endpoint));</span>
+    }
+
+    public ManagementClient getManagementClient(String endpoint) {
+<span class="nc" id="L151">        return (ManagementClient) getClient(ManagementClient.class, endpoint);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

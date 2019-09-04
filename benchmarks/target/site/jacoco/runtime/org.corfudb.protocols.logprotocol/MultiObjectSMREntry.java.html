@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>MultiObjectSMREntry.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.logprotocol</a> &gt; <span class="el_source">MultiObjectSMREntry.java</span></div><h1>MultiObjectSMREntry.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.logprotocol;
+
+import io.netty.buffer.ByteBuf;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import lombok.Getter;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers;
+
+
+
+/**
+ * A log entry structure which contains a collection of multiSMRentries,
+ * each one contains a list of updates for one object.
+ */
+@SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+<span class="nc" id="L25">@ToString</span>
+<span class="nc" id="L26">@Slf4j</span>
+public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
+
+    // map from stream-ID to a list of updates encapsulated as MultiSMREntry
+<span class="nc" id="L30">    @Getter</span>
+<span class="nc" id="L31">    public Map&lt;UUID, MultiSMREntry&gt; entryMap = Collections.synchronizedMap(new HashMap&lt;&gt;());</span>
+
+<span class="nc" id="L33">    public MultiObjectSMREntry() {</span>
+<span class="nc" id="L34">        this.type = LogEntryType.MULTIOBJSMR;</span>
+<span class="nc" id="L35">    }</span>
+
+<span class="nc" id="L37">    public MultiObjectSMREntry(Map&lt;UUID, MultiSMREntry&gt; entryMap) {</span>
+<span class="nc" id="L38">        this.type = LogEntryType.MULTIOBJSMR;</span>
+<span class="nc" id="L39">        this.entryMap = entryMap;</span>
+<span class="nc" id="L40">    }</span>
+
+    /** Extract a particular stream's entry from this object.
+     *
+     * @param streamID StreamID
+     * @return the MultiSMREntry corresponding to streamId
+     */
+    protected MultiSMREntry getStreamEntry(UUID streamID) {
+<span class="nc" id="L48">        return getEntryMap().computeIfAbsent(streamID, u -&gt; {</span>
+<span class="nc" id="L49">                    return new MultiSMREntry();</span>
+                }
+        );
+    }
+
+    /**
+     * Add one SMR-update to one object's update-list.
+     * @param streamID StreamID
+     * @param updateEntry SMREntry to add
+     */
+    public void addTo(UUID streamID, SMREntry updateEntry) {
+<span class="nc" id="L60">        getStreamEntry(streamID).addTo(updateEntry);</span>
+<span class="nc" id="L61">    }</span>
+
+    /**
+     * merge two MultiObjectSMREntry records.
+     * merging is done object-by-object
+     * @param other Object to merge.
+     */
+    public void mergeInto(MultiObjectSMREntry other) {
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (other == null) {</span>
+<span class="nc" id="L70">            return;</span>
+        }
+
+<span class="nc" id="L73">        other.getEntryMap().forEach((streamID, multiSmrEntry) -&gt; {</span>
+<span class="nc" id="L74">            getStreamEntry(streamID).mergeInto(multiSmrEntry);</span>
+<span class="nc" id="L75">        });</span>
+<span class="nc" id="L76">    }</span>
+
+    /**
+     * This function provides the remaining buffer.
+     *
+     * @param b The remaining buffer.
+     */
+    @Override
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+<span class="nc" id="L85">        super.deserializeBuffer(b, rt);</span>
+
+<span class="nc" id="L87">        int numUpdates = b.readInt();</span>
+<span class="nc" id="L88">        entryMap = new HashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        for (int i = 0; i &lt; numUpdates; i++) {</span>
+<span class="nc" id="L90">            entryMap.put(</span>
+<span class="nc" id="L91">                    new UUID(b.readLong(), b.readLong()),</span>
+<span class="nc" id="L92">                    ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt)));</span>
+        }
+<span class="nc" id="L94">    }</span>
+
+    @Override
+    public void serialize(ByteBuf b) {
+<span class="nc" id="L98">        super.serialize(b);</span>
+<span class="nc" id="L99">        b.writeInt(entryMap.size());</span>
+<span class="nc" id="L100">        entryMap.entrySet().stream()</span>
+<span class="nc" id="L101">                .forEach(x -&gt; {</span>
+<span class="nc" id="L102">                    b.writeLong(x.getKey().getMostSignificantBits());</span>
+<span class="nc" id="L103">                    b.writeLong(x.getKey().getLeastSignificantBits());</span>
+<span class="nc" id="L104">                    Serializers.CORFU.serialize(x.getValue(), b);</span>
+<span class="nc" id="L105">                });</span>
+<span class="nc" id="L106">    }</span>
+
+    /**
+     * Get the list of SMR updates for a particular object.
+     * @param id StreamID
+     * @return an empty list if object has no updates; a list of updates if exists
+     */
+    @Override
+    public List&lt;SMREntry&gt; getSMRUpdates(UUID id) {
+<span class="nc" id="L115">        MultiSMREntry entry = entryMap.get(id);</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        return entryMap.get(id) == null ? Collections.emptyList() :</span>
+<span class="nc" id="L117">                entry.getUpdates();</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setGlobalAddress(long address) {
+<span class="nc" id="L125">        super.setGlobalAddress(address);</span>
+<span class="nc" id="L126">        this.getEntryMap().values().forEach(x -&gt; {</span>
+<span class="nc" id="L127">            x.setGlobalAddress(address);</span>
+<span class="nc" id="L128">        });</span>
+<span class="nc" id="L129">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

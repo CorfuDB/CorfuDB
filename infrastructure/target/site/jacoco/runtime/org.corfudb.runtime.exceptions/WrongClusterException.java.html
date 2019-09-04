@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>WrongClusterException.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.exceptions</a> &gt; <span class="el_source">WrongClusterException.java</span></div><h1>WrongClusterException.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.exceptions;
+
+import java.util.UUID;
+import javax.annotation.Nullable;
+import lombok.Getter;
+import org.corfudb.util.UuidUtils;
+
+public class WrongClusterException extends RuntimeException {
+
+    /** The cluster we expected to connect to. */
+<span class="nc" id="L11">    @Getter</span>
+    final UUID expectedCluster;
+
+    /** The cluster we actually ended up connecting to. */
+<span class="nc" id="L15">    @Getter</span>
+    final UUID actualCluster;
+
+    /** Create a new {@link org.corfudb.runtime.exceptions.WrongClusterException}.
+     *
+     * @param expectedCluster   The cluster we expected to connect to.
+     * @param actualCluster     The cluster we actually ended up connecting to.
+     */
+    public WrongClusterException(@Nullable UUID expectedCluster,
+                                 @Nullable UUID actualCluster) {
+<span class="nc bnc" id="L25" title="All 2 branches missed.">        super(&quot;Expected: &quot;</span>
+<span class="nc bnc" id="L26" title="All 2 branches missed.">            + ((expectedCluster == null) ? &quot;null&quot; : UuidUtils.asBase64(expectedCluster))</span>
+            + &quot; Actual: &quot;
+<span class="nc" id="L28">            + ((actualCluster == null) ? &quot;null&quot; : UuidUtils.asBase64(actualCluster)));</span>
+<span class="nc" id="L29">        this.expectedCluster = expectedCluster;</span>
+<span class="nc" id="L30">        this.actualCluster = actualCluster;</span>
+<span class="nc" id="L31">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

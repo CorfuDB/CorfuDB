@@ -1,0 +1,8 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+runtime/annotations,org.corfudb.runtime.object,ICorfuSMR,4,0,0,0,1,0,1,0,1,0
+runtime/annotations,org.corfudb.annotations,ObjectType,38,0,0,0,3,0,4,0,4,0
+runtime/annotations,org.corfudb.annotations,StaticMappingObject,3,0,0,0,1,0,1,0,1,0
+runtime/annotations,org.corfudb.annotations,ConstructorType,38,0,0,0,3,0,4,0,4,0
+runtime/annotations,org.corfudb.annotations,StateSource,38,0,0,0,3,0,4,0,4,0
+runtime/annotationProcessor,org.corfudb.annotations,ObjectAnnotationProcessor,2816,0,236,0,484,0,196,0,78,0
+runtime/annotationProcessor,org.corfudb.annotations,ObjectAnnotationProcessor.SmrMethodInfo,121,0,18,0,24,0,13,0,4,0

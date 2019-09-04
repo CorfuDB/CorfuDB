@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <!-- https://logback.qos.ch/manual/configuration.html#stopContext -->
+    <shutdownHook/>
+
+    <property name="LOG_DIRECTORY" value="/var/log/corfu" />
+
+    <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIRECTORY}/corfu.9000.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${LOG_DIRECTORY}/corfu.9000.%i.log.gz</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>30</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>700MB</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %30.30thread | %30.30logger{30} | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
+    <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="file" />
+        <queueSize>1024</queueSize>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="async_file"/>
+    </root>
+</configuration>

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>PlainTextSaslServer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.security.sasl.plaintext</a> &gt; <span class="el_source">PlainTextSaslServer.java</span></div><h1>PlainTextSaslServer.java</h1><pre class="source lang-java linenums">package org.corfudb.security.sasl.plaintext;
+
+import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
+import java.util.Map;
+
+import javax.security.auth.callback.CallbackHandler;
+import javax.security.auth.login.LoginContext;
+import javax.security.auth.login.LoginException;
+import javax.security.sasl.Sasl;
+import javax.security.sasl.SaslException;
+import javax.security.sasl.SaslServer;
+import javax.security.sasl.SaslServerFactory;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Created by sneginhal on 01/27/2017.
+ * Implementation of the plain text SASL server.
+ * Please refer to the following resources for more information:
+ * https://docs.oracle.com/javase/8/docs/technotes/guides/security/sasl/sasl-refguide.html
+ * https://tools.ietf.org/html/rfc4616
+ * https://tools.ietf.org/html/rfc4422
+ */
+<span class="nc" id="L24">@Slf4j</span>
+public class PlainTextSaslServer implements SaslServer {
+
+    public static final String MECHANISM = &quot;PLAIN&quot;;
+
+    private boolean authenticated;
+
+    private String authorizationId;
+
+<span class="nc" id="L33">    public PlainTextSaslServer() {</span>
+<span class="nc" id="L34">        authenticated = false;</span>
+<span class="nc" id="L35">    }</span>
+
+    @Override
+    public String getMechanismName() {
+<span class="nc" id="L39">        return MECHANISM;</span>
+    }
+
+    private void verify(String authzid, String authcid, String passwd)
+            throws SaslException {
+
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (authcid.isEmpty()) {</span>
+<span class="nc" id="L46">            throw new SaslException(&quot;Authentication failed due to empty username&quot;);</span>
+        }
+<span class="nc bnc" id="L48" title="All 2 branches missed.">        if (passwd.isEmpty()) {</span>
+<span class="nc" id="L49">            throw new SaslException(&quot;Authentication failed due to empty password&quot;);</span>
+        }
+
+<span class="nc bnc" id="L52" title="All 2 branches missed.">        if (authzid.isEmpty()) {</span>
+<span class="nc" id="L53">            authorizationId = authcid;</span>
+        } else {
+<span class="nc" id="L55">            authorizationId = authzid;</span>
+        }
+
+        try {
+<span class="nc" id="L59">            LoginContext lc = new LoginContext(&quot;CorfuDB&quot;,</span>
+                    new PlainTextCallbackHandler(authcid, passwd));
+<span class="nc" id="L61">            lc.login();</span>
+<span class="nc" id="L62">        } catch (LoginException le) {</span>
+<span class="nc" id="L63">            throw new SaslException(&quot;Login attempt by '&quot; + authcid + &quot;' failed&quot;);</span>
+<span class="nc" id="L64">        }</span>
+<span class="nc" id="L65">        log.debug(&quot;Login by {} is successful&quot;, authcid);</span>
+
+<span class="nc" id="L67">        authenticated = true;</span>
+<span class="nc" id="L68">    }</span>
+
+    @Override
+    public byte[] evaluateResponse(byte[] response)
+            throws SaslException {
+        String[] tokens;
+        try {
+<span class="nc" id="L75">            tokens = new String(response, &quot;UTF-8&quot;).split(&quot;\u0000&quot;);</span>
+<span class="nc" id="L76">        } catch (UnsupportedEncodingException ue) {</span>
+<span class="nc" id="L77">            throw new SaslException(&quot;Unsupported charset&quot;);</span>
+<span class="nc" id="L78">        }</span>
+
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (tokens.length != 3) {</span>
+<span class="nc" id="L81">            throw new SaslException(&quot;Malformed plain text response received&quot;);</span>
+        }
+
+<span class="nc" id="L84">        verify(tokens[0], tokens[1], tokens[2]);</span>
+
+<span class="nc" id="L86">        return null;</span>
+    }
+
+    @Override
+    public boolean isComplete() {
+<span class="nc" id="L91">        return authenticated;</span>
+    }
+
+    @Override
+    public String getAuthorizationID() {
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        if (!authenticated) {</span>
+<span class="nc" id="L97">            throw new IllegalStateException(&quot;Authentication is incomplete&quot;);</span>
+        }
+<span class="nc" id="L99">        return authorizationId;</span>
+    }
+
+    @Override
+    public byte[] unwrap(byte[] incoming, int offset, int len) throws SaslException {
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        if (!authenticated) {</span>
+<span class="nc" id="L105">            throw new IllegalStateException(&quot;Authentication is incomplete&quot;);</span>
+        }
+<span class="nc" id="L107">        return Arrays.copyOfRange(incoming, offset, offset + len);</span>
+    }
+
+    @Override
+    public byte[] wrap(byte[] outgoing, int offset, int len) throws SaslException {
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (!authenticated) {</span>
+<span class="nc" id="L113">            throw new IllegalStateException(&quot;Authentication is incomplete&quot;);</span>
+        }
+<span class="nc" id="L115">        return Arrays.copyOfRange(outgoing, offset, offset + len);</span>
+    }
+
+    @Override
+    public Object getNegotiatedProperty(String propName) {
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        if (!authenticated) {</span>
+<span class="nc" id="L121">            throw new IllegalStateException(&quot;Authentication is incomplete&quot;);</span>
+        }
+<span class="nc" id="L123">        return null;</span>
+    }
+
+    @Override
+    public void dispose() throws SaslException {
+<span class="nc" id="L128">    }</span>
+
+<span class="nc" id="L130">    public static class PlainTextSaslServerFactory implements SaslServerFactory {</span>
+
+        @Override
+        public SaslServer createSaslServer(String mechanism, String protocol,
+                                           String serverName, Map&lt;String, ?&gt; props,
+                                           CallbackHandler cbh)
+                throws SaslException {
+
+<span class="nc bnc" id="L138" title="All 2 branches missed.">            if (!mechanism.equals(MECHANISM)) {</span>
+<span class="nc" id="L139">                throw new SaslException(&quot;Unsupported mechanism: &quot; + mechanism);</span>
+            }
+<span class="nc" id="L141">            return new PlainTextSaslServer();</span>
+        }
+
+        @Override
+        public String[] getMechanismNames(Map&lt;String, ?&gt; props) {
+<span class="nc" id="L146">            String noPlainText = (String) props.get(Sasl.POLICY_NOPLAINTEXT);</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">            if (noPlainText.equals(&quot;true&quot;)) {</span>
+<span class="nc" id="L148">                return new String[]{};</span>
+            } else {
+<span class="nc" id="L150">                return new String[]{MECHANISM};</span>
+            }
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>StreamsAddressRequest.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">StreamsAddressRequest.java</span></div><h1>StreamsAddressRequest.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import io.netty.buffer.ByteBuf;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NonNull;
+
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Represents the request sent to the sequencer to retrieve one or several streams address map.
+ *
+ * Created by annym on 02/06/2019
+ */
+<span class="nc bnc" id="L16" title="All 16 branches missed.">@Data</span>
+<span class="nc" id="L17">@AllArgsConstructor</span>
+@CorfuPayload
+public class StreamsAddressRequest implements ICorfuPayload&lt;StreamsAddressRequest&gt;{
+
+    public static final byte STREAMS = 0; /*To request specific streams*/
+
+    public static final byte ALL_STREAMS = 1; /*To request all streams*/
+
+    /** The type of request, one of the above. */
+<span class="nc" id="L26">    final byte reqType;</span>
+
+<span class="nc" id="L28">    private final List&lt;StreamAddressRange&gt; streamsRanges;</span>
+
+<span class="nc bnc" id="L30" title="All 2 branches missed.">    public StreamsAddressRequest(@NonNull List&lt;StreamAddressRange&gt; streamsRanges) {</span>
+<span class="nc" id="L31">        reqType = STREAMS;</span>
+<span class="nc" id="L32">        this.streamsRanges = streamsRanges;</span>
+<span class="nc" id="L33">    }</span>
+
+<span class="nc" id="L35">    public StreamsAddressRequest(Byte reqType) {</span>
+<span class="nc" id="L36">        this.reqType = reqType;</span>
+<span class="nc" id="L37">        this.streamsRanges = Collections.EMPTY_LIST;</span>
+<span class="nc" id="L38">    }</span>
+
+    /**
+     * Deserialization Constructor from Bytebuf to StreamsAddressRequest.
+     *
+     * @param buf The buffer to deserialize
+     */
+<span class="nc" id="L45">    public StreamsAddressRequest(ByteBuf buf) {</span>
+<span class="nc" id="L46">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
+<span class="nc bnc" id="L47" title="All 2 branches missed.">        if (reqType != ALL_STREAMS) {</span>
+<span class="nc" id="L48">            streamsRanges = ICorfuPayload.listFromBuffer(buf, StreamAddressRange.class);</span>
+        } else {
+<span class="nc" id="L50">            streamsRanges = Collections.EMPTY_LIST;</span>
+        }
+<span class="nc" id="L52">    }</span>
+
+    @Override
+    public void doSerialize(ByteBuf buf) {
+<span class="nc" id="L56">        ICorfuPayload.serialize(buf, reqType);</span>
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (reqType != ALL_STREAMS) {</span>
+<span class="nc" id="L58">            ICorfuPayload.serialize(buf, streamsRanges);</span>
+        }
+<span class="nc" id="L60">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

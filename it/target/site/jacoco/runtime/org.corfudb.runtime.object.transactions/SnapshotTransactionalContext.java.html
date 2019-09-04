@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SnapshotTransactionalContext.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object.transactions</a> &gt; <span class="el_source">SnapshotTransactionalContext.java</span></div><h1>SnapshotTransactionalContext.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object.transactions;
+
+import com.google.common.collect.ImmutableSet;
+
+import java.util.Set;
+
+import lombok.Getter;
+
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.view.Address;
+
+/**
+ * A snapshot transactional context.
+ *
+ * &lt;p&gt;Given the snapshot (log address) given by the TransactionBuilder,
+ * access all objects within the same snapshot during the course of
+ * this transactional context.
+ *
+ * &lt;p&gt;Created by mwei on 11/22/16.
+ */
+public class SnapshotTransactionalContext extends AbstractTransactionalContext {
+
+    /** In a snapshot transaction, no proxies are ever modified.
+     *
+     */
+<span class="nc" id="L32">    @Getter</span>
+<span class="nc" id="L33">    private Set&lt;ICorfuSMRProxyInternal&gt; modifiedProxies = ImmutableSet.of();</span>
+
+    public SnapshotTransactionalContext(Transaction transaction) {
+<span class="nc" id="L36">        super(transaction);</span>
+<span class="nc" id="L37">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public &lt;R, T&gt; R access(ICorfuSMRProxyInternal&lt;T&gt; proxy,
+                           ICorfuSMRAccess&lt;R, T&gt; accessFunction,
+                           Object[] conflictObject) {
+
+        // In snapshot transactions, there are no conflicts.
+        // Hence, we do not need to add this access to a conflict set
+        // do not add: addToReadSet(proxy, conflictObject);
+<span class="nc" id="L50">        return proxy.getUnderlyingObject().access(o -&gt; o.getVersionUnsafe()</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">                        == getSnapshotTimestamp().getSequence()</span>
+<span class="nc bnc" id="L52" title="All 2 branches missed.">                        &amp;&amp; !o.isOptimisticallyModifiedUnsafe(),</span>
+                o -&gt; {
+<span class="nc" id="L54">                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);</span>
+<span class="nc" id="L55">                },</span>
+<span class="nc" id="L56">                o -&gt; accessFunction.access(o));</span>
+    }
+
+    /**
+     * Get the result of an upcall.
+     *
+     * @param proxy     The proxy to retrieve the upcall for.
+     * @param timestamp The timestamp to return the upcall for.
+     * @return The result of the upcall.
+     */
+    @Override
+    public &lt;T&gt; Object getUpcallResult(ICorfuSMRProxyInternal&lt;T&gt; proxy,
+                                      long timestamp,
+                                      Object[] conflictObject) {
+<span class="nc" id="L70">        throw new UnsupportedOperationException(&quot;Can't get upcall during a read-only transaction!&quot;);</span>
+    }
+
+    /**
+     * Log an SMR update to the Corfu log.
+     *
+     * @param proxy       The proxy which generated the update.
+     * @param updateEntry The entry which we are writing to the log.
+     * @return The address the update was written at.
+     */
+    @Override
+    public &lt;T&gt; long logUpdate(ICorfuSMRProxyInternal&lt;T&gt; proxy,
+                              SMREntry updateEntry,
+                              Object[] conflictObject) {
+<span class="nc" id="L84">        throw new UnsupportedOperationException(</span>
+                &quot;Can't modify object during a read-only transaction!&quot;);
+    }
+
+    @Override
+    public void addTransaction(AbstractTransactionalContext tc) {
+<span class="nc" id="L90">        throw new UnsupportedOperationException(&quot;Can't merge into a readonly txn (yet)&quot;);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

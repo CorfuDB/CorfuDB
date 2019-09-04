@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>LayoutDeserializer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">LayoutDeserializer.java</span></div><h1>LayoutDeserializer.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParseException;
+
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+
+/**
+ * Created by rmichoud on 4/13/17.
+ *
+ * &lt;p&gt;These classes will be used to force the json deserialized object to be created by
+ * the constructor. Proper validation of the object is done in the Layout class constructor.&lt;/p&gt;
+ */
+<span class="nc" id="L18">public class LayoutDeserializer implements JsonDeserializer {</span>
+    @Override
+    public Layout deserialize(JsonElement arg0, Type arg1, JsonDeserializationContext arg2)
+            throws JsonParseException {
+<span class="nc" id="L22">        Gson g = new Gson();</span>
+<span class="nc" id="L23">        Layout unsafeLayout = g.fromJson(arg0, Layout.class);</span>
+
+        /* Unresponsive servers is an optional field in the json, if it is not present
+         * we need to create an empty list (by default gson will set it to null)
+         */
+<span class="nc bnc" id="L28" title="All 2 branches missed.">        if (unsafeLayout.unresponsiveServers == null) {</span>
+<span class="nc" id="L29">            unsafeLayout.unresponsiveServers = new ArrayList&lt;&gt;();</span>
+        }
+
+        /* Similar to a copy constructor. This constructor holds all the validation for
+        constructing a layout. */
+<span class="nc" id="L34">        Layout safeLayout = new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,</span>
+                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch,
+                unsafeLayout.clusterId);
+
+<span class="nc" id="L38">        return safeLayout;</span>
+
+    }
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

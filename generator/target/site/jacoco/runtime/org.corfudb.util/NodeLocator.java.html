@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>NodeLocator.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">NodeLocator.java</span></div><h1>NodeLocator.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import com.google.common.collect.ImmutableMap;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Singular;
+
+import java.io.Serializable;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+/**
+ * {@link NodeLocator}s represent locators for Corfu nodes.
+ *
+ * &lt;p&gt;A detailed document regarding their contents and format can be found in docs/NODE_FORMAT.md
+ */
+<span class="nc bnc" id="L25" title="All 12 branches missed.">@Builder</span>
+<span class="nc bnc" id="L26" title="All 40 branches missed.">@EqualsAndHashCode</span>
+public class NodeLocator implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * Represents protocols for Corfu nodes.
+     */
+<span class="nc" id="L34">    public enum Protocol {</span>
+        /**
+         * Default TCP-based protocol.
+         */
+<span class="nc" id="L38">        TCP</span>
+    }
+
+    /**
+     * The protocol to use.
+     */
+<span class="nc" id="L44">    @Getter</span>
+    @NonNull
+    @Default
+    private final Protocol protocol = Protocol.TCP;
+
+    /**
+     * The host the node is located on.
+     */
+<span class="nc" id="L52">    @Getter</span>
+    @NonNull
+    private final String host;
+
+    /**
+     * The port number on the host the node is located on.
+     */
+<span class="nc" id="L59">    @Getter</span>
+    private final int port;
+
+    /**
+     * The ID of the node. Can be null if node id matching is not requested.
+     */
+<span class="nc" id="L65">    @Getter</span>
+    private final UUID nodeId;
+
+    /**
+     * A map of options.
+     */
+    @Singular
+    private final ImmutableMap&lt;String, String&gt; options;
+
+    /**
+     * Parse a node locator string.
+     *
+     * @param toParse The string to parse.
+     * @return A {@link NodeLocator} which represents the string.
+     */
+    public static NodeLocator parseString(String toParse) {
+        try {
+            // Fix a &quot;legacy&quot; node locator, which doesn't have a protocol.
+<span class="nc bnc" id="L83" title="All 2 branches missed.">            if (!toParse.contains(&quot;://&quot;)) {</span>
+<span class="nc" id="L84">                toParse = &quot;tcp://&quot; + toParse;</span>
+            }
+
+<span class="nc" id="L87">            URI url = new URI(toParse);</span>
+
+            // Get the protocol from the enum
+<span class="nc" id="L90">            Protocol proto = Protocol.valueOf(url.getScheme().toUpperCase());</span>
+
+            // Host/port are as in a URL
+<span class="nc" id="L93">            String host = url.getHost();</span>
+<span class="nc" id="L94">            int port = url.getPort();</span>
+
+            // Node ID is from the path, if present.
+            UUID nodeId;
+<span class="nc bnc" id="L98" title="All 4 branches missed.">            if (url.getPath().equals(&quot;&quot;) || url.getPath().equals(&quot;/&quot;)) {</span>
+                // No path, so nodeId is null
+<span class="nc" id="L100">                nodeId = null;</span>
+            } else {
+<span class="nc" id="L102">                nodeId = UuidUtils.fromBase64(url.getPath().replaceFirst(&quot;/&quot;, &quot;&quot;));</span>
+            }
+
+            // Options map is from the query, if present.
+            Map&lt;String, String&gt; options;
+<span class="nc bnc" id="L107" title="All 4 branches missed.">            if (url.getQuery() == null || url.getQuery().equals(&quot;&quot;)) {</span>
+<span class="nc" id="L108">                options = Collections.emptyMap();</span>
+            } else {
+<span class="nc" id="L110">                String[] query = url.getQuery().split(&quot;&amp;&quot;);</span>
+<span class="nc" id="L111">                options = Arrays.stream(query)</span>
+<span class="nc" id="L112">                        .map(keyValue -&gt; keyValue.split(&quot;=&quot;))</span>
+<span class="nc" id="L113">                        .collect(Collectors.toMap(kv -&gt; kv[0], kv -&gt; kv[1]));</span>
+            }
+
+<span class="nc" id="L116">            return NodeLocator.builder()</span>
+<span class="nc" id="L117">                    .protocol(proto)</span>
+<span class="nc" id="L118">                    .host(host)</span>
+<span class="nc" id="L119">                    .port(port)</span>
+<span class="nc" id="L120">                    .nodeId(nodeId)</span>
+<span class="nc" id="L121">                    .options(options)</span>
+<span class="nc" id="L122">                    .build();</span>
+
+<span class="nc" id="L124">        } catch (URISyntaxException m) {</span>
+<span class="nc" id="L125">            throw new IllegalArgumentException(m);</span>
+        }
+    }
+
+    public String toEndpointUrl(){
+<span class="nc" id="L130">        return host + &quot;:&quot; + port;</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L135">        return toEndpointUrl();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

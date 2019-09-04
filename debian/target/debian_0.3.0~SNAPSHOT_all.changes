@@ -1,0 +1,20 @@
+Format: 1.8
+Date: Wed, 4 Sep 2019 11:17:57 -0700
+Source: corfu-server
+Binary: corfu-server
+Architecture: all
+Version: 0.3.0~SNAPSHOT
+Distribution: development
+Urgency: low
+Maintainer: Michael Wei <mwei@cs.ucsd.edu>
+Changed-By: Michael Wei <mwei@cs.ucsd.edu>
+Description:
+ corfu-server - Corfu is a consistency platform designed around the abstraction of a shared log.
+Changes:
+ corfu-server (0.3.0~SNAPSHOT) development; urgency=low
+Checksums-Sha1:
+ 7b4ab19dc74c0c6ab3a9e49cea38aa468e30e912 17058824 debian_0.3.0~SNAPSHOT_all.deb
+Checksums-Sha256:
+ 092e3df7b8fb4a8d0287d48d8375abab46cc976a7e4fa40c70c088af82d5a277 17058824 debian_0.3.0~SNAPSHOT_all.deb
+Files:
+ 40ca509aae4316f3bd5d01735189882d 17058824 misc optional debian_0.3.0~SNAPSHOT_all.deb

@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ICorfuPayload.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">ICorfuPayload.java</span></div><h1>ICorfuPayload.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import com.google.common.collect.BoundType;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableRangeSet;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.reflect.TypeToken;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
+import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
+import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
+import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.JsonUtils;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
+
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.lang.invoke.CallSite;
+import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Constructor;
+import java.nio.charset.StandardCharsets;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Created by mwei on 8/1/16.
+ */
+public interface ICorfuPayload&lt;T&gt; {
+
+    @FunctionalInterface
+    interface PayloadConstructor&lt;T&gt; {
+        T construct(ByteBuf buf);
+    }
+
+<span class="nc" id="L49">    ConcurrentHashMap&lt;Class&lt;?&gt;, PayloadConstructor&lt;?&gt;&gt; constructorMap = new ConcurrentHashMap&lt;&gt;(</span>
+<span class="nc" id="L50">            ImmutableMap.&lt;Class&lt;?&gt;, PayloadConstructor&lt;?&gt;&gt;builder()</span>
+<span class="nc" id="L51">                    .put(Byte.class, ByteBuf::readByte)</span>
+<span class="nc" id="L52">                    .put(Integer.class, ByteBuf::readInt)</span>
+<span class="nc" id="L53">                    .put(Long.class, ByteBuf::readLong)</span>
+<span class="nc" id="L54">                    .put(Boolean.class, ByteBuf::readBoolean)</span>
+<span class="nc" id="L55">                    .put(Double.class, ByteBuf::readDouble)</span>
+<span class="nc" id="L56">                    .put(Float.class, ByteBuf::readFloat)</span>
+<span class="nc" id="L57">                    .put(String.class, x -&gt; {</span>
+<span class="nc" id="L58">                        int numBytes = x.readInt();</span>
+<span class="nc" id="L59">                        byte[] bytes = new byte[numBytes];</span>
+<span class="nc" id="L60">                        x.readBytes(bytes);</span>
+<span class="nc" id="L61">                        return new String(bytes);</span>
+                    })
+<span class="nc" id="L63">                    .put(Layout.class, x -&gt; {</span>
+<span class="nc" id="L64">                        int length = x.readInt();</span>
+<span class="nc" id="L65">                        byte[] byteArray = new byte[length];</span>
+<span class="nc" id="L66">                        x.readBytes(byteArray, 0, length);</span>
+<span class="nc" id="L67">                        String str = new String(byteArray, StandardCharsets.UTF_8);</span>
+<span class="nc" id="L68">                        return JsonUtils.parser.fromJson(str, Layout.class);</span>
+                    })
+<span class="nc" id="L70">                    .put(DataRank.class, x -&gt; new DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))</span>
+<span class="nc" id="L71">                    .put(CheckpointEntryType.class, x -&gt; CheckpointEntryType.typeMap.get(x.readByte()))</span>
+<span class="nc" id="L72">                    .put(UUID.class, x -&gt; new UUID(x.readLong(), x.readLong()))</span>
+<span class="nc" id="L73">                    .put(byte[].class, x -&gt; {</span>
+<span class="nc" id="L74">                        int length = x.readInt();</span>
+<span class="nc" id="L75">                        byte[] bytes = new byte[length];</span>
+<span class="nc" id="L76">                        x.readBytes(bytes);</span>
+<span class="nc" id="L77">                        return bytes;</span>
+                    })
+<span class="nc" id="L79">                    .put(ByteBuf.class, x -&gt; {</span>
+<span class="nc" id="L80">                        int bytes = x.readInt();</span>
+<span class="nc" id="L81">                        ByteBuf b = x.retainedSlice(x.readerIndex(), bytes);</span>
+<span class="nc" id="L82">                        x.readerIndex(x.readerIndex() + bytes);</span>
+<span class="nc" id="L83">                        return b;</span>
+                    })
+<span class="nc" id="L85">                    .put(StreamAddressRange.class, buffer -&gt;</span>
+<span class="nc" id="L86">                            new StreamAddressRange(new UUID(buffer.readLong(), buffer.readLong()),</span>
+<span class="nc" id="L87">                                    buffer.readLong(), buffer.readLong()))</span>
+<span class="nc" id="L88">                    .put(StreamAddressSpace.class, buffer -&gt; {</span>
+<span class="nc" id="L89">                        long trimMark = buffer.readLong();</span>
+<span class="nc" id="L90">                        Roaring64NavigableMap map = new Roaring64NavigableMap();</span>
+<span class="nc" id="L91">                        try (ByteBufInputStream inputStream = new ByteBufInputStream(buffer)) {</span>
+<span class="nc" id="L92">                            map.deserialize(inputStream);</span>
+<span class="nc" id="L93">                            return new StreamAddressSpace(trimMark, map);</span>
+<span class="nc bnc" id="L94" title="All 8 branches missed.">                        } catch (IOException ioe) {</span>
+<span class="nc" id="L95">                            throw new SerializerException(&quot;Exception when attempting to &quot; +</span>
+                                    &quot;deserialize stream address space.&quot;, ioe);
+                        }
+                    })
+<span class="nc" id="L99">                    .build()</span>
+    );
+
+
+    /**
+     * A lookup representing the context we'll use to do lookups.
+     */
+<span class="nc" id="L106">    Lookup lookup = MethodHandles.lookup();</span>
+
+    /**
+     * Build payload from Buffer
+     *
+     * @param buf The buffer to deserialize.
+     * @param cls The class of the payload.
+     * @param &lt;T&gt; The type of the payload.
+     * @return payload
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    static &lt;T&gt; T fromBuffer(ByteBuf buf, Class&lt;T&gt; cls) {
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (constructorMap.containsKey(cls)) {</span>
+<span class="nc" id="L119">            return (T) constructorMap.get(cls).construct(buf);</span>
+        }
+
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        if (cls.isEnum()) {</span>
+            // we only know how to deal with enums with a typemap
+            try {
+<span class="nc" id="L125">                Map&lt;Byte, T&gt; enumMap = (Map&lt;Byte, T&gt;) cls.getDeclaredField(&quot;typeMap&quot;).get(null);</span>
+<span class="nc" id="L126">                constructorMap.put(cls, x -&gt; enumMap.get(x.readByte()));</span>
+<span class="nc" id="L127">                return (T) constructorMap.get(cls).construct(buf);</span>
+<span class="nc" id="L128">            } catch (NoSuchFieldException e) {</span>
+<span class="nc" id="L129">                throw new RuntimeException(&quot;only enums with a typeMap are supported!&quot;);</span>
+<span class="nc" id="L130">            } catch (IllegalAccessException e) {</span>
+<span class="nc" id="L131">                throw new RuntimeException(e);</span>
+            }
+        }
+
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        if (!ICorfuPayload.class.isAssignableFrom(cls)) {</span>
+<span class="nc" id="L136">            throw new RuntimeException(&quot;Unknown class &quot; + cls + &quot; for deserialization&quot;);</span>
+        }
+
+        // Grab the constructor and get convert it to a lambda.
+        try {
+<span class="nc" id="L141">            Constructor&lt;?&gt; t = cls.getConstructor(ByteBuf.class);</span>
+<span class="nc" id="L142">            MethodHandle mh = lookup.unreflectConstructor(t);</span>
+<span class="nc" id="L143">            MethodType mt = MethodType.methodType(Object.class, ByteBuf.class);</span>
+
+            try {
+<span class="nc" id="L146">                CallSite metafactory = LambdaMetafactory.metafactory(</span>
+                        lookup,
+                        &quot;construct&quot;,
+<span class="nc" id="L149">                        MethodType.methodType(PayloadConstructor.class),</span>
+<span class="nc" id="L150">                        mt, mh, mh.type()</span>
+                );
+<span class="nc" id="L152">                constructorMap.put(cls, (PayloadConstructor&lt;T&gt;) metafactory.getTarget().invokeExact());</span>
+<span class="nc" id="L153">                return (T) constructorMap.get(cls).construct(buf);</span>
+<span class="nc" id="L154">            } catch (Throwable th) {</span>
+<span class="nc" id="L155">                throw new RuntimeException(th);</span>
+            }
+<span class="nc" id="L157">        } catch (NoSuchMethodException nsme) {</span>
+<span class="nc" id="L158">            throw new RuntimeException(&quot;CorfuPayloads must include a ByteBuf &quot; +</span>
+<span class="nc" id="L159">                    &quot;constructor! for class: &quot; + cls.toString());</span>
+<span class="nc" id="L160">        } catch (IllegalAccessException e) {</span>
+<span class="nc" id="L161">            throw new RuntimeException(e);</span>
+        }
+    }
+
+    /**
+     * Build payload from Buffer.
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    static &lt;T&gt; T fromBuffer(ByteBuf buf, TypeToken&lt;T&gt; token) {
+<span class="nc" id="L170">        Class&lt;?&gt; rawType = token.getRawType();</span>
+
+<span class="nc bnc" id="L172" title="All 2 branches missed.">        if (rawType.isAssignableFrom(Map.class)) {</span>
+<span class="nc" id="L173">            return (T) mapFromBuffer(</span>
+                    buf,
+<span class="nc" id="L175">                    token.resolveType(Map.class.getTypeParameters()[0]).getRawType(),</span>
+<span class="nc" id="L176">                    token.resolveType(Map.class.getTypeParameters()[1]).getRawType()</span>
+            );
+        }
+
+<span class="nc bnc" id="L180" title="All 2 branches missed.">        if (rawType.isAssignableFrom(Set.class)) {</span>
+<span class="nc" id="L181">            return (T) setFromBuffer(</span>
+                    buf,
+<span class="nc" id="L183">                    token.resolveType(Set.class.getTypeParameters()[0]).getRawType()</span>
+            );
+        }
+
+<span class="nc" id="L187">        return (T) fromBuffer(buf, rawType);</span>
+    }
+
+    /**
+     * A really simple flat map implementation. The first entry is the size of the map as an int,
+     * and the next entries are each key followed by its value.
+     * Maps of maps are currently not supported.
+     *
+     * @param buf        The buffer to deserialize.
+     * @param keyClass   The class of the keys.
+     * @param valueClass The class of the values.
+     * @param &lt;K&gt;        The type of the keys.
+     * @param &lt;V&gt;        The type of the values.
+     * @return Map
+     */
+    static &lt;K, V&gt; Map&lt;K, V&gt; mapFromBuffer(ByteBuf buf, Class&lt;K&gt; keyClass, Class&lt;V&gt; valueClass) {
+<span class="nc" id="L203">        int numEntries = buf.readInt();</span>
+<span class="nc" id="L204">        ImmutableMap.Builder&lt;K, V&gt; builder = ImmutableMap.builder();</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L206">            builder.put(fromBuffer(buf, keyClass), fromBuffer(buf, valueClass));</span>
+        }
+<span class="nc" id="L208">        return builder.build();</span>
+    }
+
+    /**
+     * A really simple flat set implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value.
+     *
+     * @param buf        The buffer to deserialize.
+     * @param valueClass The class of the values.
+     * @param &lt;V&gt;        The type of the values.
+     * @return Set of value types
+     */
+    static &lt;V&gt; Set&lt;V&gt; setFromBuffer(ByteBuf buf, Class&lt;V&gt; valueClass) {
+<span class="nc" id="L221">        int numEntries = buf.readInt();</span>
+<span class="nc" id="L222">        ImmutableSet.Builder&lt;V&gt; builder = ImmutableSet.builder();</span>
+<span class="nc bnc" id="L223" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L224">            builder.add(fromBuffer(buf, valueClass));</span>
+        }
+<span class="nc" id="L226">        return builder.build();</span>
+    }
+
+    /**
+     * A really simple flat list implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value.
+     *
+     * @param &lt;V&gt;        The type of the values.
+     * @param buf        The buffer to deserialize.
+     * @param valueClass The class of the values.
+     * @return List of values types
+     */
+    static &lt;V&gt; List&lt;V&gt; listFromBuffer(ByteBuf buf, Class&lt;V&gt; valueClass) {
+<span class="nc" id="L239">        int numEntries = buf.readInt();</span>
+<span class="nc" id="L240">        ImmutableList.Builder&lt;V&gt; builder = ImmutableList.builder();</span>
+<span class="nc bnc" id="L241" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L242">            builder.add(fromBuffer(buf, valueClass));</span>
+        }
+<span class="nc" id="L244">        return builder.build();</span>
+    }
+
+    /**
+     * A really simple flat map implementation. The first entry is the size of the map as an int,
+     * and the next entries are each value.
+     *
+     * @param buf      The buffer to deserialize.
+     * @param keyClass The class of the keys.
+     * @param &lt;K&gt;      The type of the keys
+     * @param &lt;V&gt;      The type of the values.
+     * @return Map for use with enum type keys
+     */
+    static &lt;K extends Enum&lt;K&gt; &amp; ITypedEnum&lt;K&gt;, V&gt; EnumMap&lt;K, V&gt; enumMapFromBuffer(
+            ByteBuf buf, Class&lt;K&gt; keyClass) {
+
+<span class="nc" id="L260">        EnumMap&lt;K, V&gt; metadataMap = new EnumMap&lt;&gt;(keyClass);</span>
+<span class="nc" id="L261">        byte numEntries = buf.readByte();</span>
+<span class="nc bnc" id="L262" title="All 4 branches missed.">        while (numEntries &gt; 0 &amp;&amp; buf.isReadable()) {</span>
+<span class="nc" id="L263">            K type = fromBuffer(buf, keyClass);</span>
+<span class="nc" id="L264">            V value = (V) fromBuffer(buf, type.getComponentType());</span>
+<span class="nc" id="L265">            metadataMap.put(type, value);</span>
+<span class="nc" id="L266">            numEntries--;</span>
+<span class="nc" id="L267">        }</span>
+<span class="nc" id="L268">        return metadataMap;</span>
+    }
+
+    /**
+     * Serialize a payload into a given byte buffer.
+     *
+     * @param payload The Payload to serialize.
+     * @param buffer  The buffer to serialize it into.
+     * @param &lt;T&gt;     The type of the payload.
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    static &lt;T&gt; void serialize(ByteBuf buffer, T payload) {
+        // If it's an ICorfuPayload, use the defined serializer.
+        // Otherwise serialize the primitive type.
+<span class="nc bnc" id="L282" title="All 2 branches missed.">        if (payload instanceof ICorfuPayload) {</span>
+<span class="nc" id="L283">            ((ICorfuPayload&lt;?&gt;) payload).doSerialize(buffer);</span>
+<span class="nc bnc" id="L284" title="All 2 branches missed.">        } else if (payload instanceof Byte) {</span>
+<span class="nc" id="L285">            buffer.writeByte((Byte) payload);</span>
+<span class="nc bnc" id="L286" title="All 2 branches missed.">        } else if (payload instanceof Short) {</span>
+<span class="nc" id="L287">            buffer.writeShort((Short) payload);</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">        } else if (payload instanceof Integer) {</span>
+<span class="nc" id="L289">            buffer.writeInt((Integer) payload);</span>
+<span class="nc bnc" id="L290" title="All 2 branches missed.">        } else if (payload instanceof Long) {</span>
+<span class="nc" id="L291">            buffer.writeLong((Long) payload);</span>
+<span class="nc bnc" id="L292" title="All 2 branches missed.">        } else if (payload instanceof Boolean) {</span>
+<span class="nc" id="L293">            buffer.writeBoolean((Boolean) payload);</span>
+<span class="nc bnc" id="L294" title="All 2 branches missed.">        } else if (payload instanceof Double) {</span>
+<span class="nc" id="L295">            buffer.writeDouble((Double) payload);</span>
+<span class="nc bnc" id="L296" title="All 2 branches missed.">        } else if (payload instanceof Float) {</span>
+<span class="nc" id="L297">            buffer.writeFloat((Float) payload);</span>
+<span class="nc bnc" id="L298" title="All 2 branches missed.">        } else if (payload instanceof byte[]) {</span>
+<span class="nc" id="L299">            buffer.writeInt(((byte[]) payload).length);</span>
+<span class="nc" id="L300">            buffer.writeBytes((byte[]) payload);</span>
+<span class="nc bnc" id="L301" title="All 2 branches missed.">        } else if (payload instanceof String) {</span>
+            // and some standard non prims as well
+<span class="nc" id="L303">            byte[] s = ((String) payload).getBytes();</span>
+<span class="nc" id="L304">            buffer.writeInt(s.length);</span>
+<span class="nc" id="L305">            buffer.writeBytes(s);</span>
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        } else if (payload instanceof UUID) {</span>
+<span class="nc" id="L307">            buffer.writeLong(((UUID) payload).getMostSignificantBits());</span>
+<span class="nc" id="L308">            buffer.writeLong(((UUID) payload).getLeastSignificantBits());</span>
+<span class="nc bnc" id="L309" title="All 2 branches missed.">        } else if (payload instanceof EnumMap) {</span>
+            // and some collection types
+<span class="nc" id="L311">            EnumMap&lt;?, ?&gt; map = (EnumMap&lt;?, ?&gt;) payload;</span>
+<span class="nc" id="L312">            buffer.writeByte(map.size());</span>
+<span class="nc" id="L313">            map.entrySet().forEach(x -&gt; {</span>
+<span class="nc" id="L314">                serialize(buffer, x.getKey());</span>
+<span class="nc" id="L315">                serialize(buffer, x.getValue());</span>
+<span class="nc" id="L316">            });</span>
+<span class="nc bnc" id="L317" title="All 2 branches missed.">        } else if (payload instanceof RangeSet) {</span>
+<span class="nc" id="L318">            Set&lt;Range&lt;?&gt;&gt; rs = (((RangeSet) payload).asRanges());</span>
+<span class="nc" id="L319">            buffer.writeInt(rs.size());</span>
+<span class="nc" id="L320">            rs.forEach(x -&gt; {</span>
+<span class="nc bnc" id="L321" title="All 2 branches missed.">                buffer.writeBoolean(x.upperBoundType() == BoundType.CLOSED);</span>
+<span class="nc" id="L322">                serialize(buffer, x.upperEndpoint());</span>
+<span class="nc bnc" id="L323" title="All 2 branches missed.">                buffer.writeBoolean(x.upperBoundType() == BoundType.CLOSED);</span>
+<span class="nc" id="L324">                serialize(buffer, x.lowerEndpoint());</span>
+<span class="nc" id="L325">            });</span>
+<span class="nc bnc" id="L326" title="All 2 branches missed.">        } else if (payload instanceof Range) {</span>
+<span class="nc" id="L327">            Range&lt;?&gt; r = (Range&lt;?&gt;) payload;</span>
+<span class="nc bnc" id="L328" title="All 2 branches missed.">            buffer.writeBoolean(r.upperBoundType() == BoundType.CLOSED);</span>
+<span class="nc" id="L329">            serialize(buffer, r.upperEndpoint());</span>
+<span class="nc bnc" id="L330" title="All 2 branches missed.">            buffer.writeBoolean(r.upperBoundType() == BoundType.CLOSED);</span>
+<span class="nc" id="L331">            serialize(buffer, r.lowerEndpoint());</span>
+<span class="nc bnc" id="L332" title="All 2 branches missed.">        } else if (payload instanceof Map) {</span>
+<span class="nc" id="L333">            Map&lt;?, ?&gt; map = (Map&lt;?, ?&gt;) payload;</span>
+<span class="nc" id="L334">            buffer.writeInt(map.size());</span>
+<span class="nc" id="L335">            map.forEach((key, value) -&gt; {</span>
+<span class="nc" id="L336">                serialize(buffer, key);</span>
+<span class="nc" id="L337">                serialize(buffer, value);</span>
+<span class="nc" id="L338">            });</span>
+<span class="nc bnc" id="L339" title="All 2 branches missed.">        } else if (payload instanceof Set) {</span>
+<span class="nc" id="L340">            Set&lt;?&gt; set = (Set&lt;?&gt;) payload;</span>
+<span class="nc" id="L341">            buffer.writeInt(set.size());</span>
+<span class="nc" id="L342">            set.forEach(x -&gt; serialize(buffer, x));</span>
+<span class="nc bnc" id="L343" title="All 2 branches missed.">        } else if (payload instanceof List) {</span>
+<span class="nc" id="L344">            List&lt;?&gt; list = (List&lt;?&gt;) payload;</span>
+<span class="nc" id="L345">            buffer.writeInt(list.size());</span>
+<span class="nc" id="L346">            list.forEach(x -&gt; serialize(buffer, x));</span>
+<span class="nc bnc" id="L347" title="All 2 branches missed.">        } else if (payload instanceof Layout) {</span>
+<span class="nc" id="L348">            byte[] b = JsonUtils.parser.toJson(payload).getBytes();</span>
+<span class="nc" id="L349">            buffer.writeInt(b.length);</span>
+<span class="nc" id="L350">            buffer.writeBytes(b);</span>
+<span class="nc bnc" id="L351" title="All 2 branches missed.">        } else if (payload instanceof ByteBuf) {</span>
+<span class="nc" id="L352">            ByteBuf b = ((ByteBuf) payload).slice();</span>
+<span class="nc" id="L353">            b.resetReaderIndex();</span>
+<span class="nc" id="L354">            int bytes = b.readableBytes();</span>
+<span class="nc" id="L355">            buffer.writeInt(bytes);</span>
+<span class="nc" id="L356">            buffer.writeBytes(b, bytes);</span>
+<span class="nc bnc" id="L357" title="All 2 branches missed.">        } else if (payload instanceof DataRank) {</span>
+<span class="nc" id="L358">            DataRank rank = (DataRank) payload;</span>
+<span class="nc" id="L359">            buffer.writeLong(rank.getRank());</span>
+<span class="nc" id="L360">            buffer.writeLong(rank.getUuid().getMostSignificantBits());</span>
+<span class="nc" id="L361">            buffer.writeLong(rank.getUuid().getLeastSignificantBits());</span>
+<span class="nc bnc" id="L362" title="All 2 branches missed.">        } else if (payload instanceof CheckpointEntryType) {</span>
+<span class="nc" id="L363">            buffer.writeByte(((CheckpointEntryType) payload).asByte());</span>
+<span class="nc bnc" id="L364" title="All 2 branches missed.">        } else if (payload instanceof PriorityLevel) {</span>
+<span class="nc" id="L365">            buffer.writeByte(((PriorityLevel) payload).asByte());</span>
+<span class="nc bnc" id="L366" title="All 2 branches missed.">        } else if (payload instanceof StreamAddressSpace) {</span>
+<span class="nc" id="L367">            StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;</span>
+<span class="nc" id="L368">            buffer.writeLong(streamAddressSpace.getTrimMark());</span>
+<span class="nc" id="L369">            serialize(buffer, streamAddressSpace.getAddressMap());</span>
+<span class="nc bnc" id="L370" title="All 2 branches missed.">        } else if (payload instanceof StreamAddressRange) {</span>
+<span class="nc" id="L371">            StreamAddressRange streamRange = (StreamAddressRange) payload;</span>
+<span class="nc" id="L372">            buffer.writeLong(streamRange.getStreamID().getMostSignificantBits());</span>
+<span class="nc" id="L373">            buffer.writeLong(streamRange.getStreamID().getLeastSignificantBits());</span>
+<span class="nc" id="L374">            buffer.writeLong(streamRange.getStart());</span>
+<span class="nc" id="L375">            buffer.writeLong(streamRange.getEnd());</span>
+<span class="nc bnc" id="L376" title="All 2 branches missed.">        } else if (payload instanceof Roaring64NavigableMap) {</span>
+<span class="nc" id="L377">            Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;</span>
+            // Improve compression
+<span class="nc" id="L379">            mrb.runOptimize();</span>
+<span class="nc" id="L380">            try (ByteBufOutputStream outputStream = new ByteBufOutputStream(buffer);</span>
+<span class="nc" id="L381">                 DataOutputStream dataOutputStream =  new DataOutputStream(outputStream)){</span>
+<span class="nc" id="L382">                mrb.serialize(dataOutputStream);</span>
+<span class="nc bnc" id="L383" title="All 16 branches missed.">            } catch (IOException ioe) {</span>
+<span class="nc" id="L384">                throw new SerializerException(&quot;Unexpected error while serializing to a byte array&quot;);</span>
+<span class="nc" id="L385">            }</span>
+<span class="nc" id="L386">        } else {</span>
+<span class="nc" id="L387">            throw new RuntimeException(&quot;Unknown class &quot; + payload.getClass() + &quot; for serialization&quot;);</span>
+        }
+<span class="nc" id="L389">    }</span>
+
+    void doSerialize(ByteBuf buf);
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

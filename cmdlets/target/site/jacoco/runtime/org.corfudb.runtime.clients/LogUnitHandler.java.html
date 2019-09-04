@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>LogUnitHandler.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.clients</a> &gt; <span class="el_source">LogUnitHandler.java</span></div><h1>LogUnitHandler.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.clients;
+
+import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.MethodHandles;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.ReadRequest;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
+
+
+/**
+ * A client to a LogUnit.
+ *
+ * &lt;p&gt;This class provides access to operations on a remote log unit.
+ * &lt;p&gt;Created by zlokhandwala on 2/20/18.
+ */
+<span class="nc" id="L32">public class LogUnitHandler implements IClient, IHandler&lt;LogUnitClient&gt; {</span>
+
+<span class="nc" id="L34">    @Setter</span>
+<span class="nc" id="L35">    @Getter</span>
+    IClientRouter router;
+
+    @Override
+    public LogUnitClient getClient(long epoch) {
+<span class="nc" id="L40">        return new LogUnitClient(router, epoch);</span>
+    }
+
+    /**
+     * The handler and handlers which implement this client.
+     */
+<span class="nc" id="L46">    @Getter</span>
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+<span class="nc" id="L48">            .generateHandlers(MethodHandles.lookup(), this);</span>
+
+    /**
+     * Handle an WRITE_OK message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @return True, since this indicates success.
+     */
+    @ClientHandler(type = CorfuMsgType.WRITE_OK)
+    private static Object handleOk(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L60">        return true;</span>
+    }
+
+    /**
+     * Handle an ERROR_TRIMMED message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @throws Exception Throws TrimmedException if address has already been trimmed.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_TRIMMED)
+    private static Object handleTrimmed(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L74">        throw new TrimmedException();</span>
+    }
+
+    /**
+     * Handle an ERROR_OVERWRITE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @throws OverwriteException Throws OverwriteException if address has already been written to.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_OVERWRITE)
+    private static Object handleOverwrite(CorfuPayloadMsg&lt;Integer&gt; msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L88">        throw new OverwriteException(OverwriteCause.fromId(msg.getPayload()));</span>
+    }
+
+    /**
+     * Handle an ERROR_DATA_OUTRANKED message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @throws OverwriteException Throws OverwriteException if write has been outranked.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_DATA_OUTRANKED)
+    private static Object handleDataOutranked(CorfuMsg msg,
+                                              ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L103">        throw new DataOutrankedException();</span>
+    }
+
+
+    /**
+     * Handle an ERROR_VALUE_ADOPTED message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_VALUE_ADOPTED)
+    private static Object handleValueAdoptedResponse(CorfuPayloadMsg&lt;ReadResponse&gt; msg,
+                                                     ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L117">        throw new ValueAdoptedException(msg.getPayload());</span>
+    }
+
+    /**
+     * Handle an ERROR_OOS message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @throws OutOfSpaceException Throws OutOfSpaceException if log unit out of space.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_OOS)
+    private static Object handleOos(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L131">        throw new OutOfSpaceException();</span>
+    }
+
+    /**
+     * Handle an ERROR_RANK message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @throws Exception Throws Exception if write has been outranked.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_RANK)
+    private static Object handleOutranked(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L145">        throw new Exception(&quot;rank&quot;);</span>
+    }
+
+    /**
+     * Handle an ERROR_NOENTRY message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @throws Exception Throws exception if write is performed to a non-existent entry.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_NOENTRY)
+    private static Object handleNoEntry(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+<span class="nc" id="L159">        throw new Exception(&quot;Tried to write commit on a non-existent entry&quot;);</span>
+    }
+
+    /**
+     * Handle a READ_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.READ_RESPONSE)
+    private static Object handleReadResponse(CorfuPayloadMsg&lt;ReadResponse&gt; msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L172">        return msg.getPayload();</span>
+    }
+
+    /**
+     * Handle a ERROR_DATA_CORRUPTION message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_DATA_CORRUPTION)
+    private static Object handleReadDataCorruption(CorfuPayloadMsg&lt;Long&gt; msg,
+                                                   ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L185">        long read = msg.getPayload().longValue();</span>
+<span class="nc" id="L186">        throw new DataCorruptionException(String.format(&quot;Encountered corrupted data while reading %s&quot;, read));</span>
+    }
+
+    /**
+     * Handle a TAIL_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.TAIL_RESPONSE)
+    private static Object handleTailResponse(CorfuPayloadMsg&lt;TailsResponse&gt; msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L199">        return msg.getPayload();</span>
+    }
+
+    @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
+    private static Object handleStreamsAddressResponse(CorfuPayloadMsg&lt;TailsResponse&gt; msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L205">        return msg.getPayload();</span>
+    }
+
+    /**
+     * Handle a HEAD_RESPONSE message
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.TRIM_MARK_RESPONSE)
+    private static Object handleTrimMarkResponse(CorfuPayloadMsg&lt;Long&gt; msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L217">        return msg.getPayload();</span>
+    }
+
+    /**
+     * Handle a KNOWN_ADDRESS_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     * @return KnownAddressResponse payload with the known addresses set.
+     */
+    @ClientHandler(type = CorfuMsgType.KNOWN_ADDRESS_RESPONSE)
+    private static Object handleKnownAddressesResponse(CorfuPayloadMsg&lt;KnownAddressResponse&gt; msg,
+                                                       ChannelHandlerContext ctx, IClientRouter r) {
+<span class="nc" id="L231">        return msg.getPayload();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

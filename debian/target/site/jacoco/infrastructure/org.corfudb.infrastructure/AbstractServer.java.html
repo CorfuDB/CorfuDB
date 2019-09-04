@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>AbstractServer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">AbstractServer.java</span></div><h1>AbstractServer.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * Created by mwei on 12/4/15.
+ */
+<span class="nc" id="L15">@Slf4j</span>
+<span class="nc" id="L16">public abstract class AbstractServer {</span>
+
+    /**
+     * Current server state
+     */
+<span class="nc" id="L21">    private final AtomicReference&lt;ServerState&gt; state = new AtomicReference&lt;&gt;(ServerState.READY);</span>
+
+    /**
+     * Get the message handler for this instance.
+     *
+     * @return A message handler.
+     */
+    public abstract CorfuMsgHandler getHandler();
+
+    /**
+     * Seal the server with the epoch.
+     *
+     * @param epoch Epoch to seal with
+     */
+    public void sealServerWithEpoch(long epoch) {
+        // Overridden in log unit to flush operations stamped with an old epoch
+<span class="nc" id="L37">    }</span>
+
+    public abstract boolean isServerReadyToHandleMsg(CorfuMsg msg);
+
+    /**
+     * Handle a incoming Netty message.
+     *
+     * @param msg An incoming message.
+     * @param ctx The channel handler context.
+     * @param r   The router that took in the message.
+     */
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        if (getState() == ServerState.SHUTDOWN) {</span>
+<span class="nc" id="L50">            log.warn(&quot;Server received {} but is already shutdown.&quot;, msg.getMsgType().toString());</span>
+<span class="nc" id="L51">            return;</span>
+        }
+
+<span class="nc bnc" id="L54" title="All 2 branches missed.">        if (!isServerReadyToHandleMsg(msg)) {</span>
+<span class="nc" id="L55">            r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());</span>
+<span class="nc" id="L56">            return;</span>
+        }
+
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        if (!getHandler().handle(msg, ctx, r)) {</span>
+<span class="nc" id="L60">            log.warn(&quot;Received unhandled message type {}&quot;, msg.getMsgType());</span>
+        }
+<span class="nc" id="L62">    }</span>
+
+    protected void setState(ServerState newState) {
+<span class="nc" id="L65">        state.updateAndGet(currState -&gt; {</span>
+<span class="nc bnc" id="L66" title="All 4 branches missed.">            if (currState == ServerState.SHUTDOWN &amp;&amp; newState != ServerState.SHUTDOWN) {</span>
+<span class="nc" id="L67">                throw new IllegalStateException(&quot;Server is in SHUTDOWN state. Can't be changed&quot;);</span>
+            }
+
+<span class="nc" id="L70">            return newState;</span>
+        });
+<span class="nc" id="L72">    }</span>
+
+    public ServerState getState() {
+<span class="nc" id="L75">        return state.get();</span>
+    }
+
+    public abstract ExecutorService getExecutor(CorfuMsgType corfuMsgType);
+
+    public abstract List&lt;ExecutorService&gt; getExecutors();
+
+    /**
+     * Shutdown the server.
+     */
+    public void shutdown() {
+<span class="nc" id="L86">        setState(ServerState.SHUTDOWN);</span>
+<span class="nc" id="L87">        getExecutors().forEach(ExecutorService::shutdownNow);</span>
+<span class="nc" id="L88">    }</span>
+
+    /**
+     * The server state.
+     * Represents server in a particular state: READY, NOT_READY, SHUTDOWN.
+     */
+<span class="nc" id="L94">    public enum ServerState {</span>
+<span class="nc" id="L95">        READY, NOT_READY, SHUTDOWN</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="8.20">
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotationProcessor/src/main/java/org/corfudb/annotations/ObjectAnnotationProcessor.java">
+<error line="322" severity="warning" message="&apos;p&apos; has incorrect indentation level 40, expected level should be 44." source="com.puppycrawl.tools.checkstyle.checks.indentation.IndentationCheck"/>
+</file>
+</checkstyle>

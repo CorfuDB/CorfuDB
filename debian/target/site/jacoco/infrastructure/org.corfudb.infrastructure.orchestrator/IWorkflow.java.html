@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>IWorkflow.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.orchestrator</a> &gt; <span class="el_source">IWorkflow.java</span></div><h1>IWorkflow.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.orchestrator;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ *
+ * A workflow is an abstract container that specifies a series of ordered steps that achieves a
+ * multi-step operation. For example, adding a new node to the cluster, which requires several
+ * steps to complete.
+ *
+ * Created by Maithem on 10/25/17.
+ */
+
+public interface IWorkflow {
+
+    /**
+     * Gets the unique identifier of this workflow instance
+     * @return id of a particular instance
+     */
+    UUID getId();
+
+    /**
+     * Return the name of this workflow
+     * @return workflow's name
+     */
+    String getName();
+
+    /**
+     * Returns the ordered that are associated with
+     * this workflow.
+     * @return List of actions
+     */
+    List&lt;Action&gt; getActions();
+
+    /**
+     * Returns whether all the actions completed successfully or not.
+     * @return true if all actions completed successfully
+     */
+    default boolean completed() {
+<span class="nc" id="L41">        return getActions().stream()</span>
+<span class="nc" id="L42">                .allMatch(a -&gt; a.getStatus().equals(ActionStatus.COMPLETED));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

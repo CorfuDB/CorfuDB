@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>RecoveryUtils.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.recovery</a> &gt; <span class="el_source">RecoveryUtils.java</span></div><h1>RecoveryUtils.java</h1><pre class="source lang-java linenums">package org.corfudb.recovery;
+
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.ReadOptions;
+import org.corfudb.util.serializer.ISerializer;
+
+import java.util.UUID;
+
+import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
+
+/**
+ * Created by rmichoud on 6/22/17.
+ */
+public class RecoveryUtils {
+
+    // Default read options used by the fast object loader logic
+<span class="nc" id="L24">    public static final ReadOptions fastLoaderReadOptions = ReadOptions.builder()</span>
+<span class="nc" id="L25">            .clientCacheable(false)</span>
+<span class="nc" id="L26">            .serverCacheable(false)</span>
+<span class="nc" id="L27">            .waitForHole(true)</span>
+<span class="nc" id="L28">            .build();</span>
+
+<span class="nc" id="L30">    private RecoveryUtils() {</span>
+        // prevent instantiation of this class
+<span class="nc" id="L32">    }</span>
+
+    private static ObjectsView.ObjectID getObjectIdFromStreamId(UUID streamId, Class type) {
+<span class="nc" id="L35">        return new ObjectsView.ObjectID(streamId, type);</span>
+    }
+
+    static boolean isCheckPointEntry(ILogData logData) {
+<span class="nc" id="L39">        return logData.hasCheckpointMetadata();</span>
+    }
+
+    static long getSnapShotAddressOfCheckPoint(CheckpointEntry logEntry) {
+<span class="nc" id="L43">        return Long.parseLong(logEntry.getDict().get(SNAPSHOT_ADDRESS));</span>
+    }
+
+    static long getStartAddressOfCheckPoint(ILogData logData) {
+<span class="nc" id="L47">        return logData.getCheckpointedStreamStartLogAddress();</span>
+    }
+
+    /**
+     * Create a new object SMRMap as recipient of SMRUpdates (if doesn't exist yet)
+     */
+    static void createObjectIfNotExist(CorfuRuntime runtime, UUID streamId, ISerializer serializer, Class type) {
+<span class="nc" id="L54">        if (!runtime.getObjectsView().getObjectCache()</span>
+<span class="nc bnc" id="L55" title="All 2 branches missed.">                .containsKey(RecoveryUtils.getObjectIdFromStreamId(streamId, type))) {</span>
+<span class="nc" id="L56">            runtime.getObjectsView().build()</span>
+<span class="nc" id="L57">                    .setStreamID(streamId)</span>
+<span class="nc" id="L58">                    .setType(type)</span>
+<span class="nc" id="L59">                    .setSerializer(serializer)</span>
+<span class="nc" id="L60">                    .open();</span>
+        }
+<span class="nc" id="L62">    }</span>
+
+    static void createObjectIfNotExist(ObjectBuilder ob, ISerializer serializer) {
+<span class="nc" id="L65">        if (!ob.getRuntime().getObjectsView().getObjectCache()</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">                .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){</span>
+<span class="nc" id="L67">                ob.setSerializer(serializer).open();</span>
+        }
+<span class="nc" id="L69">    }</span>
+
+    /**
+     * Fetch LogData from Corfu server
+     *
+     * @param address address to be fetched
+     * @return LogData at address
+     */
+    static ILogData getLogData(CorfuRuntime runtime, boolean loadInCache, long address) {
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        if (loadInCache) {</span>
+<span class="nc" id="L79">            return runtime.getAddressSpaceView().read(address);</span>
+        } else {
+<span class="nc" id="L81">            return runtime.getAddressSpaceView().read(address, fastLoaderReadOptions);</span>
+        }
+    }
+
+    /**
+     * Deserialize a logData by getting the logEntry
+     *
+     * Getting the underlying logEntry should trigger deserialization only once.
+     * Next access should just returned the logEntry directly.
+     */
+    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) throws Exception {
+<span class="nc" id="L92">        return logData.getLogEntry(runtime);</span>
+    }
+
+    /**
+     * Look in the objectCache for the corresponding CorfuCompileProxy
+     */
+    static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId, Class type) {
+<span class="nc" id="L99">        ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, type);</span>
+<span class="nc" id="L100">        return ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().getObjectCache().get(thisObjectId)).</span>
+<span class="nc" id="L101">                getCorfuSMRProxy());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

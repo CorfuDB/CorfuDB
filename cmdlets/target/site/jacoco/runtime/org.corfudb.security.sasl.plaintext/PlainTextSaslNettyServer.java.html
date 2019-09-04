@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>PlainTextSaslNettyServer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.security.sasl.plaintext</a> &gt; <span class="el_source">PlainTextSaslNettyServer.java</span></div><h1>PlainTextSaslNettyServer.java</h1><pre class="source lang-java linenums">package org.corfudb.security.sasl.plaintext;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
+
+import javax.security.sasl.Sasl;
+import javax.security.sasl.SaslException;
+import javax.security.sasl.SaslServer;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Created by sneginhal on 01/31/2017.
+ * This is the server side of SASL Plain Text authentication.
+ * This SimpleChannelInboundHandler is inserted in the CorfuServer's Netty
+ * pipeline. Once TLS is negotiated and we have a secure channel, this handler
+ * expects the username/password from the remote end as per:
+ * https://tools.ietf.org/html/rfc4616
+ */
+<span class="nc" id="L21">@Slf4j</span>
+public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler&lt;ByteBuf&gt; {
+
+    private SaslServer saslServer;
+
+<span class="nc" id="L26">    private final String mechanisms = &quot;PLAIN&quot;;</span>
+
+    static {
+<span class="nc" id="L29">        PlainTextSaslServerProvider.initialize();</span>
+<span class="nc" id="L30">    }</span>
+
+<span class="nc" id="L32">    public PlainTextSaslNettyServer() throws SaslException {</span>
+<span class="nc" id="L33">        saslServer = Sasl.createSaslServer(mechanisms, &quot;plain&quot;, null, null, null);</span>
+<span class="nc" id="L34">    }</span>
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf buf)
+            throws Exception {
+
+<span class="nc" id="L40">        byte[] msg = new byte[buf.readableBytes()];</span>
+<span class="nc" id="L41">        buf.getBytes(0, msg);</span>
+
+<span class="nc bnc" id="L43" title="All 2 branches missed.">        while (!saslServer.isComplete()) {</span>
+            try {
+<span class="nc" id="L45">                byte[] challenge = saslServer.evaluateResponse(msg);</span>
+<span class="nc" id="L46">            } catch (SaslException se) {</span>
+<span class="nc" id="L47">                log.error(&quot;SaslException {}&quot;, se.toString());</span>
+<span class="nc" id="L48">                break;</span>
+<span class="nc" id="L49">            }</span>
+        }
+
+<span class="nc bnc" id="L52" title="All 2 branches missed.">        if (saslServer.isComplete()) {</span>
+<span class="nc" id="L53">            log.debug(&quot;channelRead0: Sasl handshake successful, uninstalling handler&quot;);</span>
+<span class="nc" id="L54">            ctx.pipeline().remove(this);</span>
+        }
+<span class="nc" id="L56">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

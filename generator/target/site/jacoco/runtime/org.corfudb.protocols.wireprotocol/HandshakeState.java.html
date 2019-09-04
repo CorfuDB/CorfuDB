@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>HandshakeState.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">HandshakeState.java</span></div><h1>HandshakeState.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * Created by amartinezman on 12/20/17.
+ */
+public class HandshakeState {
+
+    /** Indicates if the handshake has failed.
+     * - If it fails because of validation, handshakeComplete = true.
+     * - If it fails due to timeout, handshakeComplete = False.
+     * */
+    private final AtomicBoolean handshakeFailed;
+    /** Indicates if the handshake has completed regardless of the result of validation.*/
+    private final AtomicBoolean handshakeComplete;
+
+    /**
+     * Keeps state of the handshake, initiated between client and server.
+     */
+<span class="nc" id="L21">    public HandshakeState() {</span>
+<span class="nc" id="L22">        this.handshakeFailed = new AtomicBoolean(false);</span>
+<span class="nc" id="L23">        this.handshakeComplete = new AtomicBoolean(false);</span>
+<span class="nc" id="L24">    }</span>
+
+    /**
+     * Set Handshake State
+     * @param failed indicates if handshake failed
+     * @param complete indicates if handshake completed between client/server, i.e., did not timeout.
+     */
+    public void set(boolean failed, boolean complete){
+<span class="nc" id="L32">        this.handshakeFailed.set(failed);</span>
+<span class="nc" id="L33">        this.handshakeComplete.set(complete);</span>
+<span class="nc" id="L34">    }</span>
+
+    /**
+     * Get Handshake Failure State
+     * @return true, if failed
+     *         false, otherwise.
+     */
+    public boolean failed() {
+<span class="nc" id="L42">        return this.handshakeFailed.get();</span>
+    }
+
+    /**
+     * Get Handshake Completeness State
+     * @return true, if handshake completed.
+     *         false, if handshake never concluded.
+     */
+    public boolean completed() {
+<span class="nc" id="L51">        return this.handshakeComplete.get();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

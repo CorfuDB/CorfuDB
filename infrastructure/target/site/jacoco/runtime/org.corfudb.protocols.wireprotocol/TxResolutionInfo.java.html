@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>TxResolutionInfo.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">TxResolutionInfo.java</span></div><h1>TxResolutionInfo.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import com.google.common.collect.ImmutableMap;
+
+import io.netty.buffer.ByteBuf;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import org.corfudb.util.Utils;
+
+/**
+ * Created by dmalkhi on 12/26/16.
+ */
+public class TxResolutionInfo implements ICorfuPayload&lt;TxResolutionInfo&gt; {
+
+<span class="nc" id="L22">    @Getter</span>
+    @SuppressWarnings({&quot;checkstyle:abbreviationaswordinname&quot;, &quot;checkstyle:membername&quot;})
+    final UUID TXid; // transaction ID, mostly for debugging purposes
+
+    /* snapshot timestamp of the txn. */
+<span class="nc" id="L27">    @Getter</span>
+<span class="nc" id="L28">    @Setter</span>
+    Token snapshotTimestamp;
+
+    /** A set of poisoned streams, which have a conflict against all updates. */
+
+<span class="nc" id="L33">    @Getter</span>
+    final Map&lt;UUID, Set&lt;byte[]&gt;&gt; conflictSet;
+
+<span class="nc" id="L36">    @Getter</span>
+    final Map&lt;UUID, Set&lt;byte[]&gt;&gt;  writeConflictParams;
+
+    /**
+     * Constructor for TxResolutionInfo.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     */
+<span class="nc" id="L45">    public TxResolutionInfo(UUID txId, Token snapshotTimestamp) {</span>
+<span class="nc" id="L46">        this.TXid = txId;</span>
+<span class="nc" id="L47">        this.snapshotTimestamp = snapshotTimestamp;</span>
+<span class="nc" id="L48">        this.conflictSet = Collections.emptyMap();</span>
+<span class="nc" id="L49">        this.writeConflictParams = Collections.emptyMap();</span>
+<span class="nc" id="L50">    }</span>
+
+    /**
+     * Constructor for TxResolutionInfo.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     * @param conflictMap map of conflict parameters, arranged by stream IDs
+     * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
+     */
+    public TxResolutionInfo(UUID txId, Token snapshotTimestamp, Map&lt;UUID, Set&lt;byte[]&gt;&gt;
+<span class="nc" id="L61">            conflictMap, Map&lt;UUID, Set&lt;byte[]&gt;&gt; writeConflictParams) {</span>
+<span class="nc" id="L62">        this.TXid = txId;</span>
+<span class="nc" id="L63">        this.snapshotTimestamp = snapshotTimestamp;</span>
+<span class="nc" id="L64">        this.conflictSet = conflictMap;</span>
+<span class="nc" id="L65">        this.writeConflictParams = writeConflictParams;</span>
+<span class="nc" id="L66">    }</span>
+
+    /**
+     * fast, specialized deserialization constructor, from a ByteBuf to this object
+     *
+     * &lt;p&gt;The first entry is a long, the snapshot timestamp.
+     * The second is an int, the size of the map.
+     * Next, entries are serialized one by one, first the key, then each value,
+     * itself a set of objects.&lt;/p&gt;
+     *
+     * @param buf        The buffer to deserialize.
+     */
+<span class="nc" id="L78">    public TxResolutionInfo(ByteBuf buf) {</span>
+<span class="nc" id="L79">        TXid = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
+<span class="nc" id="L80">        final long epoch = buf.readLong();</span>
+<span class="nc" id="L81">        final long sequence = buf.readLong();</span>
+<span class="nc" id="L82">        snapshotTimestamp = new Token(epoch, sequence);</span>
+
+        // conflictSet
+<span class="nc" id="L85">        int numEntries = buf.readInt();</span>
+<span class="nc" id="L86">        ImmutableMap.Builder&lt;UUID, Set&lt;byte[]&gt;&gt; conflictMapBuilder = new ImmutableMap.Builder&lt;&gt;();</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L88">            UUID k = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
+<span class="nc" id="L89">            Set&lt;byte[]&gt; v = ICorfuPayload.setFromBuffer(buf, byte[].class);</span>
+<span class="nc" id="L90">            conflictMapBuilder.put(k, v);</span>
+        }
+<span class="nc" id="L92">        conflictSet = conflictMapBuilder.build();</span>
+
+        // writeConflictParams
+<span class="nc" id="L95">        numEntries = buf.readInt();</span>
+<span class="nc" id="L96">        ImmutableMap.Builder&lt;UUID, Set&lt;byte[]&gt;&gt; writeMapBuilder = new ImmutableMap.Builder&lt;&gt;();</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L98">            UUID k = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
+<span class="nc" id="L99">            Set&lt;byte[]&gt; v = ICorfuPayload.setFromBuffer(buf, byte[].class);</span>
+<span class="nc" id="L100">            writeMapBuilder.put(k, v);</span>
+        }
+
+<span class="nc" id="L103">        writeConflictParams = writeMapBuilder.build();</span>
+<span class="nc" id="L104">    }</span>
+
+    /**
+     * fast , specialized serialization of object into ByteBuf.
+     *
+     * @param buf The buffer to serialize object into
+     */
+    @Override
+    public void doSerialize(ByteBuf buf) {
+<span class="nc" id="L113">        ICorfuPayload.serialize(buf, TXid);</span>
+<span class="nc" id="L114">        buf.writeLong(snapshotTimestamp.getEpoch());</span>
+<span class="nc" id="L115">        buf.writeLong(snapshotTimestamp.getSequence());</span>
+
+        // conflictSet
+<span class="nc" id="L118">        buf.writeInt(conflictSet.size());</span>
+<span class="nc" id="L119">        conflictSet.entrySet().stream().forEach(x -&gt; {</span>
+<span class="nc" id="L120">            ICorfuPayload.serialize(buf, x.getKey());</span>
+<span class="nc" id="L121">            ICorfuPayload.serialize(buf, x.getValue());</span>
+<span class="nc" id="L122">        });</span>
+
+        // writeConflictParams
+<span class="nc" id="L125">        buf.writeInt(writeConflictParams.size());</span>
+<span class="nc" id="L126">        writeConflictParams.entrySet().stream().forEach(x -&gt; {</span>
+<span class="nc" id="L127">            ICorfuPayload.serialize(buf, x.getKey());</span>
+<span class="nc" id="L128">            ICorfuPayload.serialize(buf, x.getValue());</span>
+<span class="nc" id="L129">        });</span>
+<span class="nc" id="L130">    }</span>
+
+    @Override
+    public String toString() {
+<span class="nc" id="L134">        return &quot;TXINFO[&quot; + Utils.toReadableId(TXid) + &quot;](ts=&quot;</span>
+                + snapshotTimestamp + &quot;)&quot;;
+    }
+
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

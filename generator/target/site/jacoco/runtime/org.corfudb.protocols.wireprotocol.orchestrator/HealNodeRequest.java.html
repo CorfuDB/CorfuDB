@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>HealNodeRequest.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol.orchestrator</a> &gt; <span class="el_source">HealNodeRequest.java</span></div><h1>HealNodeRequest.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol.orchestrator;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
+
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+import lombok.Getter;
+
+import org.corfudb.util.JsonUtils;
+
+/**
+ * An orchestrator request to heal an existing node to the cluster.
+ *
+ * @author Maithem
+ */
+public class HealNodeRequest implements CreateRequest {
+
+<span class="nc" id="L20">    @Getter</span>
+    public String endpoint;
+
+<span class="nc" id="L23">    @Getter</span>
+    boolean layoutServer;
+
+<span class="nc" id="L26">    @Getter</span>
+    boolean sequencerServer;
+
+<span class="nc" id="L29">    @Getter</span>
+    boolean logUnitServer;
+
+<span class="nc" id="L32">    @Getter</span>
+    int stripeIndex;
+
+    public HealNodeRequest(String endpoint,
+                           boolean layoutServer,
+                           boolean sequencerServer,
+                           boolean logUnitServer,
+<span class="nc" id="L39">                           int stripeIndex) {</span>
+<span class="nc" id="L40">        this.endpoint = endpoint;</span>
+<span class="nc" id="L41">        this.layoutServer = layoutServer;</span>
+<span class="nc" id="L42">        this.sequencerServer = sequencerServer;</span>
+<span class="nc" id="L43">        this.logUnitServer = logUnitServer;</span>
+<span class="nc" id="L44">        this.stripeIndex = stripeIndex;</span>
+<span class="nc" id="L45">    }</span>
+
+<span class="nc" id="L47">    public HealNodeRequest(byte[] buf) {</span>
+<span class="nc" id="L48">        String str = new String(buf, StandardCharsets.UTF_8);</span>
+<span class="nc" id="L49">        Map&lt;String, String&gt; params = JsonUtils.parser.fromJson(str, HashMap.class);</span>
+<span class="nc" id="L50">        endpoint = params.get(&quot;endpoint&quot;);</span>
+<span class="nc" id="L51">        layoutServer = Boolean.parseBoolean(params.get(&quot;layoutServer&quot;));</span>
+<span class="nc" id="L52">        sequencerServer = Boolean.parseBoolean(params.get(&quot;sequencerServer&quot;));</span>
+<span class="nc" id="L53">        logUnitServer = Boolean.parseBoolean(params.get(&quot;logUnitServer&quot;));</span>
+<span class="nc" id="L54">        stripeIndex = Integer.parseInt(params.get(&quot;stripeIndex&quot;));</span>
+<span class="nc" id="L55">    }</span>
+
+    @Override
+    public OrchestratorRequestType getType() {
+<span class="nc" id="L59">        return HEAL_NODE;</span>
+    }
+
+    @Override
+    public byte[] getSerialized() {
+<span class="nc" id="L64">        Map&lt;String, String&gt; params = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L65">        params.put(&quot;endpoint&quot;, endpoint);</span>
+<span class="nc" id="L66">        params.put(&quot;layoutServer&quot;, String.valueOf(layoutServer));</span>
+<span class="nc" id="L67">        params.put(&quot;sequencerServer&quot;, String.valueOf(sequencerServer));</span>
+<span class="nc" id="L68">        params.put(&quot;logUnitServer&quot;, String.valueOf(logUnitServer));</span>
+<span class="nc" id="L69">        params.put(&quot;stripeIndex&quot;, String.valueOf(stripeIndex));</span>
+<span class="nc" id="L70">        String jsonString = JsonUtils.parser.toJson(params);</span>
+<span class="nc" id="L71">        return jsonString.getBytes();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

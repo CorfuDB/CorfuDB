@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SequencerClient.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.clients</a> &gt; <span class="el_source">SequencerClient.java</span></div><h1>SequencerClient.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.clients;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TokenRequest;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+
+/**
+ * A sequencer client.
+ *
+ * &lt;p&gt;This client allows the client to obtain sequence numbers from a sequencer.
+ *
+ * &lt;p&gt;Created by mwei on 12/10/15.
+ */
+public class SequencerClient extends AbstractClient {
+
+    public SequencerClient(IClientRouter router, long epoch) {
+<span class="nc" id="L29">        super(router, epoch);</span>
+<span class="nc" id="L30">    }</span>
+
+    /**
+     * Sends a metrics request to the sequencer server.
+     */
+    public CompletableFuture&lt;SequencerMetrics&gt; requestMetrics() {
+<span class="nc" id="L36">        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_METRICS_REQUEST.msg());</span>
+    }
+
+    /**
+     * Fetches the next available token from the sequencer.
+     *
+     * @param streamIDs Set of streamIDs to be assigned ot the token.
+     * @param numTokens Number of tokens to be reserved.
+     * @return A completable future with the token response from the sequencer.
+     */
+    public CompletableFuture&lt;TokenResponse&gt; nextToken(List&lt;UUID&gt; streamIDs, long numTokens) {
+<span class="nc" id="L47">        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(</span>
+<span class="nc" id="L48">                new TokenRequest(numTokens, streamIDs)));</span>
+    }
+
+    /**
+     * Retrieves from the sequencer the address space for the specified streams in the given ranges.
+     *
+     * @param streamsAddressesRange requested streams and ranges.
+     * @return streams address maps in the given range.
+     */
+    public CompletableFuture&lt;StreamsAddressResponse&gt; getStreamsAddressSpace(List&lt;StreamAddressRange&gt; streamsAddressesRange) {
+<span class="nc" id="L58">        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(</span>
+                new StreamsAddressRequest(streamsAddressesRange)));
+    }
+
+    /**
+     * Fetches the next available token from the sequencer.
+     *
+     * @param streamIDs    Set of streamIDs to be assigned ot the token.
+     * @param numTokens    Number of tokens to be reserved.
+     * @param conflictInfo Transaction resolution conflict parameters.
+     * @return A completable future with the token response from the sequencer.
+     */
+    public CompletableFuture&lt;TokenResponse&gt; nextToken(List&lt;UUID&gt; streamIDs, long numTokens,
+                                                      TxResolutionInfo conflictInfo) {
+<span class="nc" id="L72">        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(</span>
+<span class="nc" id="L73">                new TokenRequest(numTokens, streamIDs, conflictInfo)));</span>
+    }
+
+    public CompletableFuture&lt;Void&gt; trimCache(Long address) {
+<span class="nc" id="L77">        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));</span>
+    }
+
+    /**
+     * Resets the sequencer with the specified initialToken
+     *
+     * @param initialToken                Token Number which the sequencer starts distributing.
+     * @param streamAddressSpaceMap       Per stream map of address space.
+     * @param readyStateEpoch             Epoch at which the sequencer is ready and to stamp tokens.
+     * @param bootstrapWithoutTailsUpdate True, if this is a delta message and just updates an
+     *                                    existing primary sequencer with the new epoch.
+     *                                    False otherwise.
+     * @return A CompletableFuture which completes once the sequencer is reset.
+     */
+    public CompletableFuture&lt;Boolean&gt; bootstrap(Long initialToken, Map&lt;UUID, StreamAddressSpace&gt; streamAddressSpaceMap,
+                                                Long readyStateEpoch,
+                                                boolean bootstrapWithoutTailsUpdate) {
+<span class="nc" id="L94">        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(</span>
+                new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
+<span class="nc" id="L96">                        bootstrapWithoutTailsUpdate)));</span>
+    }
+
+    /**
+     * Resets the sequencer with the specified initialToken.
+     * BootstrapWithoutTailsUpdate defaulted to false.
+     *
+     * @param initialToken          Token Number which the sequencer starts distributing.
+     * @param streamAddressSpaceMap Per stream map of address space.
+     * @param readyStateEpoch       Epoch at which the sequencer is ready and to stamp tokens.
+     * @return A CompletableFuture which completes once the sequencer is reset.
+     */
+    public CompletableFuture&lt;Boolean&gt; bootstrap(Long initialToken,
+                                                Map&lt;UUID, StreamAddressSpace&gt; streamAddressSpaceMap,
+                                                Long readyStateEpoch) {
+<span class="nc" id="L111">        return bootstrap(initialToken, streamAddressSpaceMap, readyStateEpoch, false);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

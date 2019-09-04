@@ -1,0 +1,1246 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CorfuRuntime.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime</a> &gt; <span class="el_source">CorfuRuntime.java</span></div><h1>CorfuRuntime.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime;
+
+import com.codahale.metrics.MetricRegistry;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.Getter;
+import lombok.Singular;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.recovery.FastObjectLoader;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerHandler;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.ManagementView;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SequencerView;
+import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.UuidUtils;
+import org.corfudb.util.Version;
+
+import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+/**
+ * Created by mwei on 12/9/15.
+ */
+<span class="nc" id="L72">@Slf4j</span>
+@Accessors(chain = true)
+public class CorfuRuntime {
+
+    /**
+     * A class which holds parameters and settings for the {@link CorfuRuntime}.
+     */
+<span class="nc bnc" id="L79" title="All 108 branches missed.">    @Builder</span>
+<span class="nc bnc" id="L80" title="All 274 branches missed.">    @Data</span>
+<span class="nc" id="L81">    @ToString</span>
+    public static class CorfuRuntimeParameters {
+        @Default
+<span class="nc" id="L84">        private final long nettyShutdownQuitePeriod = 100;</span>
+        @Default
+<span class="nc" id="L86">        private final long nettyShutdownTimeout = 300;</span>
+
+        // region Object Layer Parameters
+
+        /**
+         * Max size for a write request.
+         */
+        @Default
+<span class="nc" id="L94">        int maxWriteSize = 0;</span>
+
+        /**
+         * Use fast loader to restore objects on connection.
+         *
+         * &lt;p&gt;If using this utility, you need to be sure that no one
+         * is accessing objects until the tables are loaded
+         * (i.e. when connect returns)
+         */
+        @Default
+<span class="nc" id="L104">        boolean useFastLoader = false;</span>
+
+        /**
+         * Set the bulk read size.
+         */
+        @Default
+<span class="nc" id="L110">        int bulkReadSize = 10;</span>
+
+        /**
+         * How much time the Fast Loader has to get the maps up to date.
+         *
+         * &lt;p&gt;Once the timeout is reached, the Fast Loader gives up. Every map that is
+         * not up to date will be loaded through normal path.
+         */
+        @Default
+<span class="nc" id="L119">        Duration fastLoaderTimeout = Duration.ofMinutes(30);</span>
+        // endregion
+
+        // region Address Space Parameters
+        /**
+         * Number of times to attempt to read before hole filling.
+         * @deprecated This is a no-op. Use holeFillWait
+         * */
+        @Deprecated
+<span class="nc" id="L128">        @Default int holeFillRetry = 10;</span>
+
+        /** Time to wait between read requests reattempts before hole filling. */
+<span class="nc" id="L131">        @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);</span>
+
+        /**
+         * Time limit after which the reader gives up and fills the hole.
+         */
+<span class="nc" id="L136">        @Default Duration holeFillTimeout = Duration.ofSeconds(10);</span>
+
+        /**
+         * Whether or not to disable the cache.
+         */
+        @Default
+<span class="nc" id="L142">        boolean cacheDisabled = false;</span>
+
+        /**
+         * The maximum number of entries in the cache.
+         */
+        @Default
+<span class="nc" id="L148">        long maxCacheEntries;</span>
+
+        /**
+         * The max in-memory size of the cache in bytes
+         */
+        @Default
+<span class="nc" id="L154">        long maxCacheWeight;</span>
+
+        /**
+         * This is a hint to size the AddressSpaceView cache, a higher concurrency
+         * level allows for less lock contention at the cost of more memory overhead.
+         * The default value of zero will result in using the cache's internal default
+         * concurrency level (i.e. 4). 
+         */
+        @Default
+<span class="nc" id="L163">        int cacheConcurrencyLevel = 0;</span>
+
+        /**
+         * Sets expireAfterAccess and expireAfterWrite in seconds.
+         */
+        @Default
+<span class="nc" id="L169">        long cacheExpiryTime = Long.MAX_VALUE;</span>
+        // endregion
+
+        // region Handshake Parameters
+        /**
+         * Sets handshake timeout in seconds.
+         */
+        @Default
+<span class="nc" id="L177">        int handshakeTimeout = 10;</span>
+        // endregion
+
+        // region Stream Parameters
+        /**
+         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
+         * False, if strategy to discover the address space of a stream relies on the get stream address map.
+         */
+        @Default
+<span class="nc" id="L186">        boolean followBackpointersEnabled = false;</span>
+
+        /**
+         * Whether or not hole filling should be disabled.
+         */
+        @Default
+<span class="nc" id="L192">        boolean holeFillingDisabled = false;</span>
+
+        /**
+         * Number of times to retry on an
+         * {@link org.corfudb.runtime.exceptions.OverwriteException} before giving up.
+         */
+        @Default
+<span class="nc" id="L199">        int writeRetry = 5;</span>
+
+        /**
+         * The number of times to retry on a retriable
+         * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.
+         */
+        @Default
+<span class="nc" id="L206">        int trimRetry = 2;</span>
+
+        /**
+         * The total number of retries the checkpointer will attempt on sequencer failover to
+         * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
+         */
+        @Default
+<span class="nc" id="L213">        int checkpointRetries = 5;</span>
+
+        /**
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        @Default
+<span class="nc" id="L220">        int streamBatchSize = 10;</span>
+
+        /**
+         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
+         * address discovery mechanism relies on address maps instead of follow backpointers;
+         */
+        @Default
+<span class="nc" id="L227">        int checkpointReadBatchSize = 5;</span>
+        // endregion
+
+        //region        Security parameters
+        /**
+         * True, if TLS is enabled.
+         */
+        @Default
+<span class="nc" id="L235">        boolean tlsEnabled = false;</span>
+
+        /**
+         * A path to the key store.
+         */
+<span class="nc" id="L240">        String keyStore;</span>
+
+        /**
+         * A file containing the password for the key store.
+         */
+<span class="nc" id="L245">        String ksPasswordFile;</span>
+
+        /**
+         * A path to the trust store.
+         */
+<span class="nc" id="L250">        String trustStore;</span>
+
+        /**
+         * A path containing the password for the trust store.
+         */
+<span class="nc" id="L255">        String tsPasswordFile;</span>
+
+        /**
+         * True, if SASL plain text authentication is enabled.
+         */
+        @Default
+<span class="nc" id="L261">        boolean saslPlainTextEnabled = false;</span>
+
+        /**
+         * A path containing the username file for SASL.
+         */
+<span class="nc" id="L266">        String usernameFile;</span>
+
+        /**
+         * A path containing the password file for SASL.
+         */
+<span class="nc" id="L271">        String passwordFile;</span>
+        //endregion
+
+        //region Connection parameters
+        /**
+         * {@link Duration} before requests timeout.
+         * This is the duration after which the reader hole fills the address.
+         */
+        @Default
+<span class="nc" id="L280">        Duration requestTimeout = Duration.ofSeconds(5);</span>
+
+        /**
+         * This timeout (in seconds) is used to detect servers that
+         * shutdown abruptly without terminating the connection properly.
+         */
+        @Default
+<span class="nc" id="L287">        int idleConnectionTimeout = 7;</span>
+
+        /**
+         * The period at which the client sends keep-alive messages to the
+         * server (a message is only send there is no write activity on the channel
+         * for the whole period.
+         */
+        @Default
+<span class="nc" id="L295">        int keepAlivePeriod = 2;</span>
+
+        /**
+         * {@link Duration} before connections timeout.
+         */
+        @Default
+<span class="nc" id="L301">        Duration connectionTimeout = Duration.ofMillis(500);</span>
+
+        /**
+         * {@link Duration} before reconnecting to a disconnected node.
+         */
+        @Default
+<span class="nc" id="L307">        Duration connectionRetryRate = Duration.ofSeconds(1);</span>
+
+        /**
+         * The period at which the runtime will run garbage collection
+         */
+        @Default
+<span class="nc" id="L313">        Duration runtimeGCPeriod = Duration.ofMinutes(20);</span>
+
+        /**
+         * The {@link UUID} for this client. Randomly generated by default.
+         */
+        @Default
+<span class="nc" id="L319">        UUID clientId = UUID.randomUUID();</span>
+
+        /**
+         * The {@link UUID} for the cluster this client is connecting to, or
+         * {@code null} if the client should adopt the {@link UUID} of the first
+         * server it connects to.
+         */
+        @Default
+<span class="nc" id="L327">        UUID clusterId = null;</span>
+
+        /**
+         * The type of socket which {@link NettyClientRouter}s should use. By default,
+         * an NIO based implementation is used.
+         */
+        @Default
+<span class="nc" id="L334">        ChannelImplementation socketType = ChannelImplementation.NIO;</span>
+
+        /**
+         * Number of retries to reconnect to an unresponsive system before invoking the
+         * systemDownHandler. This is mainly required to allow the fault detection mechanism
+         * to detect and reconfigure the cluster.
+         * The fault detection takes at least 3 seconds to recognize a failure.
+         * Each retry is attempted after a sleep of {@literal connectionRetryRate}
+         * invoking the systemDownHandler after a minimum of
+         * (systemDownHandlerTriggerLimit * connectionRetryRate) seconds. Default: 20 seconds.
+         */
+        @Default
+<span class="nc" id="L346">        int systemDownHandlerTriggerLimit = 20;</span>
+
+        /**
+         * The initial list of layout servers.
+         */
+        @Singular
+<span class="nc" id="L352">        List&lt;NodeLocator&gt; layoutServers;</span>
+        //endregion
+
+        //region Threading Parameters
+        /**
+         * The {@link EventLoopGroup} which {@link NettyClientRouter}s will use.
+         * If not specified, the runtime will generate this using the {@link ChannelImplementation}
+         * specified in {@code socketType} and the {@link ThreadFactory} specified in
+         * {@code nettyThreadFactory}.
+         */
+<span class="nc" id="L362">        EventLoopGroup nettyEventLoop;</span>
+
+        /**
+         * A string which will be used to set the
+         * {@link com.google.common.util.concurrent.ThreadFactoryBuilder#nameFormat} for the
+         * {@code nettyThreadFactory}. By default, this is set to &quot;netty-%d&quot;.
+         * If you provide your own {@code nettyEventLoop}, this field is ignored.
+         */
+        @Default
+<span class="nc" id="L371">        String nettyEventLoopThreadFormat = &quot;netty-%d&quot;;</span>
+
+        /**
+         * The number of threads that should be available in the {@link NettyClientRouter}'s
+         * event pool. 0 means that we will use 2x the number of processors reported in the
+         * system. If you provide your own {@code nettyEventLoop}, this field is ignored.
+         */
+        @Default
+<span class="nc" id="L379">        int nettyEventLoopThreads = 0;</span>
+
+        /**
+         * True, if the {@code NettyEventLoop} should be shutdown when the runtime is
+         * shutdown. False otherwise.
+         */
+        @Default
+<span class="nc" id="L386">        boolean shutdownNettyEventLoop = true;</span>
+
+        /**
+         * Netty channel options, if provided. If no options are set, we default to
+         * the defaults in {@link this#DEFAULT_CHANNEL_OPTIONS}.
+         */
+        @Singular
+<span class="nc" id="L393">        Map&lt;ChannelOption, Object&gt; customNettyChannelOptions;</span>
+
+        /**
+         * Default channel options, used if there are no options in the
+         * {@link this#customNettyChannelOptions} field.
+         */
+<span class="nc" id="L399">        static final Map&lt;ChannelOption, Object&gt; DEFAULT_CHANNEL_OPTIONS =</span>
+<span class="nc" id="L400">                ImmutableMap.&lt;ChannelOption, Object&gt;builder()</span>
+<span class="nc" id="L401">                        .put(ChannelOption.TCP_NODELAY, true)</span>
+<span class="nc" id="L402">                        .put(ChannelOption.SO_REUSEADDR, true)</span>
+<span class="nc" id="L403">                        .build();</span>
+
+        /**
+         * Get the netty channel options to be used by the netty client implementation.
+         *
+         * @return A map containing options which should be applied to each netty channel.
+         */
+        public Map&lt;ChannelOption, Object&gt; getNettyChannelOptions() {
+<span class="nc bnc" id="L411" title="All 2 branches missed.">            return customNettyChannelOptions.size() == 0</span>
+                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
+        }
+
+        /**
+         * A {@link UncaughtExceptionHandler} which handles threads that have an uncaught
+         * exception. Used on all {@link ThreadFactory}s the runtime creates, but if you
+         * generate your own thread factory, this field is ignored. If this field is not set,
+         * the runtime's default handler runs, which logs an error level message.
+         */
+<span class="nc" id="L421">        UncaughtExceptionHandler uncaughtExceptionHandler;</span>
+        //endregion
+
+        /**
+         * The number of times to retry invalidate when a layout change is expected.
+         */
+        @Default
+<span class="nc" id="L428">        int invalidateRetry = 5;</span>
+
+        /**
+         * Represents filtering logic to be applied on the inbound messages received by Netty Client
+         * Router. If filters are not null, Netty Client Router add a filter handler and configures it
+         * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
+         */
+        @Default
+<span class="nc" id="L436">        List&lt;MsgHandlingFilter&gt; nettyClientInboundMsgFilters = null;</span>
+
+        // Register handlers region
+
+        // These two handlers are provided to give some control on what happen when system is down.
+        // For applications that want to have specific behaviour when a the system appears
+        // unavailable, they can register their own handler for both before the rpc request and
+        // upon cluster unreachability.
+        // An example of how to use these handlers implementing timeout is given in
+        // test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
+
+        /**
+         * SystemDownHandler is invoked at any point when the Corfu client attempts to make an RPC
+         * request to the Corfu cluster but is unable to complete this.
+         * NOTE: This will also be invoked during connect if the cluster is unreachable.
+         */
+        @Default
+<span class="nc" id="L453">        volatile Runnable systemDownHandler = () -&gt; {</span>
+<span class="nc" id="L454">        };</span>
+
+        /**
+         * BeforeRPCHandler callback is invoked every time before an RPC call.
+         */
+        @Default
+<span class="nc" id="L460">        volatile Runnable beforeRpcHandler = () -&gt; {</span>
+<span class="nc" id="L461">        };</span>
+        //endregion
+
+        /**
+         * The default priority of the requests made by this client.
+         * Under resource constraints non-high priority requests
+         * are dropped.
+         */
+        @Default
+<span class="nc" id="L470">        PriorityLevel priorityLevel = PriorityLevel.NORMAL;</span>
+    }
+
+    /**
+     * The parameters used to configure this {@link CorfuRuntime}.
+     */
+<span class="nc" id="L476">    @Getter</span>
+    private final CorfuRuntimeParameters parameters;
+
+    /**
+     * The {@link EventLoopGroup} provided to netty routers.
+     */
+<span class="nc" id="L482">    @Getter</span>
+    private final EventLoopGroup nettyEventLoop;
+
+    /**
+     * A view of the layout service in the Corfu server instance.
+     */
+<span class="nc bnc" id="L488" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final LayoutView layoutView = new LayoutView(this);
+    /**
+     * A view of the sequencer server in the Corfu server instance.
+     */
+<span class="nc bnc" id="L493" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final SequencerView sequencerView = new SequencerView(this);
+    /**
+     * A view of the address space in the Corfu server instance.
+     */
+<span class="nc bnc" id="L498" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+    /**
+     * A view of streamsView in the Corfu server instance.
+     */
+<span class="nc bnc" id="L503" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final StreamsView streamsView = new StreamsView(this);
+
+    /**
+     * Views of objects in the Corfu server instance.
+     */
+<span class="nc bnc" id="L509" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final ObjectsView objectsView = new ObjectsView(this);
+    /**
+     * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
+     */
+<span class="nc bnc" id="L514" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
+    /**
+     * A view of the Management Service.
+     */
+<span class="nc bnc" id="L519" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final ManagementView managementView = new ManagementView(this);
+
+    /**
+     * List of initial set of layout servers, i.e., servers specified in
+     * connection string on bootstrap.
+     */
+<span class="nc" id="L526">    @Getter</span>
+    private volatile List&lt;String&gt; bootstrapLayoutServers;
+
+    /**
+     * List of known layout servers, refreshed on each fetchLayout.
+     */
+<span class="nc" id="L532">    @Getter</span>
+    private volatile List&lt;String&gt; layoutServers;
+
+    /**
+     * Node Router Pool.
+     */
+<span class="nc" id="L538">    @Getter</span>
+    private NodeRouterPool nodeRouterPool;
+
+    /**
+     * A completable future containing a layout, when completed.
+     */
+    public volatile CompletableFuture&lt;Layout&gt; layout;
+
+    /**
+     * The {@link UUID} of the cluster we are currently connected to, or null, if
+     * there is no cluster yet.
+     */
+<span class="nc" id="L550">    @Getter</span>
+    public volatile UUID clusterId;
+
+<span class="nc" id="L553">    @Getter</span>
+    final ViewsGarbageCollector garbageCollector = new ViewsGarbageCollector(this);
+
+    /**
+     * Notifies that the runtime is no longer used
+     * and async retries to fetch the layout can be stopped.
+     */
+<span class="nc" id="L560">    @Getter</span>
+    private volatile boolean isShutdown = false;
+
+
+    /**
+     * This thread is used by fetchLayout to find a new layout in the system
+     */
+<span class="nc" id="L567">    final ExecutorService runtimeExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()</span>
+<span class="nc" id="L568">            .setDaemon(true)</span>
+<span class="nc" id="L569">            .setNameFormat(&quot;CorfuRuntime-%d&quot;)</span>
+<span class="nc" id="L570">            .build());</span>
+
+    /**
+     * Latest layout seen by the runtime.
+     */
+<span class="nc" id="L575">    private volatile Layout latestLayout = null;</span>
+
+<span class="nc" id="L577">    @Getter</span>
+<span class="nc" id="L578">    private static final MetricRegistry defaultMetrics = new MetricRegistry();</span>
+
+    /** Initialize a default static registry which through that different metrics
+     * can be registered and reported */
+    static {
+<span class="nc" id="L583">        synchronized (defaultMetrics) {</span>
+<span class="nc" id="L584">            MetricsUtils.metricsReportingSetup(defaultMetrics);</span>
+<span class="nc" id="L585">        }</span>
+    }
+
+    /**
+     * Register SystemDownHandler.
+     * Please use CorfuRuntimeParameters builder to register this.
+     *
+     * @param handler Handler to invoke in case of system Down.
+     * @return CorfuRuntime instance.
+     */
+    @Deprecated
+    public CorfuRuntime registerSystemDownHandler(Runnable handler) {
+<span class="nc" id="L597">        this.getParameters().setSystemDownHandler(handler);</span>
+<span class="nc" id="L598">        return this;</span>
+    }
+
+    /**
+     * Register BeforeRPCHandler.
+     * Please use CorfuRuntimeParameters builder to register this.
+     *
+     * @param handler Handler to invoke before every RPC.
+     * @return CorfuRuntime instance.
+     */
+    @Deprecated
+    public CorfuRuntime registerBeforeRpcHandler(Runnable handler) {
+<span class="nc" id="L610">        this.getParameters().setBeforeRpcHandler(handler);</span>
+<span class="nc" id="L611">        return this;</span>
+    }
+
+
+    /**
+     * When set, overrides the default getRouterFunction. Used by the testing
+     * framework to ensure the default routers used are for testing.
+     */
+<span class="nc" id="L619">    public static BiFunction&lt;CorfuRuntime, String, IClientRouter&gt; overrideGetRouterFunction = null;</span>
+
+    /**
+     * A function to handle getting routers. Used by test framework to inject
+     * a test router. Can also be used to provide alternative logic for obtaining
+     * a router.
+     */
+<span class="nc bnc" id="L626" title="All 2 branches missed.">    @Getter</span>
+    private final Function&lt;String, IClientRouter&gt; getRouterFunction =
+            overrideGetRouterFunction != null ? (address) -&gt;
+<span class="nc" id="L629">                    overrideGetRouterFunction.apply(this, address) : (address) -&gt; {</span>
+<span class="nc" id="L630">                NodeLocator node = NodeLocator.parseString(address);</span>
+                // Generate a new router, start it and add it to the table.
+<span class="nc" id="L632">                NettyClientRouter newRouter = new NettyClientRouter(node,</span>
+<span class="nc" id="L633">                        getNettyEventLoop(),</span>
+<span class="nc" id="L634">                        getParameters());</span>
+<span class="nc" id="L635">                log.debug(&quot;Connecting to new router {}&quot;, node);</span>
+                try {
+<span class="nc" id="L637">                    newRouter.addClient(new LayoutHandler())</span>
+<span class="nc" id="L638">                            .addClient(new SequencerHandler())</span>
+<span class="nc" id="L639">                            .addClient(new LogUnitHandler())</span>
+<span class="nc" id="L640">                            .addClient(new ManagementHandler());</span>
+<span class="nc" id="L641">                } catch (Exception e) {</span>
+<span class="nc" id="L642">                    log.warn(&quot;Error connecting to router&quot;, e);</span>
+<span class="nc" id="L643">                    throw e;</span>
+<span class="nc" id="L644">                }</span>
+<span class="nc" id="L645">                return newRouter;</span>
+            };
+
+    /**
+     * Factory method for generating new {@link CorfuRuntime}s given a set of
+     * {@link CorfuRuntimeParameters} to configure the runtime with.
+     *
+     * @param parameters A {@link CorfuRuntimeParameters} to use.
+     * @return A new {@link CorfuRuntime}.
+     */
+    public static CorfuRuntime fromParameters(@Nonnull CorfuRuntimeParameters parameters) {
+<span class="nc" id="L656">        return new CorfuRuntime(parameters);</span>
+    }
+
+    /**
+     * Construct a new {@link CorfuRuntime} given a {@link CorfuRuntimeParameters} instance.
+     *
+     * @param parameters {@link CorfuRuntimeParameters} to configure the runtime with.
+     */
+<span class="nc" id="L664">    private CorfuRuntime(@Nonnull CorfuRuntimeParameters parameters) {</span>
+        // Set the local parameters field
+<span class="nc" id="L666">        this.parameters = parameters;</span>
+
+        // Populate the initial set of layout servers
+<span class="nc" id="L669">        bootstrapLayoutServers = parameters.getLayoutServers().stream()</span>
+<span class="nc" id="L670">                .map(NodeLocator::toString)</span>
+<span class="nc" id="L671">                .collect(Collectors.toList());</span>
+
+        // Initialize list of layout servers (this list will get updated for every new layout)
+<span class="nc" id="L674">        layoutServers = new ArrayList&lt;&gt;(bootstrapLayoutServers);</span>
+
+        // Set the initial cluster Id
+<span class="nc" id="L677">        clusterId = parameters.getClusterId();</span>
+
+        // Generate or set the NettyEventLoop
+<span class="nc bnc" id="L680" title="All 2 branches missed.">        nettyEventLoop = parameters.nettyEventLoop == null ? getNewEventLoopGroup()</span>
+                : parameters.nettyEventLoop;
+
+        // Initializing the node router pool.
+<span class="nc" id="L684">        nodeRouterPool = new NodeRouterPool(getRouterFunction);</span>
+
+<span class="nc" id="L686">        log.info(&quot;Corfu runtime version {} initialized.&quot;, getVersionString());</span>
+<span class="nc" id="L687">    }</span>
+
+    /**
+     * Get a new {@link EventLoopGroup} for scheduling threads for Netty. The
+     * {@link EventLoopGroup} is typically passed to a router.
+     *
+     * @return An {@link EventLoopGroup}.
+     */
+    private EventLoopGroup getNewEventLoopGroup() {
+        // Calculate the number of threads which should be available in the thread pool.
+<span class="nc bnc" id="L697" title="All 2 branches missed.">        int numThreads = parameters.nettyEventLoopThreads == 0</span>
+<span class="nc" id="L698">                ? Runtime.getRuntime().availableProcessors() * 2 :</span>
+                parameters.nettyEventLoopThreads;
+<span class="nc" id="L700">        ThreadFactory factory = new ThreadFactoryBuilder()</span>
+<span class="nc" id="L701">                .setDaemon(true)</span>
+<span class="nc" id="L702">                .setNameFormat(parameters.nettyEventLoopThreadFormat)</span>
+<span class="nc" id="L703">                .setUncaughtExceptionHandler(this::handleUncaughtThread)</span>
+<span class="nc" id="L704">                .build();</span>
+<span class="nc" id="L705">        return parameters.socketType.getGenerator().generate(numThreads, factory);</span>
+    }
+
+    /**
+     * Function which is called whenever the runtime encounters an uncaught thread.
+     *
+     * @param thread    The thread which terminated.
+     * @param throwable The throwable which caused the thread to terminate.
+     */
+    private void handleUncaughtThread(@Nonnull Thread thread, @Nonnull Throwable throwable) {
+<span class="nc bnc" id="L715" title="All 2 branches missed.">        if (parameters.getUncaughtExceptionHandler() != null) {</span>
+<span class="nc" id="L716">            parameters.getUncaughtExceptionHandler().uncaughtException(thread, throwable);</span>
+        } else {
+<span class="nc" id="L718">            log.error(&quot;handleUncaughtThread: {} terminated with throwable of type {}&quot;,</span>
+<span class="nc" id="L719">                    thread.getName(),</span>
+<span class="nc" id="L720">                    throwable.getClass().getSimpleName(),</span>
+                    throwable);
+        }
+<span class="nc" id="L723">    }</span>
+
+    /**
+     * Shuts down the CorfuRuntime.
+     * Stops async tasks from fetching the layout.
+     * Cannot reuse the runtime once shutdown is called.
+     */
+    public void shutdown() {
+        // Stopping async task from fetching layout.
+<span class="nc" id="L732">        isShutdown = true;</span>
+<span class="nc" id="L733">        garbageCollector.stop();</span>
+<span class="nc" id="L734">        runtimeExecutor.shutdownNow();</span>
+<span class="nc bnc" id="L735" title="All 2 branches missed.">        if (layout != null) {</span>
+            try {
+<span class="nc" id="L737">                layout.cancel(true);</span>
+<span class="nc" id="L738">            } catch (Exception e) {</span>
+<span class="nc" id="L739">                log.error(&quot;Runtime shutting down. Exception in terminating fetchLayout: {}&quot;, e);</span>
+<span class="nc" id="L740">            }</span>
+        }
+
+<span class="nc" id="L743">        stop(true);</span>
+
+        // Shutdown the event loop
+<span class="nc bnc" id="L746" title="All 2 branches missed.">        if (parameters.shutdownNettyEventLoop) {</span>
+<span class="nc" id="L747">            nettyEventLoop.shutdownGracefully();</span>
+        }
+<span class="nc" id="L749">    }</span>
+
+    /**
+     * Stop all routers associated with this runtime &amp; disconnect them.
+     */
+    public void stop() {
+<span class="nc" id="L755">        stop(false);</span>
+<span class="nc" id="L756">    }</span>
+
+    /**
+     * Stop all routers associated with this Corfu Runtime.
+     **/
+    public void stop(boolean shutdown) {
+<span class="nc" id="L762">        nodeRouterPool.shutdown();</span>
+<span class="nc bnc" id="L763" title="All 2 branches missed.">        if (!shutdown) {</span>
+<span class="nc" id="L764">            nodeRouterPool = new NodeRouterPool(getRouterFunction);</span>
+        }
+<span class="nc" id="L766">    }</span>
+
+    /**
+     * Get a UUID for a named stream.
+     *
+     * @param string The name of the stream.
+     * @return The ID of the stream.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
+    public static UUID getStreamID(String string) {
+<span class="nc" id="L776">        return UUID.nameUUIDFromBytes(string.getBytes());</span>
+    }
+
+    public static UUID getCheckpointStreamIdFromId(UUID streamId) {
+<span class="nc" id="L780">        return getStreamID(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);</span>
+    }
+
+    public static UUID getCheckpointStreamIdFromName(String streamName) {
+<span class="nc" id="L784">        return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));</span>
+    }
+
+    /**
+     * Get corfu runtime version.
+     **/
+    public static String getVersionString() {
+<span class="nc bnc" id="L791" title="All 2 branches missed.">        if (Version.getVersionString().contains(&quot;SNAPSHOT&quot;)</span>
+<span class="nc bnc" id="L792" title="All 2 branches missed.">                || Version.getVersionString().contains(&quot;source&quot;)) {</span>
+<span class="nc" id="L793">            return Version.getVersionString() + &quot;(&quot;</span>
+<span class="nc" id="L794">                    + GitRepositoryState.getRepositoryState().commitIdAbbrev + &quot;)&quot;;</span>
+        }
+<span class="nc" id="L796">        return Version.getVersionString();</span>
+    }
+
+    /**
+     * If enabled, successful transactions will be written to a special transaction stream
+     * (i.e. TRANSACTION_STREAM_ID)
+     *
+     * @param enable indicates if transaction logging is enabled
+     * @return corfu runtime object
+     */
+    public CorfuRuntime setTransactionLogging(boolean enable) {
+<span class="nc" id="L807">        this.getObjectsView().setTransactionLogging(enable);</span>
+<span class="nc" id="L808">        return this;</span>
+    }
+
+    /**
+     * Parse a configuration string and get a CorfuRuntime.
+     *
+     * @param configurationString The configuration string to parse.
+     * @return A CorfuRuntime Configured based on the configuration string.
+     */
+    public CorfuRuntime parseConfigurationString(String configurationString) {
+        // Parse comma sep. list.
+<span class="nc" id="L819">        bootstrapLayoutServers = Pattern.compile(&quot;,&quot;)</span>
+<span class="nc" id="L820">                .splitAsStream(configurationString)</span>
+<span class="nc" id="L821">                .map(String::trim)</span>
+<span class="nc" id="L822">                .collect(Collectors.toList());</span>
+<span class="nc" id="L823">        layoutServers = new ArrayList&lt;&gt;(bootstrapLayoutServers);</span>
+<span class="nc" id="L824">        return this;</span>
+    }
+
+    /**
+     * Add a layout server to the list of servers known by the CorfuRuntime.
+     *
+     * @param layoutServer A layout server to use.
+     * @return A CorfuRuntime, to support the builder pattern.
+     */
+    public CorfuRuntime addLayoutServer(String layoutServer) {
+<span class="nc" id="L834">        bootstrapLayoutServers.add(layoutServer);</span>
+<span class="nc" id="L835">        layoutServers.add(layoutServer);</span>
+<span class="nc" id="L836">        return this;</span>
+    }
+
+    /**
+     * Get a router, given the address.
+     *
+     * @param address The address of the router to get.
+     * @return The router.
+     */
+    public IClientRouter getRouter(String address) {
+<span class="nc" id="L846">        return nodeRouterPool.getRouter(NodeLocator.parseString(address));</span>
+    }
+
+    /**
+     * Invalidate the current layout.
+     * If the layout has been previously invalidated and a new layout has not yet been retrieved,
+     * this function does nothing.
+     */
+    public synchronized CompletableFuture&lt;Layout&gt; invalidateLayout() {
+        // Is there a pending request to retrieve the layout?
+<span class="nc bnc" id="L856" title="All 2 branches missed.">        if (layout.isDone()) {</span>
+<span class="nc" id="L857">            List&lt;String&gt; servers = Optional.ofNullable(latestLayout)</span>
+<span class="nc" id="L858">                    .map(Layout::getLayoutServers)</span>
+<span class="nc" id="L859">                    .orElse(bootstrapLayoutServers);</span>
+
+<span class="nc" id="L861">            layout = fetchLayout(servers);</span>
+        }
+
+<span class="nc" id="L864">        return layout;</span>
+    }
+
+    /**
+     * Check if the cluster Id of the layout matches the client cluster Id.
+     * If the client cluster Id is null, we update the client cluster Id.
+     * &lt;p&gt;
+     * If both the layout cluster Id and the client cluster Id is null, the check is skipped.
+     * This can only occur in the case of legacy cluster without a cluster Id.
+     *
+     * @param layout The layout to check.
+     * @throws WrongClusterException If the layout belongs to the wrong cluster.
+     */
+    private void checkClusterId(@Nonnull Layout layout) {
+        // We haven't adopted a clusterId yet.
+<span class="nc bnc" id="L879" title="All 2 branches missed.">        if (clusterId == null) {</span>
+<span class="nc" id="L880">            clusterId = layout.getClusterId();</span>
+<span class="nc bnc" id="L881" title="All 2 branches missed.">            if (clusterId != null) {</span>
+<span class="nc" id="L882">                log.info(&quot;Connected to new cluster {}&quot;, UuidUtils.asBase64(clusterId));</span>
+            }
+<span class="nc bnc" id="L884" title="All 2 branches missed.">        } else if (!clusterId.equals(layout.getClusterId())) {</span>
+            // We connected but got a cluster id we didn't expect.
+<span class="nc" id="L886">            throw new WrongClusterException(clusterId, layout.getClusterId());</span>
+        }
+<span class="nc" id="L888">    }</span>
+
+    /**
+     * Detects connections to nodes in the router pool which are no longer present in the layout.
+     * For each of these nodes, the router is stopped and the reference is removed from the pool.
+     * If this is not done, the reference remains and Netty keeps attempting to reconnect to the
+     * disconnected node.
+     *
+     * @param layout The latest layout.
+     */
+    private void pruneRemovedRouters(@Nonnull Layout layout) {
+<span class="nc" id="L899">        nodeRouterPool.getNodeRouters().keySet().stream()</span>
+                // Check if endpoint is present in the layout.
+<span class="nc" id="L901">                .filter(endpoint -&gt; !layout.getAllServers()</span>
+                        // Converting to legacy endpoint format as the layout only contains
+                        // legacy format - host:port.
+<span class="nc bnc" id="L904" title="All 2 branches missed.">                        .contains(endpoint.toEndpointUrl()))</span>
+<span class="nc" id="L905">                .forEach(endpoint -&gt; {</span>
+                    try {
+<span class="nc" id="L907">                        IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);</span>
+<span class="nc bnc" id="L908" title="All 2 branches missed.">                        if (router != null) {</span>
+                            // Stop the channel from keeping connecting/reconnecting to server.
+                            // Also if channel is not closed properly, router will be garbage collected.
+<span class="nc" id="L911">                            router.stop();</span>
+                        }
+<span class="nc" id="L913">                    } catch (Exception e) {</span>
+<span class="nc" id="L914">                        log.warn(&quot;fetchLayout: Exception in stopping and removing &quot;</span>
+                                + &quot;router connection to node {} :&quot;, endpoint, e);
+<span class="nc" id="L916">                    }</span>
+<span class="nc" id="L917">                });</span>
+<span class="nc" id="L918">    }</span>
+
+    /**
+     * Return a completable future which is guaranteed to contain a layout.
+     * This future will continue retrying until it gets a layout.
+     * If you need this completable future to fail, you should chain it with a timeout.
+     *
+     * @param servers Layout servers to fetch the layout from.
+     * @return A completable future containing a layout.
+     */
+    private CompletableFuture&lt;Layout&gt; fetchLayout(List&lt;String&gt; servers) {
+
+<span class="nc" id="L930">        return CompletableFuture.supplyAsync(() -&gt; {</span>
+
+<span class="nc" id="L932">            List&lt;String&gt; layoutServersCopy = new ArrayList&lt;&gt;(servers);</span>
+<span class="nc" id="L933">            parameters.getBeforeRpcHandler().run();</span>
+<span class="nc" id="L934">            int systemDownTriggerCounter = 0;</span>
+
+            while (true) {
+
+<span class="nc" id="L938">                Collections.shuffle(layoutServersCopy);</span>
+                // Iterate through the layout servers, attempting to connect to one
+<span class="nc bnc" id="L940" title="All 2 branches missed.">                for (String s : layoutServersCopy) {</span>
+<span class="nc" id="L941">                    log.trace(&quot;Trying connection to layout server {}&quot;, s);</span>
+                    try {
+<span class="nc" id="L943">                        IClientRouter router = getRouter(s);</span>
+                        // Try to get a layout.
+<span class="nc" id="L945">                        CompletableFuture&lt;Layout&gt; layoutFuture =</span>
+<span class="nc" id="L946">                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();</span>
+                        // Wait for layout
+<span class="nc" id="L948">                        Layout l = layoutFuture.get();</span>
+
+                        // If the layout we got has a smaller epoch than the latestLayout epoch,
+                        // we discard it.
+<span class="nc bnc" id="L952" title="All 4 branches missed.">                        if (latestLayout != null &amp;&amp; latestLayout.getEpoch() &gt; l.getEpoch()) {</span>
+<span class="nc" id="L953">                            log.warn(&quot;fetchLayout: Received a layout with epoch {} from server &quot;</span>
+                                            + &quot;{}:{} smaller than latestLayout epoch {}, &quot;
+                                            + &quot;discarded.&quot;,
+<span class="nc" id="L956">                                    l.getEpoch(), router.getHost(), router.getPort(),</span>
+<span class="nc" id="L957">                                    latestLayout.getEpoch());</span>
+<span class="nc" id="L958">                            continue;</span>
+                        }
+
+<span class="nc" id="L961">                        checkClusterId(l);</span>
+
+                        // Update/refresh list of layout servers
+<span class="nc" id="L964">                        this.layoutServers = l.getLayoutServers();</span>
+
+<span class="nc" id="L966">                        layout = layoutFuture;</span>
+<span class="nc" id="L967">                        latestLayout = l;</span>
+<span class="nc" id="L968">                        log.debug(&quot;Layout server {} responded with layout {}&quot;, s, l);</span>
+
+                        // Prune away removed node routers from the nodeRouterPool.
+<span class="nc" id="L971">                        pruneRemovedRouters(l);</span>
+
+<span class="nc" id="L973">                        return l;</span>
+<span class="nc" id="L974">                    } catch (InterruptedException ie) {</span>
+<span class="nc" id="L975">                        throw new UnrecoverableCorfuInterruptedError(</span>
+                                &quot;Interrupted during layout fetch&quot;, ie);
+<span class="nc" id="L977">                    } catch (ExecutionException ee){</span>
+<span class="nc bnc" id="L978" title="All 2 branches missed.">                        if (ee.getCause() instanceof TimeoutException) {</span>
+<span class="nc" id="L979">                            log.warn(&quot;Tried to get layout from {} but failed by timeout&quot;, s);</span>
+                        } else {
+<span class="nc" id="L981">                            log.warn(&quot;Tried to get layout from {} but failed with exception:&quot;, s, ee);</span>
+                        }
+                    }
+<span class="nc" id="L984">                    catch (Exception e) {</span>
+<span class="nc" id="L985">                        log.warn(&quot;Tried to get layout from {} but failed with exception:&quot;, s, e);</span>
+<span class="nc" id="L986">                    }</span>
+<span class="nc" id="L987">                }</span>
+
+<span class="nc" id="L989">                log.warn(&quot;Couldn't connect to any up-to-date layout servers, retrying in {}, &quot;</span>
+                                + &quot;Retried {} times, systemDownHandlerTriggerLimit = {}&quot;,
+<span class="nc" id="L991">                        parameters.connectionRetryRate, systemDownTriggerCounter,</span>
+<span class="nc" id="L992">                        parameters.getSystemDownHandlerTriggerLimit());</span>
+
+<span class="nc bnc" id="L994" title="All 2 branches missed.">                if (++systemDownTriggerCounter &gt;= parameters.getSystemDownHandlerTriggerLimit()) {</span>
+<span class="nc" id="L995">                    log.info(&quot;fetchLayout: Invoking the systemDownHandler.&quot;);</span>
+<span class="nc" id="L996">                    parameters.getSystemDownHandler().run();</span>
+                }
+
+<span class="nc" id="L999">                Sleep.sleepUninterruptibly(parameters.connectionRetryRate);</span>
+<span class="nc bnc" id="L1000" title="All 2 branches missed.">                if (isShutdown) {</span>
+<span class="nc" id="L1001">                    return null;</span>
+                }
+            }
+        }, runtimeExecutor);
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private void checkVersion() {
+        try {
+<span class="nc" id="L1010">            Layout currentLayout = CFUtils.getUninterruptibly(layout);</span>
+<span class="nc" id="L1011">            List&lt;CompletableFuture&lt;VersionInfo&gt;&gt; versions =</span>
+<span class="nc" id="L1012">                    currentLayout.getLayoutServers()</span>
+<span class="nc" id="L1013">                            .stream().map(s -&gt; getLayoutView().getRuntimeLayout().getBaseClient(s))</span>
+<span class="nc" id="L1014">                            .map(BaseClient::getVersionInfo)</span>
+<span class="nc" id="L1015">                            .collect(Collectors.toList());</span>
+
+<span class="nc bnc" id="L1017" title="All 2 branches missed.">            for (CompletableFuture&lt;VersionInfo&gt; versionCf : versions) {</span>
+<span class="nc" id="L1018">                final VersionInfo version = CFUtils.getUninterruptibly(versionCf,</span>
+                        TimeoutException.class, NetworkException.class);
+<span class="nc bnc" id="L1020" title="All 2 branches missed.">                if (version.getVersion() == null) {</span>
+<span class="nc" id="L1021">                    log.error(&quot;Unexpected server version, server is too old to return&quot;</span>
+                            + &quot; version information&quot;);
+<span class="nc bnc" id="L1023" title="All 2 branches missed.">                } else if (!version.getVersion().equals(getVersionString())) {</span>
+<span class="nc" id="L1024">                    log.error(&quot;connect: expected version {}, but server version is {}&quot;,</span>
+<span class="nc" id="L1025">                            getVersionString(), version.getVersion());</span>
+                } else {
+<span class="nc" id="L1027">                    log.info(&quot;connect: client version {}, server version is {}&quot;,</span>
+<span class="nc" id="L1028">                            getVersionString(), version.getVersion());</span>
+                }
+<span class="nc" id="L1030">            }</span>
+<span class="nc" id="L1031">        } catch (TimeoutException | NetworkException e) {</span>
+<span class="nc" id="L1032">            log.error(&quot;connect: failed to get version. Couldn't connect to server.&quot;, e);</span>
+<span class="nc" id="L1033">        } catch (Exception ex) {</span>
+            // Because checkVersion is just an informational step (log purpose), we don't need to retry
+            // and we can actually ignore any exception while trying to fetch the server corfu version.
+            // If at any point we decide to abort upon server mismatch this logic must change.
+<span class="nc" id="L1037">            log.error(&quot;connect: failed to get version.&quot;, ex);</span>
+<span class="nc" id="L1038">        }</span>
+<span class="nc" id="L1039">    }</span>
+
+    /**
+     * Connect to the Corfu server instance.
+     * When this function returns, the Corfu server is ready to be accessed.
+     */
+    public synchronized CorfuRuntime connect() {
+
+<span class="nc" id="L1047">        log.info(&quot;connect: runtime parameters {}&quot;, getParameters());</span>
+
+<span class="nc bnc" id="L1049" title="All 2 branches missed.">        if (layout == null) {</span>
+<span class="nc" id="L1050">            log.info(&quot;Connecting to Corfu server instance, layout servers={}&quot;, bootstrapLayoutServers);</span>
+            // Fetch the current layout and save the future.
+<span class="nc" id="L1052">            layout = fetchLayout(bootstrapLayoutServers);</span>
+            try {
+<span class="nc" id="L1054">                layout.get();</span>
+<span class="nc" id="L1055">            } catch (Exception e) {</span>
+                // A serious error occurred trying to connect to the Corfu instance.
+<span class="nc" id="L1057">                log.error(&quot;Fatal error connecting to Corfu server instance.&quot;, e);</span>
+<span class="nc" id="L1058">                throw new UnrecoverableCorfuError(e);</span>
+<span class="nc" id="L1059">            }</span>
+        }
+
+<span class="nc" id="L1062">        checkVersion();</span>
+
+<span class="nc bnc" id="L1064" title="All 2 branches missed.">        if (parameters.isUseFastLoader()) {</span>
+<span class="nc" id="L1065">            FastObjectLoader fastLoader = new FastObjectLoader(this)</span>
+<span class="nc" id="L1066">                    .setBatchReadSize(parameters.getBulkReadSize())</span>
+<span class="nc" id="L1067">                    .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());</span>
+<span class="nc" id="L1068">            fastLoader.loadMaps();</span>
+        }
+
+<span class="nc" id="L1071">        garbageCollector.start();</span>
+
+<span class="nc" id="L1073">        return this;</span>
+    }
+
+    // Below are deprecated methods which should no longer be
+    // used and may be deprecated in the future.
+
+    // region Deprecated Constructors
+
+    /**
+     * Constructor for CorfuRuntime.
+     *
+     * @deprecated Use {@link CorfuRuntime#fromParameters(CorfuRuntimeParameters)}
+     **/
+    @Deprecated
+    public CorfuRuntime() {
+<span class="nc" id="L1088">        this(CorfuRuntimeParameters.builder().build());</span>
+<span class="nc" id="L1089">    }</span>
+
+    /**
+     * Parse a configuration string and get a CorfuRuntime.
+     *
+     * @param configurationString The configuration string to parse.
+     * @deprecated Use {@link CorfuRuntime#fromParameters(CorfuRuntimeParameters)}
+     */
+    @Deprecated
+    public CorfuRuntime(String configurationString) {
+<span class="nc" id="L1099">        this(CorfuRuntimeParameters.builder().build());</span>
+<span class="nc" id="L1100">        this.parseConfigurationString(configurationString);</span>
+<span class="nc" id="L1101">    }</span>
+    // endregion
+
+    // region Deprecated Setters
+
+    /**
+     * Enable TLS.
+     *
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     **/
+    @Deprecated
+    public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
+                                  String tsPasswordFile) {
+<span class="nc" id="L1114">        log.warn(&quot;enableTls: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1115">        parameters.keyStore = keyStore;</span>
+<span class="nc" id="L1116">        parameters.ksPasswordFile = ksPasswordFile;</span>
+<span class="nc" id="L1117">        parameters.trustStore = trustStore;</span>
+<span class="nc" id="L1118">        parameters.tsPasswordFile = tsPasswordFile;</span>
+<span class="nc" id="L1119">        parameters.tlsEnabled = true;</span>
+<span class="nc" id="L1120">        return this;</span>
+    }
+
+    /**
+     * Enable SASL Plain Text.
+     *
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     **/
+    @Deprecated
+    public CorfuRuntime enableSaslPlainText(String usernameFile, String passwordFile) {
+<span class="nc" id="L1130">        log.warn(&quot;enableSaslPlainText: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1131">        parameters.usernameFile = usernameFile;</span>
+<span class="nc" id="L1132">        parameters.passwordFile = passwordFile;</span>
+<span class="nc" id="L1133">        parameters.saslPlainTextEnabled = true;</span>
+<span class="nc" id="L1134">        return this;</span>
+    }
+
+    /**
+     * Whether or not to disable the cache
+     *
+     * @param disable True, if the cache should be disabled, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setCacheDisabled(boolean disable) {
+<span class="nc" id="L1146">        log.warn(&quot;setCacheDisabled: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1147">        parameters.setCacheDisabled(disable);</span>
+<span class="nc" id="L1148">        return this;</span>
+    }
+
+    /**
+     * Whether or not to use the fast loader.
+     *
+     * @param enable True, if the fast loader should be used, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setLoadSmrMapsAtConnect(boolean enable) {
+<span class="nc" id="L1160">        log.warn(&quot;setLoadSmrMapsAtConnect: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1161">        parameters.setUseFastLoader(enable);</span>
+<span class="nc" id="L1162">        return this;</span>
+    }
+
+    /**
+     * Whether or not hole filling is disabled
+     *
+     * @param disable True, if hole filling should be disabled
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setHoleFillingDisabled(boolean disable) {
+<span class="nc" id="L1174">        log.warn(&quot;setHoleFillingDisabled: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1175">        parameters.setHoleFillingDisabled(disable);</span>
+<span class="nc" id="L1176">        return this;</span>
+    }
+
+    /**
+     * Set the cache expiration time.
+     *
+     * @param expiryTime The time before cache expiration, in seconds.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setCacheExpiryTime(int expiryTime) {
+<span class="nc" id="L1187">        log.warn(&quot;setCacheExpiryTime: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1188">        parameters.setCacheExpiryTime(expiryTime);</span>
+<span class="nc" id="L1189">        return this;</span>
+    }
+
+    /**
+     * Set the bulk read size.
+     *
+     * @param size The bulk read size.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setBulkReadSize(int size) {
+<span class="nc" id="L1200">        log.warn(&quot;setBulkReadSize: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1201">        parameters.setBulkReadSize(size);</span>
+<span class="nc" id="L1202">        return this;</span>
+    }
+
+
+    /**
+     * Set the write retry time.
+     *
+     * @param writeRetry The number of times to retry writes.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setWriteRetry(int writeRetry) {
+<span class="nc" id="L1214">        log.warn(&quot;setWriteRetry: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1215">        parameters.setWriteRetry(writeRetry);</span>
+<span class="nc" id="L1216">        return this;</span>
+    }
+
+    /**
+     * Set the trim retry time.
+     *
+     * @param trimRetry The number of times to retry on trims.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setTrimRetry(int trimRetry) {
+<span class="nc" id="L1227">        log.warn(&quot;setTrimRetry: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1228">        parameters.setWriteRetry(trimRetry);</span>
+<span class="nc" id="L1229">        return this;</span>
+    }
+
+    /**
+     * Set the timeout of the fast loader, in minutes.
+     *
+     * @param timeout The number of minutes to wait.
+     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setTimeoutInMinutesForFastLoading(int timeout) {
+<span class="nc" id="L1240">        log.warn(&quot;setTrimRetry: Deprecated, please set parameters instead&quot;);</span>
+<span class="nc" id="L1241">        parameters.setFastLoaderTimeout(Duration.ofMinutes(timeout));</span>
+<span class="nc" id="L1242">        return this;</span>
+    }
+    // endregion
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

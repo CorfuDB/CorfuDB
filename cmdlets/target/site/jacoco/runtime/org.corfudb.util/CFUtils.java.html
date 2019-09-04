@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CFUtils.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">CFUtils.java</span></div><h1>CFUtils.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+
+import java.time.Duration;
+import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
+
+/**
+ * Created by mwei on 9/15/15.
+ */
+public final class CFUtils {
+<span class="nc" id="L22">    private static final ScheduledExecutorService SCHEDULER =</span>
+<span class="nc" id="L23">            Executors.newScheduledThreadPool(</span>
+                    1,
+                    new ThreadFactoryBuilder()
+<span class="nc" id="L26">                            .setDaemon(true)</span>
+<span class="nc" id="L27">                            .setNameFormat(&quot;failAfter-%d&quot;)</span>
+<span class="nc" id="L28">                            .build());</span>
+
+    /** A static timeout exception that we complete futures exceptionally with. */
+<span class="nc" id="L31">    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();</span>
+
+<span class="nc" id="L33">    private CFUtils() {</span>
+        // Prevent initializing a utility class
+<span class="nc" id="L35">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public static &lt;T,
+            A extends Throwable,
+            B extends Throwable,
+            C extends Throwable,
+            D extends Throwable&gt; T getUninterruptibly(Future&lt;T&gt; future,
+                                                      Class&lt;A&gt; throwableA,
+                                                      Class&lt;B&gt; throwableB,
+                                                      Class&lt;C&gt; throwableC,
+                                                      Class&lt;D&gt; throwableD)
+            throws A, B, C, D {
+            try {
+<span class="nc" id="L49">                return future.get();</span>
+<span class="nc" id="L50">            } catch (InterruptedException e) {</span>
+<span class="nc" id="L51">                throw new UnrecoverableCorfuInterruptedError(&quot;Interrupted while completing future&quot;, e);</span>
+<span class="nc" id="L52">            } catch (ExecutionException ee) {</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">                if (throwableA.isInstance(ee.getCause())) {</span>
+<span class="nc" id="L54">                    throw (A) ee.getCause();</span>
+                }
+<span class="nc bnc" id="L56" title="All 2 branches missed.">                if (throwableB.isInstance(ee.getCause())) {</span>
+<span class="nc" id="L57">                    throw (B) ee.getCause();</span>
+                }
+<span class="nc bnc" id="L59" title="All 2 branches missed.">                if (throwableC.isInstance(ee.getCause())) {</span>
+<span class="nc" id="L60">                    throw (C) ee.getCause();</span>
+                }
+<span class="nc bnc" id="L62" title="All 2 branches missed.">                if (throwableD.isInstance(ee.getCause())) {</span>
+<span class="nc" id="L63">                    throw (D) ee.getCause();</span>
+                }
+<span class="nc" id="L65">                throw new RuntimeException(ee.getCause());</span>
+            }
+    }
+
+    public static &lt;T,
+            A extends Throwable,
+            B extends Throwable,
+            C extends Throwable&gt; T getUninterruptibly(Future&lt;T&gt; future,
+                                                      Class&lt;A&gt; throwableA,
+                                                      Class&lt;B&gt; throwableB,
+                                                      Class&lt;C&gt; throwableC)
+            throws A, B, C {
+<span class="nc" id="L77">        return getUninterruptibly(future, throwableA, throwableB, throwableC,</span>
+                RuntimeException.class);
+    }
+
+    public static &lt;T,
+            A extends Throwable,
+            B extends Throwable&gt; T getUninterruptibly(Future&lt;T&gt; future,
+                                                      Class&lt;A&gt; throwableA,
+                                                      Class&lt;B&gt; throwableB)
+            throws A, B {
+<span class="nc" id="L87">        return getUninterruptibly(future, throwableA, throwableB, RuntimeException.class,</span>
+                RuntimeException.class);
+    }
+
+    public static &lt;T, A extends Throwable&gt; T getUninterruptibly(Future&lt;T&gt; future,
+                                                                Class&lt;A&gt; throwableA)
+            throws A {
+<span class="nc" id="L94">        return getUninterruptibly(future, throwableA, RuntimeException.class,</span>
+                RuntimeException.class, RuntimeException.class);
+    }
+
+    public static &lt;T&gt; T getUninterruptibly(Future&lt;T&gt; future) {
+<span class="nc" id="L99">        return getUninterruptibly(future, RuntimeException.class, RuntimeException.class,</span>
+                RuntimeException.class, RuntimeException.class);
+    }
+
+    /**
+     * Generates a completable future which times out.
+     * inspired by NoBlogDefFound: http://www.nurkiewicz.com/2014/12/asynchronous-timeouts-with.html
+     *
+     * @param duration The duration to timeout after.
+     * @param &lt;T&gt;      Ignored, since the future will always timeout.
+     * @return A completable future that will time out.
+     */
+    public static &lt;T&gt; CompletableFuture&lt;T&gt; failAfter(Duration duration) {
+<span class="nc" id="L112">        final CompletableFuture&lt;T&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L113">        SCHEDULER.schedule(() -&gt; promise.completeExceptionally(TIMEOUT_EXCEPTION),</span>
+<span class="nc" id="L114">                                        duration.toMillis(), TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L115">        return promise;</span>
+    }
+
+    /**
+     * Schedules a runnable after a given time
+     *
+     * @param duration The duration to timeout after.
+     */
+    public static void runAfter(Duration duration, Runnable toRun) {
+<span class="nc" id="L124">        SCHEDULER.schedule(toRun::run, duration.toMillis(), TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L125">    }</span>
+
+    /**
+     * Takes a completable future, and ensures that it completes within a certain duration.
+     * If it does not, it is cancelled and completes exceptionally with TimeoutException.
+     * inspired by NoBlogDefFound: www.nurkiewicz.com/2014/12/asynchronous-timeouts-with.html
+     *
+     * @param future   The completable future that must be completed within duration.
+     * @param duration The duration the future must be completed in.
+     * @param &lt;T&gt;      The return type of the future.
+     * @return         A completable future which completes with the original value if completed
+     *                 within duration, otherwise completes exceptionally with TimeoutException.
+     */
+    public static &lt;T&gt; CompletableFuture&lt;T&gt; within(CompletableFuture&lt;T&gt; future, Duration duration) {
+<span class="nc" id="L139">        final CompletableFuture&lt;T&gt; timeout = failAfter(duration);</span>
+<span class="nc" id="L140">        return future.applyToEither(timeout, Function.identity());</span>
+    }
+
+    public static &lt;T&gt; CompletableFuture&lt;Void&gt; allOf(Collection&lt;CompletableFuture&lt;T&gt;&gt; futures) {
+<span class="nc" id="L144">        CompletableFuture&lt;T&gt;[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);</span>
+<span class="nc" id="L145">        return CompletableFuture.allOf(futuresArr);</span>
+    }
+
+    /**
+     * Unwraps ExecutionException thrown from a CompletableFuture.
+     *
+     * @param throwable  Throwable to unwrap.
+     * @param throwableA Checked Exception to expose.
+     * @param &lt;A&gt;        Class of checked exception.
+     * @throws A Throws checked exception.
+     */
+    public static &lt;A extends Throwable&gt; void unwrap(Throwable throwable, Class&lt;A&gt; throwableA) throws A {
+
+<span class="nc" id="L158">        Throwable unwrapThrowable = throwable;</span>
+<span class="nc bnc" id="L159" title="All 4 branches missed.">        if (throwable instanceof ExecutionException || throwable instanceof CompletionException) {</span>
+<span class="nc" id="L160">            unwrapThrowable = throwable.getCause();</span>
+        }
+
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        if (throwableA.isInstance(unwrapThrowable)) {</span>
+<span class="nc" id="L164">            throw (A) unwrapThrowable;</span>
+        }
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (unwrapThrowable instanceof RuntimeException) {</span>
+<span class="nc" id="L167">            throw (RuntimeException) unwrapThrowable;</span>
+        }
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        if (unwrapThrowable instanceof Error) {</span>
+<span class="nc" id="L170">            throw (Error) unwrapThrowable;</span>
+        }
+<span class="nc" id="L172">        throw new RuntimeException(unwrapThrowable);</span>
+    }
+
+    /**
+     * Unwraps ExecutionException thrown from a CompletableFuture.
+     *
+     * @param throwable Throwable to unwrap.
+     */
+    public static void unwrap(Throwable throwable) {
+<span class="nc" id="L181">        unwrap(throwable, RuntimeException.class);</span>
+<span class="nc" id="L182">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

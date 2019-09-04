@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="7.3">
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/IObjectBuilder.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/ICorfuSMRAccess.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/IUndoFunction.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/IConflictFunction.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/IUndoRecordFunction.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/ICorfuSMRProxyWrapper.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/ICorfuSMRProxy.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/ICorfuSMRUpcallTarget.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/ICorfuSMR.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/runtime/object/package-info.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/ConstructorType.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/StateSource.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/MutatorAccessor.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/Accessor.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/ConflictParameter.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/InterfaceOverride.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/DontInstrument.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/CorfuObject.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/PassThrough.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/Mutator.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/InstrumentedCorfuObject.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/TransactionalMethod.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/StaticMappingObject.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/ObjectType.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/Instrumented.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/annotations/src/main/java/org/corfudb/annotations/package-info.java">
+</file>
+</checkstyle>

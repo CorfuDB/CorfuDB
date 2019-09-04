@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>StreamLog.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.log</a> &gt; <span class="el_source">StreamLog.java</span></div><h1>StreamLog.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.log;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+
+/**
+ * An interface definition that specifies an api to interact with a StreamLog.
+ *
+ * &lt;p&gt;Created by maithem on 7/15/16.
+ */
+
+public interface StreamLog {
+
+    /**
+     * Append an entry to the stream log.
+     * @param address  address of append entry
+     * @param entry    entry to append to the log
+     */
+    void append(long address, LogData entry);
+
+    /**
+     * Append a range of consecutive entries ordered by their addresses.
+     * Entries that are trimmed, or overwrites other addresses are ignored
+     * (i.e. they are not written) and an OverwriteException is not thrown.
+     *
+     * @param entries
+     */
+    void append(List&lt;LogData&gt; entries);
+
+    /**
+     * Given an address, read the corresponding stream entry.
+     * @param address  address to read from the log
+     * @return Stream entry if it exists, otherwise return null
+     */
+    LogData read(long address);
+
+    /**
+     * Prefix trim the global log.
+     * @param address address to trim the log up to
+     */
+    void prefixTrim(long address);
+
+    /**
+     * Remove all trimmed addresses from the StreamLog.
+     */
+    void compact();
+
+    /**
+     * Get the global tail and stream tails.
+     */
+    TailsResponse getTails(List&lt;UUID&gt; streams);
+
+    /**
+     * Get the global log tail.
+     */
+    long getLogTail();
+
+    /**
+     * Get global and all stream tails.
+     */
+    TailsResponse getAllTails();
+
+    /**
+     * Get the address space for every stream.
+     */
+    StreamsAddressResponse getStreamsAddressSpace();
+
+    /**
+     * Get the first untrimmed address in the address space.
+     */
+    long getTrimMark();
+
+    /**
+     * Returns the known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    Set&lt;Long&gt; getKnownAddressesInRange(long rangeStart, long rangeEnd);
+
+    /**
+     * Sync the stream log file to secondary storage.
+     *
+     * @param force force data to secondary storage if true
+     */
+    void sync(boolean force) throws IOException;
+
+    /**
+     * Close the stream log.
+     */
+    void close();
+
+    /**
+     * Clears all data and resets all segment handlers.
+     */
+    void reset();
+
+    /**
+     * Get overwrite cause for a given address.
+     *
+     * @param address global log address
+     * @param entry entry which would cause the overwrite
+     * @return (OverwriteCause) Cause of the overwrite
+     */
+    default OverwriteCause getOverwriteCauseForAddress(long address, LogData entry) {
+<span class="nc" id="L115">        LogData currentEntry = read(address);</span>
+<span class="nc" id="L116">        OverwriteCause cause = OverwriteCause.DIFF_DATA;</span>
+
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (currentEntry != null) {</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">            if (currentEntry.isHole()) {</span>
+<span class="nc" id="L120">                cause = OverwriteCause.HOLE;</span>
+<span class="nc bnc" id="L121" title="All 4 branches missed.">            } else if (entry.getData() != null &amp;&amp; currentEntry.getData() != null &amp;&amp;</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">                    currentEntry.getData().length == entry.getData().length) {</span>
+                // If the entry is already present and it is not a hole, the write
+                // might have been propagated by a fast reader from part of the chain.
+                // Compare based on data length. Based on this info client will do an actual
+                // verification on the data
+<span class="nc" id="L127">                cause = OverwriteCause.SAME_DATA;</span>
+            }
+        } else {
+            // No actual entry is found in this address, there is no apparent cause
+            // for the overwrite exception
+<span class="nc" id="L132">            cause = OverwriteCause.NONE;</span>
+        }
+<span class="nc" id="L134">        return cause;</span>
+    }
+
+    /**
+     * Query if the StreamLog has enough quota to accept writes
+     */
+    default boolean quotaExceeded() {
+<span class="nc" id="L141">        return false;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ConflictSetInfo.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object.transactions</a> &gt; <span class="el_source">ConflictSetInfo.java</span></div><h1>ConflictSetInfo.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object.transactions;
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+
+import lombok.Getter;
+
+/**
+ * This class captures information about objects accessed (read) during speculative
+ * transaction execution.
+ */
+@Getter
+<span class="nc" id="L20">public class ConflictSetInfo {</span>
+
+
+    /** Set of objects this conflict set conflicts with. */
+<span class="nc" id="L24">    protected Map&lt;ICorfuSMRProxyInternal, Set&lt;Object&gt;&gt; conflicts = new HashMap&lt;&gt;();</span>
+
+    /** Get a hash for the object, given a proxy. */
+    public static byte[] generateHashFromObject(ICorfuSMRProxyInternal p, Object o) {
+<span class="nc" id="L28">        return p.getSerializer().hash(o);</span>
+    }
+
+    /** Get the hashed conflict set.
+     * @return              The hashed conflict set.
+     */
+    public Map&lt;UUID, Set&lt;byte[]&gt;&gt; getHashedConflictSet() {
+<span class="nc" id="L35">        return conflicts.entrySet().stream()</span>
+<span class="nc" id="L36">                .collect(Collectors.toMap(</span>
+                        // Key = UUID
+<span class="nc" id="L38">                        e -&gt; e.getKey().getStreamID(),</span>
+                        // Value = Generated hash.
+<span class="nc" id="L40">                        e -&gt; e.getValue().stream()</span>
+<span class="nc" id="L41">                                .map(o -&gt; ConflictSetInfo.generateHashFromObject(e.getKey(), o))</span>
+<span class="nc" id="L42">                                .collect(Collectors.toSet()),</span>
+                        // Merge function, in case key was already mapped
+                        // (If two proxies have the same stream).
+                        (v1,v2) -&gt; {
+                            // Combine the two sets.
+<span class="nc" id="L47">                            v1.addAll(v2);</span>
+<span class="nc" id="L48">                            return v1;</span>
+                        }));
+    }
+
+    /** Merge a conflict set into this conflict set.
+     * @param other         The conflict set to merge.
+     */
+    public void mergeInto(ConflictSetInfo other) {
+<span class="nc" id="L56">        conflicts.putAll(other.conflicts);</span>
+<span class="nc" id="L57">    }</span>
+
+    /** Add an operation into this conflict set. */
+    public void add(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (conflictObjects == null) {</span>
+<span class="nc" id="L62">            return;</span>
+        }
+
+        // Add the conflict objects to the set for this proxy,
+        // creating a new set if needed.
+<span class="nc" id="L67">        conflicts.compute(proxy, (p, c) -&gt; {</span>
+            // If key not previously mapped
+<span class="nc bnc" id="L69" title="All 2 branches missed.">            if (c == null) {</span>
+<span class="nc" id="L70">                c = new HashSet&lt;&gt;();</span>
+            }
+            // Add conflicts to set.
+<span class="nc" id="L73">            c.addAll(Arrays.asList(conflictObjects));</span>
+<span class="nc" id="L74">            return c;</span>
+        });
+<span class="nc" id="L76">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

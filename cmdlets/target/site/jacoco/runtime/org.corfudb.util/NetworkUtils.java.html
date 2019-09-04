@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>NetworkUtils.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util</a> &gt; <span class="el_source">NetworkUtils.java</span></div><h1>NetworkUtils.java</h1><pre class="source lang-java linenums">package org.corfudb.util;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+
+import java.net.Inet4Address;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * Network utility methods.
+ *
+ * &lt;p&gt;Created by zlokhandwala on 3/6/18.
+ */
+<span class="nc" id="L22">@Slf4j</span>
+public class NetworkUtils {
+
+<span class="nc" id="L25">    private NetworkUtils() {</span>
+        // prevent instantiation of this class
+<span class="nc" id="L27">    }</span>
+
+    /**
+     * Fetches the IP address given an interface name.
+     * Throws an unrecoverable error and aborts if the server is unable to find a valid address.
+     *
+     * @param interfaceName Network interface name.
+     * @return address for the interface name.
+     */
+    public static String getAddressFromInterfaceName(String interfaceName) {
+        try {
+<span class="nc bnc" id="L38" title="All 2 branches missed.">            for (NetworkInterface networkInterface : getAllInterfaces()) {</span>
+<span class="nc bnc" id="L39" title="All 2 branches missed.">                if (networkInterface.isUp()</span>
+<span class="nc bnc" id="L40" title="All 2 branches missed.">                        &amp;&amp; interfaceName.equals(networkInterface.getName())) {</span>
+                    String address;
+<span class="nc bnc" id="L42" title="All 2 branches missed.">                    if (networkInterface.isVirtual()) {</span>
+                        // If the interface is a subinterface return any ipv4 address
+<span class="nc" id="L44">                        address = getIPV4Address(networkInterface.getInterfaceAddresses());</span>
+                    } else {
+                        // This is not a subinterface, need to exclude the subinterface addresses
+                        // from the address list before we select an ipv4 address.
+<span class="nc" id="L48">                        Set&lt;InterfaceAddress&gt; parentAddresses = new HashSet&lt;&gt;(networkInterface.getInterfaceAddresses());</span>
+<span class="nc" id="L49">                        Set&lt;InterfaceAddress&gt; subInterfacesAddresses = getSubInterfacesAddresses(networkInterface);</span>
+<span class="nc" id="L50">                        parentAddresses.removeAll(subInterfacesAddresses);</span>
+<span class="nc" id="L51">                        address = getIPV4Address(new ArrayList&lt;&gt;(parentAddresses));</span>
+                    }
+
+<span class="nc bnc" id="L54" title="All 2 branches missed.">                    if (address != null) {</span>
+<span class="nc" id="L55">                        return address;</span>
+                    }
+
+                    break;
+                }
+<span class="nc" id="L60">            }</span>
+<span class="nc" id="L61">        } catch (SocketException e) {</span>
+<span class="nc" id="L62">            log.error(&quot;Error fetching address from interface name &quot;, e);</span>
+<span class="nc" id="L63">            throw new UnrecoverableCorfuError(e);</span>
+<span class="nc" id="L64">        }</span>
+
+<span class="nc" id="L66">        throw new UnrecoverableCorfuError(&quot;No valid interfaces with name &quot;</span>
+                + interfaceName + &quot; found.&quot;);
+    }
+
+    /**
+     * Collects all subinterface addreses for an interface
+     */
+    private static Set&lt;InterfaceAddress&gt; getSubInterfacesAddresses(NetworkInterface networkInterface) {
+<span class="nc" id="L74">        Set&lt;InterfaceAddress&gt; interfaceAddresses = new HashSet&lt;&gt;();</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">        for (NetworkInterface subInterface : Collections.list(networkInterface.getSubInterfaces())) {</span>
+<span class="nc" id="L76">            interfaceAddresses.addAll(subInterface.getInterfaceAddresses());</span>
+<span class="nc" id="L77">        }</span>
+<span class="nc" id="L78">        return interfaceAddresses;</span>
+    }
+
+    /**
+     * Finds an ipv4 address in a list of interface addresses
+     */
+    private static String getIPV4Address(List&lt;InterfaceAddress&gt; addresses) {
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        for (InterfaceAddress interfaceAddress : addresses) {</span>
+<span class="nc bnc" id="L86" title="All 2 branches missed.">            if (interfaceAddress.getAddress() instanceof Inet4Address) {</span>
+<span class="nc" id="L87">                return interfaceAddress.getAddress().getHostAddress();</span>
+            }
+<span class="nc" id="L89">        }</span>
+<span class="nc" id="L90">        return null;</span>
+    }
+
+    /**
+     * Get all interfaces, including virtual interfaces.
+     * @return A list of all interfaces
+     * @throws SocketException
+     */
+    private static List&lt;NetworkInterface&gt; getAllInterfaces() throws SocketException {
+<span class="nc" id="L99">        List&lt;NetworkInterface&gt; allInterfaces = Collections.list(NetworkInterface.getNetworkInterfaces())</span>
+<span class="nc" id="L100">                .stream()</span>
+<span class="nc" id="L101">                .flatMap(m -&gt; {</span>
+<span class="nc" id="L102">                    List&lt;NetworkInterface&gt; l = Collections.list(m.getSubInterfaces());</span>
+<span class="nc" id="L103">                    l.add(m);</span>
+<span class="nc" id="L104">                    return l.stream();</span>
+                })
+<span class="nc" id="L106">                .collect(Collectors.toList());</span>
+<span class="nc" id="L107">        return allInterfaces;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

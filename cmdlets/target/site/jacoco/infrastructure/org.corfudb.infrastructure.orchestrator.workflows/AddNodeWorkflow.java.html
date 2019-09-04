@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>AddNodeWorkflow.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.orchestrator.workflows</a> &gt; <span class="el_source">AddNodeWorkflow.java</span></div><h1>AddNodeWorkflow.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.orchestrator.workflows;
+
+import static org.corfudb.infrastructure.orchestrator.actions.StateTransfer.transfer;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
+
+import com.google.common.collect.ImmutableList;
+
+import java.util.List;
+import java.util.UUID;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.NotThreadSafe;
+
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
+
+
+/**
+ * A definition of a workflow that adds a new node to the cluster. This workflow
+ * has almost no retry logic, therefore errors can result in its failure and the
+ * the client is responsible to ensure that it has completed by restarting the
+ * workflow.
+ *
+ * @author Maithem
+ */
+@NotThreadSafe
+<span class="nc" id="L33">@Slf4j</span>
+public class AddNodeWorkflow implements IWorkflow {
+
+    private final AddNodeRequest request;
+
+    Layout newLayout;
+
+<span class="nc" id="L40">    @Getter</span>
+    final UUID id;
+
+<span class="nc" id="L43">    @Getter</span>
+    List&lt;Action&gt; actions;
+
+    /**
+     * Creates a new add node workflow from a request.
+     *
+     * @param request request to add a node
+     */
+<span class="nc" id="L51">    public AddNodeWorkflow(AddNodeRequest request) {</span>
+<span class="nc" id="L52">        this.id = UUID.randomUUID();</span>
+<span class="nc" id="L53">        this.request = request;</span>
+<span class="nc" id="L54">        actions = ImmutableList.of(new BootstrapNode(),</span>
+                new AddNodeToLayout(),
+                new RestoreRedundancy());
+<span class="nc" id="L57">    }</span>
+
+    @Override
+    public String getName() {
+<span class="nc" id="L61">        return ADD_NODE.toString();</span>
+    }
+
+    /**
+     * Bootstrap the new node to be added to the cluster, or ignore
+     * bootstrap if it's already bootstrapped.
+     */
+<span class="nc" id="L68">    protected class BootstrapNode extends Action {</span>
+        @Override
+        public String getName() {
+<span class="nc" id="L71">            return &quot;BootstrapNode&quot;;</span>
+        }
+
+        /**
+         * Completes if bootstrap was successful.
+         *
+         * @param runtime A runtime that the action will use to execute
+         */
+        @Override
+        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+<span class="nc" id="L81">            runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint()).get();</span>
+<span class="nc" id="L82">        }</span>
+    }
+
+
+    /**
+     * This action adds a new node to the layout. If it is also
+     * added as a logunit server, then in addition to adding
+     * the node the address space segment is split at the
+     * tail determined during the layout modification.
+     */
+<span class="nc" id="L92">    private class AddNodeToLayout extends Action {</span>
+        @Override
+        public String getName() {
+<span class="nc" id="L95">            return &quot;AddNodeToLayout&quot;;</span>
+        }
+
+        @Override
+        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+<span class="nc" id="L100">            Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="nc" id="L101">            runtime.getLayoutManagementView().addNode(currentLayout, request.getEndpoint(),</span>
+                    true, true,
+                    true, false,
+                    0);
+
+<span class="nc" id="L106">            runtime.invalidateLayout();</span>
+<span class="nc" id="L107">            newLayout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="nc" id="L108">        }</span>
+    }
+
+    /**
+     * The new server is caught up with all data.
+     * This server is then added to all the segments to mark it open to all reads and writes.
+     */
+<span class="nc" id="L115">    protected class RestoreRedundancy extends Action {</span>
+        @Nonnull
+        @Override
+        public String getName() {
+<span class="nc" id="L119">            return &quot;RestoreRedundancy&quot;;</span>
+        }
+
+        @Override
+        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+<span class="nc" id="L124">            runtime.invalidateLayout();</span>
+<span class="nc" id="L125">            newLayout = runtime.getLayoutView().getLayout();</span>
+
+            // A newly added node can be marked as unresponsive by the fault detector by the
+            // time this action is executed. There are 2 cases following this:
+
+            // Case 1. The node remains unresponsive.
+            //      State transfer fails.
+            // Case 2. The node is marked responsive again.
+            //      In this case, the node was removed from all segments and was wiped clean.
+            //      So either the healing workflow or the add node workflow will attempt
+            //      to catchup the new node.
+<span class="nc bnc" id="L136" title="All 2 branches missed.">            if (newLayout.getAllActiveServers().contains(request.endpoint)) {</span>
+                // Transfer only till the second last segment as the last segment is unbounded.
+                // The new server is already a part of the last segment. This is based on an
+                // assumption that the newly added node is not removed from the layout.
+<span class="nc bnc" id="L140" title="All 2 branches missed.">                for (int i = 0; i &lt; newLayout.getSegments().size() - 1; i++) {</span>
+<span class="nc" id="L141">                    transfer(newLayout,</span>
+<span class="nc" id="L142">                            request.getEndpoint(),</span>
+                            runtime,
+<span class="nc" id="L144">                            newLayout.getSegments().get(i));</span>
+                }
+
+<span class="nc" id="L147">                final int stripeIndex = 0;</span>
+<span class="nc" id="L148">                runtime.getLayoutManagementView()</span>
+<span class="nc" id="L149">                        .addLogUnitReplica(</span>
+<span class="nc" id="L150">                                new Layout(newLayout), request.getEndpoint(), stripeIndex);</span>
+<span class="nc" id="L151">                runtime.invalidateLayout();</span>
+<span class="nc" id="L152">                newLayout = runtime.getLayoutView().getLayout();</span>
+<span class="nc" id="L153">            } else {</span>
+<span class="nc" id="L154">                throw new IllegalStateException(&quot;RestoreRedundancy: &quot;</span>
+                        + &quot;Node to be added marked unresponsive.&quot;);
+            }
+<span class="nc" id="L157">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

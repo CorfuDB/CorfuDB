@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>IDataStore.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">IDataStore.java</span></div><h1>IDataStore.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+/**
+ * Key Value data store abstraction that provides persistence for variables that need
+ * retain values across node restarts or need to be accessed by multiple modules/threads.
+ *
+ * &lt;p&gt;The key value store is partitioned by prefix (namespace/table). All values being stored
+ * under a prefix should be of a single Type or Class T.
+ *
+ * &lt;p&gt;Created by mdhawan on 7/27/16.
+ */
+public interface IDataStore {
+
+    @Deprecated
+    &lt;T&gt; void put(Class&lt;T&gt; tclass, String prefix, String key, T value);
+
+    @Deprecated
+    &lt;T&gt; T get(Class&lt;T&gt; tclass, String prefix, String key);
+
+    @Deprecated
+    &lt;T&gt; void delete(Class&lt;T&gt; tclass, String prefix, String key);
+
+    /**
+     * Stores a value for a key under a prefix (namespace).
+     *
+     * @param key record meta information
+     * @param value  Immutable value (or a value that won't be changed)
+     */
+    &lt;T&gt; void put(KvRecord&lt;T&gt; key, T value);
+
+    /**
+     * Retrieves the value for a key under a prefix.
+     *
+     * @param key record meta information
+     * @return value stored under key
+     */
+    &lt;T&gt; T get(KvRecord&lt;T&gt; key);
+
+    /**
+     * Retrieves the value for a key or a default value
+     *
+     * @param key key meta info
+     * @param defaultValue a default value
+     * @param &lt;T&gt;
+     * @return
+     */
+    &lt;T&gt; T get(KvRecord&lt;T&gt; key, T defaultValue);
+
+    /**
+     * Deletes the value for a key under a prefix.
+     *
+     * @param key record meta information
+     */
+    &lt;T&gt; void delete(KvRecord&lt;T&gt; key);
+
+    /**
+     * Key-value meta information class, provides all the information for saving and getting data from a data store
+     *
+     * @param &lt;T&gt; data type
+     */
+<span class="nc" id="L65">    @AllArgsConstructor</span>
+    @Getter
+    class KvRecord&lt;T&gt; {
+        /**
+         * namespace prefix for a key
+         */
+<span class="nc" id="L71">        private final String prefix;</span>
+        /**
+         * key in a data store
+         */
+<span class="nc" id="L75">        private final String key;</span>
+        /**
+         * The class of the value in a data store
+         */
+<span class="nc" id="L79">        private final Class&lt;T&gt; dataType;</span>
+
+        public String getFullKeyName() {
+<span class="nc" id="L82">            return prefix + &quot;_&quot; + key;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

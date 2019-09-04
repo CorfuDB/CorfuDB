@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CorfuGuidGenerator.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">CorfuGuidGenerator.java</span></div><h1>CorfuGuidGenerator.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+
+import java.util.UUID;
+
+/**
+ * Globally Unique Identity generator that returns ids
+ * with weak comparable ordering with minimal distributed state sync.
+ * On startup increment a globally unique id via Corfu Object.
+ * Use this id with locally incrementing values to return unique ids.
+ * Higher bits are made of an UTC timestamp while lower bits carry the
+ * counter.
+ *
+ * Created by Sundar Sridharan on 5/22/19.
+ */
+<span class="nc" id="L22">@Slf4j</span>
+public class CorfuGuidGenerator implements OrderedGuidGenerator {
+    private final static int TIMESTAMP_SHIFT            = 24;
+    private final static int INSTANCE_ID_SHIFT          = 8;
+    private final static int MAX_TIMESTAMP_CORRECTION   = 0xFF;
+    private final static int MAX_INSTANCE_ID            = 0xFFff;
+
+<span class="nc" id="L29">    private final String GUID_STREAM_NAME = &quot;CORFU_GUID_COUNTER_STREAM&quot;;</span>
+<span class="nc" id="L30">    private final Integer GUID_STREAM_KEY = 0xdeadbeef;</span>
+
+    private final SMRMap&lt;Integer, Long&gt; distributedCounter;
+    private final CorfuRuntime runtime;
+
+    /**
+     * Initialize timestamp &amp; correction to MAX to force an update on the instance id on first call.
+     * This prevents the instance id from bumping up if there are no calls made to this class.
+     */
+<span class="nc" id="L39">    private long timestampCorrection = MAX_TIMESTAMP_CORRECTION;</span>
+<span class="nc" id="L40">    private long previousTimestamp = Long.MAX_VALUE;</span>
+<span class="nc" id="L41">    private long instanceId = 0L;</span>
+
+<span class="nc" id="L43">    public CorfuGuidGenerator(CorfuRuntime rt) {</span>
+<span class="nc" id="L44">        runtime = rt;</span>
+<span class="nc" id="L45">        distributedCounter = rt.getObjectsView().build()</span>
+<span class="nc" id="L46">                               .setType(SMRMap.class)</span>
+<span class="nc" id="L47">                               .setStreamName(GUID_STREAM_NAME)</span>
+<span class="nc" id="L48">                               .open();</span>
+<span class="nc" id="L49">    }</span>
+
+    private long updateInstanceId() {
+        long nextInstanceId;
+        while(true) {
+            try {
+                TransactionType txnType;
+<span class="nc bnc" id="L56" title="All 2 branches missed.">                if (TransactionalContext.isInTransaction()) {</span>
+<span class="nc" id="L57">                    txnType = TransactionalContext.getCurrentContext()</span>
+<span class="nc" id="L58">                            .getTransaction().getType();</span>
+                } else { // Pick default type as OPTIMISTIC
+<span class="nc" id="L60">                    txnType = TransactionType.OPTIMISTIC;</span>
+
+                }
+<span class="nc" id="L63">                runtime.getObjectsView().TXBuild()</span>
+<span class="nc" id="L64">                        .type(txnType)</span>
+<span class="nc" id="L65">                        .build()</span>
+<span class="nc" id="L66">                        .begin();</span>
+
+<span class="nc" id="L68">                nextInstanceId = distributedCounter.getOrDefault(GUID_STREAM_KEY, 1L) + 1;</span>
+<span class="nc" id="L69">                distributedCounter.put(GUID_STREAM_KEY, nextInstanceId);</span>
+
+<span class="nc" id="L71">                runtime.getObjectsView().TXEnd();</span>
+<span class="nc" id="L72">                break;</span>
+<span class="nc" id="L73">            } catch (TransactionAbortedException e) {</span>
+<span class="nc" id="L74">                log.error(&quot;updateInstanceId: Transaction aborted while updating GUID counter&quot;, e);</span>
+<span class="nc" id="L75">            }</span>
+        }
+
+<span class="nc" id="L78">        instanceId = nextInstanceId;</span>
+<span class="nc" id="L79">        return nextInstanceId;</span>
+    }
+
+    /**
+     * +----------------+--------------------+------------+
+     * |  UTC Timestamp | Unique Instance ID | Correction |
+     * +----------------+--------------------+------------+
+     * &lt;----5 bytes----&gt;&lt;------2 bytes------&gt;&lt;---1 byte---&gt;
+     *
+     * @return a globally unique id with minimal distributed sync up
+     */
+    @Override
+    public long nextLong() {
+<span class="nc" id="L92">        long currentTimestamp = getCorrectedTimestamp();</span>
+<span class="nc" id="L93">        return (currentTimestamp &lt;&lt; TIMESTAMP_SHIFT) |</span>
+                ((instanceId &amp; MAX_INSTANCE_ID) &lt;&lt; INSTANCE_ID_SHIFT) |
+                (timestampCorrection &amp; MAX_TIMESTAMP_CORRECTION);
+    }
+
+    /**
+     * +-------------------++--------------+------------+
+     * | UTC Timestamp     || Instance Id  | Correction |
+     * +-------------------++--------------+------------+
+     * &lt;------8 byte-------&gt;&lt;---7 byte------&gt;&lt;--1 byte--&gt;
+     *
+     * @return a higher resolution UUID with a timestamp built in.
+     */
+    @Override
+    public UUID nextUUID() {
+<span class="nc" id="L108">        long currentTimestamp = getCorrectedTimestamp();</span>
+<span class="nc" id="L109">        return new UUID(currentTimestamp,</span>
+                (instanceId &lt;&lt; INSTANCE_ID_SHIFT) | (timestampCorrection &amp; MAX_TIMESTAMP_CORRECTION));
+
+    }
+
+    /**
+     * Ensure that timestamp is monotonically increasing and if not,
+     * 1. First bump up the correction
+     * 2. If correction has also rolled over, bump up instance id
+     *
+     * @return currentTimestamp but with side-effects to object state
+     */
+    private synchronized long getCorrectedTimestamp() {
+<span class="nc" id="L122">        long currentTimestamp = System.currentTimeMillis();</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        if (currentTimestamp &lt;= previousTimestamp) {</span>
+<span class="nc" id="L124">            timestampCorrection++;</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">            if (timestampCorrection &gt; MAX_TIMESTAMP_CORRECTION) {</span>
+<span class="nc" id="L126">                timestampCorrection = 0;</span>
+<span class="nc" id="L127">                log.info(&quot;updateInstanceId: CorfuGuidGenerator corrected timestamp &quot;+</span>
+                                MAX_TIMESTAMP_CORRECTION+
+                                &quot; times!&quot;+
+                                &quot; timestamp={} previousTimestamp={} correction={} instanceId={}&quot;,
+<span class="nc" id="L131">                        currentTimestamp, previousTimestamp, timestampCorrection, instanceId);</span>
+<span class="nc" id="L132">                updateInstanceId();</span>
+            }
+        }
+<span class="nc" id="L135">        previousTimestamp = currentTimestamp;</span>
+<span class="nc" id="L136">        return currentTimestamp;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

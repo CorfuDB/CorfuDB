@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>AddNode.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view.workflows</a> &gt; <span class="el_source">AddNode.java</span></div><h1>AddNode.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view.workflows;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.view.Layout;
+
+import java.time.Duration;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
+
+/**
+ *
+ * A workflow request that makes an orchestrator call to add a new node to
+ * the cluster.
+ *
+ * Created by Maithem on 1/19/18.
+ */
+<span class="nc" id="L21">@Slf4j</span>
+public class AddNode extends WorkflowRequest {
+
+<span class="nc bnc" id="L24" title="All 4 branches missed.">    public AddNode(@NonNull String endpointToAdd, @NonNull CorfuRuntime runtime,</span>
+<span class="nc bnc" id="L25" title="All 2 branches missed.">                   int retry, @NonNull Duration timeout,</span>
+<span class="nc bnc" id="L26" title="All 2 branches missed.">                   @NonNull Duration pollPeriod) {</span>
+<span class="nc" id="L27">        this.nodeForWorkflow = endpointToAdd;</span>
+<span class="nc" id="L28">        this.runtime = runtime;</span>
+<span class="nc" id="L29">        this.retry = retry;</span>
+<span class="nc" id="L30">        this.timeout = timeout;</span>
+<span class="nc" id="L31">        this.pollPeriod = pollPeriod;</span>
+<span class="nc" id="L32">    }</span>
+
+    @Override
+<span class="nc bnc" id="L35" title="All 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
+        // Select the current tail node and send an add node request to the orchestrator
+<span class="nc" id="L37">        CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);</span>
+<span class="nc" id="L38">        log.info(&quot;sendRequest: requested to add {} on orchestrator {}:{}&quot;,</span>
+<span class="nc" id="L39">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
+<span class="nc" id="L40">                managementClient.getRouter().getPort());</span>
+<span class="nc" id="L41">        return resp.getWorkflowId();</span>
+    }
+
+    @Override
+<span class="nc bnc" id="L45" title="All 2 branches missed.">    protected boolean verifyRequest(@NonNull Layout layout) {</span>
+        // Verify that the node has been added and that the address space isn't
+        // segmented
+<span class="nc" id="L48">        log.info(&quot;verifyRequest: {} to {}&quot;, this, layout);</span>
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        return layout.getAllServers().contains(nodeForWorkflow)</span>
+<span class="nc" id="L50">                &amp;&amp; layout.getSegmentsForEndpoint(nodeForWorkflow).size()</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">                == layout.getSegments().size();</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L56">        return this.getClass().getSimpleName() + &quot; &quot; + nodeForWorkflow;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

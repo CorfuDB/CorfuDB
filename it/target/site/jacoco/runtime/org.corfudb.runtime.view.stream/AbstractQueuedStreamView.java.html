@@ -1,0 +1,1016 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>AbstractQueuedStreamView.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view.stream</a> &gt; <span class="el_source">AbstractQueuedStreamView.java</span></div><h1>AbstractQueuedStreamView.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view.stream;
+
+import com.google.common.annotations.VisibleForTesting;
+import lombok.Data;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AppendException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ReadOptions;
+import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.util.Utils;
+
+import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Optional;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+
+/** The abstract queued stream view implements a stream backed by a read queue.
+ *
+ * &lt;p&gt;A read queue is a priority queue where addresses can be inserted, and are
+ * dequeued in ascending order. Subclasses implement the fillReadQueue()
+ * function, which defines how the read queue should be filled, and the
+ * read() function, which reads an entry and updates the pointers for the
+ * stream view.
+ *
+ * &lt;p&gt;The addresses in the read queue must be global addresses.
+ *
+ * &lt;p&gt;This implementation does not handle bulk reads and depends on IStreamView's
+ * implementation of remainingUpTo(), which simply calls nextUpTo() under a lock
+ * until it returns null.
+ *
+ * &lt;p&gt;Created by mwei on 1/6/17.
+ */
+<span class="nc" id="L53">@Slf4j</span>
+public abstract class AbstractQueuedStreamView extends
+        AbstractContextStreamView&lt;AbstractQueuedStreamView
+                .QueuedStreamContext&gt; {
+<span class="nc" id="L57">    @Getter</span>
+    private final ReadOptions readOptions;
+
+    /** Create a new queued stream view.
+     *
+     * @param streamId  The ID of the stream
+     * @param runtime   The runtime used to create this view.
+     */
+    public AbstractQueuedStreamView(final CorfuRuntime runtime,
+                                    final UUID streamId,
+                                    StreamOptions streamOptions) {
+<span class="nc" id="L68">        super(runtime, streamId, QueuedStreamContext::new);</span>
+<span class="nc" id="L69">        this.readOptions = ReadOptions.builder()</span>
+<span class="nc" id="L70">                .clientCacheable(streamOptions.isCacheEntries())</span>
+<span class="nc" id="L71">                .ignoreTrim(streamOptions.isIgnoreTrimmed())</span>
+<span class="nc" id="L72">                .build();</span>
+<span class="nc" id="L73">    }</span>
+
+    /** Add the given address to the resolved queue of the
+     * given context.
+     * @param context           The context to add the address to
+     * @param globalAddress     The resolved global address.
+     */
+    protected void addToResolvedQueue(QueuedStreamContext context,
+                                      long globalAddress,
+                                      ILogData ld) {
+<span class="nc" id="L83">        context.resolvedQueue.add(globalAddress);</span>
+
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (context.maxResolution &lt; globalAddress) {</span>
+<span class="nc" id="L86">            context.maxResolution = globalAddress;</span>
+        }
+<span class="nc" id="L88">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected ILogData getNextEntry(QueuedStreamContext context,
+                                    long maxGlobal) {
+        // If we have no entries to read, fill the read queue.
+        // Return if the queue is still empty.
+<span class="nc bnc" id="L98" title="All 4 branches missed.">        if (context.readQueue.isEmpty() &amp;&amp; context.readCpQueue.isEmpty()</span>
+<span class="nc bnc" id="L99" title="All 2 branches missed.">                &amp;&amp; !fillReadQueue(maxGlobal, context)) {</span>
+<span class="nc" id="L100">            return null;</span>
+        }
+
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+<span class="nc bnc" id="L105" title="All 2 branches missed.">        if (maxGlobal &lt; context.checkpoint.startAddress) {</span>
+<span class="nc" id="L106">            throw new TrimmedException();</span>
+        }
+
+        // If checkpoint data is available, get from readCpQueue first
+        NavigableSet&lt;Long&gt; getFrom;
+<span class="nc bnc" id="L111" title="All 2 branches missed.">        if (context.readCpQueue.size() &gt; 0) {</span>
+<span class="nc" id="L112">            getFrom = context.readCpQueue;</span>
+            // Note: this is a checkpoint, we do not need to verify it is before the trim mark, it actually should be
+            // cause this is the last address of the trimmed range.
+<span class="nc" id="L115">            context.setGlobalPointer(context.checkpoint.startAddress);</span>
+        } else {
+<span class="nc" id="L117">            getFrom = context.readQueue;</span>
+        }
+
+        // If the lowest DATA element is greater than maxGlobal, there's nothing
+        // to return.
+<span class="nc bnc" id="L122" title="All 4 branches missed.">        if (context.readCpQueue.isEmpty() &amp;&amp; context.readQueue.first() &gt; maxGlobal) {</span>
+<span class="nc" id="L123">            return null;</span>
+        }
+
+<span class="nc" id="L126">        return removeFromQueue(getFrom);</span>
+    }
+
+    /**
+     * Remove next entry from the queue.
+     *
+     * @param queue queue of entries.
+     * @return next available entry. or null if there are no more entries
+     *         or remaining entries are not part of this stream.
+     */
+    protected abstract ILogData removeFromQueue(NavigableSet&lt;Long&gt; queue);
+
+    @Override
+    public void gc(long trimMark) {
+        // GC stream only if the pointer is ahead from the trim mark (last untrimmed address),
+        // this guarantees that the data to be discarded is already applied to the stream and data will not be lost.
+        // Note: if the pointer is behind, discarding the data immediately will incur in data
+        // loss as checkpoints are only loaded on resets. We don't want to trigger resets as this slows
+        // the runtime.
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        if (getCurrentContext().getGlobalPointer() &gt;= getCurrentContext().getGcTrimMark()) {</span>
+<span class="nc" id="L146">            log.debug(&quot;gc[{}]: start GC on stream {} for trim mark {}&quot;, this, this.getId(),</span>
+<span class="nc" id="L147">                    getCurrentContext().getGcTrimMark());</span>
+            // Remove all the entries that are strictly less than
+            // the trim mark
+<span class="nc" id="L150">            getCurrentContext().readCpQueue.headSet(getCurrentContext().getGcTrimMark()).clear();</span>
+<span class="nc" id="L151">            getCurrentContext().readQueue.headSet(getCurrentContext().getGcTrimMark()).clear();</span>
+<span class="nc" id="L152">            getCurrentContext().resolvedQueue.headSet(getCurrentContext().getGcTrimMark()).clear();</span>
+
+<span class="nc bnc" id="L154" title="All 2 branches missed.">            if (!getCurrentContext().resolvedQueue.isEmpty()) {</span>
+<span class="nc" id="L155">                getCurrentContext().minResolution = getCurrentContext()</span>
+<span class="nc" id="L156">                        .resolvedQueue.first();</span>
+            }
+        } else {
+<span class="nc" id="L159">            log.debug(&quot;gc[{}]: GC not performed on stream {} for this cycle. Global pointer {} is below trim mark {}&quot;,</span>
+<span class="nc" id="L160">                    this, this.getId(), getCurrentContext().getGlobalPointer(), getCurrentContext().getGcTrimMark());</span>
+        }
+
+        // Set the trim mark for next GC Cycle
+<span class="nc" id="L164">        getCurrentContext().setGcTrimMark(trimMark);</span>
+<span class="nc" id="L165">    }</span>
+
+    /**
+     * {@inheritDoc}
+     *
+     * &lt;p&gt;We loop forever trying to
+     * write, and automatically retrying if we get overwritten (hole filled).
+     */
+    @Override
+    public long append(Object object,
+                       Function&lt;TokenResponse, Boolean&gt; acquisitionCallback,
+                       Function&lt;TokenResponse, Boolean&gt; deacquisitionCallback) {
+<span class="nc" id="L177">        final LogData ld = new LogData(DataType.DATA, object);</span>
+        // Validate if the  size of the log data is under max write size.
+<span class="nc" id="L179">        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());</span>
+
+        // First, we get a token from the sequencer.
+<span class="nc" id="L182">        TokenResponse tokenResponse = runtime.getSequencerView()</span>
+<span class="nc" id="L183">                .next(id);</span>
+
+        // We loop forever until we are interrupted, since we may have to
+        // acquire an address several times until we are successful.
+<span class="nc bnc" id="L187" title="All 2 branches missed.">        for (int x = 0; x &lt; runtime.getParameters().getWriteRetry(); x++) {</span>
+            // Next, we call the acquisitionCallback, if present, informing
+            // the client of the token that we acquired.
+<span class="nc bnc" id="L190" title="All 2 branches missed.">            if (acquisitionCallback != null) {</span>
+<span class="nc bnc" id="L191" title="All 2 branches missed.">                if (!acquisitionCallback.apply(tokenResponse)) {</span>
+                    // The client did not like our token, so we end here.
+                    // We'll leave the hole to be filled by the client or
+                    // someone else.
+<span class="nc" id="L195">                    log.debug(&quot;Acquisition rejected token={}&quot;, tokenResponse);</span>
+<span class="nc" id="L196">                    return -1L;</span>
+                }
+            }
+
+            // Now, we do the actual write. We could get an overwrite
+            // exception here - any other exception we should pass up
+            // to the client.
+            try {
+<span class="nc" id="L204">                runtime.getAddressSpaceView().write(tokenResponse, ld);</span>
+                // The write completed successfully, so we return this
+                // address to the client.
+<span class="nc" id="L207">                return tokenResponse.getToken().getSequence();</span>
+<span class="nc" id="L208">            } catch (OverwriteException oe) {</span>
+<span class="nc" id="L209">                log.trace(&quot;Overwrite occurred at {}&quot;, tokenResponse);</span>
+                // We got overwritten, so we call the deacquisition callback
+                // to inform the client we didn't get the address.
+<span class="nc bnc" id="L212" title="All 2 branches missed.">                if (deacquisitionCallback != null) {</span>
+<span class="nc bnc" id="L213" title="All 2 branches missed.">                    if (!deacquisitionCallback.apply(tokenResponse)) {</span>
+<span class="nc" id="L214">                        log.debug(&quot;Deacquisition requested abort&quot;);</span>
+<span class="nc" id="L215">                        return -1L;</span>
+                    }
+                }
+                // Request a new token, informing the sequencer we were
+                // overwritten.
+<span class="nc" id="L220">                tokenResponse = runtime.getSequencerView().next(id);</span>
+<span class="nc" id="L221">            } catch (StaleTokenException te) {</span>
+<span class="nc" id="L222">                log.trace(&quot;Token grew stale occurred at {}&quot;, tokenResponse);</span>
+<span class="nc bnc" id="L223" title="All 4 branches missed.">                if (deacquisitionCallback != null &amp;&amp; !deacquisitionCallback.apply(tokenResponse)) {</span>
+<span class="nc" id="L224">                    log.debug(&quot;Deacquisition requested abort&quot;);</span>
+<span class="nc" id="L225">                    return -1L;</span>
+                }
+                // Request a new token, informing the sequencer we were
+                // overwritten.
+<span class="nc" id="L229">                tokenResponse = runtime.getSequencerView().next(id);</span>
+<span class="nc" id="L230">            }</span>
+        }
+
+<span class="nc" id="L233">        log.error(&quot;append[{}]: failed after {} retries, write size {} bytes&quot;,</span>
+<span class="nc" id="L234">                tokenResponse.getSequence(),</span>
+<span class="nc" id="L235">                runtime.getParameters().getWriteRetry(),</span>
+<span class="nc" id="L236">                ILogData.getSerializedSize(object));</span>
+<span class="nc" id="L237">        throw new AppendException();</span>
+    }
+
+    /**
+     * Reads data from an address in the address space.
+     *
+     * It will give the writer a chance to complete based on the time
+     * when the reads of which this individual read is a step started.
+     * If the reads have been going on for longer than the grace period
+     * given for a writer to complete a write, the subsequent individual
+     * read calls will immediately fill the hole on absence of data at
+     * the given address.
+     *
+     * @param address       address to read.
+     * @param readStartTime start time of the range of reads.
+     * @return log data at the address.
+     */
+    @Deprecated
+    protected ILogData read(final long address, long readStartTime) {
+        try {
+<span class="nc" id="L257">            if (System.currentTimeMillis() - readStartTime &lt;</span>
+<span class="nc bnc" id="L258" title="All 2 branches missed.">                    runtime.getParameters().getHoleFillTimeout().toMillis()) {</span>
+<span class="nc" id="L259">                return runtime.getAddressSpaceView().read(address, readOptions);</span>
+            }
+
+<span class="nc" id="L262">            ReadOptions options = readOptions.toBuilder()</span>
+<span class="nc" id="L263">                    .waitForHole(false)</span>
+<span class="nc" id="L264">                    .build();</span>
+<span class="nc" id="L265">            return runtime.getAddressSpaceView().read(address, options);</span>
+<span class="nc" id="L266">        } catch (TrimmedException te) {</span>
+<span class="nc" id="L267">            processTrimmedException(te);</span>
+<span class="nc" id="L268">            throw te;</span>
+        }
+    }
+
+    @Nonnull
+    protected List&lt;ILogData&gt; readAll(@Nonnull List&lt;Long&gt; addresses) {
+        try {
+<span class="nc" id="L275">            Map&lt;Long, ILogData&gt; dataMap =</span>
+<span class="nc" id="L276">                    runtime.getAddressSpaceView().read(addresses, readOptions);</span>
+            // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
+            // to all requested addresses, for this reason we must filter out data entries not included (null).
+            // Also, we need to preserve ordering for checkpoint logic.
+<span class="nc" id="L280">            return  addresses.stream().map(dataMap::get)</span>
+<span class="nc bnc" id="L281" title="All 2 branches missed.">                    .filter(data -&gt; data != null)</span>
+<span class="nc" id="L282">                    .collect(Collectors.toList());</span>
+<span class="nc" id="L283">        } catch (TrimmedException te) {</span>
+<span class="nc" id="L284">            processTrimmedException(te);</span>
+<span class="nc" id="L285">            throw te;</span>
+        }
+    }
+
+    private void processTrimmedException(TrimmedException te) {
+<span class="nc bnc" id="L290" title="All 2 branches missed.">        if (TransactionalContext.getCurrentContext() != null</span>
+<span class="nc" id="L291">                &amp;&amp; TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()</span>
+<span class="nc bnc" id="L292" title="All 2 branches missed.">                &lt; getCurrentContext().checkpoint.snapshot) {</span>
+<span class="nc" id="L293">            te.setRetriable(false);</span>
+        }
+<span class="nc" id="L295">    }</span>
+
+    /** {@inheritDoc}
+     *
+     * &lt;p&gt;In the queued implementation, we just read all entries in the read queue
+     * in parallel. If there is any entry which changes the context, we cut the
+     * list off there.
+     * */
+    @Override
+    protected List&lt;ILogData&gt; getNextEntries(QueuedStreamContext context, long maxGlobal,
+                                            Function&lt;ILogData, Boolean&gt; contextCheckFn) {
+<span class="nc" id="L306">        NavigableSet&lt;Long&gt; readSet = new TreeSet&lt;&gt;();</span>
+
+        // Scan backward in the stream to find interesting
+        // log records less than or equal to maxGlobal.
+        // Boolean includes both CHECKPOINT &amp; DATA entries.
+<span class="nc bnc" id="L311" title="All 2 branches missed.">        boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);</span>
+
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+<span class="nc bnc" id="L315" title="All 2 branches missed.">        if (maxGlobal &lt; context.checkpoint.startAddress) {</span>
+<span class="nc" id="L316">            throw new TrimmedException();</span>
+        }
+
+        // We always have to fill to the read queue to ensure we read up to
+        // max global.
+<span class="nc bnc" id="L321" title="All 2 branches missed.">        if (readQueueIsEmpty) {</span>
+<span class="nc" id="L322">            return Collections.emptyList();</span>
+        }
+
+        // If we witnessed a checkpoint during our scan that
+        // we should pay attention to, then start with them.
+<span class="nc" id="L327">        readSet.addAll(context.readCpQueue);</span>
+
+<span class="nc bnc" id="L329" title="All 4 branches missed.">        if (!context.readQueue.isEmpty() &amp;&amp; context.readQueue.first() &gt; maxGlobal) {</span>
+            // If the lowest element is greater than maxGlobal, there's nothing
+            // more to return: readSet is ok as-is.
+        } else {
+            // Select everything in the read queue between
+            // the start and maxGlobal
+<span class="nc" id="L335">            readSet.addAll(context.readQueue.headSet(maxGlobal, true));</span>
+        }
+
+<span class="nc" id="L338">        List&lt;Long&gt; toRead = readSet.stream()</span>
+<span class="nc" id="L339">                .collect(Collectors.toList());</span>
+
+        // The list to store read results in
+<span class="nc" id="L342">        List&lt;ILogData&gt; readFrom = readAll(toRead).stream()</span>
+<span class="nc bnc" id="L343" title="All 2 branches missed.">                .filter(x -&gt; x.getType() == DataType.DATA)</span>
+<span class="nc" id="L344">                .filter(x -&gt; x.containsStream(context.id))</span>
+<span class="nc" id="L345">                .collect(Collectors.toList());</span>
+
+        // If any entries change the context,
+        // don't return anything greater than
+        // that entry
+<span class="nc" id="L350">        Optional&lt;ILogData&gt; contextEntry = readFrom.stream()</span>
+<span class="nc" id="L351">                .filter(contextCheckFn::apply).findFirst();</span>
+<span class="nc bnc" id="L352" title="All 2 branches missed.">        if (contextEntry.isPresent()) {</span>
+<span class="nc" id="L353">            log.trace(&quot;getNextEntries[{}] context switch @ {}&quot;, this,</span>
+<span class="nc" id="L354">                    contextEntry.get().getGlobalAddress());</span>
+<span class="nc" id="L355">            int idx = readFrom.indexOf(contextEntry.get());</span>
+<span class="nc" id="L356">            readFrom = readFrom.subList(0, idx + 1);</span>
+            // NOTE: readSet's clear() changed underlying context.readQueue
+<span class="nc" id="L358">            readSet.headSet(contextEntry.get().getGlobalAddress(), true).clear();</span>
+<span class="nc" id="L359">        } else {</span>
+            // Clear the entries which were read
+<span class="nc" id="L361">            context.readQueue.headSet(maxGlobal, true).clear();</span>
+        }
+
+        // Transfer the addresses of the read entries to the resolved queue
+<span class="nc" id="L365">        readFrom.stream()</span>
+<span class="nc" id="L366">                .forEach(x -&gt; addToResolvedQueue(context, x.getGlobalAddress(), x));</span>
+
+        // Update the global pointer
+<span class="nc bnc" id="L369" title="All 2 branches missed.">        if (readFrom.size() &gt; 0) {</span>
+<span class="nc" id="L370">            context.setGlobalPointerCheckGCTrimMark(readFrom.get(readFrom.size() - 1)</span>
+<span class="nc" id="L371">                    .getGlobalAddress());</span>
+        }
+
+<span class="nc" id="L374">        return readFrom;</span>
+    }
+
+    /**
+     * Fill the read queue for the current context. This method is called
+     * whenever a client requests a read, but there are no addresses left in
+     * the read queue.
+     *
+     * &lt;p&gt;This method returns true if entries were added to the read queue,
+     * false otherwise.
+     *
+     * @param maxGlobal     The maximum global address to read to.
+     * @param context       The current stream context.
+     *
+     * @return              True, if entries were added to the read queue,
+     *                      False, otherwise.
+     *
+     * {@inheritDoc}
+     */
+    protected boolean fillReadQueue(final long maxGlobal,
+                                    final QueuedStreamContext context) {
+<span class="nc" id="L395">        log.trace(&quot;Fill_Read_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}&quot;, this,</span>
+<span class="nc" id="L396">                maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);</span>
+<span class="nc" id="L397">        log.trace(&quot;Fill_Read_Queue[{}]: addresses in this stream Resolved queue {}&quot; +</span>
+                        &quot; - ReadQueue {} - CP Queue {}&quot;, this,
+                context.resolvedQueue, context.readQueue, context.readCpQueue);
+
+        // If the stream has just been reset and we don't have
+        // any checkpoint entries, we should consult
+        // a checkpoint first.
+<span class="nc bnc" id="L404" title="All 4 branches missed.">        if (context.getGlobalPointer() == Address.NEVER_READ &amp;&amp;</span>
+                context.checkpoint.id == null) {
+            // The checkpoint stream ID is the UUID appended with CP
+<span class="nc" id="L407">            final UUID checkpointId = CorfuRuntime</span>
+<span class="nc" id="L408">                    .getCheckpointStreamIdFromId(context.id);</span>
+            // Find the checkpoint, if present
+            try {
+<span class="nc bnc" id="L411" title="All 2 branches missed.">                if (discoverAddressSpace(checkpointId, context.readCpQueue,</span>
+<span class="nc" id="L412">                        runtime.getSequencerView()</span>
+<span class="nc" id="L413">                                .query(checkpointId),</span>
+<span class="nc" id="L414">                        Address.NEVER_READ, d -&gt; scanCheckpointStream(context, d, maxGlobal),</span>
+                        true, maxGlobal)) {
+<span class="nc" id="L416">                    log.trace(&quot;Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries&quot;,</span>
+<span class="nc" id="L417">                            this, context.readCpQueue.size());</span>
+
+<span class="nc" id="L419">                    return true;</span>
+                }
+<span class="nc" id="L421">            } catch (TrimmedException te) {</span>
+<span class="nc" id="L422">                log.warn(&quot;Fill_Read_Queue[{}] Trim encountered.&quot;, this, te);</span>
+<span class="nc" id="L423">                throw te;</span>
+<span class="nc" id="L424">            }</span>
+        }
+
+        // The maximum address we will fill to.
+<span class="nc" id="L428">        final long maxAddress =</span>
+<span class="nc" id="L429">                Long.min(maxGlobal, context.maxGlobalAddress);</span>
+
+        // If we already reached maxAddress ,
+        // we return since there is nothing left to do.
+<span class="nc bnc" id="L433" title="All 2 branches missed.">        if (context.getGlobalPointer() &gt;= maxAddress) {</span>
+<span class="nc" id="L434">            return false;</span>
+        }
+
+        // If everything is available in the resolved
+        // queue, use it
+<span class="nc bnc" id="L439" title="All 2 branches missed.">        if (context.maxResolution &gt;= maxAddress</span>
+<span class="nc bnc" id="L440" title="All 2 branches missed.">                &amp;&amp; context.minResolution &lt; context.getGlobalPointer()) {</span>
+<span class="nc" id="L441">            return fillFromResolved(maxGlobal, context);</span>
+        }
+
+<span class="nc" id="L444">        Long latestTokenValue = null;</span>
+
+        // If the max has been resolved, use it.
+<span class="nc bnc" id="L447" title="All 2 branches missed.">        if (maxGlobal != Address.MAX) {</span>
+<span class="nc" id="L448">            latestTokenValue = context.resolvedQueue.ceiling(maxGlobal);</span>
+        }
+
+        // If we don't have a larger token in resolved, or the request was for
+        // a linearized read, fetch the token from the sequencer.
+<span class="nc bnc" id="L453" title="All 4 branches missed.">        if (latestTokenValue == null || maxGlobal == Address.MAX) {</span>
+            // The stream tail might be ahead of maxGlobal (our max timestamp to resolve up to)
+            // We could limit it to the min between these two (maxGlobal and tail), but that could
+            // lead to reading an address (maxGlobal) that does not belong to our stream and attempt
+            // to deserialize it, or furthermore abort due to a trim on an address that does not even
+            // belong to our stream.
+            // For these reasons, we will keep this as the high boundary and prune
+            // our discovered space of addresses up to maxGlobal.
+<span class="nc" id="L461">            latestTokenValue = runtime.getSequencerView().query(context.id);</span>
+<span class="nc" id="L462">            log.trace(&quot;Fill_Read_Queue[{}] Fetched tail {} from sequencer&quot;, this, latestTokenValue);</span>
+        }
+
+        // If there is no information on the tail of the stream, return,
+        // there is nothing to do
+<span class="nc bnc" id="L467" title="All 2 branches missed.">        if (Address.nonAddress(latestTokenValue)) {</span>
+            // sanity check:
+            // currently, the only possible non-address return value for a token-query
+            // is Address.NON_EXIST
+<span class="nc bnc" id="L471" title="All 2 branches missed.">            if (latestTokenValue != Address.NON_EXIST) {</span>
+<span class="nc" id="L472">                log.warn(&quot;TOKEN[{}] unexpected return value&quot;, latestTokenValue);</span>
+            }
+<span class="nc" id="L474">            return false;</span>
+        }
+
+        // If everything is available in the resolved
+        // queue, use it
+<span class="nc bnc" id="L479" title="All 2 branches missed.">        if (context.maxResolution &gt;= latestTokenValue</span>
+<span class="nc bnc" id="L480" title="All 2 branches missed.">                &amp;&amp; context.minResolution &lt; context.getGlobalPointer()) {</span>
+<span class="nc" id="L481">            return fillFromResolved(latestTokenValue, context);</span>
+        }
+
+<span class="nc" id="L484">        long stopAddress = Long.max(context.globalPointer, context.checkpoint.snapshot);</span>
+
+        // We check if we can fill partially from the resolved queue
+        // This is a requirement for the getStreamAddressMaps as it considers the content of the resolved queue
+        // to decide if needs to fetch the address maps or not.
+<span class="nc bnc" id="L489" title="All 2 branches missed.">        if (context.globalPointer &lt; context.maxResolution) {</span>
+<span class="nc bnc" id="L490" title="All 2 branches missed.">            if (fillFromResolved(context.maxResolution, context)) {</span>
+<span class="nc" id="L491">                stopAddress = context.maxResolution;</span>
+<span class="nc" id="L492">                log.trace(&quot;fillReadQueue[{}]: current pointer: {}, resolved up to: {}, readQueue: {}, &quot; +</span>
+<span class="nc" id="L493">                                &quot;new stop address: {}&quot;, this, context.globalPointer,</span>
+<span class="nc" id="L494">                        context.maxResolution, context.readQueue, stopAddress);</span>
+            }
+        }
+
+        // Now we fetch the address map for this stream from the sequencer in a single call, i.e.,
+        // addresses of this stream in the range (stopAddress, startAddress==latestTokenValue]
+<span class="nc" id="L500">        discoverAddressSpace(context.id, context.readQueue,</span>
+<span class="nc" id="L501">                latestTokenValue,</span>
+                stopAddress,
+<span class="nc" id="L503">                d -&gt; true, false, maxGlobal);</span>
+
+<span class="nc bnc" id="L505" title="All 4 branches missed.">        return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();</span>
+    }
+
+    /**
+     * Defines the strategy to discover addresses belonging to this stream.
+     *
+     * We currently support two mechanisms:
+     *      - Following backpointers (@see org.corfudb.runtime.view.stream.BackpointerStreamView)
+     *      - Requesting the sequencer for the complete address map of a stream.
+     *      (@see org.corfudb.runtime.view.stream.AddressMapStreamView)
+     *
+     * @param streamId stream unique identifier.
+     * @param queue queue to fill up.
+     * @param startAddress read start address (inclusive)
+     * @param stopAddress read stop address (exclusive)
+     * @param filter filter to apply to data
+     * @param checkpoint true if checkpoint discovery, false otherwise.
+     * @param maxGlobal max address to resolve discovery.
+     *
+     * @return true if addresses were discovered, false, otherwise.
+     */
+    protected abstract boolean discoverAddressSpace(final UUID streamId,
+                                                    final NavigableSet&lt;Long&gt; queue,
+                                                    final long startAddress,
+                                                    final long stopAddress,
+                                                    final Function&lt;ILogData, Boolean&gt; filter,
+                                                    final boolean checkpoint,
+                                                    final long maxGlobal);
+
+    protected boolean fillFromResolved(final long maxGlobal,
+                                       final QueuedStreamContext context) {
+        // There's nothing to read if we're already past maxGlobal.
+<span class="nc bnc" id="L537" title="All 2 branches missed.">        if (maxGlobal &lt; context.getGlobalPointer()) {</span>
+<span class="nc" id="L538">            return false;</span>
+        }
+        // Get the subset of the resolved queue, which starts at
+        // globalPointer and ends at maxAddress inclusive.
+<span class="nc" id="L542">        NavigableSet&lt;Long&gt; resolvedSet =</span>
+<span class="nc" id="L543">                context.resolvedQueue.subSet(context.getGlobalPointer(),</span>
+<span class="nc" id="L544">                        false, maxGlobal, true);</span>
+
+        // Put those elements in the read queue
+<span class="nc" id="L547">        context.readQueue.addAll(resolvedSet);</span>
+
+<span class="nc bnc" id="L549" title="All 2 branches missed.">        return !context.readQueue.isEmpty();</span>
+    }
+
+    /**
+     *  {@inheritDoc}
+     *
+     **/
+    protected ILogData read(final long address) {
+        try {
+<span class="nc" id="L558">            return runtime.getAddressSpaceView().read(address, readOptions);</span>
+<span class="nc" id="L559">        } catch (TrimmedException te) {</span>
+<span class="nc" id="L560">            processTrimmedException(te);</span>
+<span class="nc" id="L561">            throw te;</span>
+        }
+    }
+
+    /**
+     *  This method reads a batch of addresses if 'nextRead' is not found in the cache.
+     *  In the case of a cache miss, it piggybacks on the read for 'nextRead'.
+     *
+     *  If 'nextRead' is present in the cache, it directly returns this data.
+     *
+     * @param nextRead current address of interest
+     * @param addresses batch of addresses to read (bring into the cache) in case there is a cache miss (includes
+     *                  nextRead)
+     * @return data for current 'address' of interest.
+     */
+    protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet&lt;Long&gt; addresses) {
+        try {
+<span class="nc" id="L578">            return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);</span>
+<span class="nc" id="L579">        } catch (TrimmedException te) {</span>
+<span class="nc" id="L580">            processTrimmedException(te);</span>
+<span class="nc" id="L581">            throw te;</span>
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * &lt;p&gt; We indicate we may have entries available
+     * if the read queue contains entries to read -or-
+     * if the next token is greater than our log pointer.
+     */
+    @Override
+    public boolean getHasNext(QueuedStreamContext context) {
+<span class="nc bnc" id="L594" title="All 2 branches missed.">        return  !context.readQueue.isEmpty()</span>
+<span class="nc" id="L595">                || runtime.getSequencerView().query(context.id)</span>
+<span class="nc bnc" id="L596" title="All 2 branches missed.">                &gt; context.getGlobalPointer();</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+<span class="nc" id="L603">    public void close() {}</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public synchronized long find(long globalAddress, SearchDirection direction) {
+<span class="nc" id="L610">        final QueuedStreamContext context = getCurrentContext();</span>
+        // First, check if we have resolved up to the given address
+<span class="nc bnc" id="L612" title="All 2 branches missed.">        if (context.maxResolution &lt; globalAddress) {</span>
+            // If not we need to read to that position
+            // to resolve all the addresses.
+<span class="nc" id="L615">            remainingUpTo(globalAddress + 1);</span>
+        }
+
+        // Now we can do the search.
+        // First, check for inclusive searches.
+<span class="nc bnc" id="L620" title="All 2 branches missed.">        if (direction.isInclusive()</span>
+<span class="nc bnc" id="L621" title="All 2 branches missed.">                &amp;&amp; context.resolvedQueue.contains(globalAddress)) {</span>
+<span class="nc" id="L622">            return globalAddress;</span>
+        }
+        // Next, check all elements excluding
+        // in the correct direction.
+        Long result;
+<span class="nc bnc" id="L627" title="All 2 branches missed.">        if (direction.isForward()) {</span>
+<span class="nc" id="L628">            result = context.resolvedQueue.higher(globalAddress);</span>
+        }  else {
+<span class="nc" id="L630">            result = context.resolvedQueue.lower(globalAddress);</span>
+        }
+
+        // Convert the address to never read if there was no result.
+<span class="nc bnc" id="L634" title="All 2 branches missed.">        return result == null ? Address.NOT_FOUND : result;</span>
+    }
+
+    // Keeps the latest valid checkpoint (based on the snapshot it covers)
+<span class="nc" id="L638">    private StreamCheckpoint latestValidCheckpoint = new StreamCheckpoint();</span>
+
+    /**
+     * Resolve all potential checkpoints for the given max global.
+     *
+     * Note that, the position of checkpoint entries in the log does not correspond
+     * to logical checkpoint ordering. For this reason, we must traverse all valid
+     * checkpoints and only after scanning all, pick the checkpoint with the highest coverage.
+     *
+     * For instance, the fact that CP2.entriesGlobalAddress &gt; CP1.entriesGlobalAddress, does not imply
+     * that CP2.logicalCheckpointedSpace &gt; CP1.logicalCheckpointedSpace.
+     * Consider the case where, CP2 snapshot was taken before CP1, however, CP1 read/write is faster
+     * and commits its entries to the log first.
+     *
+     * +------------------------------------------------+
+     * | CP1 (snapshot 15) |  |  |  | CP2 (snapshot 10) |
+     * +------------------------------------------------+
+     *
+     * @param context this stream's current context
+     * @param data checkpoint log data entry
+     * @param maxGlobal maximum global address to resolve this stream up to.
+     *
+     * @return true, if the checkpoint was completely resolved (from end to start markers of a checkpoint)
+     *         false, otherwise.
+     */
+    protected boolean scanCheckpointStream(final QueuedStreamContext context, ILogData data,
+                                           long maxGlobal) {
+<span class="nc bnc" id="L665" title="All 2 branches missed.">        if (data.hasCheckpointMetadata()) {</span>
+<span class="nc" id="L666">            CheckpointEntry cpEntry = (CheckpointEntry) data.getPayload(runtime);</span>
+
+            // Consider only checkpoints that are less than maxGlobal
+            // Because we are traversing in reverse order END marker of a checkpoint should be found first.
+<span class="nc bnc" id="L670" title="All 2 branches missed.">            if (context.checkpoint.id == null &amp;&amp;</span>
+<span class="nc bnc" id="L671" title="All 2 branches missed.">                    cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END</span>
+<span class="nc bnc" id="L672" title="All 2 branches missed.">                    &amp;&amp; Long.decode(cpEntry.getDict()</span>
+<span class="nc" id="L673">                    .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)) &lt;= maxGlobal) {</span>
+<span class="nc" id="L674">                log.trace(&quot;Checkpoint[{}] END found at address {} type {} id {} author {}&quot;,</span>
+<span class="nc" id="L675">                        this, data.getGlobalAddress(), cpEntry.getCpType(),</span>
+<span class="nc" id="L676">                        Utils.toReadableId(cpEntry.getCheckpointId()), cpEntry.getCheckpointAuthorId());</span>
+
+                // Because checkpoint ordering is not guaranteed, i.e., a checkpoint for a lower snapshot
+                // could appear in the log after a checkpoint for a higher snapshot (case of multiple
+                // checkpointers running in parallel). We need to inspect all checkpoints and keep the one
+                // with the highest VLO version.
+<span class="nc" id="L682">                UUID checkpointId = cpEntry.getCheckpointId();</span>
+<span class="nc" id="L683">                long checkpointVLOVersion = Long.decode(cpEntry.getDict()</span>
+<span class="nc" id="L684">                        .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));</span>
+<span class="nc" id="L685">                boolean isCheckpointForHighestVLOVersion = latestValidCheckpoint.validateHigher(checkpointId,</span>
+                        checkpointVLOVersion);
+
+                // If the entry being inspected represents a checkpoint for a higher VLO
+                // take this as our latest valid checkpoint, and accumulate relevant info
+                // (addresses, numEntries).
+<span class="nc bnc" id="L691" title="All 2 branches missed.">                if (isCheckpointForHighestVLOVersion) {</span>
+                    // We found a highest checkpoint, set this as our valid checkpoint.
+<span class="nc" id="L693">                    latestValidCheckpoint = new StreamCheckpoint(checkpointId);</span>
+<span class="nc" id="L694">                    latestValidCheckpoint.setStartAddress(data.getCheckpointedStreamStartLogAddress());</span>
+<span class="nc" id="L695">                    latestValidCheckpoint.setNumEntries(1);</span>
+<span class="nc" id="L696">                    latestValidCheckpoint.setTotalBytes((long) data.getSizeEstimate());</span>
+<span class="nc" id="L697">                    latestValidCheckpoint.addAddress(data.getGlobalAddress());</span>
+
+<span class="nc bnc" id="L699" title="All 2 branches missed.">                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey</span>
+                            .SNAPSHOT_ADDRESS) != null) {
+<span class="nc" id="L701">                        latestValidCheckpoint.setSnapshot(Long.decode(cpEntry.getDict()</span>
+<span class="nc" id="L702">                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS)));</span>
+                    }
+                }
+<span class="nc bnc" id="L705" title="All 2 branches missed.">            } else if (latestValidCheckpoint.getId() != null &amp;&amp;</span>
+<span class="nc bnc" id="L706" title="All 2 branches missed.">                    latestValidCheckpoint.getId().equals(cpEntry.getCheckpointId())) {</span>
+                // Case: all other markers other than END of a checkpoint.
+
+                // Add checkpoint entry data to the summarized state of the checkpoint, which will be used
+                // when the definite checkpoint is selected.
+<span class="nc" id="L711">                latestValidCheckpoint.addBytes((long) data.getSizeEstimate());</span>
+<span class="nc" id="L712">                latestValidCheckpoint.addNumEntries(1);</span>
+<span class="nc" id="L713">                latestValidCheckpoint.addAddress(data.getGlobalAddress());</span>
+
+<span class="nc bnc" id="L715" title="All 2 branches missed.">                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {</span>
+                    // Only for the case of START markers add some extra information.
+<span class="nc" id="L717">                    log.trace(&quot;Checkpoint[{}] START found at address {} type {} id {} author {}&quot;,</span>
+<span class="nc" id="L718">                            this, data.getGlobalAddress(), cpEntry.getCpType(),</span>
+<span class="nc" id="L719">                            Utils.toReadableId(cpEntry.getCheckpointId()),</span>
+<span class="nc" id="L720">                            cpEntry.getCheckpointAuthorId());</span>
+<span class="nc" id="L721">                    return true;</span>
+                }
+            }
+        }
+<span class="nc" id="L725">        return false;</span>
+    }
+
+    /**
+     * Resolves the valid checkpoint for the current view of the stream and returns
+     * addresses belonging to this checkpoint.
+     *
+     * @param context current stream context.
+     *
+     * @return addresses for the valid checkpoint.
+     */
+    public List&lt;Long&gt; resolveCheckpoint(final QueuedStreamContext context) {
+
+<span class="nc" id="L738">        List&lt;Long&gt; checkpointAddresses = new ArrayList&lt;&gt;();</span>
+
+<span class="nc bnc" id="L740" title="All 4 branches missed.">        if (latestValidCheckpoint != null &amp;&amp; latestValidCheckpoint.getId() != null) {</span>
+            // Select checkpoint with the highest start address
+<span class="nc" id="L742">            log.trace(&quot;resolveCheckpoint[{}]: selecting checkpoint {} with start address {}&quot;, this,</span>
+<span class="nc" id="L743">                    latestValidCheckpoint.getId(), latestValidCheckpoint.getStartAddress());</span>
+<span class="nc" id="L744">            context.checkpoint = latestValidCheckpoint;</span>
+<span class="nc" id="L745">            checkpointAddresses.addAll(latestValidCheckpoint.getCheckpointAddresses());</span>
+        }
+
+        // Checkpoint has been resolved, reset latest valid checkpoint.
+<span class="nc" id="L749">        latestValidCheckpoint = new StreamCheckpoint();</span>
+<span class="nc" id="L750">        return checkpointAddresses;</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     * */
+    @Override
+    public synchronized ILogData previous() {
+<span class="nc" id="L758">        final QueuedStreamContext context = getCurrentContext();</span>
+<span class="nc" id="L759">        final long oldPointer = context.getGlobalPointer();</span>
+
+<span class="nc" id="L761">        log.trace(&quot;previous[{}]: max={} min={}&quot;, this,</span>
+<span class="nc" id="L762">                context.maxResolution,</span>
+<span class="nc" id="L763">                context.minResolution);</span>
+
+        // If never read, there would be no pointer to the previous entry.
+<span class="nc bnc" id="L766" title="All 2 branches missed.">        if (context.getGlobalPointer() == Address.NEVER_READ) {</span>
+<span class="nc" id="L767">            return null;</span>
+        }
+
+        // If we're attempt to go prior to most recent checkpoint, we
+        // throw a TrimmedException.
+<span class="nc bnc" id="L772" title="All 2 branches missed.">        if (context.getGlobalPointer() - 1 &lt; context.checkpoint.startAddress) {</span>
+<span class="nc" id="L773">            throw new TrimmedException();</span>
+        }
+
+        // Otherwise, the previous entry should be resolved, so get
+        // one less than the current.
+<span class="nc" id="L778">        Long prevAddress = context</span>
+<span class="nc" id="L779">                .resolvedQueue.lower(context.getGlobalPointer());</span>
+        // If the pointer is before our min resolution, we need to resolve
+        // to get the correct previous entry.
+<span class="nc bnc" id="L782" title="All 6 branches missed.">        if (prevAddress == null &amp;&amp; Address.isAddress(context.minResolution)</span>
+<span class="nc bnc" id="L783" title="All 2 branches missed.">                || prevAddress != null &amp;&amp; prevAddress &lt;= context.minResolution) {</span>
+<span class="nc bnc" id="L784" title="All 2 branches missed.">            context.setGlobalPointerCheckGCTrimMark(prevAddress == null ? Address.NEVER_READ :</span>
+<span class="nc" id="L785">                    prevAddress - 1L);</span>
+
+<span class="nc" id="L787">            remainingUpTo(context.minResolution);</span>
+<span class="nc" id="L788">            context.minResolution = Address.NON_ADDRESS;</span>
+<span class="nc" id="L789">            context.setGlobalPointerCheckGCTrimMark(oldPointer);</span>
+<span class="nc" id="L790">            prevAddress = context</span>
+<span class="nc" id="L791">                    .resolvedQueue.lower(context.getGlobalPointer());</span>
+<span class="nc" id="L792">            log.trace(&quot;previous[{}]: updated resolved queue {}&quot;, this, context.resolvedQueue);</span>
+        }
+
+        // Clear the read queue, it may no longer be valid
+<span class="nc" id="L796">        context.readQueue.clear();</span>
+
+<span class="nc bnc" id="L798" title="All 2 branches missed.">        if (prevAddress != null) {</span>
+<span class="nc" id="L799">            log.trace(&quot;previous[{}]: updated read queue {}&quot;, this, context.readQueue);</span>
+<span class="nc" id="L800">            context.setGlobalPointerCheckGCTrimMark(prevAddress);</span>
+<span class="nc" id="L801">            return read(prevAddress);</span>
+        }
+
+<span class="nc bnc" id="L804" title="All 2 branches missed.">        if (context.checkpoint.id == null) {</span>
+            // The stream hasn't been checkpointed and we need to
+            // move the stream pointer to an address before the first
+            // entry
+<span class="nc" id="L808">            log.trace(&quot;previous[{}]: reached the beginning of the stream resetting&quot; +</span>
+<span class="nc" id="L809">                    &quot; the stream pointer to {}&quot;, this, Address.NON_ADDRESS);</span>
+<span class="nc" id="L810">            context.setGlobalPointerCheckGCTrimMark(Address.NON_ADDRESS);</span>
+<span class="nc" id="L811">            return null;</span>
+        }
+
+<span class="nc bnc" id="L814" title="All 2 branches missed.">        if (context.resolvedQueue.first() == context.getGlobalPointer()) {</span>
+<span class="nc" id="L815">            log.trace(&quot;previous[{}]: reached the beginning of the stream resetting&quot; +</span>
+<span class="nc" id="L816">                    &quot; the stream pointer to checkpoint version {}&quot;, this, context.checkpoint.startAddress);</span>
+            // Note: this is a checkpoint, we do not need to verify it is before the trim mark, it actually should be
+            // cause this is the last address of the trimmed range.
+<span class="nc" id="L819">            context.setGlobalPointer(context.checkpoint.startAddress);</span>
+<span class="nc" id="L820">            return null;</span>
+        }
+
+<span class="nc" id="L823">        throw new IllegalStateException(&quot;The stream pointer seems to be corrupted!&quot;);</span>
+    }
+
+
+    /**
+    * {@inheritDoc}
+    * */
+    @Override
+    public synchronized ILogData current() {
+<span class="nc" id="L832">        final QueuedStreamContext context = getCurrentContext();</span>
+
+<span class="nc bnc" id="L834" title="All 2 branches missed.">        if (Address.nonAddress(context.getGlobalPointer())) {</span>
+<span class="nc" id="L835">            return null;</span>
+        }
+<span class="nc" id="L837">        return read(context.getGlobalPointer());</span>
+    }
+
+    /**
+     * {@inheritDoc}
+     * */
+    @Override
+    public long getCurrentGlobalPosition() {
+<span class="nc" id="L845">        return getCurrentContext().getGlobalPointer();</span>
+    }
+
+    @VisibleForTesting
+    AbstractQueuedStreamView.QueuedStreamContext getContext() {
+<span class="nc" id="L850">        return this.baseContext;</span>
+    }
+
+    /** {@inheritDoc}
+     *
+     * &lt;p&gt;For the queued stream context, we include just a queue of potential
+     * global addresses to be read from.
+     */
+<span class="nc" id="L858">    @ToString</span>
+    static class QueuedStreamContext extends AbstractStreamContext {
+
+        /** A queue of addresses which have already been resolved. */
+<span class="nc" id="L862">        final NavigableSet&lt;Long&gt; resolvedQueue</span>
+                = new TreeSet&lt;&gt;();
+
+        /** The minimum global address which we have resolved this
+         * stream to.
+         */
+<span class="nc" id="L868">        long minResolution = Address.NON_ADDRESS;</span>
+
+        /** The maximum global address which we have resolved this
+         * stream to.
+         */
+<span class="nc" id="L873">        long maxResolution = Address.NON_ADDRESS;</span>
+
+        /**
+         * A priority queue of potential addresses to be read from.
+         */
+<span class="nc" id="L878">        final NavigableSet&lt;Long&gt; readQueue</span>
+                = new TreeSet&lt;&gt;();
+
+        /** List of checkpoint records, if a successful checkpoint has been observed.
+         */
+<span class="nc" id="L883">        final NavigableSet&lt;Long&gt; readCpQueue = new TreeSet&lt;&gt;();</span>
+
+        /** Info on checkpoint we used for initial stream replay,
+         *  other checkpoint-related info &amp; stats.
+         */
+<span class="nc" id="L888">        StreamCheckpoint checkpoint = new StreamCheckpoint();</span>
+
+        /** Create a new stream context with the given ID and maximum address
+         * to read to.
+         * @param id                  The ID of the stream to read from
+         * @param maxGlobalAddress    The maximum address for the context.
+         */
+        public QueuedStreamContext(UUID id, long maxGlobalAddress) {
+<span class="nc" id="L896">            super(id, maxGlobalAddress);</span>
+<span class="nc" id="L897">        }</span>
+
+        /**
+         * {@inheritDoc}
+         * */
+        @Override
+        void reset() {
+<span class="nc" id="L904">            super.reset();</span>
+<span class="nc" id="L905">            readCpQueue.clear();</span>
+<span class="nc" id="L906">            readQueue.clear();</span>
+<span class="nc" id="L907">            resolvedQueue.clear();</span>
+<span class="nc" id="L908">            minResolution = Address.NON_ADDRESS;</span>
+<span class="nc" id="L909">            maxResolution = Address.NON_ADDRESS;</span>
+
+<span class="nc" id="L911">            checkpoint.reset();</span>
+<span class="nc" id="L912">        }</span>
+
+        /**
+         * {@inheritDoc}
+         * */
+        @Override
+        synchronized void seek(long globalAddress) {
+<span class="nc bnc" id="L919" title="All 2 branches missed.">            if (Address.nonAddress(globalAddress)) {</span>
+<span class="nc" id="L920">                throw new IllegalArgumentException(&quot;globalAddress must&quot;</span>
+                        + &quot; be &gt;= Address.maxNonAddress()&quot;);
+            }
+<span class="nc" id="L923">            log.trace(&quot;Seek[{}]({}), min={} max={}&quot;, this,  globalAddress,</span>
+<span class="nc" id="L924">                    minResolution, maxResolution);</span>
+            // Update minResolution if necessary
+<span class="nc bnc" id="L926" title="All 2 branches missed.">            if (globalAddress &gt;= maxResolution) {</span>
+<span class="nc" id="L927">                log.trace(&quot;set min res to {}&quot; , globalAddress);</span>
+<span class="nc" id="L928">                minResolution = globalAddress;</span>
+            }
+            // remove anything in the read queue LESS
+            // than global address.
+<span class="nc" id="L932">            readQueue.headSet(globalAddress).clear();</span>
+            // transfer from the resolved queue into
+            // the read queue anything equal to or
+            // greater than the global address
+<span class="nc" id="L936">            readQueue.addAll(resolvedQueue.tailSet(globalAddress, true));</span>
+<span class="nc" id="L937">            super.seek(globalAddress);</span>
+<span class="nc" id="L938">        }</span>
+    }
+
+    /**
+     * Represents a contained form of a stream's checkpoint.
+     * Only with relevant information for the stream view.
+     */
+<span class="nc bnc" id="L945" title="All 30 branches missed.">    @Data</span>
+    static class StreamCheckpoint {
+
+<span class="nc" id="L948">        UUID id = null;</span>
+        // Represents the VLO version at the time of checkpoint, i.e., last update observed
+        // on the checkpointed stream at the snapshot this checkpoint was taken.
+<span class="nc" id="L951">        long startAddress = Address.NEVER_READ;</span>
+        // Total number of entries in this checkpoint
+<span class="nc" id="L953">        long numEntries = 0L;</span>
+        // Total number of Bytes in this checkpoint
+<span class="nc" id="L955">        long totalBytes = 0L;</span>
+
+        /** The address the current checkpoint snapshot was taken at.
+         *  The checkpoint guarantees for this stream there are no entries
+         *  between startAddress and snapshot.
+         */
+<span class="nc" id="L961">        long snapshot = Address.NEVER_READ;</span>
+        // List of addresses belonging to this checkpoint
+<span class="nc" id="L963">        List&lt;Long&gt; checkpointAddresses = new ArrayList&lt;&gt;();</span>
+
+        /**
+         * Create a new stream checkpoint to contain basic checkpoint information.
+         */
+<span class="nc" id="L968">        public StreamCheckpoint(UUID id) {</span>
+<span class="nc" id="L969">            this.id = id;</span>
+<span class="nc" id="L970">        }</span>
+
+<span class="nc" id="L972">        public StreamCheckpoint() {</span>
+<span class="nc" id="L973">        }</span>
+
+        public void addAddress(long address) {
+<span class="nc" id="L976">            checkpointAddresses.add(address);</span>
+<span class="nc" id="L977">        }</span>
+
+        /**
+         * Validates current checkpoint against the proposed and keeps the higher,
+         * i.e., the latest checkpoint based on the snapshot it covers.
+         *
+         * @param id checkpoint id
+         * @param startAddress checkpoint VLO version (last update observed for this stream at the time of checkpoint)
+         * @return true, if this checkpoint if higher.
+         *         false, otherwise.
+         */
+        public boolean validateHigher(UUID id, long startAddress) {
+<span class="nc bnc" id="L989" title="All 4 branches missed.">            if (Address.isAddress(startAddress) &amp;&amp; startAddress &gt; this.startAddress) {</span>
+<span class="nc" id="L990">                log.trace(&quot;validateHigher[{}]: valid checkpoint {} with start address {}&quot;, this, id, startAddress);</span>
+<span class="nc" id="L991">                return true;</span>
+            }
+
+<span class="nc" id="L994">            return false;</span>
+        }
+
+        public void reset() {
+<span class="nc" id="L998">            id = null;</span>
+<span class="nc" id="L999">            startAddress = Address.NEVER_READ;</span>
+<span class="nc" id="L1000">            snapshot = Address.NEVER_READ;</span>
+<span class="nc" id="L1001">            numEntries = 0;</span>
+<span class="nc" id="L1002">            totalBytes = 0;</span>
+<span class="nc" id="L1003">            checkpointAddresses = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L1004">        }</span>
+
+        public void addBytes(long bytes) {
+<span class="nc" id="L1007">            totalBytes += bytes;</span>
+<span class="nc" id="L1008">        }</span>
+
+        public void addNumEntries(int entries) {
+<span class="nc" id="L1011">            numEntries += entries;</span>
+<span class="nc" id="L1012">        }</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

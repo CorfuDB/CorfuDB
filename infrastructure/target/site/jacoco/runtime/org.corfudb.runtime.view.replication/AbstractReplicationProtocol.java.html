@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>AbstractReplicationProtocol.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view.replication</a> &gt; <span class="el_source">AbstractReplicationProtocol.java</span></div><h1>AbstractReplicationProtocol.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view.replication;
+
+import javax.annotation.Nonnull;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.exceptions.HoleFillRequiredException;
+import org.corfudb.runtime.view.RuntimeLayout;
+
+/**
+ * Created by mwei on 4/6/17.
+ */
+<span class="nc" id="L13">@Slf4j</span>
+public abstract class AbstractReplicationProtocol implements IReplicationProtocol {
+
+    /**
+     * The hole fill policy to apply.
+     */
+    protected final IHoleFillPolicy holeFillPolicy;
+
+    /**
+     * Build the replication protocol using the given hole filling policy.
+     *
+     * @param holeFillPolicy The hole filling policy to be applied when
+     *                       a read returns uncommitted data.
+     */
+<span class="nc" id="L27">    public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy) {</span>
+<span class="nc" id="L28">        this.holeFillPolicy = holeFillPolicy;</span>
+<span class="nc" id="L29">    }</span>
+
+    /**
+     * {@inheritDoc}
+     *
+     * &lt;p&gt;In the base implementation, we attempt to read data
+     * using the peek method. If data is returned by peek,
+     * we use it. Otherwise, we invoke the hole filling
+     * protocol.
+     **/
+    @Nonnull
+    @Override
+    public ILogData read(RuntimeLayout runtimeLayout, long globalAddress) {
+        try {
+<span class="nc" id="L43">            return holeFillPolicy</span>
+<span class="nc" id="L44">                    .peekUntilHoleFillRequired(globalAddress,</span>
+<span class="nc" id="L45">                            a -&gt; peek(runtimeLayout, a));</span>
+<span class="nc" id="L46">        } catch (HoleFillRequiredException e) {</span>
+<span class="nc" id="L47">            log.debug(&quot;HoleFill[{}] due to {}&quot;, globalAddress, e.getMessage());</span>
+<span class="nc" id="L48">            holeFill(runtimeLayout, globalAddress);</span>
+<span class="nc" id="L49">            return peek(runtimeLayout, globalAddress);</span>
+        }
+    }
+
+    /**
+     * Write a special hole filling entry using the
+     * given address. When this call returns, either
+     * the hole filling write has been committed
+     * or the result of another client's write
+     * has committed (you WILL need to -read- the
+     * address to find out which write was adopted).
+     *
+     * @param globalAddress The address to hole fill.
+     */
+    protected abstract void holeFill(RuntimeLayout runtimeLayout, long globalAddress);
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

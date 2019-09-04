@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>RemoveNodeWorkflow.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure.orchestrator.workflows</a> &gt; <span class="el_source">RemoveNodeWorkflow.java</span></div><h1>RemoveNodeWorkflow.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure.orchestrator.workflows;
+
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.REMOVE_NODE;
+
+/**
+ * A workflow definition that removes a node from the cluster, if it exists. This workflow
+ * will fail if the remove results in a cluster that is not redundant.
+ * @author Maithem
+ */
+
+<span class="nc" id="L24">@Slf4j</span>
+public class RemoveNodeWorkflow implements IWorkflow {
+
+    private final RemoveNodeRequest request;
+
+    /**
+     * The id of this workflow
+     */
+<span class="nc" id="L32">    @Getter</span>
+    final UUID id;
+
+<span class="nc" id="L35">    @Getter</span>
+    final List&lt;Action&gt; actions;
+
+    /**
+     * Create a remove node workflow from a request.
+     * @param request the remove node request
+     */
+<span class="nc" id="L42">    public RemoveNodeWorkflow(@Nonnull RemoveNodeRequest request) {</span>
+<span class="nc" id="L43">        this.id = UUID.randomUUID();</span>
+<span class="nc" id="L44">        this.request = request;</span>
+<span class="nc" id="L45">        actions = Collections.singletonList(new RemoveNode());</span>
+
+<span class="nc" id="L47">    }</span>
+
+    @Override
+    public String getName() {
+<span class="nc" id="L51">        return REMOVE_NODE.toString();</span>
+    }
+
+    /**
+     * Remove the node from the current layout.
+     */
+<span class="nc" id="L57">    class RemoveNode extends Action {</span>
+        @Override
+        public String getName() {
+<span class="nc" id="L60">            return REMOVE_NODE.toString();</span>
+        }
+
+        @Override
+        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+<span class="nc" id="L65">            Layout layout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="nc" id="L66">            runtime.getLayoutManagementView().removeNode(layout,</span>
+<span class="nc" id="L67">                    request.getEndpoint());</span>
+<span class="nc" id="L68">        }</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

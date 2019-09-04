@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ISerializer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">generator</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.util.serializer</a> &gt; <span class="el_source">ISerializer.java</span></div><h1>ISerializer.java</h1><pre class="source lang-java linenums">package org.corfudb.util.serializer;
+
+import com.esotericsoftware.kryo.Kryo;
+import com.google.common.collect.ImmutableMap;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import java.util.function.Function;
+
+import de.javakaffee.kryoserializers.guava.ImmutableListSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableMapSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableMultimapSerializer;
+import de.javakaffee.kryoserializers.guava.ImmutableSetSerializer;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
+import net.openhft.hashing.LongHashFunction;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.Utils;
+import org.objenesis.strategy.StdInstantiatorStrategy;
+
+/**
+ * This class represents a serializer, which takes an object and reads/writes it to a bytebuf.
+ * Created by mwei on 9/17/15.
+ */
+public interface ISerializer {
+
+    // Used for default cloning.
+<span class="nc" id="L33">    ThreadLocal&lt;Kryo&gt; kryos = new ThreadLocal&lt;Kryo&gt;() {</span>
+        protected Kryo initialValue() {
+<span class="nc" id="L35">            Kryo kryo = new Kryo();</span>
+            // Use an instantiator that does not require no-args
+<span class="nc" id="L37">            kryo.setInstantiatorStrategy(new Kryo.DefaultInstantiatorStrategy(</span>
+                    new StdInstantiatorStrategy()));
+<span class="nc" id="L39">            ImmutableListSerializer.registerSerializers(kryo);</span>
+<span class="nc" id="L40">            ImmutableSetSerializer.registerSerializers(kryo);</span>
+<span class="nc" id="L41">            ImmutableMapSerializer.registerSerializers(kryo);</span>
+<span class="nc" id="L42">            ImmutableMultimapSerializer.registerSerializers(kryo);</span>
+            // configure kryo instance, customize settings
+<span class="nc" id="L44">            return kryo;</span>
+        }
+
+        ;
+    };
+
+    byte getType();
+
+    /**
+     * Deserialize an object from a given byte buffer.
+     *
+     * @param b The bytebuf to deserialize.
+     * @return The deserialized object.
+     */
+    Object deserialize(ByteBuf b, CorfuRuntime rt);
+
+    /**
+     * Serialize an object into a given byte buffer.
+     *
+     * @param o The object to serialize.
+     * @param b The bytebuf to serialize it into.
+     */
+    void serialize(Object o, ByteBuf b);
+
+<span class="nc" id="L68">    Map&lt;Class&lt;?&gt;, Function&lt;?, byte[]&gt;&gt; customHashingMap =</span>
+            new ConcurrentHashMap&lt;&gt;();
+
+    /** Register a new custom hasher with the serializer.
+     * @param cls               The class this hasher will handle.
+     * @param hashFunction      The function to execute to generate the hash.
+     */
+    default &lt;T&gt; void registerCustomHasher(Class&lt;T&gt; cls, Function&lt;T, byte[]&gt; hashFunction) {
+<span class="nc" id="L76">        customHashingMap.put(cls, hashFunction);</span>
+<span class="nc" id="L77">    }</span>
+
+    /** Get a custom hasher from the serializer.
+     * @param cls       The class to obtain a hasher for.
+     * @return          A function to generate a hash, or null, if no custom
+     *                  hasher was registered.
+     */
+    default &lt;T&gt; Function&lt;T, byte[]&gt; getCustomHasher(Class&lt;T&gt; cls) {
+<span class="nc" id="L85">        return (Function&lt;T, byte[]&gt;) customHashingMap.get(cls);</span>
+    }
+
+    /** This map provides some methods for performing hashing on
+     * known types.
+     */
+<span class="nc" id="L91">    Map&lt;Class&lt;?&gt;, Function&lt;?, byte[]&gt;&gt; hashConversionMap =</span>
+<span class="nc" id="L92">            ImmutableMap.&lt;Class&lt;?&gt;, Function&lt;?, byte[]&gt;&gt;builder()</span>
+<span class="nc" id="L93">                    .put(String.class, (String o) -&gt;</span>
+<span class="nc" id="L94">                        Utils.longToBigEndianByteArray(LongHashFunction.xx().hashChars(o)))</span>
+<span class="nc" id="L95">                    .put(UUID.class, (UUID o) -&gt; {</span>
+<span class="nc" id="L96">                        ByteBuffer bb = ByteBuffer.wrap(new byte[16]);</span>
+<span class="nc" id="L97">                        bb.putLong(o.getMostSignificantBits());</span>
+<span class="nc" id="L98">                        bb.putLong(o.getLeastSignificantBits());</span>
+<span class="nc" id="L99">                        return bb.array();</span>
+                    })
+<span class="nc" id="L101">                    .put(Long.class, (Long o) -&gt; Utils.longToBigEndianByteArray(o))</span>
+<span class="nc" id="L102">                    .put(Integer.class, (Integer o) -&gt; Utils.intToBigEndianByteArray(o))</span>
+<span class="nc" id="L103">                    .put(Byte.class, (Byte o) -&gt; new byte[]{o})</span>
+<span class="nc" id="L104">                    .put(long.class, (Long o) -&gt; Utils.longToBigEndianByteArray(o))</span>
+<span class="nc" id="L105">                    .put(int.class, (Integer o) -&gt; Utils.intToBigEndianByteArray(o))</span>
+<span class="nc" id="L106">                    .put(byte.class, (Byte o) -&gt; new byte[]{o})</span>
+<span class="nc" id="L107">            .build();</span>
+
+    /** Given an object, generate a hash for it.
+     *  This hash is used internally by Corfu for conflict resolution.
+     *
+     * The default implementation uses xxHash, a fast
+     * non-cryptographic hash algorithm on the serialized
+     * payload.
+     *
+     * It tries to be smart about some primitive types, not
+     * serializing them if possible to generate the hashcode.
+     *
+     * @param o The object to hash.
+     * @return  The hashed object value, as a byte array.
+     */
+    default byte[] hash(Object o) {
+<span class="nc" id="L123">        final Class&lt;?&gt; cls = o.getClass();</span>
+<span class="nc" id="L124">        Function&lt;Object, byte[]&gt; conversionFunc =</span>
+<span class="nc" id="L125">                (Function&lt;Object, byte[]&gt;) hashConversionMap.get(cls);</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        if (conversionFunc != null) {</span>
+            // If we know how to convert this object quickly, do that.
+<span class="nc" id="L128">            return conversionFunc.apply(o);</span>
+<span class="nc" id="L129">        } else if ((conversionFunc =</span>
+<span class="nc bnc" id="L130" title="All 2 branches missed.">                (Function&lt;Object, byte[]&gt;)getCustomHasher(cls)) != null) {</span>
+            // If we have a registered custom hasher, use that
+<span class="nc" id="L132">            return conversionFunc.apply(o);</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        } else if (o instanceof ICorfuHashable) {</span>
+            // The object implements Corfu hashable, so use that
+<span class="nc" id="L135">            return ((ICorfuHashable) o).generateCorfuHash();</span>
+        } else {
+            // Otherwise, revert to having xx generate a hash by using the
+            // serializer then hashing.
+            long hash;
+<span class="nc" id="L140">            ByteBuf b = Unpooled.buffer();</span>
+<span class="nc" id="L141">            serialize(o, b);</span>
+<span class="nc" id="L142">            hash = LongHashFunction.xx().hashBytes(b.nioBuffer());</span>
+<span class="nc" id="L143">            b.release();</span>
+<span class="nc" id="L144">            return Utils.longToBigEndianByteArray(hash);</span>
+        }
+    }
+
+    /**
+     * Clone an object through serialization.
+     *
+     * @param o The object to clone.
+     * @return The cloned object.
+     */
+    default Object clone(Object o, CorfuRuntime rt) {
+<span class="nc" id="L155">        return kryos.get().copy(o);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

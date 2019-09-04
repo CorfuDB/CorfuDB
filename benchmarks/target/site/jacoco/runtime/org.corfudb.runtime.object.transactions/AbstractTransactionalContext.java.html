@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>AbstractTransactionalContext.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">benchmarks</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.object.transactions</a> &gt; <span class="el_source">AbstractTransactionalContext.java</span></div><h1>AbstractTransactionalContext.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.object.transactions;
+
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Utils;
+
+import javax.annotation.Nullable;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
+/**
+ * Represents a transactional context. Transactional contexts
+ * manage per-thread transaction state.
+ *
+ * &lt;p&gt;Recall from {@link CorfuCompileProxy} that an SMR object layer implements objects whose
+ * history of updates
+ * are backed by a stream. If a Corfu object's method is an Accessor, it invokes the proxy's
+ * access() method. Likewise, if a Corfu object's method is a Mutator or Accessor-Mutator,
+ * it invokes the proxy's logUpdate() method.
+ *
+ * &lt;p&gt;Within transactional context, these methods invoke the transactionalContext
+ * accessor/mutator helper.
+ *
+ * &lt;p&gt;For example, OptimisticTransactionalContext.access() is responsible for
+ * sync'ing the proxy state to the snapshot version, and then doing the access.
+ *
+ * &lt;p&gt;logUpdate() within transactional context is
+ * responsible for updating the write-set.
+ *
+ * &lt;p&gt;Finally, if a Corfu object's method is an Accessor-Mutator, then although the mutation
+ * is delayed, it needs to obtain the result by invoking getUpcallResult() on the optimistic
+ * stream. This is similar to the second stage of access(), except working on the optimistic
+ * stream instead of the underlying stream.
+ *
+ * &lt;p&gt;Created by mwei on 4/4/16.
+ */
+<span class="nc" id="L60">@Slf4j</span>
+public abstract class AbstractTransactionalContext implements
+        Comparable&lt;AbstractTransactionalContext&gt; {
+
+    /**
+     * Constant for the address of an uncommitted log entry.
+     */
+    public static final long UNCOMMITTED_ADDRESS = -1L;
+
+    /**
+     * Constant for a transaction which has been folded into
+     * another transaction.
+     */
+    public static final long FOLDED_ADDRESS = -2L;
+
+    /**
+     * Constant for a transaction which has been aborted.
+     */
+    public static final long ABORTED_ADDRESS = -3L;
+
+    /**
+     * Constant for committing a transaction which did not
+     * modify the log at all.
+     */
+    public static final long NOWRITE_ADDRESS = -4L;
+
+    /**
+     * The ID of the transaction. This is used for tracking only, it is
+     * NOT recorded in the log.
+     */
+    @SuppressWarnings(&quot;checkstyle:abbreviationaswordinname&quot;)
+<span class="nc" id="L91">    @Getter</span>
+    public UUID transactionID;
+
+    /**
+     * The builder used to create this transaction.
+     */
+<span class="nc" id="L97">    @Getter</span>
+    public final Transaction transaction;
+
+    /**
+     * The start time of the context.
+     */
+<span class="nc" id="L103">    @Getter</span>
+    public final long startTime;
+
+    /**
+     * The global-log position that the transaction snapshots in all reads.
+     */
+<span class="nc bnc" id="L109" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+    private final Token snapshotTimestamp = obtainSnapshotTimestamp();
+
+    /**
+     * The address that the transaction was committed at.
+     */
+<span class="nc" id="L115">    @Getter</span>
+    public long commitAddress = AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
+
+    /**
+     * The parent context of this transaction, if in a nested transaction.
+     */
+<span class="nc" id="L121">    @Getter</span>
+    private final AbstractTransactionalContext parentContext;
+
+<span class="nc" id="L124">    @Getter</span>
+    private final WriteSetInfo writeSetInfo = new WriteSetInfo();
+
+<span class="nc" id="L127">    @Getter</span>
+    private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
+
+    /**
+     * A future which gets completed when this transaction commits.
+     * It is completed exceptionally when the transaction aborts.
+     */
+<span class="nc" id="L134">    @Getter</span>
+    public CompletableFuture&lt;Boolean&gt; completionFuture =
+            new CompletableFuture&lt;&gt;();
+
+    /**
+     * Cache of last known position of streams accessed in this transaction.
+     */
+<span class="nc" id="L141">    @Getter</span>
+    private final Map&lt;UUID, Long&gt; knownStreamPosition = new HashMap&lt;&gt;();
+
+    /**
+     * Metrics related fields for registry and the context marking the beginning of a transaction.
+     */
+<span class="nc" id="L147">    @Getter</span>
+<span class="nc" id="L148">    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();</span>
+<span class="nc" id="L149">    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +</span>
+            &quot;txn-op-duration&quot;;
+<span class="nc" id="L151">    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);</span>
+<span class="nc" id="L152">    @Getter</span>
+    private final Timer.Context txOpDurationContext;
+
+<span class="nc" id="L155">    AbstractTransactionalContext(Transaction transaction) {</span>
+<span class="nc" id="L156">        transactionID = UUID.randomUUID();</span>
+<span class="nc" id="L157">        this.transaction = transaction;</span>
+
+<span class="nc" id="L159">        startTime = System.currentTimeMillis();</span>
+
+<span class="nc" id="L161">        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);</span>
+
+<span class="nc" id="L163">        parentContext = TransactionalContext.getCurrentContext();</span>
+
+<span class="nc" id="L165">        AbstractTransactionalContext.log.debug(&quot;TXBegin[{}]&quot;, this);</span>
+<span class="nc" id="L166">    }</span>
+
+    /**
+     * Access the state of the object.
+     *
+     * @param proxy          The proxy to access the state for.
+     * @param accessFunction The function to execute, which will be provided with the state
+     *                       of the object.
+     * @param conflictObject Fine-grained conflict information, if available.
+     * @param &lt;R&gt;            The return type of the access function.
+     * @param &lt;T&gt;            The type of the proxy's underlying object.
+     * @return The return value of the access function.
+     */
+    public abstract &lt;R, T&gt; R access(ICorfuSMRProxyInternal&lt;T&gt; proxy,
+                                    ICorfuSMRAccess&lt;R, T&gt; accessFunction,
+                                    Object[] conflictObject);
+
+    /**
+     * Get the result of an upcall.
+     *
+     * @param proxy          The proxy to retrieve the upcall for.
+     * @param timestamp      The timestamp to return the upcall for.
+     * @param conflictObject Fine-grained conflict information, if available.
+     * @param &lt;T&gt;            The type of the proxy's underlying object.
+     * @return The result of the upcall.
+     */
+    public abstract &lt;T&gt; Object getUpcallResult(ICorfuSMRProxyInternal&lt;T&gt; proxy,
+                                               long timestamp,
+                                               Object[] conflictObject);
+
+    public void syncWithRetryUnsafe(VersionLockedObject vlo,
+                                    Token snapshotTimestamp,
+                                    ICorfuSMRProxyInternal proxy,
+                                    @Nullable Consumer&lt;VersionLockedObject&gt; optimisticStreamSetter) {
+<span class="nc bnc" id="L200" title="All 2 branches missed.">        for (int x = 0; x &lt; this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {</span>
+            try {
+<span class="nc bnc" id="L202" title="All 2 branches missed.">                if (optimisticStreamSetter != null) {</span>
+                    // Swap ourselves to be the active optimistic stream.
+                    // Inside setAsOptimisticStream, if there are
+                    // currently optimistic updates on the object, we
+                    // roll them back.  Then, we set this context as  the
+                    // object's new optimistic context.
+<span class="nc" id="L208">                    optimisticStreamSetter.accept(vlo);</span>
+                }
+<span class="nc" id="L210">                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());</span>
+<span class="nc" id="L211">                break;</span>
+<span class="nc" id="L212">            } catch (TrimmedException te) {</span>
+                // If a trim is encountered, we must reset the object
+<span class="nc" id="L214">                vlo.resetUnsafe();</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">                if (!te.isRetriable()</span>
+<span class="nc bnc" id="L216" title="All 2 branches missed.">                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {</span>
+                    // abort the transaction
+<span class="nc" id="L218">                    TransactionAbortedException tae =</span>
+                            new TransactionAbortedException(
+<span class="nc" id="L220">                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),</span>
+<span class="nc" id="L221">                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),</span>
+<span class="nc" id="L222">                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);</span>
+<span class="nc" id="L223">                    abortTransaction(tae);</span>
+<span class="nc" id="L224">                    throw tae;</span>
+                }
+            }
+        }
+<span class="nc" id="L228">    }</span>
+
+    /**
+     * Log an SMR update to the Corfu log.
+     *
+     * @param proxy          The proxy which generated the update.
+     * @param updateEntry    The entry which we are writing to the log.
+     * @param conflictObject Fine-grained conflict information, if available.
+     * @param &lt;T&gt;            The type of the proxy's underlying object.
+     * @return The address the update was written at.
+     */
+    public abstract &lt;T&gt; long logUpdate(ICorfuSMRProxyInternal&lt;T&gt; proxy, SMREntry updateEntry,
+                                       Object[] conflictObject);
+
+    /**
+     * Add a given transaction to this transactional context, merging
+     * the read and write sets.
+     *
+     * @param tc The transactional context to merge.
+     */
+    public abstract void addTransaction(AbstractTransactionalContext tc);
+
+    /**
+     * Commit the transaction to the log.
+     *
+     * @throws TransactionAbortedException If the transaction is aborted.
+     */
+    public long commitTransaction() throws TransactionAbortedException {
+<span class="nc" id="L256">        completionFuture.complete(true);</span>
+<span class="nc" id="L257">        return NOWRITE_ADDRESS;</span>
+    }
+
+    /**
+     * Forcefully abort the transaction.
+     */
+    public void abortTransaction(TransactionAbortedException ae) {
+<span class="nc" id="L264">        AbstractTransactionalContext.log.debug(&quot;TXAbort[{}]&quot;, this);</span>
+<span class="nc" id="L265">        commitAddress = ABORTED_ADDRESS;</span>
+<span class="nc" id="L266">        completionFuture</span>
+<span class="nc" id="L267">                .completeExceptionally(ae);</span>
+<span class="nc" id="L268">    }</span>
+
+    /**
+     * Retrieves the current tail from the sequencer, if this
+     * is a nested transaction, then inherit the snapshot
+     * time from the parent transaction.
+     *
+     * @return the current global tail
+     */
+    private Token obtainSnapshotTimestamp() {
+<span class="nc" id="L278">        final AbstractTransactionalContext parentCtx = getParentContext();</span>
+<span class="nc" id="L279">        final Token txnBuilderTs = getTransaction().getSnapshot();</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        if (parentCtx != null) {</span>
+            // If we're in a nested transaction, the first read timestamp
+            // needs to come from the root.
+<span class="nc" id="L283">            Token parentTimestamp = parentCtx.getSnapshotTimestamp();</span>
+<span class="nc" id="L284">            log.trace(&quot;obtainSnapshotTimestamp: inheriting parent snapshot&quot; +</span>
+                    &quot; SnapshotTimestamp[{}] {}&quot;, this, parentTimestamp);
+<span class="nc" id="L286">            return parentTimestamp;</span>
+<span class="nc bnc" id="L287" title="All 2 branches missed.">        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {</span>
+<span class="nc" id="L288">            log.trace(&quot;obtainSnapshotTimestamp: using user defined snapshot&quot; +</span>
+                    &quot; SnapshotTimestamp[{}] {}&quot;, this, txnBuilderTs);
+<span class="nc" id="L290">            return txnBuilderTs;</span>
+        } else {
+            // Otherwise, fetch a read token from the sequencer the linearize
+            // ourselves against.
+<span class="nc" id="L294">            Token timestamp = getTransaction()</span>
+<span class="nc" id="L295">                    .getRuntime()</span>
+<span class="nc" id="L296">                    .getSequencerView()</span>
+<span class="nc" id="L297">                    .query()</span>
+<span class="nc" id="L298">                    .getToken();</span>
+<span class="nc" id="L299">            log.trace(&quot;obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}&quot;, this, timestamp);</span>
+<span class="nc" id="L300">            return timestamp;</span>
+        }
+    }
+
+    /**
+     * Add the proxy and conflict-params information to our read set.
+     *
+     * @param proxy           The proxy to add
+     * @param conflictObjects The fine-grained conflict information, if
+     *                        available.
+     */
+    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+<span class="nc" id="L312">        getReadSetInfo().add(proxy, conflictObjects);</span>
+<span class="nc" id="L313">    }</span>
+
+    /**
+     * Merge another readSet into this one.
+     *
+     * @param other  Source readSet to merge in
+     */
+    void mergeReadSetInto(ConflictSetInfo other) {
+<span class="nc" id="L321">        getReadSetInfo().mergeInto(other);</span>
+<span class="nc" id="L322">    }</span>
+
+    /**
+     * Add an update to the transaction optimistic write-set.
+     *
+     * @param proxy           the SMR object for this update
+     * @param updateEntry     the update
+     * @param conflictObjects the conflict objects to add
+     * @return a synthetic &quot;address&quot; in the write-set, to be used for
+     *     checking upcall results
+     */
+    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
+            conflictObjects) {
+<span class="nc" id="L335">        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);</span>
+    }
+
+    /**
+     * collect all the conflict-params from the write-set for this transaction
+     * into a set.
+     *
+     * @return A set of longs representing all the conflict params
+     */
+    Map&lt;UUID, Set&lt;byte[]&gt;&gt; collectWriteConflictParams() {
+<span class="nc" id="L345">        return getWriteSetInfo().getHashedConflictSet();</span>
+    }
+
+    void mergeWriteSetInto(WriteSetInfo other) {
+<span class="nc" id="L349">        getWriteSetInfo().mergeInto(other);</span>
+<span class="nc" id="L350">    }</span>
+
+    /**
+     * convert our write set into a new MultiObjectSMREntry.
+     *
+     * @return  the write set
+     */
+    MultiObjectSMREntry collectWriteSetEntries() {
+<span class="nc" id="L358">        return getWriteSetInfo().getWriteSet();</span>
+    }
+
+    /**
+     * Helper function to get a write set for a particular stream.
+     *
+     * @param id The stream to get a append set for.
+     * @return The append set for that stream, as an ordered list.
+     */
+    List&lt;SMREntry&gt; getWriteSetEntryList(UUID id) {
+<span class="nc" id="L368">        return getWriteSetInfo().getWriteSet().getSMRUpdates(id);</span>
+    }
+
+    int getWriteSetEntrySize(UUID id) {
+<span class="nc" id="L372">        return getWriteSetInfo()</span>
+<span class="nc" id="L373">                .getWriteSet()</span>
+<span class="nc" id="L374">                .getSMRUpdates(id)</span>
+<span class="nc" id="L375">                .size();</span>
+    }
+
+    /**
+     * Transactions are ordered by their snapshot timestamp.
+     */
+    @Override
+    public int compareTo(AbstractTransactionalContext o) {
+<span class="nc" id="L383">        return this.getSnapshotTimestamp()</span>
+<span class="nc" id="L384">                .compareTo(o.getSnapshotTimestamp());</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L389">        return &quot;TX[&quot; + Utils.toReadableId(transactionID) + &quot;]&quot;;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

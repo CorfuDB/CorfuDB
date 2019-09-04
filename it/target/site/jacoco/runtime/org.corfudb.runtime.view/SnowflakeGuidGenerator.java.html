@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>SnowflakeGuidGenerator.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime.view</a> &gt; <span class="el_source">SnowflakeGuidGenerator.java</span></div><h1>SnowflakeGuidGenerator.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime.view;
+
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Fast Globally Unique Identity (GUID) generator that returns compact ids
+ * having a notion of a universal comparable ordering.
+ *
+ * Created by Sundar Sridharan on 5/22/19.
+ */
+public class SnowflakeGuidGenerator implements OrderedGuidGenerator {
+    private static final short NODE_MAX_VAL = 1023;
+    private static final int NODE_SHIFT_LONG = 10;
+    private static final int NODE_SHIFT_UUID = 53;
+    private static final short SEQ_MAX_VAL = 4095;
+    private static final int SEQ_SHIFT = 12;
+
+    private final short node;
+    private final AtomicInteger sequence;
+
+    /**
+     * Please pass something unique to this node.
+     * For example:
+     *      UUID nodeId = UUID.fromString(&quot;mac_address_of_machine&quot;);
+     *      SnowflakeGuidGenerator guidGenerator = new SnowflakeGuidGenerator(nodeId.node());
+     * @param node - Simple integer representing the current node.
+     */
+<span class="nc" id="L29">    public SnowflakeGuidGenerator(long node) {</span>
+<span class="nc" id="L30">        this.node = (short)(node &amp; NODE_MAX_VAL);</span>
+<span class="nc" id="L31">        sequence = new AtomicInteger(0);</span>
+<span class="nc" id="L32">    }</span>
+
+    /**
+     * Fast best effort generation scheme for compact snowflake generation.
+     *    ______________________________________________
+     *   | timestamp lower 42 bits | Node Id | Sequence |
+     *    ------------------------- --------- ----------
+     *    &lt;------ 42 bits ---------&gt;&lt;-10bits-&gt;&lt;-12bits--&gt;
+     * @return The next 64-bit integer.
+     */
+    @Override
+    public long nextLong() {
+<span class="nc" id="L44">        long currentTime = System.currentTimeMillis();</span>
+<span class="nc" id="L45">        long counter = this.sequence.incrementAndGet() &amp; SEQ_MAX_VAL;</span>
+<span class="nc" id="L46">        return currentTime &lt;&lt; NODE_SHIFT_LONG &lt;&lt; SEQ_SHIFT</span>
+                | node &lt;&lt; SEQ_SHIFT
+                | counter;
+    }
+
+    /**
+     * Fast best effort generation scheme for snowflake generation.
+     *    ____________________________________________________
+     *   | timestamp 8 bytes      | Node Id  | Sequence       |
+     *    ------------------------- --------------------------
+     *    &lt;------ 64 bits --------&gt;&lt;-10bits--&gt;&lt;----54 bits----&gt;
+     * @return a higher resolution unique identifier.
+     */
+    @Override
+    public UUID nextUUID() {
+<span class="nc" id="L61">        long currentTime = System.currentTimeMillis();</span>
+<span class="nc" id="L62">        long counter = this.sequence.incrementAndGet();</span>
+<span class="nc" id="L63">        counter |= node &lt;&lt; NODE_SHIFT_UUID;</span>
+<span class="nc" id="L64">        return new UUID(currentTime, counter);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

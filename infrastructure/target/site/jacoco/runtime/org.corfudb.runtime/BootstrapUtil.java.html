@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>BootstrapUtil.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">infrastructure</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.runtime</a> &gt; <span class="el_source">BootstrapUtil.java</span></div><h1>BootstrapUtil.java</h1><pre class="source lang-java linenums">package org.corfudb.runtime;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.clients.BaseHandler;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
+
+import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Utility to bootstrap a cluster.
+ *
+ * &lt;p&gt;Created by zlokhandwala on 1/19/18.
+ */
+<span class="nc" id="L29">@Slf4j</span>
+public class BootstrapUtil {
+
+<span class="nc" id="L32">    private BootstrapUtil() {</span>
+        // prevent instantiation of this class
+<span class="nc" id="L34">    }</span>
+
+    /**
+     * Bootstraps the given layout.
+     * Attempts to bootstrap each node finite number of times.
+     * If the retries are exhausted, the utility throws the responsible exception.
+     *
+     * @param layout       Layout to bootstrap the cluster.
+     * @param retries      Number of retries to bootstrap each node before giving up.
+     * @param retryDuration Duration between retries.
+     */
+<span class="nc bnc" id="L45" title="All 2 branches missed.">    public static void bootstrap(@NonNull Layout layout,</span>
+                                 int retries,
+<span class="nc bnc" id="L47" title="All 2 branches missed.">                                 @NonNull Duration retryDuration) {</span>
+<span class="nc" id="L48">        bootstrap(layout, CorfuRuntimeParameters.builder().build(), retries, retryDuration);</span>
+<span class="nc" id="L49">    }</span>
+
+    /**
+     * Bootstraps a layout server connected to the specified router.
+     *
+     * @param router Router connected to the node.
+     * @param layout Layout to bootstrap with
+     */
+    private static void bootstrapLayoutServer(IClientRouter router, Layout layout)
+            throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
+<span class="nc" id="L59">        LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch());</span>
+
+        try {
+<span class="nc" id="L62">            CFUtils.getUninterruptibly(layoutClient.bootstrapLayout(layout),</span>
+                    AlreadyBootstrappedException.class);
+<span class="nc" id="L64">        } catch (AlreadyBootstrappedException abe) {</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">            if (!layoutClient.getLayout().get().equals(layout)) {</span>
+<span class="nc" id="L66">                log.error(&quot;BootstrapUtil: Layout Server {}:{} already bootstrapped with different &quot;</span>
+<span class="nc" id="L67">                        + &quot;layout.&quot;, router.getHost(), router.getPort());</span>
+<span class="nc" id="L68">                throw abe;</span>
+            }
+<span class="nc" id="L70">        }</span>
+<span class="nc" id="L71">    }</span>
+
+    /**
+     * Bootstraps a management server connected to the specified router.
+     *
+     * @param router Router connected to the node.
+     * @param layout Layout to bootstrap with
+     */
+    private static void bootstrapManagementServer(IClientRouter router, Layout layout)
+            throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
+<span class="nc" id="L81">        ManagementClient managementClient</span>
+<span class="nc" id="L82">                = new ManagementClient(router, layout.getEpoch());</span>
+
+        try {
+<span class="nc" id="L85">            CFUtils.getUninterruptibly(managementClient.bootstrapManagement(layout),</span>
+                    AlreadyBootstrappedException.class);
+<span class="nc" id="L87">        } catch (AlreadyBootstrappedException abe) {</span>
+<span class="nc bnc" id="L88" title="All 2 branches missed.">            if (!managementClient.getLayout().get().equals(layout)) {</span>
+<span class="nc" id="L89">                log.error(&quot;BootstrapUtil: Management Server {}:{} already bootstrapped with &quot;</span>
+<span class="nc" id="L90">                        + &quot;different layout.&quot;, router.getHost(), router.getPort());</span>
+<span class="nc" id="L91">                throw abe;</span>
+            }
+<span class="nc" id="L93">        }</span>
+<span class="nc" id="L94">    }</span>
+
+    /**
+     * Bootstraps the given layout.
+     * Attempts to bootstrap each node finite number of times.
+     * If the retries are exhausted, the utility throws the responsible exception.
+     *
+     * @param layout                 Layout to bootstrap the cluster.
+     * @param corfuRuntimeParameters CorfuRuntimeParameters can specify security parameters.
+     * @param retries                Number of retries to bootstrap each node before giving up.
+     * @param retryDuration          Duration between retries.
+     */
+<span class="nc bnc" id="L106" title="All 2 branches missed.">    public static void bootstrap(@NonNull Layout layout,</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">                                 @NonNull CorfuRuntimeParameters corfuRuntimeParameters,</span>
+                                 int retries,
+<span class="nc bnc" id="L109" title="All 2 branches missed.">                                 @NonNull Duration retryDuration) {</span>
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        for (String server : layout.getAllServers()) {</span>
+<span class="nc" id="L111">            int retry = retries;</span>
+
+<span class="nc" id="L113">            IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),</span>
+                    corfuRuntimeParameters);
+<span class="nc" id="L115">            router.addClient(new LayoutHandler())</span>
+<span class="nc" id="L116">                    .addClient(new ManagementHandler())</span>
+<span class="nc" id="L117">                    .addClient(new BaseHandler());</span>
+
+<span class="nc bnc" id="L119" title="All 2 branches missed.">            while (retry-- &gt; 0) {</span>
+                try {
+<span class="nc" id="L121">                    log.info(&quot;Attempting to bootstrap node: {} with layout:{}&quot;, server, layout);</span>
+<span class="nc" id="L122">                    bootstrapLayoutServer(router, layout);</span>
+<span class="nc" id="L123">                    bootstrapManagementServer(router, layout);</span>
+<span class="nc" id="L124">                    break;</span>
+<span class="nc" id="L125">                } catch (AlreadyBootstrappedException abe) {</span>
+<span class="nc" id="L126">                    log.error(&quot;Bootstrapping node: {} failed with exception:&quot;, server, abe);</span>
+<span class="nc" id="L127">                    log.error(&quot;Cannot retry since already bootstrapped.&quot;);</span>
+<span class="nc" id="L128">                    throw new RuntimeException(abe);</span>
+<span class="nc" id="L129">                } catch (Exception e) {</span>
+<span class="nc" id="L130">                    log.error(&quot;Bootstrapping node: {} failed with exception:&quot;, server, e);</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">                    if (retry == 0) {</span>
+<span class="nc" id="L132">                        throw new RetryExhaustedException(&quot;Bootstrapping node: retry exhausted&quot;);</span>
+                    }
+<span class="nc" id="L134">                    log.warn(&quot;Retrying bootstrap {} times in {}ms.&quot;, retry, retryDuration.toMillis());</span>
+<span class="nc" id="L135">                    Sleep.sleepUninterruptibly(retryDuration);</span>
+<span class="nc" id="L136">                }</span>
+            }
+
+<span class="nc" id="L139">            router.stop();</span>
+<span class="nc" id="L140">        }</span>
+<span class="nc" id="L141">        log.info(&quot;Successfully Bootstrapped layout:{} .&quot;, layout);</span>
+<span class="nc" id="L142">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

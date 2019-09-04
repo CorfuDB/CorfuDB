@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>BaseServer.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">universe</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">BaseServer.java</span></div><h1>BaseServer.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import io.netty.channel.ChannelHandlerContext;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
+import java.net.InetSocketAddress;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * Created by mwei on 12/8/15.
+ */
+<span class="nc" id="L25">@Slf4j</span>
+public class BaseServer extends AbstractServer {
+
+    final ServerContext serverContext;
+
+    private final ExecutorService executor;
+
+    @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+<span class="nc bnc" id="L34" title="All 2 branches missed.">        return getState() == ServerState.READY;</span>
+    }
+
+    @Override
+    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
+<span class="nc" id="L39">        return executor;</span>
+    }
+
+    @Override
+    public List&lt;ExecutorService&gt; getExecutors() {
+<span class="nc" id="L44">        return Collections.singletonList(executor);</span>
+    }
+
+<span class="nc" id="L47">    public BaseServer(@Nonnull ServerContext context) {</span>
+<span class="nc" id="L48">        this.serverContext = context;</span>
+<span class="nc" id="L49">        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),</span>
+                new ServerThreadFactory(&quot;baseServer-&quot;, new ServerThreadFactory.ExceptionHandler()));
+<span class="nc" id="L51">    }</span>
+
+    /** Handler for the base server. */
+<span class="nc" id="L54">    @Getter</span>
+    private final CorfuMsgHandler handler =
+<span class="nc" id="L56">            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);</span>
+
+    /**
+     * Respond to a ping message.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.PING)
+    private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc" id="L67">        r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());</span>
+<span class="nc" id="L68">    }</span>
+
+    /**
+     * Respond to a keep alive message.
+     * Note: this message ignores epoch.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.KEEP_ALIVE)
+    private void keepAlive(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc" id="L80">        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());</span>
+<span class="nc" id="L81">    }</span>
+
+    /**
+     * Respond to a version request message.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.VERSION_REQUEST)
+    private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc" id="L92">        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),</span>
+<span class="nc" id="L93">                                         serverContext.getNodeIdBase64());</span>
+<span class="nc" id="L94">        r.sendResponse(ctx, msg, new JSONPayloadMsg&lt;&gt;(vi, CorfuMsgType.VERSION_RESPONSE));</span>
+<span class="nc" id="L95">    }</span>
+
+    /**
+     * Respond to a epoch change message.
+     * This method also executes sealing logic on each individual server type.
+     *
+     * @param msg The incoming message
+     * @param ctx The channel context
+     * @param r   The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.SEAL)
+<span class="nc bnc" id="L106" title="All 2 branches missed.">    public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg&lt;Long&gt; msg,</span>
+                                                   ChannelHandlerContext ctx,
+<span class="nc bnc" id="L108" title="All 2 branches missed.">                                                   @NonNull IServerRouter r) {</span>
+        try {
+<span class="nc" id="L110">            long epoch = msg.getPayload();</span>
+            String remoteHostAddress;
+            try {
+<span class="nc" id="L113">                remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();</span>
+<span class="nc" id="L114">            } catch (NullPointerException e) {</span>
+<span class="nc" id="L115">                remoteHostAddress = &quot;unavailable&quot;;</span>
+<span class="nc" id="L116">            }</span>
+<span class="nc" id="L117">            log.info(&quot;handleMessageSetEpoch: Received SEAL from (clientId={}:{}), moving to new epoch {}&quot;,</span>
+<span class="nc" id="L118">                    msg.getClientID(), remoteHostAddress, epoch);</span>
+<span class="nc" id="L119">            serverContext.setServerEpoch(epoch, r);</span>
+<span class="nc" id="L120">            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());</span>
+<span class="nc" id="L121">        } catch (WrongEpochException e) {</span>
+<span class="nc" id="L122">            log.debug(&quot;handleMessageSetEpoch: Rejected SEAL current={}, requested={}&quot;,</span>
+<span class="nc" id="L123">                    e.getCorrectEpoch(), msg.getPayload());</span>
+<span class="nc" id="L124">            r.sendResponse(ctx, msg,</span>
+<span class="nc" id="L125">                    new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));</span>
+<span class="nc" id="L126">        }</span>
+<span class="nc" id="L127">    }</span>
+
+    /**
+     * Reset the JVM. This mechanism leverages that corfu_server runs in a bash script
+     * which monitors the exit code of Corfu. If the exit code is 100, then it resets
+     * the server and DELETES ALL EXISTING DATA.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.RESET)
+    private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc" id="L140">        log.warn(&quot;Remote reset requested from client {}&quot;, msg.getClientID());</span>
+<span class="nc" id="L141">        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());</span>
+<span class="nc" id="L142">        CorfuServer.restartServer(true);</span>
+<span class="nc" id="L143">    }</span>
+
+    /**
+     * Restart the JVM. This mechanism leverages that corfu_server runs in a bash script
+     * which monitors the exit code of Corfu. If the exit code is 200, then it restarts
+     * the server.
+     *
+     * @param msg   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.RESTART)
+    private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+<span class="nc" id="L156">        log.warn(&quot;Remote restart requested from client {}&quot;, msg.getClientID());</span>
+<span class="nc" id="L157">        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());</span>
+<span class="nc" id="L158">        CorfuServer.restartServer(false);</span>
+<span class="nc" id="L159">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

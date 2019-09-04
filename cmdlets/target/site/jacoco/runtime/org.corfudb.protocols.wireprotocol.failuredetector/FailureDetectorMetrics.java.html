@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>FailureDetectorMetrics.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">cmdlets</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol.failuredetector</a> &gt; <span class="el_source">FailureDetectorMetrics.java</span></div><h1>FailureDetectorMetrics.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol.failuredetector;
+
+import io.netty.buffer.ByteBuf;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
+import org.corfudb.util.JsonUtils;
+
+import java.util.List;
+import java.util.NavigableSet;
+import java.util.TreeSet;
+
+/**
+ * Full information about failure that changed cluster state.
+ * It can be saved in history and provide full information about a cluster and a failure.
+ * The decision made by a node can be reproduced using this information.
+ */
+<span class="nc" id="L18">@Builder</span>
+<span class="nc" id="L19">@AllArgsConstructor</span>
+public class FailureDetectorMetrics implements ICorfuPayload&lt;FailureDetectorMetrics&gt; {
+    //state
+    private final String localNode;
+    private final ConnectivityGraph graph;
+
+    //action
+    private final FailureDetectorAction action;
+    private final NodeRank failed;
+    private final NodeRank healed;
+
+    //layout
+    private final List&lt;String&gt; layout;
+    private final List&lt;String&gt; unresponsiveNodes;
+    private final long epoch;
+
+    public String toJson(){
+<span class="nc" id="L36">        return JsonUtils.toJson(this);</span>
+    }
+
+<span class="nc" id="L39">    public FailureDetectorMetrics(ByteBuf buf) {</span>
+<span class="nc" id="L40">        localNode = ICorfuPayload.fromBuffer(buf, String.class);</span>
+<span class="nc" id="L41">        graph = ICorfuPayload.fromBuffer(buf, ConnectivityGraph.class);</span>
+<span class="nc" id="L42">        action = FailureDetectorAction.valueOf(ICorfuPayload.fromBuffer(buf, String.class));</span>
+<span class="nc" id="L43">        failed = ICorfuPayload.fromBuffer(buf, NodeRank.class);</span>
+<span class="nc" id="L44">        healed = ICorfuPayload.fromBuffer(buf, NodeRank.class);</span>
+<span class="nc" id="L45">        layout = ICorfuPayload.listFromBuffer(buf, String.class);</span>
+<span class="nc" id="L46">        unresponsiveNodes = ICorfuPayload.listFromBuffer(buf, String.class);</span>
+<span class="nc" id="L47">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="nc" id="L48">    }</span>
+
+    @Override
+    public void doSerialize(ByteBuf buf) {
+<span class="nc" id="L52">        ICorfuPayload.serialize(buf, localNode);</span>
+<span class="nc" id="L53">        ICorfuPayload.serialize(buf, graph);</span>
+<span class="nc" id="L54">        ICorfuPayload.serialize(buf, action.name());</span>
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        ICorfuPayload.serialize(buf, failed == null ? NodeRank.EMPTY_NODE_RANK: failed);</span>
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        ICorfuPayload.serialize(buf, healed == null ? NodeRank.EMPTY_NODE_RANK: healed);</span>
+<span class="nc" id="L57">        ICorfuPayload.serialize(buf, layout);</span>
+<span class="nc" id="L58">        ICorfuPayload.serialize(buf, unresponsiveNodes);</span>
+<span class="nc" id="L59">        ICorfuPayload.serialize(buf, epoch);</span>
+<span class="nc" id="L60">    }</span>
+
+<span class="nc" id="L62">    public enum FailureDetectorAction {</span>
+<span class="nc" id="L63">        FAIL, HEAL, EXTERNAL_UPDATE</span>
+    }
+
+    /**
+     * Simplified version of a ClusterGraph, contains only connectivity information.
+     */
+<span class="nc" id="L69">    @AllArgsConstructor</span>
+    public static class ConnectivityGraph implements ICorfuPayload&lt;ConnectivityGraph&gt; {
+        private final NavigableSet&lt;NodeConnectivity&gt; graph;
+
+<span class="nc" id="L73">        public ConnectivityGraph(ByteBuf buf){</span>
+<span class="nc" id="L74">            graph = new TreeSet&lt;&gt;(ICorfuPayload.setFromBuffer(buf, NodeConnectivity.class));</span>
+<span class="nc" id="L75">        }</span>
+
+        @Override
+        public void doSerialize(ByteBuf buf) {
+<span class="nc" id="L79">            ICorfuPayload.serialize(buf, graph);</span>
+<span class="nc" id="L80">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

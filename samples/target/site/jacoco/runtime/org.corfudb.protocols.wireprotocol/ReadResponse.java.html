@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>ReadResponse.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">samples</a> &gt; <a href="../index.html" class="el_bundle">runtime</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.protocols.wireprotocol</a> &gt; <span class="el_source">ReadResponse.java</span></div><h1>ReadResponse.java</h1><pre class="source lang-java linenums">package org.corfudb.protocols.wireprotocol;
+
+import io.netty.buffer.ByteBuf;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Getter;
+
+/**
+ * Created by mwei on 8/15/16.
+ */
+<span class="nc bnc" id="L15" title="All 14 branches missed.">@Data</span>
+<span class="nc" id="L16">@AllArgsConstructor</span>
+public class ReadResponse implements ICorfuPayload&lt;ReadResponse&gt; {
+
+<span class="nc" id="L19">    @Getter</span>
+    Map&lt;Long, LogData&gt; addresses;
+
+<span class="nc" id="L22">    public ReadResponse(ByteBuf buf) {</span>
+<span class="nc" id="L23">        addresses = ICorfuPayload.mapFromBuffer(buf, Long.class, LogData.class);</span>
+<span class="nc" id="L24">    }</span>
+
+<span class="nc" id="L26">    public ReadResponse() {</span>
+<span class="nc" id="L27">        addresses = new HashMap&lt;Long, LogData&gt;();</span>
+<span class="nc" id="L28">    }</span>
+
+    public void put(Long address, LogData data) {
+<span class="nc" id="L31">        addresses.put(address, data);</span>
+<span class="nc" id="L32">    }</span>
+
+    @Override
+    public void doSerialize(ByteBuf buf) {
+<span class="nc" id="L36">        ICorfuPayload.serialize(buf, addresses);</span>
+<span class="nc" id="L37">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

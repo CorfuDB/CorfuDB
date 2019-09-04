@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../../jacoco-resources/report.gif" type="image/gif"/><title>CorfuServerNode.java</title><link rel="stylesheet" href="../../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../../index.html" class="el_report">debian</a> &gt; <a href="../index.html" class="el_bundle">infrastructure</a> &gt; <a href="index.source.html" class="el_package">org.corfudb.infrastructure</a> &gt; <span class="el_source">CorfuServerNode.java</span></div><h1>CorfuServerNode.java</h1><pre class="source lang-java linenums">package org.corfudb.infrastructure;
+
+import com.google.common.collect.ImmutableMap;
+
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
+
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
+import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Version;
+
+
+/**
+ * Created by zlokhandwala on 2019-05-06.
+ */
+<span class="nc" id="L47">@Slf4j</span>
+public class CorfuServerNode implements AutoCloseable {
+
+<span class="nc" id="L50">    @Getter</span>
+    private final ServerContext serverContext;
+
+<span class="nc" id="L53">    @Getter</span>
+    private final Map&lt;Class, AbstractServer&gt; serverMap;
+
+<span class="nc" id="L56">    @Getter</span>
+    private final NettyServerRouter router;
+
+    // This flag makes the closing of the CorfuServer idempotent.
+    private final AtomicBoolean close;
+
+    private ChannelFuture bindFuture;
+
+    /**
+     * Corfu Server initialization.
+     *
+     * @param serverContext Initialized Server Context.
+     */
+    public CorfuServerNode(@Nonnull ServerContext serverContext) {
+<span class="nc" id="L70">        this(serverContext,</span>
+<span class="nc" id="L71">                ImmutableMap.&lt;Class, AbstractServer&gt;builder()</span>
+<span class="nc" id="L72">                        .put(BaseServer.class, new BaseServer(serverContext))</span>
+<span class="nc" id="L73">                        .put(SequencerServer.class, new SequencerServer(serverContext))</span>
+<span class="nc" id="L74">                        .put(LayoutServer.class, new LayoutServer(serverContext))</span>
+<span class="nc" id="L75">                        .put(LogUnitServer.class, new LogUnitServer(serverContext))</span>
+<span class="nc" id="L76">                        .put(ManagementServer.class, new ManagementServer(serverContext))</span>
+<span class="nc" id="L77">                        .build()</span>
+        );
+<span class="nc" id="L79">    }</span>
+
+    /**
+     * Corfu Server initialization.
+     *
+     * @param serverContext Initialized Server Context.
+     * @param serverMap     Server Map with all components.
+     */
+    public CorfuServerNode(@Nonnull ServerContext serverContext,
+<span class="nc" id="L88">                           @Nonnull Map&lt;Class, AbstractServer&gt; serverMap) {</span>
+<span class="nc" id="L89">        this.serverContext = serverContext;</span>
+<span class="nc" id="L90">        this.serverMap = serverMap;</span>
+<span class="nc" id="L91">        router = new NettyServerRouter(new ArrayList&lt;&gt;(serverMap.values()));</span>
+<span class="nc" id="L92">        this.serverContext.setServerRouter(router);</span>
+<span class="nc" id="L93">        this.close = new AtomicBoolean(false);</span>
+<span class="nc" id="L94">    }</span>
+
+    /**
+     * Start the Corfu Server by listening on the specified port.
+     */
+    public ChannelFuture start() {
+<span class="nc" id="L100">        bindFuture = bindServer(serverContext.getBossGroup(),</span>
+<span class="nc" id="L101">                serverContext.getWorkerGroup(),</span>
+                this::configureBootstrapOptions,
+                serverContext,
+                router,
+<span class="nc" id="L105">                (String) serverContext.getServerConfig().get(&quot;--address&quot;),</span>
+<span class="nc" id="L106">                Integer.parseInt((String) serverContext.getServerConfig().get(&quot;&lt;port&gt;&quot;)));</span>
+
+<span class="nc" id="L108">        return bindFuture.syncUninterruptibly();</span>
+    }
+
+    /**
+     * Wait on Corfu Server Channel until it closes.
+     */
+    public void startAndListen() {
+        // Wait on it to close.
+<span class="nc" id="L116">        this.start().channel().closeFuture().syncUninterruptibly();</span>
+<span class="nc" id="L117">    }</span>
+
+    /**
+     * Closes the currently running corfu server.
+     */
+    @Override
+    public void close() {
+
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (!close.compareAndSet(false, true)) {</span>
+<span class="nc" id="L126">            log.trace(&quot;close: Server already shutdown&quot;);</span>
+<span class="nc" id="L127">            return;</span>
+        }
+
+<span class="nc" id="L130">        log.info(&quot;close: Shutting down Corfu server and cleaning resources&quot;);</span>
+<span class="nc" id="L131">        serverContext.close();</span>
+<span class="nc" id="L132">        bindFuture.channel().close().syncUninterruptibly();</span>
+
+        // A executor service to create the shutdown threads
+        // plus name the threads correctly.
+<span class="nc" id="L136">        final ExecutorService shutdownService = Executors.newFixedThreadPool(serverMap.size(),</span>
+                new ServerThreadFactory(&quot;CorfuServer-shutdown-&quot;,
+                        new ServerThreadFactory.ExceptionHandler()));
+
+        // Turn into a list of futures on the shutdown, returning
+        // generating a log message to inform of the result.
+<span class="nc" id="L142">        CompletableFuture[] shutdownFutures = serverMap.values().stream()</span>
+<span class="nc" id="L143">                .map(server -&gt; CompletableFuture.runAsync(() -&gt; {</span>
+                    try {
+<span class="nc" id="L145">                        log.info(&quot;close: Shutting down {}&quot;, server.getClass().getSimpleName());</span>
+<span class="nc" id="L146">                        server.shutdown();</span>
+<span class="nc" id="L147">                        log.info(&quot;close: Cleanly shutdown {}&quot;, server.getClass().getSimpleName());</span>
+<span class="nc" id="L148">                    } catch (Exception e) {</span>
+<span class="nc" id="L149">                        log.error(&quot;close: Failed to cleanly shutdown {}&quot;,</span>
+<span class="nc" id="L150">                                server.getClass().getSimpleName(), e);</span>
+<span class="nc" id="L151">                    }</span>
+<span class="nc" id="L152">                }, shutdownService))</span>
+<span class="nc" id="L153">                .toArray(CompletableFuture[]::new);</span>
+
+<span class="nc" id="L155">        CompletableFuture.allOf(shutdownFutures).join();</span>
+<span class="nc" id="L156">        shutdownService.shutdown();</span>
+<span class="nc" id="L157">        log.info(&quot;close: Server shutdown and resources released&quot;);</span>
+<span class="nc" id="L158">    }</span>
+
+    /**
+     * Get the requested Corfu server.
+     *
+     * @param serverClass Server class.
+     * @param &lt;T&gt;         Type of server.
+     * @return T Server Object.
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public @Nonnull
+    &lt;T extends AbstractServer&gt; T getServer(@Nonnull Class&lt;T&gt; serverClass) {
+<span class="nc" id="L170">        T server = (T) serverMap.get(serverClass);</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">        if (server == null) {</span>
+<span class="nc" id="L172">            throw new UnrecoverableCorfuError(&quot;Server does not exist&quot;);</span>
+        }
+<span class="nc" id="L174">        return server;</span>
+    }
+
+    /**
+     * A functional interface for receiving and configuring a {@link ServerBootstrap}.
+     */
+    @FunctionalInterface
+    public interface BootstrapConfigurer {
+
+        /**
+         * Configure a {@link ServerBootstrap}.
+         *
+         * @param serverBootstrap The {@link ServerBootstrap} to configure.
+         */
+        void configure(ServerBootstrap serverBootstrap);
+    }
+
+    /**
+     * Bind the Corfu server to the given {@code port} using the provided
+     * {@code channelType}. It is the callers' responsibility to shutdown the
+     * {@link EventLoopGroup}s. For implementations which listen on multiple ports,
+     * {@link EventLoopGroup}s may be reused.
+     *
+     * @param bossGroup           The &quot;boss&quot; {@link EventLoopGroup} which services incoming
+     *                            connections.
+     * @param workerGroup         The &quot;worker&quot; {@link EventLoopGroup} which services incoming
+     *                            requests.
+     * @param bootstrapConfigurer A {@link BootstrapConfigurer} which will receive the
+     *                            {@link ServerBootstrap} to set options.
+     * @param context             A {@link ServerContext} which will be used to configure
+     *                            the server.
+     * @param router              A {@link NettyServerRouter} which will process incoming
+     *                            messages.
+     * @param port                The port the {@link ServerChannel} will be created on.
+     * @return A {@link ChannelFuture} which can be used to wait for the server to be shutdown.
+     */
+    public ChannelFuture bindServer(@Nonnull EventLoopGroup bossGroup,
+                                    @Nonnull EventLoopGroup workerGroup,
+                                    @Nonnull BootstrapConfigurer bootstrapConfigurer,
+                                    @Nonnull ServerContext context,
+                                    @Nonnull NettyServerRouter router,
+                                    String address,
+                                    int port) {
+        try {
+<span class="nc" id="L218">            ServerBootstrap bootstrap = new ServerBootstrap();</span>
+<span class="nc" id="L219">            bootstrap.group(bossGroup, workerGroup)</span>
+<span class="nc" id="L220">                    .channel(context.getChannelImplementation().getServerChannelClass());</span>
+<span class="nc" id="L221">            bootstrapConfigurer.configure(bootstrap);</span>
+
+<span class="nc" id="L223">            bootstrap.childHandler(getServerChannelInitializer(context, router));</span>
+<span class="nc" id="L224">            boolean bindToAllInterfaces =</span>
+<span class="nc" id="L225">                    Optional.ofNullable(context.getServerConfig(Boolean.class, &quot;--bind-to-all-interfaces&quot;))</span>
+<span class="nc" id="L226">                            .orElse(false);</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">            if (bindToAllInterfaces) {</span>
+<span class="nc" id="L228">                log.info(&quot;Corfu Server listening on all interfaces on port:{}&quot;, port);</span>
+<span class="nc" id="L229">                return bootstrap.bind(port).sync();</span>
+            } else {
+<span class="nc" id="L231">                log.info(&quot;Corfu Server listening on {}:{}&quot;, address, port);</span>
+<span class="nc" id="L232">                return bootstrap.bind(address, port).sync();</span>
+            }
+<span class="nc" id="L234">        } catch (InterruptedException ie) {</span>
+<span class="nc" id="L235">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
+        }
+    }
+
+    /**
+     * Configure server bootstrap per-channel options, such as TCP options, etc.
+     *
+     * @param bootstrap The {@link ServerBootstrap} to be configured.
+     */
+    public void configureBootstrapOptions(@Nonnull ServerBootstrap bootstrap) {
+<span class="nc" id="L245">        bootstrap.option(ChannelOption.SO_BACKLOG, 100)</span>
+<span class="nc" id="L246">                .childOption(ChannelOption.SO_KEEPALIVE, true)</span>
+<span class="nc" id="L247">                .childOption(ChannelOption.SO_REUSEADDR, true)</span>
+<span class="nc" id="L248">                .childOption(ChannelOption.TCP_NODELAY, true)</span>
+<span class="nc" id="L249">                .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);</span>
+<span class="nc" id="L250">    }</span>
+
+
+    /**
+     * Obtain a {@link ChannelInitializer} which initializes the channel pipeline
+     * for a new {@link ServerChannel}.
+     *
+     * @param context The {@link ServerContext} to use.
+     * @param router  The {@link NettyServerRouter} to initialize the channel with.
+     * @return A {@link ChannelInitializer} to intialize the channel.
+     */
+    private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
+                                                                  @Nonnull NettyServerRouter router) {
+
+        // Generate the initializer.
+<span class="nc" id="L265">        return new ChannelInitializer() {</span>
+            @Override
+            protected void initChannel(@Nonnull Channel ch) throws Exception {
+
+                // Security variables
+                final SslContext sslContext;
+                final String[] enabledTlsProtocols;
+                final String[] enabledTlsCipherSuites;
+
+                // Security Initialization
+<span class="nc" id="L275">                Boolean tlsEnabled = context.getServerConfig(Boolean.class, &quot;--enable-tls&quot;);</span>
+<span class="nc" id="L276">                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,</span>
+                        &quot;--enable-tls-mutual-auth&quot;);
+<span class="nc bnc" id="L278" title="All 2 branches missed.">                if (tlsEnabled) {</span>
+                    // Get the TLS cipher suites to enable
+<span class="nc" id="L280">                    String ciphs = context.getServerConfig(String.class, &quot;--tls-ciphers&quot;);</span>
+<span class="nc bnc" id="L281" title="All 2 branches missed.">                    if (ciphs != null) {</span>
+<span class="nc" id="L282">                        enabledTlsCipherSuites = Pattern.compile(&quot;,&quot;)</span>
+<span class="nc" id="L283">                                .splitAsStream(ciphs)</span>
+<span class="nc" id="L284">                                .map(String::trim)</span>
+<span class="nc" id="L285">                                .toArray(String[]::new);</span>
+                    } else {
+<span class="nc" id="L287">                        enabledTlsCipherSuites = new String[]{};</span>
+                    }
+
+                    // Get the TLS protocols to enable
+<span class="nc" id="L291">                    String protos = context.getServerConfig(String.class, &quot;--tls-protocols&quot;);</span>
+<span class="nc bnc" id="L292" title="All 2 branches missed.">                    if (protos != null) {</span>
+<span class="nc" id="L293">                        enabledTlsProtocols = Pattern.compile(&quot;,&quot;)</span>
+<span class="nc" id="L294">                                .splitAsStream(protos)</span>
+<span class="nc" id="L295">                                .map(String::trim)</span>
+<span class="nc" id="L296">                                .toArray(String[]::new);</span>
+                    } else {
+<span class="nc" id="L298">                        enabledTlsProtocols = new String[]{};</span>
+                    }
+
+                    try {
+<span class="nc" id="L302">                        sslContext = SslContextConstructor.constructSslContext(true,</span>
+<span class="nc" id="L303">                                context.getServerConfig(String.class, &quot;--keystore&quot;),</span>
+<span class="nc" id="L304">                                context.getServerConfig(String.class, &quot;--keystore-password-file&quot;),</span>
+<span class="nc" id="L305">                                context.getServerConfig(String.class, &quot;--truststore&quot;),</span>
+<span class="nc" id="L306">                                context.getServerConfig(String.class,</span>
+                                        &quot;--truststore-password-file&quot;));
+<span class="nc" id="L308">                    } catch (SSLException e) {</span>
+<span class="nc" id="L309">                        log.error(&quot;Could not build the SSL context&quot;, e);</span>
+<span class="nc" id="L310">                        throw new RuntimeException(&quot;Couldn't build the SSL context&quot;, e);</span>
+<span class="nc" id="L311">                    }</span>
+<span class="nc" id="L312">                } else {</span>
+<span class="nc" id="L313">                    enabledTlsCipherSuites = new String[]{};</span>
+<span class="nc" id="L314">                    enabledTlsProtocols = new String[]{};</span>
+<span class="nc" id="L315">                    sslContext = null;</span>
+                }
+
+<span class="nc" id="L318">                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,</span>
+                        &quot;--enable-sasl-plain-text-auth&quot;);
+
+                // If TLS is enabled, setup the encryption pipeline.
+<span class="nc bnc" id="L322" title="All 2 branches missed.">                if (tlsEnabled) {</span>
+<span class="nc" id="L323">                    SSLEngine engine = sslContext.newEngine(ch.alloc());</span>
+<span class="nc" id="L324">                    engine.setEnabledCipherSuites(enabledTlsCipherSuites);</span>
+<span class="nc" id="L325">                    engine.setEnabledProtocols(enabledTlsProtocols);</span>
+<span class="nc bnc" id="L326" title="All 2 branches missed.">                    if (tlsMutualAuthEnabled) {</span>
+<span class="nc" id="L327">                        engine.setNeedClientAuth(true);</span>
+                    }
+<span class="nc" id="L329">                    ch.pipeline().addLast(&quot;ssl&quot;, new SslHandler(engine));</span>
+                }
+                // Add/parse a length field
+<span class="nc" id="L332">                ch.pipeline().addLast(new LengthFieldPrepender(4));</span>
+<span class="nc" id="L333">                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer</span>
+                        .MAX_VALUE, 0, 4,
+                        0, 4));
+                // If SASL authentication is requested, perform a SASL plain-text auth.
+<span class="nc bnc" id="L337" title="All 2 branches missed.">                if (saslPlainTextAuth) {</span>
+<span class="nc" id="L338">                    ch.pipeline().addLast(&quot;sasl/plain-text&quot;, new</span>
+                            PlainTextSaslNettyServer());
+                }
+                // Transform the framed message into a Corfu message.
+<span class="nc" id="L342">                ch.pipeline().addLast(new NettyCorfuMessageDecoder());</span>
+<span class="nc" id="L343">                ch.pipeline().addLast(new NettyCorfuMessageEncoder());</span>
+<span class="nc" id="L344">                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),</span>
+<span class="nc" id="L345">                        Version.getVersionString() + &quot;(&quot;</span>
+<span class="nc" id="L346">                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + &quot;)&quot;,</span>
+<span class="nc" id="L347">                        context.getServerConfig(String.class, &quot;--HandshakeTimeout&quot;)));</span>
+                // Route the message to the server class.
+<span class="nc" id="L349">                ch.pipeline().addLast(router);</span>
+<span class="nc" id="L350">            }</span>
+        };
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>
