@@ -910,7 +910,7 @@ public class ServerRestartIT extends AbstractIT {
         final int numEntries = 10;
 
         final List<Long> expectedAddresses = new ArrayList<>(
-                Arrays.asList(13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L));
+                Arrays.asList(14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L, 23L));
 
         CorfuRuntime r = null;
         CorfuRuntime runtimeRestart = null;
