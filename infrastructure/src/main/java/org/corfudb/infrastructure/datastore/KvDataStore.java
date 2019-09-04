@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.datastore;
 
 
 import lombok.AllArgsConstructor;
@@ -13,16 +13,7 @@ import lombok.Getter;
  *
  * <p>Created by mdhawan on 7/27/16.
  */
-public interface IDataStore {
-
-    @Deprecated
-    <T> void put(Class<T> tclass, String prefix, String key, T value);
-
-    @Deprecated
-    <T> T get(Class<T> tclass, String prefix, String key);
-
-    @Deprecated
-    <T> void delete(Class<T> tclass, String prefix, String key);
+public interface KvDataStore {
 
     /**
      * Stores a value for a key under a prefix (namespace).
@@ -77,6 +68,29 @@ public interface IDataStore {
          * The class of the value in a data store
          */
         private final Class<T> dataType;
+
+        /**
+         * Build kv record
+         * @param prefix prefix
+         * @param key key name
+         * @param dataType dataType
+         * @param <R> class type
+         * @return kv record
+         */
+        public static <R> KvRecord<R> of(String prefix, String key, Class<R> dataType) {
+            return new KvRecord<>(prefix, key, dataType);
+        }
+
+        /**
+         * Build kv record with empty prefix
+         * @param key key name
+         * @param dataType data type
+         * @param <R> class type
+         * @return kv record
+         */
+        public static <R> KvRecord<R> of(String key, Class<R> dataType) {
+            return of("", key, dataType);
+        }
 
         public String getFullKeyName() {
             return prefix + "_" + key;

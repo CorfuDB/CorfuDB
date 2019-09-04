@@ -378,14 +378,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             }
         });
 
+        // Represents the checkpoint NO_OP entry write
+        history.add(ImmutableMap.copyOf(snapshot));
+
         // Write all CP data + interleaving middle map updates
-        Token globalTail = r.getSequencerView().query().getToken();
-        cpw.appendCheckpoint();
+        Token cpToken = cpw.appendCheckpoint();
         // First write after the current tail should be the start address entry
         // for the checkpoint. Since regular writes are being interleaved with
         // the checkpointer perfectly, the checkpointer will write on every other
         // address (i.e. odd offsets from the base, startAddress)
-        long startAddress = globalTail.getSequence() + 1;
+        long startAddress = cpToken.getSequence() + 1;
         assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
         final long contRecordffset = startAddress + 1;
@@ -450,7 +452,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         .begin();
 
                 assertThat(m2.entrySet())
-                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .describedAs("Snapshot at global log address " + globalAddr + 1)
                         .isEqualTo(expectedHistory.entrySet());
                 r.getObjectsView().TXEnd();
             }

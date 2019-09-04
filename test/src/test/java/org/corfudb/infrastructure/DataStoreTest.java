@@ -10,6 +10,8 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.junit.Test;
 
@@ -20,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Created by mdhawan on 7/29/16.
  */
 public class DataStoreTest extends AbstractCorfuTest {
+
+    private static final KvRecord<String> TEST_RECORD = KvRecord.of("test", "key", String.class);
 
     private DataStore createPersistDataStore(String serviceDir, String numRetention,
                                              Consumer<String> cleanupTask) {
@@ -41,11 +45,11 @@ public class DataStoreTest extends AbstractCorfuTest {
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
-        dataStore.put(String.class, "test", "key", value);
-        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+        dataStore.put(TEST_RECORD, value);
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
 
-        dataStore.put(String.class, "test", "key", "NEW_VALUE");
-        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+        dataStore.put(TEST_RECORD, "NEW_VALUE");
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
     }
 
     @Test
@@ -54,7 +58,7 @@ public class DataStoreTest extends AbstractCorfuTest {
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
-        dataStore.put(String.class, "test", "key", value);
+        dataStore.put(TEST_RECORD, value);
 
         String fileName = PARAMETERS.TEST_TEMP_DIR + File.separator + "test_key" + DataStore.EXTENSION;
         RandomAccessFile dsFile = new RandomAccessFile(fileName, "rw");
@@ -65,7 +69,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
         // Simulate a restart of data store
         final DataStore dataStore2 = createPersistDataStore(serviceDir, numRetention, fn -> { });
-        assertThatThrownBy(() -> dataStore2.get(String.class, "test", "key"))
+        assertThatThrownBy(() -> dataStore2.get(TEST_RECORD))
                 .isInstanceOf(DataCorruptionException.class);
     }
 
@@ -75,14 +79,14 @@ public class DataStoreTest extends AbstractCorfuTest {
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
-        dataStore.put(String.class, "test", "key", value);
+        dataStore.put(TEST_RECORD, value);
 
         // Simulate a restart of data store
         dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
-        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
 
-        dataStore.put(String.class, "test", "key", "NEW_VALUE");
-        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+        dataStore.put(TEST_RECORD, "NEW_VALUE");
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
     }
 
     @Test
@@ -93,13 +97,13 @@ public class DataStoreTest extends AbstractCorfuTest {
 
         for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
-            dataStore.put(String.class, "test", "key", value);
+            dataStore.put(TEST_RECORD, value);
 
             // Simulate a restart of data store
             dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
-            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
-            dataStore.put(String.class, "test", "key", "NEW_VALUE");
-            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+            assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
+            dataStore.put(TEST_RECORD, "NEW_VALUE");
+            assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
         }
     }
 
@@ -122,7 +126,7 @@ public class DataStoreTest extends AbstractCorfuTest {
             prefixesToClean.forEach(prefix -> {
                 String key = epoch + "KEY";
                 String value = UUID.randomUUID().toString();
-                dataStore.put(String.class, prefix, key, value);
+                dataStore.put(KvRecord.of(prefix, key, String.class), value);
             });
 
             prefixesToClean.forEach(prefix -> {
@@ -147,11 +151,11 @@ public class DataStoreTest extends AbstractCorfuTest {
     public void testInMemoryPutGet() {
         DataStore dataStore = createInMemoryDataStore();
         String value = UUID.randomUUID().toString();
-        dataStore.put(String.class, "test", "key", value);
-        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+        dataStore.put(TEST_RECORD, value);
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
 
-        dataStore.put(String.class, "test", "key", "NEW_VALUE");
-        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+        dataStore.put(TEST_RECORD, "NEW_VALUE");
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
 
     }
 
@@ -161,11 +165,11 @@ public class DataStoreTest extends AbstractCorfuTest {
 
         for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
-            dataStore.put(String.class, "test", "key", value);
-            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+            dataStore.put(TEST_RECORD, value);
+            assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
 
-            dataStore.put(String.class, "test", "key", "NEW_VALUE");
-            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+            dataStore.put(TEST_RECORD, "NEW_VALUE");
+            assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
         }
     }
 }
