@@ -13,6 +13,7 @@ import javax.annotation.Nonnull;
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
@@ -87,7 +88,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
-                    if (ld.containsStream(this.id)) {
+                    if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
                         addToResolvedQueue(getCurrentContext(), currentRead, ld);
                         readNext = false;
                     } else {
@@ -180,16 +181,15 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 if (isCheckpointCapable()
                         && Address.isAddress(trimMark)
                         && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
-                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                    "trimmed at address %s and this space is not covered by the " +
-                                    "loaded checkpoint with start address %s, while accessing the " +
-                                    "stream at version %s. Looking for a new checkpoint.",this,
-                            trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
-                    log.info(message);
                     if (getReadOptions().isIgnoreTrim()) {
                         log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
                                 this, streamAddressSpace.getTrimMark());
                     } else {
+                        String message = String.format("getStreamAddressMap[{%s}] stream has been " +
+                                        "trimmed at address %s and this space is not covered by the " +
+                                        "loaded checkpoint with start address %s, while accessing the " +
+                                        "stream at version %s. Looking for a new checkpoint.",this,
+                                trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
                         throw new TrimmedException(message);
                     }
                 }
