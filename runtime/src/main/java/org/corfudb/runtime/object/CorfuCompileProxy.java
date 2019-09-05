@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -126,8 +127,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                             ISerializer serializer, ICorfuSMR<T> wrapperObject
-    ) {
+                             ISerializer serializer, ICorfuSMR<T> wrapperObject,
+                             GarbageInformer garbageInformer) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -138,7 +139,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject);
+                wrapperObject, garbageInformer);
+
 
         final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
         timerAccess = metrics.timer(CorfuComponent.OBJECT + "access");
