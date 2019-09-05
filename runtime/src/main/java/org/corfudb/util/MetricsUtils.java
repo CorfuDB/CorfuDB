@@ -149,7 +149,9 @@ public class MetricsUtils {
      * @param metrics Metrics registry
      */
     public static void metricsReportingSetup(@NonNull MetricRegistry metrics) {
-        if (isMetricsReportingSetUp(metrics)) return;
+        if (isMetricsReportingSetUp(metrics)) {
+            return;
+        }
 
         metrics.counter(mpTrigger);
 
