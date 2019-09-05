@@ -364,7 +364,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
-        private String compressionCodec = null;
 
 
         /**

@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.corfudb.infrastructure.log.CompactionPolicy;
 import org.corfudb.infrastructure.log.CompactionPolicy.CompactionPolicyType;
 import org.corfudb.infrastructure.log.StreamLogDataStore;
 import org.corfudb.infrastructure.log.StreamLogParams;
