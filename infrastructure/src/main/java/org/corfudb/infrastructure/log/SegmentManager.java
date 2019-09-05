@@ -59,7 +59,7 @@ public class SegmentManager {
     private final Map<Long, CompactionMetadata> segmentCompactionMetadata = new ConcurrentHashMap<>();
 
     long getSegmentOrdinal(long globalAddress) {
-        return globalAddress / logParams.RECORDS_PER_SEGMENT;
+        return globalAddress / StreamLogParams.RECORDS_PER_SEGMENT;
     }
 
     private <T extends AbstractLogSegment> String getSegmentFilePath(
@@ -345,7 +345,9 @@ public class SegmentManager {
     }
 
     /**
-     * Only to support prefix trim, will be removed later.
+     * Close the segments and delete the corresponding files up to {@code endSegment}.
+     *
+     * @param endSegment the last segment to close.
      */
     void cleanAndClose(long endSegment) {
         cleanAndClose(streamLogSegments, endSegment);

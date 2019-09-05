@@ -41,15 +41,19 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 @Slf4j
 public class StreamLogCompactor {
 
-    // Flush the file to disk after writing this number of entries
+    // Flush the file to disk after writing this number of batch
     // to the compaction output file to avoid large IO bursts and
     // making space in page cache for normal reads/writes.
     // TODO: Do we need to expose this as a configurable parameter?
-    private static final int COMPACTION_FLUSH_BATCH_SIZE = 100;
+    private static final int COMPACTION_FLUSH_BATCH_SIZE = 10;
+
+    // When compacting the stream log segment, control the size
+    // of batch of entries to be rewritten.
+    private static final int STREAM_COMPACTION_BATCH_SIZE = 10;
 
     // When compacting the garbage log segment, control the size
-    // of a garbage entries batch to be rewritten.
-    private static final int GARBAGE_COMPACTION_BATCH_SIZE = 10;
+    // of batch of entries to be rewritten.
+    private static final int GARBAGE_COMPACTION_BATCH_SIZE = 20;
 
     private final StreamLogParams logParams;
 
@@ -176,6 +180,7 @@ public class StreamLogCompactor {
                                                     GarbageLogSegment inputGarbageSegment) {
         log.info("Compacting stream log segment: {}", inputStreamSegment.getFilePath());
         int flushBatchCount = 0;
+        List<LogData> batch = new ArrayList<>();
         Map<Long, SMRGarbageEntry> garbageInfoMap = inputGarbageSegment.getGarbageEntryMap();
         CompactionFeedback compactionFeedback = new CompactionFeedback();
 
@@ -187,16 +192,13 @@ public class StreamLogCompactor {
                     garbageInfoMap.get(address), compactionFeedback);
             // If the entire LogData is compacted, do not append to new segment.
             if (newLogData != null) {
-                outputStreamSegment.append(address, newLogData);
+                batch.add(newLogData);
             }
 
-            // Flush the compaction output file after a batch to avoid IO burst.
-            if (++flushBatchCount >= COMPACTION_FLUSH_BATCH_SIZE) {
-                outputStreamSegment.sync();
-                flushBatchCount = 0;
-            }
+            // Write batch to the output segment.
+            flushBatchCount = writeBatchToCompactionOutput(batch,
+                    STREAM_COMPACTION_BATCH_SIZE, flushBatchCount, outputStreamSegment);
         }
-
         outputStreamSegment.sync();
 
         return compactionFeedback;
@@ -345,21 +347,32 @@ public class StreamLogCompactor {
 
             // Reset the logData payload with the prune garbage entry.
             logData.resetPayload(payload);
+            batch.add(logData);
 
             // Write batch to the output segment.
-            batch.add(logData);
-            if (batch.size() >= GARBAGE_COMPACTION_BATCH_SIZE) {
-                outputGarbageSegment.append(batch);
-                flushBatchCount += batch.size();
-                batch = new ArrayList<>();
+            flushBatchCount = writeBatchToCompactionOutput(batch,
+                    GARBAGE_COMPACTION_BATCH_SIZE, flushBatchCount, outputGarbageSegment);
+        }
 
-                // Flush the compaction output file after a batch to avoid IO burst.
-                if (++flushBatchCount >= COMPACTION_FLUSH_BATCH_SIZE) {
-                    outputGarbageSegment.sync();
-                    flushBatchCount = 0;
-                }
+        outputGarbageSegment.sync();
+    }
+
+    private int writeBatchToCompactionOutput(List<LogData> batch,
+                                             int batchSize, int flushBatchCount,
+                                             AbstractLogSegment compactionOutput) {
+        if (batch.size() >= batchSize) {
+            compactionOutput.append(batch);
+            flushBatchCount += batch.size();
+            batch.clear();
+
+            // Flush the compaction output file after a batch to avoid IO burst.
+            if (flushBatchCount >= COMPACTION_FLUSH_BATCH_SIZE) {
+                compactionOutput.sync();
+                flushBatchCount = 0;
             }
         }
+
+        return flushBatchCount;
     }
 
     private void closeSegments(AbstractLogSegment... segments) {
