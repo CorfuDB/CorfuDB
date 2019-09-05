@@ -11,6 +11,7 @@ import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
@@ -42,7 +43,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -179,40 +180,46 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Writes per-address sparse-trim decisions to LogUnit servers.
-     *
-     * @param token         The token to use for the write.
-     * @param garbageEntry  Per-address sparse-trim decisions.
+     * Sends garbage decisions to LogUnit servers in a stripe.
+     * @param runtimeLayout Corfu runtime layout.
+     * @param stripe  one stripe in layout.
+     * @param garbageEntries a collection of garbageEntries which contain garbage decisions.
      */
-    public void sparseTrim(@NonNull IToken token, @NonNull LogData garbageEntry) {
-        log.info("sparseTrim[{}]", token.getSequence());
-        garbageEntry.useToken(token);
+    public void sparseTrim(RuntimeLayout runtimeLayout, Layout.LayoutStripe stripe,
+                           Collection<SMRGarbageEntry> garbageEntries) {
+        List<LogData> garbageDataList =
+                garbageEntries.stream().map(garbageEntry -> {
 
-        layoutHelper(e -> {
-            List<String> servers = e.getLayout().getStripe(token.getSequence()).getLogServers();
-            int numUnits = servers.size();
-            // Reverse order
-            // TODO(Xin): add more comments to explain why use reverse order.
-            for (int i = numUnits - 1; i >= 0; --i) {
-                log.trace("sparseTrim ChainReplication[{}]: {}/{}",
-                        Token.of(e.getLayout().getEpoch(), token.getSequence()), i + 1, numUnits);
-                String server = servers.get(i);
-                writeGarbageToLogUnit(e, server, token, garbageEntry);
-            }
-            return null;
-        }, true);
+            // epoch in token is not used, therefore it is set to a dummy value -1.
+            Token token = new Token(-1, garbageEntry.getGlobalAddress());
+            LogData garbageData = new LogData(DataType.GARBAGE, garbageEntry);
+            garbageData.useToken(token);
+
+            return garbageData;
+        }).collect(Collectors.toList());
+
+        List<String> servers = stripe.getLogServers();
+        int numUnits = servers.size();
+        // Reverse order
+        // TODO(Xin): add more comments to explain why use reverse order.
+        for (int i = numUnits - 1; i >= 0; --i) {
+            log.trace("sparseTrim ChainReplication[{}]: {}/{}", stripe, i + 1, numUnits);
+            String server = servers.get(i);
+            writeGarbageToLogUnit(runtimeLayout, server, garbageDataList);
+        }
+
     }
 
-    private void writeGarbageToLogUnit(RuntimeLayout runtimeLayout, String logUnitServer, @NonNull IToken token,
-                                       @NonNull LogData garbageEntry) {
+    private void writeGarbageToLogUnit(RuntimeLayout runtimeLayout, String logUnitServer,
+                                       List<LogData> garbageEntries) {
         LogUnitClient client = runtimeLayout.getLogUnitClient(logUnitServer);
-        garbageEntry.setId(runtime.getParameters().getClientId());
+        garbageEntries.forEach(garbageEntry -> garbageEntry.setId(runtime.getParameters().getClientId()));
 
         final int numRetries = 3;
 
         for (int x = 0; x < numRetries; x++) {
             try {
-                CFUtils.getUninterruptibly(client.writeGarbageEntries(Collections.singletonList(garbageEntry)),
+                CFUtils.getUninterruptibly(client.writeGarbageEntries(garbageEntries),
                         NetworkException.class, TimeoutException.class, WrongEpochException.class);
                 return;
             } catch (NetworkException | TimeoutException e) {
@@ -224,10 +231,9 @@ public class AddressSpaceView extends AbstractView {
             } catch (WrongEpochException wee) {
                 long serverEpoch = wee.getCorrectEpoch();
                 long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                log.warn("writeGarbageToLogUnit[{}]: wrongEpochException, runtime is in epoch {}, " +
+                log.warn("writeGarbageToLogUnit: wrongEpochException, runtime is in epoch {}, " +
                                 "while server is in epoch {}. Invalidate layout for this client and retry, attempt: " +
-                                "{}/{}",
-                        token.getSequence(), runtimeEpoch, serverEpoch, x + 1, numRetries);
+                                "{}/{}", runtimeEpoch, serverEpoch, x + 1, numRetries);
                 runtime.invalidateLayout();
             }
         }
