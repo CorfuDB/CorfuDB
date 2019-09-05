@@ -64,6 +64,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
     /**
      * TODO: Add comments
      */
+    @Override
     public void append(long address, LogData entry) {
         try {
             SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
@@ -98,6 +99,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
      *
      * @param entries entries to append to the file
      */
+    @Override
     public void append(List<LogData> entries) {
         try {
             List<SMRGarbageEntry> uniqueGarbageEntries = new ArrayList<>();
