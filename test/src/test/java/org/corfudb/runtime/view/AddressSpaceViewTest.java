@@ -10,6 +10,7 @@ import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.util.MetricsUtils;
 import org.junit.Test;
 
@@ -170,7 +171,6 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     public void testSparseTrim() {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
-        final Token trimAddress = new Token(rt.getLayoutView().getLayout().getEpoch(), 10);
         Long markerAddress = 0L;
         int smrRecordSize = 0;
         UUID streamId = UUID.randomUUID();
@@ -179,9 +179,13 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         SMRGarbageRecord garbageRecord = new SMRGarbageRecord(markerAddress, smrRecordSize);
         SMRGarbageEntry smrGarbageEntry = new SMRGarbageEntry();
         smrGarbageEntry.add(streamId, index, garbageRecord);
-        
-        LogData logData = new LogData(DataType.GARBAGE, smrGarbageEntry);
-        rt.getAddressSpaceView().sparseTrim(trimAddress, logData);
+        smrGarbageEntry.setGlobalAddress(1L);
+
+        GarbageInformer.GarbageBatch garbageBatch =
+                new GarbageInformer.GarbageBatch(Collections.singletonList(smrGarbageEntry), null);
+
+        GarbageInformer garbageInformer = new GarbageInformer(rt);
+        garbageInformer.sendGarbageBatch(garbageBatch);
     }
 
     @Test
