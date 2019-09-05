@@ -24,7 +24,7 @@ public class SMRGarbageRecord {
     private int smrEntrySize;
 
     /**
-     * Constructor for SMREntryGarbageInfo
+     * Constructor for SMRGarbageRecord
      * @param markerAddress The Global address of the SRMRecord that supersedes this SMRRecord.
      * @param smrEntrySize  Serialized size of this SMRRecord in byte.
      */
