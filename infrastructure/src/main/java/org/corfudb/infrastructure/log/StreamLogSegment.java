@@ -106,6 +106,7 @@ class StreamLogSegment extends AbstractLogSegment {
      * @param address address of append entry
      * @param entry   entry to append to the file
      */
+    @Override
     public void append(long address, LogData entry) {
         try {
             // Check if the entry exists.
@@ -133,6 +134,7 @@ class StreamLogSegment extends AbstractLogSegment {
      *
      * @param entries entries to append to the file
      */
+    @Override
     public void append(List<LogData> entries) {
         try {
             // Check if any entry exists.
