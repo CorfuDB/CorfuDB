@@ -93,6 +93,22 @@ public abstract class AbstractLogSegment implements AutoCloseable,
     }
 
     /**
+     * Append an entry to the log segment file.
+     *
+     * @param address address of append entry
+     * @param entry   entry to append to the file
+     */
+    public abstract void append(long address, LogData entry);
+
+    /**
+     * Append a range of consecutive entries ordered by addresses
+     * to the log segment file.
+     *
+     * @param entries entries to append to the file
+     */
+    public abstract void append(List<LogData> entries);
+
+    /**
      * Reads the entire address space of this segment file
      * and update the in-memory metadata if needed. If this
      * is a new segment, a log header will be appended.
