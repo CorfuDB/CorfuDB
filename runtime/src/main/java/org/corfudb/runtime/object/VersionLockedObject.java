@@ -6,7 +6,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.SMRRecord;
+import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
@@ -17,6 +19,7 @@ import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -115,6 +118,11 @@ public class VersionLockedObject<T> {
     private final Map<String, IGarbageIdentificationFunction> garbageIdentifyFunctionMap;
 
     /**
+     * The garbage identification decisions are exposed outside runtime via garbageInformer.
+     */
+    private final GarbageInformer garbageInformer;
+
+    /**
      * The reset set for this object.
      */
     private final Set<String> resetSet;
@@ -146,6 +154,7 @@ public class VersionLockedObject<T> {
      * @param garbageTargets    Garbage identification function map for this object.
      * @param undoTargets       Undo functions map.
      * @param resetSet          Reset set for this object.
+     * @param garbageInformer   The hub to disseminate garbage information.
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
@@ -153,13 +162,15 @@ public class VersionLockedObject<T> {
                                Map<String, IUndoRecordFunction<T>> undoRecordTargets,
                                Map<String, IUndoFunction<T>> undoTargets,
                                Map<String, IGarbageIdentificationFunction> garbageTargets,
-                               Set<String> resetSet) {
+                               Set<String> resetSet,
+                               GarbageInformer garbageInformer) {
         this.smrStream = smrStream;
 
         this.upcallTargetMap = upcallTargets;
         this.undoRecordFunctionMap = undoRecordTargets;
         this.undoFunctionMap = undoTargets;
         this.garbageIdentifyFunctionMap = garbageTargets;
+        this.garbageInformer = garbageInformer;
         this.resetSet = resetSet;
 
         this.newObjectFn = newObjectFn;
@@ -569,9 +580,9 @@ public class VersionLockedObject<T> {
                 log.trace("Apply[{}] Undo->RESET", this);
             }
         }
-
         // now invoke the upcall
         return target.upcall(object, record.getSMRArguments());
+
     }
 
     /**
@@ -648,6 +659,7 @@ public class VersionLockedObject<T> {
     private void applyUpdateStreamUnsafe(Stream<SMRRecord> smrRecordStream, boolean isOptimistic) {
         // AtomicLong is used as a container to bypass the restriction of lambda expression
         final AtomicLong lastSyncAddress = new AtomicLong(Address.NON_ADDRESS);
+        List<SMRRecordLocator> garbageLocators = new ArrayList<>();
 
         smrRecordStream
                 .forEachOrdered(record -> {
@@ -668,6 +680,12 @@ public class VersionLockedObject<T> {
                             if (lastSyncAddress.get() != Address.NON_ADDRESS &&
                                     record.getGlobalAddress() > lastSyncAddress.get()) {
                                 syncTail = Math.max(syncTail, lastSyncAddress.get());
+
+                                // flush garbage if there is garbage
+                                if (!garbageLocators.isEmpty()) {
+                                    garbageInformer.add(syncTail, garbageLocators);
+                                    garbageLocators.clear();
+                                }
                             }
 
                             // to check whether the SMRRecord is first encountered by VLO
@@ -677,7 +695,8 @@ public class VersionLockedObject<T> {
                                 if (garbageIdentifyFunction != null) {
                                     List<Object> garbage =
                                             garbageIdentifyFunction.identify(record.locator, record.getSMRArguments());
-                                    // TODO(xin): handle garbage
+                                    garbage.forEach(o ->
+                                            garbageLocators.add((SMRRecordLocator) o));
                                 }
 
                                 lastSyncAddress.set(record.getGlobalAddress());
@@ -695,6 +714,11 @@ public class VersionLockedObject<T> {
         // update syncTail after applying all SMRRecords. 
         if (!isOptimistic) {
             syncTail = Math.max(syncTail, lastSyncAddress.get());
+
+            // flush garbage if there is garbage
+            if (!garbageLocators.isEmpty()) {
+                garbageInformer.add(syncTail, garbageLocators);
+            }
         }
     }
 

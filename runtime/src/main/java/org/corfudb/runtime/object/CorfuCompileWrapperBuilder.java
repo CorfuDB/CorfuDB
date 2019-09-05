@@ -64,7 +64,8 @@ public class CorfuCompileWrapperBuilder {
                 wrapperObject.getCorfuUndoMap(),
                 wrapperObject.getCorfuUndoRecordMap(),
                 wrapperObject.getCorfuGarbageIdentificationMap(),
-                wrapperObject.getCorfuResetSet()));
+                wrapperObject.getCorfuResetSet(),
+                rt.getGarbageInformer()));
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)
