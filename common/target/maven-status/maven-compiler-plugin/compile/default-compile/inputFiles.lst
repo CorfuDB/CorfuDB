@@ -1,6 +1,0 @@
-/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/MetricsServer.java
-/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/result/Result.java
-/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/providers/DropwizardMetricsProvider.java
-/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/servers/PrometheusMetricsServer.java
-/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/MetricsProvider.java
-/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/util/ClassUtils.java

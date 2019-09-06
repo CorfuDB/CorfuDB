@@ -1,4 +1,0 @@
-collection-enabled:true
-reporting-enabled:true
-directory:/tmp/metrics-reporting-dir
-interval:15

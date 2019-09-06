@@ -1,4 +1,0 @@
-org/corfudb/protocols/wireprotocol/ICorfuPayloadTest.class
-org/corfudb/protocols/wireprotocol/NodeStateTest.class
-org/corfudb/protocols/wireprotocol/failuredetector/NodeConnectivityTest.class
-org/corfudb/runtime/view/LayoutTest.class
