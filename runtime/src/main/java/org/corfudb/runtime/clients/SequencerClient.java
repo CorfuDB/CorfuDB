@@ -32,6 +32,7 @@ public class SequencerClient extends AbstractClient {
     private Timer nextTokenTimer;
     private Timer nextTokenTxTimer;
     private Timer getStreamSpaceTimer;
+    private Timer bootstrapTimer;
     private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     public SequencerClient(IClientRouter router, long epoch) {
         super(router, epoch);
@@ -39,6 +40,7 @@ public class SequencerClient extends AbstractClient {
                 "next-token");
         nextTokenTxTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "next-tx-token");
         getStreamSpaceTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "get-stream-space");
+        bootstrapTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "bootstrap");
     }
 
     /**
@@ -109,9 +111,11 @@ public class SequencerClient extends AbstractClient {
     public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
-        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
-                        bootstrapWithoutTailsUpdate)));
+        try (Timer.Context context = MetricsUtils.getConditionalContext(bootstrapTimer)) {
+            return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
+                    new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
+                            bootstrapWithoutTailsUpdate)));
+        }
     }
 
     /**

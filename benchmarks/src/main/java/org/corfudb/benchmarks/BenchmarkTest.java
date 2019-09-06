@@ -3,22 +3,13 @@ package org.corfudb.benchmarks;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
-
-import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.MetricsUtils;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.LongAdder;
 
 /**
  * This class is the super class for all performance tests.
  * It set test parameters like how many clients to run, how many threads each client run,
  * and how many request one thread send.
- * It also set up runtimes, threads, reporter and setup CSV reporter to store csv metrics files
- * to JVM given directory.
  */
 @Slf4j
 public class BenchmarkTest {
