@@ -39,6 +39,7 @@ fi
 # default heap for corfudb
 CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
 export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
+export CORFUFLAGS="-Dcorfu.metrics.collection=True -Dcorfu.metrics.csv.interval=10 -Dcorfu.metrics.csv.folder=/Users/lidong/vmware_proj/csvreporting/sequencer"
 
 if [[ $* == *--agent* ]]
 then
@@ -47,4 +48,4 @@ else
       byteman=""
 fi
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $CORFUFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*

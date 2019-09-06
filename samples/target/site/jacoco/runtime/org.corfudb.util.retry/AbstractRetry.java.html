@@ -15,12 +15,12 @@ import lombok.Getter;
  *
  * &lt;p&gt;Created by Konstantin Spirov on 4/6/2017.
  */
-<span class="nc" id="L18">@AllArgsConstructor</span>
+<span class="fc" id="L18">@AllArgsConstructor</span>
 abstract class AbstractRetry&lt;E extends Exception, F extends Exception,
         G extends Exception, H extends Exception, O, A extends IRetry&gt;
         implements IRetry&lt;E, F, G, H, O, org.corfudb.util.retry.ExponentialBackoffRetry&gt; {
 
-<span class="nc" id="L23">    @Getter</span>
+<span class="fc" id="L23">    @Getter</span>
     final IRetryable&lt;E, F, G, H, O&gt; runFunction;
 
 }

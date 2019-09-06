@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  *
  * &lt;p&gt;Created by zlokhandwala on 9/28/16.
  */
-<span class="nc" id="L49">@Slf4j</span>
+<span class="fc" id="L49">@Slf4j</span>
 public class ManagementServer extends AbstractServer {
 
     private final ServerContext serverContext;
@@ -54,8 +54,8 @@ public class ManagementServer extends AbstractServer {
     /**
      * A {@link SingletonResource} which provides a {@link CorfuRuntime}.
      */
-<span class="nc" id="L57">    private final SingletonResource&lt;CorfuRuntime&gt; corfuRuntime =</span>
-<span class="nc" id="L58">            SingletonResource.withInitial(this::getNewCorfuRuntime);</span>
+<span class="fc" id="L57">    private final SingletonResource&lt;CorfuRuntime&gt; corfuRuntime =</span>
+<span class="fc" id="L58">            SingletonResource.withInitial(this::getNewCorfuRuntime);</span>
 
     /**
      * Policy to be used to handle failures/healing.
@@ -64,7 +64,7 @@ public class ManagementServer extends AbstractServer {
 
     private final ClusterStateContext clusterContext;
 
-<span class="nc" id="L67">    @Getter</span>
+<span class="fc" id="L67">    @Getter</span>
     private final ManagementAgent managementAgent;
 
     private final Orchestrator orchestrator;
@@ -75,10 +75,10 @@ public class ManagementServer extends AbstractServer {
      * cannot make progress on an RPC call after trying for more than
      * SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT number of retries.
      */
-<span class="nc" id="L78">    private final Runnable runtimeSystemDownHandler = () -&gt; {</span>
-<span class="nc" id="L79">        log.warn(&quot;ManagementServer: Runtime stalled. Invoking systemDownHandler after {} &quot;</span>
-<span class="nc" id="L80">                + &quot;unsuccessful tries.&quot;, SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);</span>
-<span class="nc" id="L81">        throw new UnreachableClusterException(&quot;Runtime stalled. Invoking systemDownHandler after &quot;</span>
+<span class="fc" id="L78">    private final Runnable runtimeSystemDownHandler = () -&gt; {</span>
+<span class="fc" id="L79">        log.warn(&quot;ManagementServer: Runtime stalled. Invoking systemDownHandler after {} &quot;</span>
+<span class="fc" id="L80">                + &quot;unsuccessful tries.&quot;, SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);</span>
+<span class="fc" id="L81">        throw new UnreachableClusterException(&quot;Runtime stalled. Invoking systemDownHandler after &quot;</span>
                 + SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT + &quot; unsuccessful tries.&quot;);
     };
 
@@ -94,24 +94,24 @@ public class ManagementServer extends AbstractServer {
     private final ExecutorService executor;
     private final ExecutorService heartbeatThread;
 
-<span class="nc" id="L97">    private final Lock healingLock = new ReentrantLock();</span>
+<span class="fc" id="L97">    private final Lock healingLock = new ReentrantLock();</span>
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-<span class="nc bnc" id="L101" title="All 2 branches missed.">        return getState() == ServerState.READY;</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">        return getState() == ServerState.READY;</span>
     }
 
     @Override
     public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-<span class="nc bnc" id="L106" title="All 2 branches missed.">        if (corfuMsgType.equals(CorfuMsgType.NODE_STATE_REQUEST)) {</span>
-<span class="nc" id="L107">            return heartbeatThread;</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        if (corfuMsgType.equals(CorfuMsgType.NODE_STATE_REQUEST)) {</span>
+<span class="fc" id="L107">            return heartbeatThread;</span>
         }
-<span class="nc" id="L109">        return executor;</span>
+<span class="fc" id="L109">        return executor;</span>
     }
 
     @Override
     public List&lt;ExecutorService&gt; getExecutors() {
-<span class="nc" id="L114">        return Arrays.asList(executor, heartbeatThread);</span>
+<span class="fc" id="L114">        return Arrays.asList(executor, heartbeatThread);</span>
     }
 
     /**
@@ -119,38 +119,38 @@ public class ManagementServer extends AbstractServer {
      *
      * @param serverContext context object providing parameters and objects
      */
-<span class="nc" id="L122">    public ManagementServer(ServerContext serverContext) {</span>
-<span class="nc" id="L123">        this.serverContext = serverContext;</span>
+<span class="fc" id="L122">    public ManagementServer(ServerContext serverContext) {</span>
+<span class="fc" id="L123">        this.serverContext = serverContext;</span>
 
-<span class="nc" id="L125">        this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),</span>
+<span class="fc" id="L125">        this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),</span>
                 new ServerThreadFactory(&quot;management-&quot;, new ServerThreadFactory.ExceptionHandler()));
-<span class="nc" id="L127">        this.heartbeatThread = Executors.newSingleThreadExecutor(</span>
+<span class="fc" id="L127">        this.heartbeatThread = Executors.newSingleThreadExecutor(</span>
                 new ServerThreadFactory(&quot;heartbeat-&quot;, new ServerThreadFactory.ExceptionHandler()));
 
-<span class="nc" id="L130">        this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();</span>
+<span class="fc" id="L130">        this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();</span>
 
-<span class="nc" id="L132">        HeartbeatCounter counter = new HeartbeatCounter();</span>
+<span class="fc" id="L132">        HeartbeatCounter counter = new HeartbeatCounter();</span>
 
-<span class="nc" id="L134">        FailureDetector failureDetector = new FailureDetector(counter, serverContext.getLocalEndpoint());</span>
+<span class="fc" id="L134">        FailureDetector failureDetector = new FailureDetector(counter, serverContext.getLocalEndpoint());</span>
 
         // Creating a management agent.
-<span class="nc" id="L137">        ClusterState defaultView = ClusterState.builder()</span>
-<span class="nc" id="L138">                .localEndpoint(serverContext.getLocalEndpoint())</span>
-<span class="nc" id="L139">                .nodes(ImmutableMap.of())</span>
-<span class="nc" id="L140">                .unresponsiveNodes(ImmutableList.of())</span>
-<span class="nc" id="L141">                .build();</span>
-<span class="nc" id="L142">        clusterContext =  ClusterStateContext.builder()</span>
-<span class="nc" id="L143">                .counter(counter)</span>
-<span class="nc" id="L144">                .clusterView(new AtomicReference&lt;&gt;(defaultView))</span>
-<span class="nc" id="L145">                .build();</span>
+<span class="fc" id="L137">        ClusterState defaultView = ClusterState.builder()</span>
+<span class="fc" id="L138">                .localEndpoint(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L139">                .nodes(ImmutableMap.of())</span>
+<span class="fc" id="L140">                .unresponsiveNodes(ImmutableList.of())</span>
+<span class="fc" id="L141">                .build();</span>
+<span class="fc" id="L142">        clusterContext =  ClusterStateContext.builder()</span>
+<span class="fc" id="L143">                .counter(counter)</span>
+<span class="fc" id="L144">                .clusterView(new AtomicReference&lt;&gt;(defaultView))</span>
+<span class="fc" id="L145">                .build();</span>
 
-<span class="nc" id="L147">        Layout managementLayout = serverContext.copyManagementLayout();</span>
-<span class="nc" id="L148">        managementAgent = new ManagementAgent(</span>
+<span class="fc" id="L147">        Layout managementLayout = serverContext.copyManagementLayout();</span>
+<span class="fc" id="L148">        managementAgent = new ManagementAgent(</span>
                 corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
         );
 
-<span class="nc" id="L152">        orchestrator = new Orchestrator(corfuRuntime, serverContext);</span>
-<span class="nc" id="L153">    }</span>
+<span class="fc" id="L152">        orchestrator = new Orchestrator(corfuRuntime, serverContext);</span>
+<span class="fc" id="L153">    }</span>
 
     /**
      * Returns a connected instance of the CorfuRuntime.
@@ -158,34 +158,34 @@ public class ManagementServer extends AbstractServer {
      * @return A connected instance of runtime.
      */
     private CorfuRuntime getNewCorfuRuntime() {
-<span class="nc" id="L161">        final CorfuRuntime.CorfuRuntimeParameters params =</span>
-<span class="nc" id="L162">                serverContext.getManagementRuntimeParameters();</span>
-<span class="nc" id="L163">        params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);</span>
-<span class="nc" id="L164">        final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);</span>
-<span class="nc" id="L165">        final Layout managementLayout = serverContext.copyManagementLayout();</span>
+<span class="fc" id="L161">        final CorfuRuntime.CorfuRuntimeParameters params =</span>
+<span class="fc" id="L162">                serverContext.getManagementRuntimeParameters();</span>
+<span class="fc" id="L163">        params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);</span>
+<span class="fc" id="L164">        final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);</span>
+<span class="fc" id="L165">        final Layout managementLayout = serverContext.copyManagementLayout();</span>
         // Runtime can be set up either using the layout or the bootstrapEndpoint address.
-<span class="nc bnc" id="L167" title="All 2 branches missed.">        if (managementLayout != null) {</span>
-<span class="nc" id="L168">            managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);</span>
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">        if (managementLayout != null) {</span>
+<span class="fc" id="L168">            managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);</span>
         }
-<span class="nc" id="L170">        runtime.connect();</span>
-<span class="nc" id="L171">        log.info(&quot;getCorfuRuntime: Corfu Runtime connected successfully&quot;);</span>
-<span class="nc" id="L172">        params.setSystemDownHandler(runtimeSystemDownHandler);</span>
-<span class="nc" id="L173">        return runtime;</span>
+<span class="fc" id="L170">        runtime.connect();</span>
+<span class="fc" id="L171">        log.info(&quot;getCorfuRuntime: Corfu Runtime connected successfully&quot;);</span>
+<span class="fc" id="L172">        params.setSystemDownHandler(runtimeSystemDownHandler);</span>
+<span class="fc" id="L173">        return runtime;</span>
     }
 
     /**
      * Handler for this server.
      */
-<span class="nc" id="L179">    @Getter</span>
+<span class="fc" id="L179">    @Getter</span>
     private final CorfuMsgHandler handler =
-<span class="nc" id="L181">            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);</span>
+<span class="fc" id="L181">            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);</span>
 
     private boolean isBootstrapped(CorfuMsg msg) {
-<span class="nc bnc" id="L184" title="All 2 branches missed.">        if (serverContext.getManagementLayout() == null) {</span>
-<span class="nc" id="L185">            log.warn(&quot;Received message but not bootstrapped! Message={}&quot;, msg);</span>
-<span class="nc" id="L186">            return false;</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        if (serverContext.getManagementLayout() == null) {</span>
+<span class="fc" id="L185">            log.warn(&quot;Received message but not bootstrapped! Message={}&quot;, msg);</span>
+<span class="fc" id="L186">            return false;</span>
         }
-<span class="nc" id="L188">        return true;</span>
+<span class="fc" id="L188">        return true;</span>
     }
 
     /**
@@ -199,9 +199,9 @@ public class ManagementServer extends AbstractServer {
     public synchronized void handleOrchestratorMsg(@Nonnull CorfuPayloadMsg&lt;OrchestratorMsg&gt; msg,
                                                    @Nonnull ChannelHandlerContext ctx,
                                                    @Nonnull IServerRouter r) {
-<span class="nc" id="L202">        log.debug(&quot;Received an orchestrator message {}&quot;, msg);</span>
-<span class="nc" id="L203">        orchestrator.handle(msg, ctx, r);</span>
-<span class="nc" id="L204">    }</span>
+<span class="fc" id="L202">        log.debug(&quot;Received an orchestrator message {}&quot;, msg);</span>
+<span class="fc" id="L203">        orchestrator.handle(msg, ctx, r);</span>
+<span class="fc" id="L204">    }</span>
 
     /**
      * Bootstraps the management server.
@@ -214,18 +214,18 @@ public class ManagementServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)
     public synchronized void handleManagementBootstrap(CorfuPayloadMsg&lt;Layout&gt; msg,
                                                        ChannelHandlerContext ctx, IServerRouter r) {
-<span class="nc bnc" id="L217" title="All 2 branches missed.">        if (serverContext.getManagementLayout() != null) {</span>
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        if (serverContext.getManagementLayout() != null) {</span>
             // We are already bootstrapped, bootstrap again is not allowed.
-<span class="nc" id="L219">            log.warn(&quot;Got a request to bootstrap a server with {} which is already bootstrapped, &quot;</span>
-<span class="nc" id="L220">                    + &quot;rejecting!&quot;, msg.getPayload());</span>
-<span class="nc" id="L221">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR));</span>
+<span class="fc" id="L219">            log.warn(&quot;Got a request to bootstrap a server with {} which is already bootstrapped, &quot;</span>
+<span class="fc" id="L220">                    + &quot;rejecting!&quot;, msg.getPayload());</span>
+<span class="fc" id="L221">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR));</span>
         } else {
-<span class="nc" id="L223">            log.info(&quot;Received Bootstrap Layout : {}&quot;, msg.getPayload());</span>
-<span class="nc" id="L224">            serverContext.saveManagementLayout(msg.getPayload());</span>
-<span class="nc" id="L225">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));</span>
+<span class="fc" id="L223">            log.info(&quot;Received Bootstrap Layout : {}&quot;, msg.getPayload());</span>
+<span class="fc" id="L224">            serverContext.saveManagementLayout(msg.getPayload());</span>
+<span class="fc" id="L225">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));</span>
 
         }
-<span class="nc" id="L228">    }</span>
+<span class="fc" id="L228">    }</span>
 
     /**
      * Triggers the failure handler.
@@ -240,19 +240,19 @@ public class ManagementServer extends AbstractServer {
                                          ChannelHandlerContext ctx, IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
-<span class="nc bnc" id="L243" title="All 2 branches missed.">        if (!isBootstrapped(msg)) {</span>
-<span class="nc" id="L244">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));</span>
-<span class="nc" id="L245">            return;</span>
+<span class="fc bfc" id="L243" title="All 2 branches covered.">        if (!isBootstrapped(msg)) {</span>
+<span class="fc" id="L244">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));</span>
+<span class="fc" id="L245">            return;</span>
         }
 
-<span class="nc" id="L248">        log.info(&quot;handleFailureDetectedMsg: Received DetectorMsg : {}&quot;, msg.getPayload());</span>
+<span class="fc" id="L248">        log.info(&quot;handleFailureDetectedMsg: Received DetectorMsg : {}&quot;, msg.getPayload());</span>
 
-<span class="nc" id="L250">        DetectorMsg detectorMsg = msg.getPayload();</span>
-<span class="nc" id="L251">        Layout layout = serverContext.copyManagementLayout();</span>
+<span class="fc" id="L250">        DetectorMsg detectorMsg = msg.getPayload();</span>
+<span class="fc" id="L251">        Layout layout = serverContext.copyManagementLayout();</span>
 
         // If this message is stamped with an older epoch which indicates the polling was
         // conducted in an old epoch. This message cannot be considered and is discarded.
-<span class="nc bnc" id="L255" title="All 2 branches missed.">        if (!detectorMsg.getDetectorEpoch().equals(layout.getEpoch())) {</span>
+<span class="pc bpc" id="L255" title="1 of 2 branches missed.">        if (!detectorMsg.getDetectorEpoch().equals(layout.getEpoch())) {</span>
 <span class="nc" id="L256">            log.error(&quot;handleFailureDetectedMsg: Discarding stale detector message received. &quot;</span>
                             + &quot;detectorEpoch:{} latestLayout epoch:{}&quot;,
 <span class="nc" id="L258">                    detectorMsg.getDetectorEpoch(), layout.getEpoch());</span>
@@ -262,15 +262,15 @@ public class ManagementServer extends AbstractServer {
 
         // Collecting the failed nodes in the message that are amongst the responsive nodes in the
         // layout
-<span class="nc" id="L265">        final Set&lt;String&gt; allActiveServers = layout.getAllActiveServers();</span>
-<span class="nc" id="L266">        final Set&lt;String&gt; responsiveFailedNodes = detectorMsg.getFailedNodes()</span>
-<span class="nc" id="L267">                .stream()</span>
-<span class="nc" id="L268">                .filter(allActiveServers::contains)</span>
-<span class="nc" id="L269">                .collect(Collectors.toSet());</span>
+<span class="fc" id="L265">        final Set&lt;String&gt; allActiveServers = layout.getAllActiveServers();</span>
+<span class="fc" id="L266">        final Set&lt;String&gt; responsiveFailedNodes = detectorMsg.getFailedNodes()</span>
+<span class="fc" id="L267">                .stream()</span>
+<span class="fc" id="L268">                .filter(allActiveServers::contains)</span>
+<span class="fc" id="L269">                .collect(Collectors.toSet());</span>
 
         // If it is not an out of phase and there is no need to update the layout, return without
         // any reconfiguration
-<span class="nc bnc" id="L273" title="All 4 branches missed.">        if (!detectorMsg.getFailedNodes().isEmpty() &amp;&amp; responsiveFailedNodes.isEmpty()) {</span>
+<span class="pc bpc" id="L273" title="1 of 4 branches missed.">        if (!detectorMsg.getFailedNodes().isEmpty() &amp;&amp; responsiveFailedNodes.isEmpty()) {</span>
 <span class="nc" id="L274">            log.warn(&quot;handleFailureDetectedMsg: No action is taken as none of the failed nodes &quot; +</span>
                             &quot;are responsive. failedNodes:{} responsive layout nodes: {}, &quot; +
                             &quot;latestLayout epoch:{} &quot;,
@@ -279,19 +279,19 @@ public class ManagementServer extends AbstractServer {
 <span class="nc" id="L279">            return;</span>
         }
 
-<span class="nc" id="L282">        boolean result = ReconfigurationEventHandler.handleFailure(</span>
+<span class="fc" id="L282">        boolean result = ReconfigurationEventHandler.handleFailure(</span>
                 failureHandlerPolicy,
                 layout,
-<span class="nc" id="L285">                managementAgent.getCorfuRuntime(),</span>
+<span class="fc" id="L285">                managementAgent.getCorfuRuntime(),</span>
                 responsiveFailedNodes);
 
-<span class="nc bnc" id="L288" title="All 2 branches missed.">        if (result) {</span>
-<span class="nc" id="L289">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));</span>
+<span class="fc bfc" id="L288" title="All 2 branches covered.">        if (result) {</span>
+<span class="fc" id="L289">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));</span>
         } else {
-<span class="nc" id="L291">            log.error(&quot;handleFailureDetectedMsg: failure handling unsuccessful.&quot;);</span>
-<span class="nc" id="L292">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));</span>
+<span class="fc" id="L291">            log.error(&quot;handleFailureDetectedMsg: failure handling unsuccessful.&quot;);</span>
+<span class="fc" id="L292">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));</span>
         }
-<span class="nc" id="L294">    }</span>
+<span class="fc" id="L294">    }</span>
 
     /**
      * Triggers the healing handler.
@@ -306,19 +306,19 @@ public class ManagementServer extends AbstractServer {
                                          ChannelHandlerContext ctx, IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
-<span class="nc bnc" id="L309" title="All 2 branches missed.">        if (!isBootstrapped(msg)) {</span>
+<span class="pc bpc" id="L309" title="1 of 2 branches missed.">        if (!isBootstrapped(msg)) {</span>
 <span class="nc" id="L310">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));</span>
 <span class="nc" id="L311">            return;</span>
         }
 
-<span class="nc" id="L314">        log.info(&quot;handleHealingDetectedMsg: Received DetectorMsg : {}&quot;, msg.getPayload());</span>
+<span class="fc" id="L314">        log.info(&quot;handleHealingDetectedMsg: Received DetectorMsg : {}&quot;, msg.getPayload());</span>
 
-<span class="nc" id="L316">        DetectorMsg detectorMsg = msg.getPayload();</span>
-<span class="nc" id="L317">        Layout layout = serverContext.copyManagementLayout();</span>
+<span class="fc" id="L316">        DetectorMsg detectorMsg = msg.getPayload();</span>
+<span class="fc" id="L317">        Layout layout = serverContext.copyManagementLayout();</span>
 
         // If this message is stamped with an older epoch which indicates the polling was
         // conducted in an old epoch. This message cannot be considered and is discarded.
-<span class="nc bnc" id="L321" title="All 2 branches missed.">        if (!detectorMsg.getDetectorEpoch().equals(layout.getEpoch())) {</span>
+<span class="pc bpc" id="L321" title="1 of 2 branches missed.">        if (!detectorMsg.getDetectorEpoch().equals(layout.getEpoch())) {</span>
 <span class="nc" id="L322">            log.error(&quot;handleHealingDetectedMsg: Discarding stale detector message received. &quot;</span>
                             + &quot;detectorEpoch:{} latestLayout epoch:{}&quot;,
 <span class="nc" id="L324">                    detectorMsg.getDetectorEpoch(), layout.getEpoch());</span>
@@ -328,15 +328,15 @@ public class ManagementServer extends AbstractServer {
 
         // Collecting the healed nodes in the message that are amongst the unresponsive nodes in the
         // layout
-<span class="nc" id="L331">        final List&lt;String&gt; unresponsiveServers = layout.getUnresponsiveServers();</span>
-<span class="nc" id="L332">        final Set&lt;String&gt; unresponsiveHealedNodes = detectorMsg.getHealedNodes()</span>
-<span class="nc" id="L333">                .stream()</span>
-<span class="nc" id="L334">                .filter(unresponsiveServers::contains)</span>
-<span class="nc" id="L335">                .collect(Collectors.toSet());</span>
+<span class="fc" id="L331">        final List&lt;String&gt; unresponsiveServers = layout.getUnresponsiveServers();</span>
+<span class="fc" id="L332">        final Set&lt;String&gt; unresponsiveHealedNodes = detectorMsg.getHealedNodes()</span>
+<span class="fc" id="L333">                .stream()</span>
+<span class="fc" id="L334">                .filter(unresponsiveServers::contains)</span>
+<span class="fc" id="L335">                .collect(Collectors.toSet());</span>
 
         // If it is not an out of phase and there is no need to update the layout, return without
         // any reconfiguration
-<span class="nc bnc" id="L339" title="All 4 branches missed.">        if (!detectorMsg.getHealedNodes().isEmpty() &amp;&amp; unresponsiveHealedNodes.isEmpty()) {</span>
+<span class="pc bpc" id="L339" title="2 of 4 branches missed.">        if (!detectorMsg.getHealedNodes().isEmpty() &amp;&amp; unresponsiveHealedNodes.isEmpty()) {</span>
 <span class="nc" id="L340">            log.warn(&quot;handleHealingDetectedMsg: No action is taken as none of the healedNodes are&quot; +</span>
                             &quot; unresponsive. healedNodes:{}, unresponsive layout nodes: {}, &quot; +
                             &quot;latestLayout epoch:{} &quot;,
@@ -345,19 +345,19 @@ public class ManagementServer extends AbstractServer {
 <span class="nc" id="L345">            return;</span>
         }
 
-<span class="nc" id="L348">        boolean result = false;</span>
-<span class="nc bnc" id="L349" title="All 2 branches missed.">        if (healingLock.tryLock()) {</span>
+<span class="fc" id="L348">        boolean result = false;</span>
+<span class="pc bpc" id="L349" title="1 of 2 branches missed.">        if (healingLock.tryLock()) {</span>
             try {
-<span class="nc" id="L351">                log.info(&quot;handleHealingDetectedMsg: acquired healing lock. Performing healing for nodes: {}&quot;,</span>
+<span class="fc" id="L351">                log.info(&quot;handleHealingDetectedMsg: acquired healing lock. Performing healing for nodes: {}&quot;,</span>
                         unresponsiveHealedNodes);
-<span class="nc" id="L353">                final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);</span>
-<span class="nc" id="L354">                result = ReconfigurationEventHandler.handleHealing(</span>
-<span class="nc" id="L355">                        managementAgent.getCorfuRuntime(),</span>
+<span class="fc" id="L353">                final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);</span>
+<span class="pc" id="L354">                result = ReconfigurationEventHandler.handleHealing(</span>
+<span class="fc" id="L355">                        managementAgent.getCorfuRuntime(),</span>
                         unresponsiveHealedNodes,
                         retryWorkflowQueryTimeout);
             } finally {
-<span class="nc" id="L359">                healingLock.unlock();</span>
-<span class="nc" id="L360">            }</span>
+<span class="pc" id="L359">                healingLock.unlock();</span>
+<span class="pc" id="L360">            }</span>
         } else {
 <span class="nc" id="L362">            log.info(&quot;handleHealingDetectedMsg: healing handling already in progress. Skipping.&quot;);</span>
 <span class="nc" id="L363">            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));</span>
@@ -387,12 +387,12 @@ public class ManagementServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.NODE_STATE_REQUEST)
     public void handleNodeStateRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-<span class="nc" id="L390">        NodeState nodeState = clusterContext.getClusterView()</span>
-<span class="nc" id="L391">                .getNode(serverContext.getLocalEndpoint())</span>
-<span class="nc" id="L392">                .orElseGet(this::buildDefaultNodeState);</span>
+<span class="fc" id="L390">        NodeState nodeState = clusterContext.getClusterView()</span>
+<span class="fc" id="L391">                .getNode(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L392">                .orElseGet(this::buildDefaultNodeState);</span>
 
-<span class="nc" id="L394">        r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));</span>
-<span class="nc" id="L395">    }</span>
+<span class="fc" id="L394">        r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));</span>
+<span class="fc" id="L395">    }</span>
 
     @ServerHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST)
     public void handleFailureDetectorMetricsRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -406,21 +406,21 @@ public class ManagementServer extends AbstractServer {
      * @return node state
      */
     private NodeState buildDefaultNodeState() {
-<span class="nc" id="L409">        log.info(&quot;Management server: {}, not ready yet, return default NodeState, current cluster view: {}&quot;,</span>
-<span class="nc" id="L410">                serverContext.getLocalEndpoint(), clusterContext.getClusterView());</span>
+<span class="fc" id="L409">        log.info(&quot;Management server: {}, not ready yet, return default NodeState, current cluster view: {}&quot;,</span>
+<span class="fc" id="L410">                serverContext.getLocalEndpoint(), clusterContext.getClusterView());</span>
 
-<span class="nc" id="L412">        long epoch = Layout.INVALID_EPOCH;</span>
-<span class="nc" id="L413">        Layout layout = serverContext.copyManagementLayout();</span>
-<span class="nc bnc" id="L414" title="All 2 branches missed.">        if (layout != null){</span>
-<span class="nc" id="L415">            epoch = layout.getEpoch();</span>
+<span class="fc" id="L412">        long epoch = Layout.INVALID_EPOCH;</span>
+<span class="fc" id="L413">        Layout layout = serverContext.copyManagementLayout();</span>
+<span class="fc bfc" id="L414" title="All 2 branches covered.">        if (layout != null){</span>
+<span class="fc" id="L415">            epoch = layout.getEpoch();</span>
         }
 
         //Node state is connected by default.
         //We believe two servers are connected if another servers is able to send command NODE_STATE_REQUEST
         // and get a response. If we are able to provide NodeState we believe that the state is CONNECTED.
-<span class="nc" id="L421">        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint(),</span>
+<span class="fc" id="L421">        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint(),</span>
                                               epoch,
-<span class="nc" id="L423">                                              clusterContext.getCounter().get());</span>
+<span class="fc" id="L423">                                              clusterContext.getCounter().get());</span>
     }
 
     /**
@@ -447,12 +447,12 @@ public class ManagementServer extends AbstractServer {
      */
     @Override
     public void shutdown() {
-<span class="nc" id="L450">        super.shutdown();</span>
-<span class="nc" id="L451">        orchestrator.shutdown();</span>
-<span class="nc" id="L452">        managementAgent.shutdown();</span>
+<span class="fc" id="L450">        super.shutdown();</span>
+<span class="fc" id="L451">        orchestrator.shutdown();</span>
+<span class="fc" id="L452">        managementAgent.shutdown();</span>
 
         // Shut down the Corfu Runtime.
-<span class="nc" id="L455">        corfuRuntime.cleanup(CorfuRuntime::shutdown);</span>
-<span class="nc" id="L456">    }</span>
+<span class="fc" id="L455">        corfuRuntime.cleanup(CorfuRuntime::shutdown);</span>
+<span class="fc" id="L456">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

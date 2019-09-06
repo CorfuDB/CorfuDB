@@ -19,16 +19,16 @@ import java.util.function.Function;
  * Created by mwei on 9/15/15.
  */
 public final class CFUtils {
-<span class="nc" id="L22">    private static final ScheduledExecutorService SCHEDULER =</span>
-<span class="nc" id="L23">            Executors.newScheduledThreadPool(</span>
+<span class="fc" id="L22">    private static final ScheduledExecutorService SCHEDULER =</span>
+<span class="fc" id="L23">            Executors.newScheduledThreadPool(</span>
                     1,
                     new ThreadFactoryBuilder()
-<span class="nc" id="L26">                            .setDaemon(true)</span>
-<span class="nc" id="L27">                            .setNameFormat(&quot;failAfter-%d&quot;)</span>
-<span class="nc" id="L28">                            .build());</span>
+<span class="fc" id="L26">                            .setDaemon(true)</span>
+<span class="fc" id="L27">                            .setNameFormat(&quot;failAfter-%d&quot;)</span>
+<span class="fc" id="L28">                            .build());</span>
 
     /** A static timeout exception that we complete futures exceptionally with. */
-<span class="nc" id="L31">    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();</span>
+<span class="fc" id="L31">    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();</span>
 
 <span class="nc" id="L33">    private CFUtils() {</span>
         // Prevent initializing a utility class
@@ -141,8 +141,8 @@ public final class CFUtils {
     }
 
     public static &lt;T&gt; CompletableFuture&lt;Void&gt; allOf(Collection&lt;CompletableFuture&lt;T&gt;&gt; futures) {
-<span class="nc" id="L144">        CompletableFuture&lt;T&gt;[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);</span>
-<span class="nc" id="L145">        return CompletableFuture.allOf(futuresArr);</span>
+<span class="fc" id="L144">        CompletableFuture&lt;T&gt;[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);</span>
+<span class="fc" id="L145">        return CompletableFuture.allOf(futuresArr);</span>
     }
 
     /**

@@ -23,16 +23,16 @@ import org.corfudb.util.serializer.Serializers;
  */
 @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
 <span class="nc" id="L25">@ToString</span>
-<span class="nc" id="L26">@Slf4j</span>
+<span class="fc" id="L26">@Slf4j</span>
 public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
 
     // map from stream-ID to a list of updates encapsulated as MultiSMREntry
-<span class="nc" id="L30">    @Getter</span>
-<span class="nc" id="L31">    public Map&lt;UUID, MultiSMREntry&gt; entryMap = Collections.synchronizedMap(new HashMap&lt;&gt;());</span>
+<span class="pc" id="L30">    @Getter</span>
+<span class="pc" id="L31">    public Map&lt;UUID, MultiSMREntry&gt; entryMap = Collections.synchronizedMap(new HashMap&lt;&gt;());</span>
 
-<span class="nc" id="L33">    public MultiObjectSMREntry() {</span>
-<span class="nc" id="L34">        this.type = LogEntryType.MULTIOBJSMR;</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L33">    public MultiObjectSMREntry() {</span>
+<span class="fc" id="L34">        this.type = LogEntryType.MULTIOBJSMR;</span>
+<span class="fc" id="L35">    }</span>
 
 <span class="nc" id="L37">    public MultiObjectSMREntry(Map&lt;UUID, MultiSMREntry&gt; entryMap) {</span>
 <span class="nc" id="L38">        this.type = LogEntryType.MULTIOBJSMR;</span>
@@ -45,8 +45,8 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * @return the MultiSMREntry corresponding to streamId
      */
     protected MultiSMREntry getStreamEntry(UUID streamID) {
-<span class="nc" id="L48">        return getEntryMap().computeIfAbsent(streamID, u -&gt; {</span>
-<span class="nc" id="L49">                    return new MultiSMREntry();</span>
+<span class="fc" id="L48">        return getEntryMap().computeIfAbsent(streamID, u -&gt; {</span>
+<span class="fc" id="L49">                    return new MultiSMREntry();</span>
                 }
         );
     }
@@ -57,8 +57,8 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * @param updateEntry SMREntry to add
      */
     public void addTo(UUID streamID, SMREntry updateEntry) {
-<span class="nc" id="L60">        getStreamEntry(streamID).addTo(updateEntry);</span>
-<span class="nc" id="L61">    }</span>
+<span class="fc" id="L60">        getStreamEntry(streamID).addTo(updateEntry);</span>
+<span class="fc" id="L61">    }</span>
 
     /**
      * merge two MultiObjectSMREntry records.
@@ -66,14 +66,14 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * @param other Object to merge.
      */
     public void mergeInto(MultiObjectSMREntry other) {
-<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (other == null) {</span>
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">        if (other == null) {</span>
 <span class="nc" id="L70">            return;</span>
         }
 
-<span class="nc" id="L73">        other.getEntryMap().forEach((streamID, multiSmrEntry) -&gt; {</span>
-<span class="nc" id="L74">            getStreamEntry(streamID).mergeInto(multiSmrEntry);</span>
-<span class="nc" id="L75">        });</span>
-<span class="nc" id="L76">    }</span>
+<span class="fc" id="L73">        other.getEntryMap().forEach((streamID, multiSmrEntry) -&gt; {</span>
+<span class="fc" id="L74">            getStreamEntry(streamID).mergeInto(multiSmrEntry);</span>
+<span class="fc" id="L75">        });</span>
+<span class="fc" id="L76">    }</span>
 
     /**
      * This function provides the remaining buffer.
@@ -82,28 +82,28 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
-<span class="nc" id="L85">        super.deserializeBuffer(b, rt);</span>
+<span class="fc" id="L85">        super.deserializeBuffer(b, rt);</span>
 
-<span class="nc" id="L87">        int numUpdates = b.readInt();</span>
-<span class="nc" id="L88">        entryMap = new HashMap&lt;&gt;();</span>
-<span class="nc bnc" id="L89" title="All 2 branches missed.">        for (int i = 0; i &lt; numUpdates; i++) {</span>
-<span class="nc" id="L90">            entryMap.put(</span>
-<span class="nc" id="L91">                    new UUID(b.readLong(), b.readLong()),</span>
-<span class="nc" id="L92">                    ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt)));</span>
+<span class="fc" id="L87">        int numUpdates = b.readInt();</span>
+<span class="fc" id="L88">        entryMap = new HashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        for (int i = 0; i &lt; numUpdates; i++) {</span>
+<span class="fc" id="L90">            entryMap.put(</span>
+<span class="fc" id="L91">                    new UUID(b.readLong(), b.readLong()),</span>
+<span class="fc" id="L92">                    ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt)));</span>
         }
-<span class="nc" id="L94">    }</span>
+<span class="fc" id="L94">    }</span>
 
     @Override
     public void serialize(ByteBuf b) {
-<span class="nc" id="L98">        super.serialize(b);</span>
-<span class="nc" id="L99">        b.writeInt(entryMap.size());</span>
-<span class="nc" id="L100">        entryMap.entrySet().stream()</span>
-<span class="nc" id="L101">                .forEach(x -&gt; {</span>
-<span class="nc" id="L102">                    b.writeLong(x.getKey().getMostSignificantBits());</span>
-<span class="nc" id="L103">                    b.writeLong(x.getKey().getLeastSignificantBits());</span>
-<span class="nc" id="L104">                    Serializers.CORFU.serialize(x.getValue(), b);</span>
-<span class="nc" id="L105">                });</span>
-<span class="nc" id="L106">    }</span>
+<span class="fc" id="L98">        super.serialize(b);</span>
+<span class="fc" id="L99">        b.writeInt(entryMap.size());</span>
+<span class="fc" id="L100">        entryMap.entrySet().stream()</span>
+<span class="fc" id="L101">                .forEach(x -&gt; {</span>
+<span class="fc" id="L102">                    b.writeLong(x.getKey().getMostSignificantBits());</span>
+<span class="fc" id="L103">                    b.writeLong(x.getKey().getLeastSignificantBits());</span>
+<span class="fc" id="L104">                    Serializers.CORFU.serialize(x.getValue(), b);</span>
+<span class="fc" id="L105">                });</span>
+<span class="fc" id="L106">    }</span>
 
     /**
      * Get the list of SMR updates for a particular object.
@@ -112,9 +112,9 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     public List&lt;SMREntry&gt; getSMRUpdates(UUID id) {
-<span class="nc" id="L115">        MultiSMREntry entry = entryMap.get(id);</span>
-<span class="nc bnc" id="L116" title="All 2 branches missed.">        return entryMap.get(id) == null ? Collections.emptyList() :</span>
-<span class="nc" id="L117">                entry.getUpdates();</span>
+<span class="fc" id="L115">        MultiSMREntry entry = entryMap.get(id);</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        return entryMap.get(id) == null ? Collections.emptyList() :</span>
+<span class="fc" id="L117">                entry.getUpdates();</span>
     }
 
     /**
@@ -122,10 +122,10 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     public void setGlobalAddress(long address) {
-<span class="nc" id="L125">        super.setGlobalAddress(address);</span>
-<span class="nc" id="L126">        this.getEntryMap().values().forEach(x -&gt; {</span>
-<span class="nc" id="L127">            x.setGlobalAddress(address);</span>
-<span class="nc" id="L128">        });</span>
-<span class="nc" id="L129">    }</span>
+<span class="fc" id="L125">        super.setGlobalAddress(address);</span>
+<span class="fc" id="L126">        this.getEntryMap().values().forEach(x -&gt; {</span>
+<span class="fc" id="L127">            x.setGlobalAddress(address);</span>
+<span class="fc" id="L128">        });</span>
+<span class="fc" id="L129">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

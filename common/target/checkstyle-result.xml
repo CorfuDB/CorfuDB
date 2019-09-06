@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <checkstyle version="8.20">
+<file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/MetricsServer.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/providers/DropwizardMetricsProvider.java">
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/MetricsProvider.java">
+<error line="4" severity="warning" message="&apos;com.codahale.metrics.Counter&apos; should be separated from previous import group by one line." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+</file>
+<file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/metrics/servers/PrometheusMetricsServer.java">
+<error line="15" severity="warning" message="Wrong lexicographical order for &apos;java.util.Map&apos; import. Should be before &apos;org.eclipse.jetty.servlet.ServletHolder&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="16" severity="warning" message="Wrong lexicographical order for &apos;java.util.Optional&apos; import. Should be before &apos;org.eclipse.jetty.servlet.ServletHolder&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="18" severity="warning" message="Wrong lexicographical order for &apos;org.corfudb.common.metrics.MetricsServer&apos; import. Should be before &apos;org.eclipse.jetty.servlet.ServletHolder&apos;." source="com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck"/>
+<error line="25" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="76" column="9" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+</file>
 <file name="/Users/lidong/vmware_proj/CorfuDB/common/src/main/java/org/corfudb/common/result/Result.java">
 <error line="33" column="5" severity="warning" message="Missing a Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
 <error line="36" column="38" severity="warning" message="WhitespaceAround: &apos;{&apos; is not preceded with whitespace." source="com.puppycrawl.tools.checkstyle.checks.whitespace.WhitespaceAroundCheck"/>

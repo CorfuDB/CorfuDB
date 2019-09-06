@@ -21,33 +21,33 @@ import org.corfudb.runtime.CorfuRuntime;
 /**
  * Created by mwei on 2/18/16.
  */
-<span class="nc" id="L24">@Slf4j</span>
+<span class="fc" id="L24">@Slf4j</span>
 public class PrimitiveSerializer implements ISerializer {
     private final byte type;
 
     public static final Map&lt;Byte, DeserializerFunction&gt; DeserializerMap =
-<span class="nc" id="L29">            Arrays.stream(Primitives.values())</span>
-<span class="nc" id="L30">                    .collect(Collectors.toMap(Primitives::getTypeNum, Primitives::getDeserializer));</span>
-<span class="nc" id="L31">    public static final Map&lt;Class, Primitives&gt; SerializerMap = getSerializerMap();</span>
+<span class="fc" id="L29">            Arrays.stream(Primitives.values())</span>
+<span class="fc" id="L30">                    .collect(Collectors.toMap(Primitives::getTypeNum, Primitives::getDeserializer));</span>
+<span class="fc" id="L31">    public static final Map&lt;Class, Primitives&gt; SerializerMap = getSerializerMap();</span>
 
-<span class="nc" id="L33">    public PrimitiveSerializer(byte type) {</span>
-<span class="nc" id="L34">        this.type = type;</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L33">    public PrimitiveSerializer(byte type) {</span>
+<span class="fc" id="L34">        this.type = type;</span>
+<span class="fc" id="L35">    }</span>
 
     @Override
     public byte getType() {
-<span class="nc" id="L39">        return type;</span>
+<span class="fc" id="L39">        return type;</span>
     }
 
     private static Map&lt;Class, Primitives&gt; getSerializerMap() {
-<span class="nc" id="L43">        ImmutableMap.Builder&lt;Class, Primitives&gt; b = ImmutableMap.builder();</span>
-<span class="nc" id="L44">        Arrays.stream(Primitives.values()).forEach(e -&gt; {</span>
-<span class="nc" id="L45">            b.put(e.getClassType(), e);</span>
-<span class="nc bnc" id="L46" title="All 2 branches missed.">            if (e.getPrimitiveClass() != null) {</span>
-<span class="nc" id="L47">                b.put(e.getPrimitiveClass(), e);</span>
+<span class="fc" id="L43">        ImmutableMap.Builder&lt;Class, Primitives&gt; b = ImmutableMap.builder();</span>
+<span class="fc" id="L44">        Arrays.stream(Primitives.values()).forEach(e -&gt; {</span>
+<span class="fc" id="L45">            b.put(e.getClassType(), e);</span>
+<span class="fc bfc" id="L46" title="All 2 branches covered.">            if (e.getPrimitiveClass() != null) {</span>
+<span class="fc" id="L47">                b.put(e.getPrimitiveClass(), e);</span>
             }
-<span class="nc" id="L49">        });</span>
-<span class="nc" id="L50">        return b.build();</span>
+<span class="fc" id="L49">        });</span>
+<span class="fc" id="L50">        return b.build();</span>
     }
 
     @SuppressWarnings(&quot;unchecked&quot;)
@@ -91,9 +91,9 @@ public class PrimitiveSerializer implements ISerializer {
     @Override
     @SuppressWarnings(&quot;unchecked&quot;)
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-<span class="nc" id="L94">        byte type = b.readByte();</span>
-<span class="nc" id="L95">        DeserializerFunction d = DeserializerMap.get(type);</span>
-<span class="nc" id="L96">        return d.deserialize(b, rt);</span>
+<span class="fc" id="L94">        byte type = b.readByte();</span>
+<span class="fc" id="L95">        DeserializerFunction d = DeserializerMap.get(type);</span>
+<span class="fc" id="L96">        return d.deserialize(b, rt);</span>
     }
 
     /**
@@ -105,57 +105,57 @@ public class PrimitiveSerializer implements ISerializer {
     @Override
     @SuppressWarnings(&quot;unchecked&quot;)
     public void serialize(Object o, ByteBuf b) {
-<span class="nc bnc" id="L108" title="All 2 branches missed.">        if (o.getClass().getName().contains(&quot;$ByteBuddy$&quot;)) {</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">        if (o.getClass().getName().contains(&quot;$ByteBuddy$&quot;)) {</span>
 <span class="nc" id="L109">            ((SerializerFunction&lt;Object&gt;) Primitives.CORFU_SMR.getSerializer()).serialize(o, b);</span>
         } else {
-<span class="nc" id="L111">            Primitives p = SerializerMap.get(o.getClass());</span>
-<span class="nc bnc" id="L112" title="All 2 branches missed.">            if (p == null) {</span>
+<span class="fc" id="L111">            Primitives p = SerializerMap.get(o.getClass());</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">            if (p == null) {</span>
 <span class="nc" id="L113">                throw new RuntimeException(&quot;Unsupported class for serialization: &quot; + o.getClass());</span>
             }
-<span class="nc" id="L115">            b.writeByte(p.getTypeNum());</span>
-<span class="nc" id="L116">            ((SerializerFunction&lt;Object&gt;)p.getSerializer()).serialize(o, b);</span>
+<span class="fc" id="L115">            b.writeByte(p.getTypeNum());</span>
+<span class="fc" id="L116">            ((SerializerFunction&lt;Object&gt;)p.getSerializer()).serialize(o, b);</span>
         }
-<span class="nc" id="L118">    }</span>
+<span class="fc" id="L118">    }</span>
 
-<span class="nc" id="L120">    enum Primitives {</span>
-<span class="nc" id="L121">        BYTE(0, Byte.class, byte.class, (o, b) -&gt; b.writeByte(o), (b, r) -&gt; b.readByte()),</span>
-<span class="nc" id="L122">        SHORT(1, Short.class, short.class, (o, b) -&gt; b.writeShort(o), (b, r) -&gt; b.readShort()),</span>
-<span class="nc" id="L123">        INTEGER(2, Integer.class, int.class, (o, b) -&gt; b.writeInt(o), (b, r) -&gt; b.readInt()),</span>
-<span class="nc" id="L124">        LONG(3, Long.class, long.class, (o, b) -&gt; b.writeLong(o), (b, r) -&gt; b.readLong()),</span>
-<span class="nc" id="L125">        BOOLEAN(4, Boolean.class, boolean.class, (o, b) -&gt; b.writeBoolean(o),</span>
+<span class="pc" id="L120">    enum Primitives {</span>
+<span class="pc" id="L121">        BYTE(0, Byte.class, byte.class, (o, b) -&gt; b.writeByte(o), (b, r) -&gt; b.readByte()),</span>
+<span class="pc" id="L122">        SHORT(1, Short.class, short.class, (o, b) -&gt; b.writeShort(o), (b, r) -&gt; b.readShort()),</span>
+<span class="pc" id="L123">        INTEGER(2, Integer.class, int.class, (o, b) -&gt; b.writeInt(o), (b, r) -&gt; b.readInt()),</span>
+<span class="fc" id="L124">        LONG(3, Long.class, long.class, (o, b) -&gt; b.writeLong(o), (b, r) -&gt; b.readLong()),</span>
+<span class="pc" id="L125">        BOOLEAN(4, Boolean.class, boolean.class, (o, b) -&gt; b.writeBoolean(o),</span>
 <span class="nc" id="L126">                (b, r) -&gt; b.readBoolean()),</span>
-<span class="nc" id="L127">        DOUBLE(5, Double.class, double.class, (o, b) -&gt; b.writeDouble(o), (b, r) -&gt; b.readDouble()),</span>
-<span class="nc" id="L128">        FLOAT(6, Float.class, float.class, (o, b) -&gt; b.writeFloat(o), (b, r) -&gt; b.readFloat()),</span>
-<span class="nc" id="L129">        BYTE_ARRAY(7, Byte[].class, byte[].class, PrimitiveSerializer::writeBytes,</span>
+<span class="fc" id="L127">        DOUBLE(5, Double.class, double.class, (o, b) -&gt; b.writeDouble(o), (b, r) -&gt; b.readDouble()),</span>
+<span class="pc" id="L128">        FLOAT(6, Float.class, float.class, (o, b) -&gt; b.writeFloat(o), (b, r) -&gt; b.readFloat()),</span>
+<span class="fc" id="L129">        BYTE_ARRAY(7, Byte[].class, byte[].class, PrimitiveSerializer::writeBytes,</span>
                 (DeserializerFunction)PrimitiveSerializer::readBytes),
-<span class="nc" id="L131">        SHORT_ARRAY(8, Short[].class, short[].class, (o, b) -&gt; writeArray(o, b,</span>
+<span class="pc" id="L131">        SHORT_ARRAY(8, Short[].class, short[].class, (o, b) -&gt; writeArray(o, b,</span>
                 ByteBuf::writeShort),
 <span class="nc" id="L133">                (b, r) -&gt; readArray(b, ByteBuf::readShort, Short[]::new)),</span>
-<span class="nc" id="L134">        INTEGER_ARRAY(9, Integer[].class, int[].class, (o, b) -&gt; writeArray(o, b,</span>
+<span class="pc" id="L134">        INTEGER_ARRAY(9, Integer[].class, int[].class, (o, b) -&gt; writeArray(o, b,</span>
                 ByteBuf::writeInt),
 <span class="nc" id="L136">                (b, r) -&gt; readArray(b, ByteBuf::readInt, Integer[]::new)),</span>
-<span class="nc" id="L137">        LONG_ARRAY(10, Long[].class, long[].class, (o, b) -&gt; writeArray(o, b, ByteBuf::writeLong),</span>
+<span class="pc" id="L137">        LONG_ARRAY(10, Long[].class, long[].class, (o, b) -&gt; writeArray(o, b, ByteBuf::writeLong),</span>
 <span class="nc" id="L138">                (b, r) -&gt; readArray(b, ByteBuf::readLong, Long[]::new)),</span>
-<span class="nc" id="L139">        BOOLEAN_ARRAY(11, Boolean[].class, boolean[].class, (o, b) -&gt; writeArray(o, b,</span>
+<span class="pc" id="L139">        BOOLEAN_ARRAY(11, Boolean[].class, boolean[].class, (o, b) -&gt; writeArray(o, b,</span>
                 ByteBuf::writeBoolean),
 <span class="nc" id="L141">                (b, r) -&gt; readArray(b, ByteBuf::readBoolean, Boolean[]::new)),</span>
-<span class="nc" id="L142">        DOUBLE_ARRAY(12, Double[].class, double[].class, (o, b) -&gt; writeArray(o, b,</span>
+<span class="pc" id="L142">        DOUBLE_ARRAY(12, Double[].class, double[].class, (o, b) -&gt; writeArray(o, b,</span>
                 ByteBuf::writeDouble),
 <span class="nc" id="L144">                (b, r) -&gt; readArray(b, ByteBuf::readDouble, Double[]::new)),</span>
-<span class="nc" id="L145">        FLOAT_ARRAY(13, Float[].class, float[].class, (o, b) -&gt; writeArray(o, b,</span>
+<span class="pc" id="L145">        FLOAT_ARRAY(13, Float[].class, float[].class, (o, b) -&gt; writeArray(o, b,</span>
                 ByteBuf::writeFloat),
 <span class="nc" id="L147">                (b, r) -&gt; readArray(b, ByteBuf::readFloat, Float[]::new)),</span>
-<span class="nc" id="L148">        STRING(14, String.class, null, (o, b) -&gt; {</span>
-<span class="nc" id="L149">            b.writeInt(o.length());</span>
-<span class="nc" id="L150">            b.writeBytes(o.getBytes());</span>
-<span class="nc" id="L151">        },</span>
+<span class="fc" id="L148">        STRING(14, String.class, null, (o, b) -&gt; {</span>
+<span class="fc" id="L149">            b.writeInt(o.length());</span>
+<span class="fc" id="L150">            b.writeBytes(o.getBytes());</span>
+<span class="fc" id="L151">        },</span>
                 (b, r) -&gt; {
 <span class="nc" id="L153">                    int length = b.readInt();</span>
 <span class="nc" id="L154">                    byte[] bs = new byte[length];</span>
 <span class="nc" id="L155">                    b.readBytes(bs, 0, length);</span>
 <span class="nc" id="L156">                    return new String(bs);</span>
                 }),
-<span class="nc" id="L158">        CORFU_SMR(15, Object.class, null, (o, b) -&gt; {</span>
+<span class="fc" id="L158">        CORFU_SMR(15, Object.class, null, (o, b) -&gt; {</span>
 <span class="nc" id="L159">            String className = o.getClass().toString();</span>
 <span class="nc" id="L160">            className = &quot;CorfuObject&quot;;</span>
 <span class="nc" id="L161">            byte[] classNameBytes = className.getBytes();</span>
@@ -194,24 +194,24 @@ public class PrimitiveSerializer implements ISerializer {
                     }
                 });
 
-<span class="nc" id="L197">        @Getter</span>
+<span class="fc" id="L197">        @Getter</span>
         public final byte typeNum;
-<span class="nc" id="L199">        @Getter</span>
+<span class="fc" id="L199">        @Getter</span>
         public final Class&lt;?&gt; classType;
-<span class="nc" id="L201">        @Getter</span>
+<span class="fc" id="L201">        @Getter</span>
         public final Class&lt;?&gt; primitiveClass;
-<span class="nc" id="L203">        @Getter</span>
+<span class="fc" id="L203">        @Getter</span>
         public final SerializerFunction&lt;?&gt; serializer;
-<span class="nc" id="L205">        @Getter</span>
+<span class="fc" id="L205">        @Getter</span>
         public final DeserializerFunction deserializer;
         &lt;T&gt; Primitives(int typeNum, Class&lt;T&gt; classType, Class&lt;?&gt; primitiveClass,
-<span class="nc" id="L208">                       SerializerFunction&lt;T&gt; serializer, DeserializerFunction&lt;T&gt; deserializer) {</span>
-<span class="nc" id="L209">            this.typeNum = (byte) typeNum;</span>
-<span class="nc" id="L210">            this.classType = classType;</span>
-<span class="nc" id="L211">            this.primitiveClass = primitiveClass;</span>
-<span class="nc" id="L212">            this.serializer = serializer;</span>
-<span class="nc" id="L213">            this.deserializer = deserializer;</span>
-<span class="nc" id="L214">        }</span>
+<span class="fc" id="L208">                       SerializerFunction&lt;T&gt; serializer, DeserializerFunction&lt;T&gt; deserializer) {</span>
+<span class="fc" id="L209">            this.typeNum = (byte) typeNum;</span>
+<span class="fc" id="L210">            this.classType = classType;</span>
+<span class="fc" id="L211">            this.primitiveClass = primitiveClass;</span>
+<span class="fc" id="L212">            this.serializer = serializer;</span>
+<span class="fc" id="L213">            this.deserializer = deserializer;</span>
+<span class="fc" id="L214">        }</span>
     }
 
 

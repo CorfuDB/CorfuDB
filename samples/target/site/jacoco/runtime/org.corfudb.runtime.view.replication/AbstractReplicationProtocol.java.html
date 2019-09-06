@@ -10,7 +10,7 @@ import org.corfudb.runtime.view.RuntimeLayout;
 /**
  * Created by mwei on 4/6/17.
  */
-<span class="nc" id="L13">@Slf4j</span>
+<span class="fc" id="L13">@Slf4j</span>
 public abstract class AbstractReplicationProtocol implements IReplicationProtocol {
 
     /**
@@ -24,9 +24,9 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
      * @param holeFillPolicy The hole filling policy to be applied when
      *                       a read returns uncommitted data.
      */
-<span class="nc" id="L27">    public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy) {</span>
-<span class="nc" id="L28">        this.holeFillPolicy = holeFillPolicy;</span>
-<span class="nc" id="L29">    }</span>
+<span class="fc" id="L27">    public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy) {</span>
+<span class="fc" id="L28">        this.holeFillPolicy = holeFillPolicy;</span>
+<span class="fc" id="L29">    }</span>
 
     /**
      * {@inheritDoc}
@@ -40,13 +40,13 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
     @Override
     public ILogData read(RuntimeLayout runtimeLayout, long globalAddress) {
         try {
-<span class="nc" id="L43">            return holeFillPolicy</span>
-<span class="nc" id="L44">                    .peekUntilHoleFillRequired(globalAddress,</span>
-<span class="nc" id="L45">                            a -&gt; peek(runtimeLayout, a));</span>
-<span class="nc" id="L46">        } catch (HoleFillRequiredException e) {</span>
-<span class="nc" id="L47">            log.debug(&quot;HoleFill[{}] due to {}&quot;, globalAddress, e.getMessage());</span>
-<span class="nc" id="L48">            holeFill(runtimeLayout, globalAddress);</span>
-<span class="nc" id="L49">            return peek(runtimeLayout, globalAddress);</span>
+<span class="fc" id="L43">            return holeFillPolicy</span>
+<span class="fc" id="L44">                    .peekUntilHoleFillRequired(globalAddress,</span>
+<span class="fc" id="L45">                            a -&gt; peek(runtimeLayout, a));</span>
+<span class="fc" id="L46">        } catch (HoleFillRequiredException e) {</span>
+<span class="fc" id="L47">            log.debug(&quot;HoleFill[{}] due to {}&quot;, globalAddress, e.getMessage());</span>
+<span class="fc" id="L48">            holeFill(runtimeLayout, globalAddress);</span>
+<span class="fc" id="L49">            return peek(runtimeLayout, globalAddress);</span>
         }
     }
 

@@ -80,13 +80,6 @@ public class TransactionRecorder {
                             histogram.getValueAtPercentile (50) / 1000.0,
                             histogram.getValueAtPercentile (95) / 1000.0,
                             histogram.getValueAtPercentile (99) / 1000.0);
-                    System.out.printf("Throughput %f req/sec   Latency{ total{%f}ms  mean{%f}ms fiftyPercent{%f}ms NintyFivePercent{%f}ms NintyNinePercent{%f}ms\n",
-                            throughput,
-                            histogram.getTotalCount () / 1000.0,
-                            histogram.getMean () / 1000.0,
-                            histogram.getValueAtPercentile (50) / 1000.0,
-                            histogram.getValueAtPercentile (95) / 1000.0,
-                            histogram.getValueAtPercentile (99) / 1000.0);
 
                     Sleep.sleepUninterruptibly (Duration.ofMillis (1000 * 3));
                     prevTs = currTs;
@@ -111,7 +104,6 @@ public class TransactionRecorder {
         for (int x = 0; x < rts.length; x++) {
             rts[x].shutdown();
         }
-        System.out.println("TransactionRecorder ends");
     }
 }
 

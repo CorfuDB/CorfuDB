@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
  *
  * &lt;p&gt;Created by mwei on 8/1/16.&lt;/p&gt;
  */
-<span class="nc" id="L23">@NoArgsConstructor</span>
+<span class="fc" id="L23">@NoArgsConstructor</span>
 public class CorfuPayloadMsg&lt;T&gt; extends CorfuMsg {
 
     /**
@@ -31,9 +31,9 @@ public class CorfuPayloadMsg&lt;T&gt; extends CorfuMsg {
 
 
     public CorfuPayloadMsg(CorfuMsgType msgType, T payload) {
-<span class="nc" id="L34">        super(msgType);</span>
-<span class="nc" id="L35">        this.payload = payload;</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L34">        super(msgType);</span>
+<span class="fc" id="L35">        this.payload = payload;</span>
+<span class="fc" id="L36">    }</span>
 
     /**
      * Serialize the message into the given bytebuffer.
@@ -42,9 +42,9 @@ public class CorfuPayloadMsg&lt;T&gt; extends CorfuMsg {
      */
     @Override
     public void serialize(ByteBuf buffer) {
-<span class="nc" id="L45">        super.serialize(buffer);</span>
-<span class="nc" id="L46">        ICorfuPayload.serialize(buffer, payload);</span>
-<span class="nc" id="L47">    }</span>
+<span class="fc" id="L45">        super.serialize(buffer);</span>
+<span class="fc" id="L46">        ICorfuPayload.serialize(buffer, payload);</span>
+<span class="fc" id="L47">    }</span>
 
     /**
      * Parse the rest of the message from the buffer. Classes that extend CorfuMsg
@@ -55,9 +55,9 @@ public class CorfuPayloadMsg&lt;T&gt; extends CorfuMsg {
     @Override
     @SuppressWarnings(&quot;unchecked&quot;)
     public void fromBuffer(ByteBuf buffer) {
-<span class="nc" id="L58">        payload = (T) ICorfuPayload.fromBuffer(buffer,</span>
-<span class="nc" id="L59">                (Class)((ParameterizedType)msgType.messageType.getType())</span>
-<span class="nc" id="L60">                        .getActualTypeArguments()[0]);</span>
-<span class="nc" id="L61">    }</span>
+<span class="fc" id="L58">        payload = (T) ICorfuPayload.fromBuffer(buffer,</span>
+<span class="fc" id="L59">                (Class)((ParameterizedType)msgType.messageType.getType())</span>
+<span class="fc" id="L60">                        .getActualTypeArguments()[0]);</span>
+<span class="fc" id="L61">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

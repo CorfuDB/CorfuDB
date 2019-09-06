@@ -22,21 +22,21 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
  *
  * &lt;p&gt;Created by Zeeshan on 12/8/17.
  */
-<span class="nc" id="L25">@Slf4j</span>
+<span class="fc" id="L25">@Slf4j</span>
 public class HealNodeWorkflow extends AddNodeWorkflow {
 
     private final HealNodeRequest request;
 
     public HealNodeWorkflow(HealNodeRequest healNodeRequest) {
-<span class="nc" id="L31">        super(new AddNodeRequest(healNodeRequest.getEndpoint()));</span>
-<span class="nc" id="L32">        this.request = healNodeRequest;</span>
-<span class="nc" id="L33">        this.actions = ImmutableList.of(new HealNodeToLayout(),</span>
+<span class="fc" id="L31">        super(new AddNodeRequest(healNodeRequest.getEndpoint()));</span>
+<span class="fc" id="L32">        this.request = healNodeRequest;</span>
+<span class="fc" id="L33">        this.actions = ImmutableList.of(new HealNodeToLayout(),</span>
                 new RestoreRedundancyMergeSegments());
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L35">    }</span>
 
     @Override
     public String getName() {
-<span class="nc" id="L39">        return HEAL_NODE.toString();</span>
+<span class="fc" id="L39">        return HEAL_NODE.toString();</span>
     }
 
     /**
@@ -45,19 +45,19 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
      * the node the address space segment is split at the
      * tail determined during the layout modification.
      */
-<span class="nc" id="L48">    class HealNodeToLayout extends Action {</span>
+<span class="fc" id="L48">    class HealNodeToLayout extends Action {</span>
         @Override
         public String getName() {
-<span class="nc" id="L51">            return &quot;HealNodeToLayout&quot;;</span>
+<span class="fc" id="L51">            return &quot;HealNodeToLayout&quot;;</span>
         }
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-<span class="nc" id="L56">            Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());</span>
-<span class="nc" id="L57">            runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());</span>
-<span class="nc" id="L58">            runtime.invalidateLayout();</span>
-<span class="nc" id="L59">            newLayout = new Layout(runtime.getLayoutView().getLayout());</span>
-<span class="nc" id="L60">        }</span>
+<span class="fc" id="L56">            Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="fc" id="L57">            runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());</span>
+<span class="fc" id="L58">            runtime.invalidateLayout();</span>
+<span class="fc" id="L59">            newLayout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="fc" id="L60">        }</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

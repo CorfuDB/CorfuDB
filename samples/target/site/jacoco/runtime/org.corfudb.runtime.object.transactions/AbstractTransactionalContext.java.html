@@ -57,7 +57,7 @@ import java.util.function.Consumer;
  *
  * &lt;p&gt;Created by mwei on 4/4/16.
  */
-<span class="nc" id="L60">@Slf4j</span>
+<span class="fc" id="L60">@Slf4j</span>
 public abstract class AbstractTransactionalContext implements
         Comparable&lt;AbstractTransactionalContext&gt; {
 
@@ -88,82 +88,82 @@ public abstract class AbstractTransactionalContext implements
      * NOT recorded in the log.
      */
     @SuppressWarnings(&quot;checkstyle:abbreviationaswordinname&quot;)
-<span class="nc" id="L91">    @Getter</span>
+<span class="fc" id="L91">    @Getter</span>
     public UUID transactionID;
 
     /**
      * The builder used to create this transaction.
      */
-<span class="nc" id="L97">    @Getter</span>
+<span class="fc" id="L97">    @Getter</span>
     public final Transaction transaction;
 
     /**
      * The start time of the context.
      */
-<span class="nc" id="L103">    @Getter</span>
+<span class="fc" id="L103">    @Getter</span>
     public final long startTime;
 
     /**
      * The global-log position that the transaction snapshots in all reads.
      */
-<span class="nc bnc" id="L109" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+<span class="pc bpc" id="L109" title="3 of 8 branches missed.">    @Getter(lazy = true)</span>
     private final Token snapshotTimestamp = obtainSnapshotTimestamp();
 
     /**
      * The address that the transaction was committed at.
      */
-<span class="nc" id="L115">    @Getter</span>
+<span class="pc" id="L115">    @Getter</span>
     public long commitAddress = AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
 
     /**
      * The parent context of this transaction, if in a nested transaction.
      */
-<span class="nc" id="L121">    @Getter</span>
+<span class="fc" id="L121">    @Getter</span>
     private final AbstractTransactionalContext parentContext;
 
-<span class="nc" id="L124">    @Getter</span>
+<span class="fc" id="L124">    @Getter</span>
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
 
-<span class="nc" id="L127">    @Getter</span>
+<span class="fc" id="L127">    @Getter</span>
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     /**
      * A future which gets completed when this transaction commits.
      * It is completed exceptionally when the transaction aborts.
      */
-<span class="nc" id="L134">    @Getter</span>
+<span class="pc" id="L134">    @Getter</span>
     public CompletableFuture&lt;Boolean&gt; completionFuture =
             new CompletableFuture&lt;&gt;();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
      */
-<span class="nc" id="L141">    @Getter</span>
+<span class="fc" id="L141">    @Getter</span>
     private final Map&lt;UUID, Long&gt; knownStreamPosition = new HashMap&lt;&gt;();
 
     /**
      * Metrics related fields for registry and the context marking the beginning of a transaction.
      */
-<span class="nc" id="L147">    @Getter</span>
-<span class="nc" id="L148">    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();</span>
-<span class="nc" id="L149">    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +</span>
+<span class="fc" id="L147">    @Getter</span>
+<span class="fc" id="L148">    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();</span>
+<span class="fc" id="L149">    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +</span>
             &quot;txn-op-duration&quot;;
-<span class="nc" id="L151">    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);</span>
-<span class="nc" id="L152">    @Getter</span>
+<span class="fc" id="L151">    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);</span>
+<span class="fc" id="L152">    @Getter</span>
     private final Timer.Context txOpDurationContext;
 
-<span class="nc" id="L155">    AbstractTransactionalContext(Transaction transaction) {</span>
-<span class="nc" id="L156">        transactionID = UUID.randomUUID();</span>
-<span class="nc" id="L157">        this.transaction = transaction;</span>
+<span class="fc" id="L155">    AbstractTransactionalContext(Transaction transaction) {</span>
+<span class="fc" id="L156">        transactionID = UUID.randomUUID();</span>
+<span class="fc" id="L157">        this.transaction = transaction;</span>
 
-<span class="nc" id="L159">        startTime = System.currentTimeMillis();</span>
+<span class="fc" id="L159">        startTime = System.currentTimeMillis();</span>
 
-<span class="nc" id="L161">        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);</span>
+<span class="fc" id="L161">        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);</span>
 
-<span class="nc" id="L163">        parentContext = TransactionalContext.getCurrentContext();</span>
+<span class="fc" id="L163">        parentContext = TransactionalContext.getCurrentContext();</span>
 
-<span class="nc" id="L165">        AbstractTransactionalContext.log.debug(&quot;TXBegin[{}]&quot;, this);</span>
-<span class="nc" id="L166">    }</span>
+<span class="fc" id="L165">        AbstractTransactionalContext.log.debug(&quot;TXBegin[{}]&quot;, this);</span>
+<span class="fc" id="L166">    }</span>
 
     /**
      * Access the state of the object.
@@ -197,35 +197,35 @@ public abstract class AbstractTransactionalContext implements
                                     Token snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer&lt;VersionLockedObject&gt; optimisticStreamSetter) {
-<span class="nc bnc" id="L200" title="All 2 branches missed.">        for (int x = 0; x &lt; this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {</span>
+<span class="pc bpc" id="L200" title="1 of 2 branches missed.">        for (int x = 0; x &lt; this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {</span>
             try {
-<span class="nc bnc" id="L202" title="All 2 branches missed.">                if (optimisticStreamSetter != null) {</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">                if (optimisticStreamSetter != null) {</span>
                     // Swap ourselves to be the active optimistic stream.
                     // Inside setAsOptimisticStream, if there are
                     // currently optimistic updates on the object, we
                     // roll them back.  Then, we set this context as  the
                     // object's new optimistic context.
-<span class="nc" id="L208">                    optimisticStreamSetter.accept(vlo);</span>
+<span class="fc" id="L208">                    optimisticStreamSetter.accept(vlo);</span>
                 }
-<span class="nc" id="L210">                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());</span>
-<span class="nc" id="L211">                break;</span>
-<span class="nc" id="L212">            } catch (TrimmedException te) {</span>
+<span class="fc" id="L210">                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());</span>
+<span class="fc" id="L211">                break;</span>
+<span class="fc" id="L212">            } catch (TrimmedException te) {</span>
                 // If a trim is encountered, we must reset the object
-<span class="nc" id="L214">                vlo.resetUnsafe();</span>
-<span class="nc bnc" id="L215" title="All 2 branches missed.">                if (!te.isRetriable()</span>
-<span class="nc bnc" id="L216" title="All 2 branches missed.">                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {</span>
+<span class="fc" id="L214">                vlo.resetUnsafe();</span>
+<span class="pc bpc" id="L215" title="1 of 2 branches missed.">                if (!te.isRetriable()</span>
+<span class="fc bfc" id="L216" title="All 2 branches covered.">                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {</span>
                     // abort the transaction
-<span class="nc" id="L218">                    TransactionAbortedException tae =</span>
+<span class="fc" id="L218">                    TransactionAbortedException tae =</span>
                             new TransactionAbortedException(
-<span class="nc" id="L220">                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),</span>
-<span class="nc" id="L221">                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),</span>
-<span class="nc" id="L222">                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);</span>
-<span class="nc" id="L223">                    abortTransaction(tae);</span>
-<span class="nc" id="L224">                    throw tae;</span>
+<span class="fc" id="L220">                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),</span>
+<span class="fc" id="L221">                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),</span>
+<span class="fc" id="L222">                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);</span>
+<span class="fc" id="L223">                    abortTransaction(tae);</span>
+<span class="fc" id="L224">                    throw tae;</span>
                 }
             }
         }
-<span class="nc" id="L228">    }</span>
+<span class="fc" id="L228">    }</span>
 
     /**
      * Log an SMR update to the Corfu log.
@@ -253,19 +253,19 @@ public abstract class AbstractTransactionalContext implements
      * @throws TransactionAbortedException If the transaction is aborted.
      */
     public long commitTransaction() throws TransactionAbortedException {
-<span class="nc" id="L256">        completionFuture.complete(true);</span>
-<span class="nc" id="L257">        return NOWRITE_ADDRESS;</span>
+<span class="fc" id="L256">        completionFuture.complete(true);</span>
+<span class="fc" id="L257">        return NOWRITE_ADDRESS;</span>
     }
 
     /**
      * Forcefully abort the transaction.
      */
     public void abortTransaction(TransactionAbortedException ae) {
-<span class="nc" id="L264">        AbstractTransactionalContext.log.debug(&quot;TXAbort[{}]&quot;, this);</span>
-<span class="nc" id="L265">        commitAddress = ABORTED_ADDRESS;</span>
-<span class="nc" id="L266">        completionFuture</span>
-<span class="nc" id="L267">                .completeExceptionally(ae);</span>
-<span class="nc" id="L268">    }</span>
+<span class="fc" id="L264">        AbstractTransactionalContext.log.debug(&quot;TXAbort[{}]&quot;, this);</span>
+<span class="fc" id="L265">        commitAddress = ABORTED_ADDRESS;</span>
+<span class="fc" id="L266">        completionFuture</span>
+<span class="fc" id="L267">                .completeExceptionally(ae);</span>
+<span class="fc" id="L268">    }</span>
 
     /**
      * Retrieves the current tail from the sequencer, if this
@@ -275,29 +275,29 @@ public abstract class AbstractTransactionalContext implements
      * @return the current global tail
      */
     private Token obtainSnapshotTimestamp() {
-<span class="nc" id="L278">        final AbstractTransactionalContext parentCtx = getParentContext();</span>
-<span class="nc" id="L279">        final Token txnBuilderTs = getTransaction().getSnapshot();</span>
-<span class="nc bnc" id="L280" title="All 2 branches missed.">        if (parentCtx != null) {</span>
+<span class="fc" id="L278">        final AbstractTransactionalContext parentCtx = getParentContext();</span>
+<span class="fc" id="L279">        final Token txnBuilderTs = getTransaction().getSnapshot();</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">        if (parentCtx != null) {</span>
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
-<span class="nc" id="L283">            Token parentTimestamp = parentCtx.getSnapshotTimestamp();</span>
-<span class="nc" id="L284">            log.trace(&quot;obtainSnapshotTimestamp: inheriting parent snapshot&quot; +</span>
+<span class="fc" id="L283">            Token parentTimestamp = parentCtx.getSnapshotTimestamp();</span>
+<span class="fc" id="L284">            log.trace(&quot;obtainSnapshotTimestamp: inheriting parent snapshot&quot; +</span>
                     &quot; SnapshotTimestamp[{}] {}&quot;, this, parentTimestamp);
-<span class="nc" id="L286">            return parentTimestamp;</span>
-<span class="nc bnc" id="L287" title="All 2 branches missed.">        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {</span>
-<span class="nc" id="L288">            log.trace(&quot;obtainSnapshotTimestamp: using user defined snapshot&quot; +</span>
+<span class="fc" id="L286">            return parentTimestamp;</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {</span>
+<span class="fc" id="L288">            log.trace(&quot;obtainSnapshotTimestamp: using user defined snapshot&quot; +</span>
                     &quot; SnapshotTimestamp[{}] {}&quot;, this, txnBuilderTs);
-<span class="nc" id="L290">            return txnBuilderTs;</span>
+<span class="fc" id="L290">            return txnBuilderTs;</span>
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-<span class="nc" id="L294">            Token timestamp = getTransaction()</span>
-<span class="nc" id="L295">                    .getRuntime()</span>
-<span class="nc" id="L296">                    .getSequencerView()</span>
-<span class="nc" id="L297">                    .query()</span>
-<span class="nc" id="L298">                    .getToken();</span>
-<span class="nc" id="L299">            log.trace(&quot;obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}&quot;, this, timestamp);</span>
-<span class="nc" id="L300">            return timestamp;</span>
+<span class="fc" id="L294">            Token timestamp = getTransaction()</span>
+<span class="fc" id="L295">                    .getRuntime()</span>
+<span class="fc" id="L296">                    .getSequencerView()</span>
+<span class="fc" id="L297">                    .query()</span>
+<span class="fc" id="L298">                    .getToken();</span>
+<span class="fc" id="L299">            log.trace(&quot;obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}&quot;, this, timestamp);</span>
+<span class="fc" id="L300">            return timestamp;</span>
         }
     }
 
@@ -309,8 +309,8 @@ public abstract class AbstractTransactionalContext implements
      *                        available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-<span class="nc" id="L312">        getReadSetInfo().add(proxy, conflictObjects);</span>
-<span class="nc" id="L313">    }</span>
+<span class="fc" id="L312">        getReadSetInfo().add(proxy, conflictObjects);</span>
+<span class="fc" id="L313">    }</span>
 
     /**
      * Merge another readSet into this one.
@@ -318,8 +318,8 @@ public abstract class AbstractTransactionalContext implements
      * @param other  Source readSet to merge in
      */
     void mergeReadSetInto(ConflictSetInfo other) {
-<span class="nc" id="L321">        getReadSetInfo().mergeInto(other);</span>
-<span class="nc" id="L322">    }</span>
+<span class="fc" id="L321">        getReadSetInfo().mergeInto(other);</span>
+<span class="fc" id="L322">    }</span>
 
     /**
      * Add an update to the transaction optimistic write-set.
@@ -332,7 +332,7 @@ public abstract class AbstractTransactionalContext implements
      */
     long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
-<span class="nc" id="L335">        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);</span>
+<span class="fc" id="L335">        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);</span>
     }
 
     /**
@@ -346,8 +346,8 @@ public abstract class AbstractTransactionalContext implements
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {
-<span class="nc" id="L349">        getWriteSetInfo().mergeInto(other);</span>
-<span class="nc" id="L350">    }</span>
+<span class="fc" id="L349">        getWriteSetInfo().mergeInto(other);</span>
+<span class="fc" id="L350">    }</span>
 
     /**
      * convert our write set into a new MultiObjectSMREntry.
@@ -355,7 +355,7 @@ public abstract class AbstractTransactionalContext implements
      * @return  the write set
      */
     MultiObjectSMREntry collectWriteSetEntries() {
-<span class="nc" id="L358">        return getWriteSetInfo().getWriteSet();</span>
+<span class="fc" id="L358">        return getWriteSetInfo().getWriteSet();</span>
     }
 
     /**
@@ -365,14 +365,14 @@ public abstract class AbstractTransactionalContext implements
      * @return The append set for that stream, as an ordered list.
      */
     List&lt;SMREntry&gt; getWriteSetEntryList(UUID id) {
-<span class="nc" id="L368">        return getWriteSetInfo().getWriteSet().getSMRUpdates(id);</span>
+<span class="fc" id="L368">        return getWriteSetInfo().getWriteSet().getSMRUpdates(id);</span>
     }
 
     int getWriteSetEntrySize(UUID id) {
-<span class="nc" id="L372">        return getWriteSetInfo()</span>
-<span class="nc" id="L373">                .getWriteSet()</span>
-<span class="nc" id="L374">                .getSMRUpdates(id)</span>
-<span class="nc" id="L375">                .size();</span>
+<span class="fc" id="L372">        return getWriteSetInfo()</span>
+<span class="fc" id="L373">                .getWriteSet()</span>
+<span class="fc" id="L374">                .getSMRUpdates(id)</span>
+<span class="fc" id="L375">                .size();</span>
     }
 
     /**

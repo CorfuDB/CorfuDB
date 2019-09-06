@@ -21,13 +21,13 @@
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/log/LogMetadata.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/CorfuMsgHandler.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/management/ClusterType.java
+/Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/datastore/KvDataStore.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/management/failuredetector/ClusterGraph.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/BatchProcessor.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/Phase2Data.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/management/IDetector.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/log/SegmentHandle.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/orchestrator/IWorkflow.java
-/Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/DataStore.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/LogUnitServer.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/BaseServer.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/LocalMonitoringService.java
@@ -38,7 +38,6 @@
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/CorfuServerNode.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/log/InMemoryStreamLog.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/log/StreamLogDataStore.java
-/Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/IDataStore.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/LayoutServer.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/RemoteMonitoringService.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/AbstractServer.java
@@ -57,6 +56,7 @@
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/SequencerServer.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/ServerContext.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/log/StreamLog.java
+/Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/datastore/DataStore.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/orchestrator/ActionStatus.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/ServerThreadFactory.java
 /Users/lidong/vmware_proj/CorfuDB/infrastructure/src/main/java/org/corfudb/infrastructure/management/ClusterStateCollector.java

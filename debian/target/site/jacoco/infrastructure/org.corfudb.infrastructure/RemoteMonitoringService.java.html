@@ -55,22 +55,22 @@ import java.util.stream.Collectors;
  * The healing detector heals nodes which were previously marked unresponsive but have now healed.
  * Created by zlokhandwala on 11/2/18.
  */
-<span class="nc" id="L58">@Slf4j</span>
+<span class="fc" id="L58">@Slf4j</span>
 public class RemoteMonitoringService implements MonitoringService {
 
-<span class="nc" id="L61">    private static final CompletableFuture&lt;DetectorTask&gt; DETECTOR_TASK_COMPLETED</span>
-<span class="nc" id="L62">            = CompletableFuture.completedFuture(DetectorTask.COMPLETED);</span>
+<span class="fc" id="L61">    private static final CompletableFuture&lt;DetectorTask&gt; DETECTOR_TASK_COMPLETED</span>
+<span class="fc" id="L62">            = CompletableFuture.completedFuture(DetectorTask.COMPLETED);</span>
 
-<span class="nc" id="L64">    private static final CompletableFuture&lt;DetectorTask&gt; DETECTOR_TASK_NOT_COMPLETED</span>
-<span class="nc" id="L65">            = CompletableFuture.completedFuture(DetectorTask.NOT_COMPLETED);</span>
+<span class="fc" id="L64">    private static final CompletableFuture&lt;DetectorTask&gt; DETECTOR_TASK_NOT_COMPLETED</span>
+<span class="fc" id="L65">            = CompletableFuture.completedFuture(DetectorTask.NOT_COMPLETED);</span>
 
-<span class="nc" id="L67">    private static final CompletableFuture&lt;DetectorTask&gt; DETECTOR_TASK_SKIPPED</span>
-<span class="nc" id="L68">            = CompletableFuture.completedFuture(DetectorTask.SKIPPED);</span>
+<span class="fc" id="L67">    private static final CompletableFuture&lt;DetectorTask&gt; DETECTOR_TASK_SKIPPED</span>
+<span class="fc" id="L68">            = CompletableFuture.completedFuture(DetectorTask.SKIPPED);</span>
 
     /**
      * Detectors to be used to detect failures and healing.
      */
-<span class="nc" id="L73">    @Getter</span>
+<span class="fc" id="L73">    @Getter</span>
     private final FailureDetector failureDetector;
 
     /**
@@ -84,7 +84,7 @@ public class RemoteMonitoringService implements MonitoringService {
     /**
      * To dispatch tasks for failure or healed nodes detection.
      */
-<span class="nc" id="L87">    @Getter</span>
+<span class="fc" id="L87">    @Getter</span>
     private final ExecutorService failureDetectorWorker;
 
     private final ServerContext serverContext;
@@ -95,7 +95,7 @@ public class RemoteMonitoringService implements MonitoringService {
     /**
      * Future for periodic failure and healed nodes detection task.
      */
-<span class="nc" id="L98">    private CompletableFuture&lt;DetectorTask&gt; failureDetectorFuture = DETECTOR_TASK_NOT_COMPLETED;</span>
+<span class="fc" id="L98">    private CompletableFuture&lt;DetectorTask&gt; failureDetectorFuture = DETECTOR_TASK_NOT_COMPLETED;</span>
 
     private final ClusterAdvisor advisor;
 
@@ -109,7 +109,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * Failure detector counter. Keeps count of missing runs of failure detector
      * if the detector is busy from previous run
      */
-<span class="nc" id="L112">    private final AtomicLong counter = new AtomicLong(1);</span>
+<span class="fc" id="L112">    private final AtomicLong counter = new AtomicLong(1);</span>
 
     /**
      * Number of workers for failure detector. Three workers used by default:
@@ -117,18 +117,18 @@ public class RemoteMonitoringService implements MonitoringService {
      * - bootstrap sequencer
      * - merge segments
      */
-<span class="nc" id="L120">    private final int detectionWorkersCount = 3;</span>
+<span class="fc" id="L120">    private final int detectionWorkersCount = 3;</span>
 
     /**
      * Future which is reset every time a new task to mergeSegments is launched.
      * This is to avoid multiple mergeSegments requests.
      */
-<span class="nc" id="L126">    private volatile CompletableFuture&lt;Boolean&gt; mergeSegmentsTask = CompletableFuture.completedFuture(true);</span>
+<span class="fc" id="L126">    private volatile CompletableFuture&lt;Boolean&gt; mergeSegmentsTask = CompletableFuture.completedFuture(true);</span>
 
     /**
      * Duration in which the restore redundancy and merge segments workflow status is queried.
      */
-<span class="nc" id="L131">    private static final Duration MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT = Duration.ofSeconds(1);</span>
+<span class="fc" id="L131">    private static final Duration MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT = Duration.ofSeconds(1);</span>
 
     /**
      * This tuple maintains, in an epoch, how many heartbeats the primary sequencer has responded
@@ -136,53 +136,53 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     @Getter
 <span class="nc" id="L138">    @Setter</span>
-<span class="nc" id="L139">    @AllArgsConstructor</span>
+<span class="fc" id="L139">    @AllArgsConstructor</span>
     private class SequencerNotReadyCounter {
-<span class="nc" id="L141">        private final long epoch;</span>
-<span class="nc" id="L142">        private int counter;</span>
+<span class="fc" id="L141">        private final long epoch;</span>
+<span class="fc" id="L142">        private int counter;</span>
 
         public void increment() {
-<span class="nc" id="L145">            counter += 1;</span>
-<span class="nc" id="L146">        }</span>
+<span class="fc" id="L145">            counter += 1;</span>
+<span class="fc" id="L146">        }</span>
     }
 
-<span class="nc" id="L149">    private volatile SequencerNotReadyCounter sequencerNotReadyCounter = new SequencerNotReadyCounter(0, 0);</span>
+<span class="fc" id="L149">    private volatile SequencerNotReadyCounter sequencerNotReadyCounter = new SequencerNotReadyCounter(0, 0);</span>
 
-<span class="nc bnc" id="L151" title="All 2 branches missed.">    RemoteMonitoringService(@NonNull ServerContext serverContext,</span>
-<span class="nc bnc" id="L152" title="All 2 branches missed.">                            @NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource,</span>
-<span class="nc bnc" id="L153" title="All 2 branches missed.">                            @NonNull ClusterStateContext clusterContext,</span>
-<span class="nc bnc" id="L154" title="All 2 branches missed.">                            @NonNull FailureDetector failureDetector,</span>
-<span class="nc bnc" id="L155" title="All 2 branches missed.">                            @NonNull LocalMonitoringService localMonitoringService) {</span>
-<span class="nc" id="L156">        this.serverContext = serverContext;</span>
-<span class="nc" id="L157">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
-<span class="nc" id="L158">        this.clusterContext = clusterContext;</span>
-<span class="nc" id="L159">        this.failureDetector = failureDetector;</span>
-<span class="nc" id="L160">        this.localMonitoringService = localMonitoringService;</span>
-<span class="nc" id="L161">        this.advisor = ClusterAdvisorFactory.createForStrategy(</span>
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">    RemoteMonitoringService(@NonNull ServerContext serverContext,</span>
+<span class="pc bpc" id="L152" title="1 of 2 branches missed.">                            @NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource,</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">                            @NonNull ClusterStateContext clusterContext,</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">                            @NonNull FailureDetector failureDetector,</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">                            @NonNull LocalMonitoringService localMonitoringService) {</span>
+<span class="fc" id="L156">        this.serverContext = serverContext;</span>
+<span class="fc" id="L157">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
+<span class="fc" id="L158">        this.clusterContext = clusterContext;</span>
+<span class="fc" id="L159">        this.failureDetector = failureDetector;</span>
+<span class="fc" id="L160">        this.localMonitoringService = localMonitoringService;</span>
+<span class="fc" id="L161">        this.advisor = ClusterAdvisorFactory.createForStrategy(</span>
                 ClusterType.COMPLETE_GRAPH,
-<span class="nc" id="L163">                serverContext.getLocalEndpoint()</span>
+<span class="fc" id="L163">                serverContext.getLocalEndpoint()</span>
         );
 
-<span class="nc" id="L166">        this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(</span>
+<span class="fc" id="L166">        this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(</span>
                 new ThreadFactoryBuilder()
-<span class="nc" id="L168">                        .setDaemon(true)</span>
-<span class="nc" id="L169">                        .setNameFormat(serverContext.getThreadPrefix() + &quot;ManagementService&quot;)</span>
-<span class="nc" id="L170">                        .build());</span>
+<span class="fc" id="L168">                        .setDaemon(true)</span>
+<span class="fc" id="L169">                        .setNameFormat(serverContext.getThreadPrefix() + &quot;ManagementService&quot;)</span>
+<span class="fc" id="L170">                        .build());</span>
 
         // Creating the detection worker thread pool.
         // This thread pool is utilized to dispatch detection tasks at regular intervals in the
         // detectorTaskScheduler.
-<span class="nc" id="L175">        this.failureDetectorWorker = Executors.newFixedThreadPool(</span>
+<span class="fc" id="L175">        this.failureDetectorWorker = Executors.newFixedThreadPool(</span>
                 detectionWorkersCount,
                 new ThreadFactoryBuilder()
-<span class="nc" id="L178">                        .setDaemon(true)</span>
-<span class="nc" id="L179">                        .setNameFormat(serverContext.getThreadPrefix() + &quot;DetectionWorker-%d&quot;)</span>
-<span class="nc" id="L180">                        .build()</span>
+<span class="fc" id="L178">                        .setDaemon(true)</span>
+<span class="fc" id="L179">                        .setNameFormat(serverContext.getThreadPrefix() + &quot;DetectionWorker-%d&quot;)</span>
+<span class="fc" id="L180">                        .build()</span>
         );
-<span class="nc" id="L182">    }</span>
+<span class="fc" id="L182">    }</span>
 
     private CorfuRuntime getCorfuRuntime() {
-<span class="nc" id="L185">        return runtimeSingletonResource.get();</span>
+<span class="fc" id="L185">        return runtimeSingletonResource.get();</span>
     }
 
     /**
@@ -196,15 +196,15 @@ public class RemoteMonitoringService implements MonitoringService {
     @Override
     public void start(Duration monitoringInterval) {
         // Trigger sequencer bootstrap on startup.
-<span class="nc" id="L199">        sequencerBootstrap(serverContext);</span>
+<span class="fc" id="L199">        sequencerBootstrap(serverContext);</span>
 
-<span class="nc" id="L201">        detectionTasksScheduler.scheduleAtFixedRate(</span>
-<span class="nc" id="L202">                () -&gt; LambdaUtils.runSansThrow(this::runDetectionTasks),</span>
+<span class="fc" id="L201">        detectionTasksScheduler.scheduleAtFixedRate(</span>
+<span class="fc" id="L202">                () -&gt; LambdaUtils.runSansThrow(this::runDetectionTasks),</span>
                 0,
-<span class="nc" id="L204">                monitoringInterval.toMillis(),</span>
+<span class="fc" id="L204">                monitoringInterval.toMillis(),</span>
                 TimeUnit.MILLISECONDS
         );
-<span class="nc" id="L207">    }</span>
+<span class="fc" id="L207">    }</span>
 
     /**
      * Trigger sequencer bootstrap mechanism. Get current layout management view and execute async bootstrap
@@ -212,11 +212,11 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param serverContext server context
      */
     private CompletableFuture&lt;DetectorTask&gt; sequencerBootstrap(ServerContext serverContext) {
-<span class="nc" id="L215">        log.info(&quot;Trigger sequencer bootstrap on startup&quot;);</span>
-<span class="nc" id="L216">        return getCorfuRuntime()</span>
-<span class="nc" id="L217">                .getLayoutManagementView()</span>
-<span class="nc" id="L218">                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker)</span>
-<span class="nc" id="L219">                .thenApply(DetectorTask::fromBool);</span>
+<span class="fc" id="L215">        log.info(&quot;Trigger sequencer bootstrap on startup&quot;);</span>
+<span class="fc" id="L216">        return getCorfuRuntime()</span>
+<span class="fc" id="L217">                .getLayoutManagementView()</span>
+<span class="fc" id="L218">                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker)</span>
+<span class="fc" id="L219">                .thenApply(DetectorTask::fromBool);</span>
     }
 
     /**
@@ -230,12 +230,12 @@ public class RemoteMonitoringService implements MonitoringService {
 
         // We check for the following condition here: If the node is NOT a part of the
         // current layout, it should not attempt to change layout.
-<span class="nc" id="L233">        Layout layout = serverContext.getManagementLayout();</span>
-<span class="nc bnc" id="L234" title="All 2 branches missed.">        if (!layout.getAllServers().contains(serverContext.getLocalEndpoint())) {</span>
+<span class="fc" id="L233">        Layout layout = serverContext.getManagementLayout();</span>
+<span class="pc bpc" id="L234" title="1 of 2 branches missed.">        if (!layout.getAllServers().contains(serverContext.getLocalEndpoint())) {</span>
 <span class="nc" id="L235">            log.debug(&quot;This Server is not a part of the active layout. Aborting reconfiguration handling.&quot;);</span>
 <span class="nc" id="L236">            return false;</span>
         }
-<span class="nc" id="L238">        return true;</span>
+<span class="fc" id="L238">        return true;</span>
     }
 
 
@@ -263,51 +263,51 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private synchronized void runDetectionTasks() {
 
-<span class="nc" id="L266">        Layout ourLayout = getCorfuRuntime()</span>
-<span class="nc" id="L267">                .invalidateLayout()</span>
-<span class="nc" id="L268">                .thenApply(serverContext::saveManagementLayout)</span>
-<span class="nc" id="L269">                .join();</span>
+<span class="fc" id="L266">        Layout ourLayout = getCorfuRuntime()</span>
+<span class="fc" id="L267">                .invalidateLayout()</span>
+<span class="fc" id="L268">                .thenApply(serverContext::saveManagementLayout)</span>
+<span class="fc" id="L269">                .join();</span>
 
-<span class="nc bnc" id="L271" title="All 2 branches missed.">        if (!canHandleReconfigurations()) {</span>
+<span class="pc bpc" id="L271" title="1 of 2 branches missed.">        if (!canHandleReconfigurations()) {</span>
 <span class="nc" id="L272">            log.error(&quot;Can't run failure detector. This Server: {}, is not a part of the active layout: {}&quot;,</span>
 <span class="nc" id="L273">                    serverContext.getLocalEndpoint(), ourLayout);</span>
 <span class="nc" id="L274">            return;</span>
         }
 
-<span class="nc bnc" id="L277" title="All 2 branches missed.">        if (!failureDetectorFuture.isDone()) {</span>
-<span class="nc" id="L278">            log.trace(&quot;Cannot initiate new failure detection task. Polling in progress. Counter: {}&quot;, counter.get());</span>
-<span class="nc" id="L279">            counter.incrementAndGet();</span>
-<span class="nc" id="L280">            return;</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">        if (!failureDetectorFuture.isDone()) {</span>
+<span class="fc" id="L278">            log.trace(&quot;Cannot initiate new failure detection task. Polling in progress. Counter: {}&quot;, counter.get());</span>
+<span class="fc" id="L279">            counter.incrementAndGet();</span>
+<span class="fc" id="L280">            return;</span>
         }
 
-<span class="nc" id="L283">        counter.set(1);</span>
+<span class="fc" id="L283">        counter.set(1);</span>
 
-<span class="nc" id="L285">        failureDetectorFuture =</span>
+<span class="fc" id="L285">        failureDetectorFuture =</span>
                 //Get metrics from local monitoring service (local monitoring works in it's own thread)
-<span class="nc" id="L287">                localMonitoringService.getMetrics()</span>
+<span class="fc" id="L287">                localMonitoringService.getMetrics()</span>
                         //Poll report asynchronously using failureDetectorWorker executor
-<span class="nc" id="L289">                        .thenCompose(metrics -&gt; pollReport(ourLayout, metrics))</span>
+<span class="fc" id="L289">                        .thenCompose(metrics -&gt; pollReport(ourLayout, metrics))</span>
                         //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
-<span class="nc" id="L291">                        .thenApply(pollReport -&gt; {</span>
-<span class="nc" id="L292">                            log.trace(&quot;Update cluster view: {}&quot;, pollReport.getClusterState());</span>
-<span class="nc" id="L293">                            clusterContext.refreshClusterView(ourLayout, pollReport);</span>
-<span class="nc" id="L294">                            return pollReport;</span>
+<span class="fc" id="L291">                        .thenApply(pollReport -&gt; {</span>
+<span class="fc" id="L292">                            log.trace(&quot;Update cluster view: {}&quot;, pollReport.getClusterState());</span>
+<span class="fc" id="L293">                            clusterContext.refreshClusterView(ourLayout, pollReport);</span>
+<span class="fc" id="L294">                            return pollReport;</span>
                         })
                         //Execute failure detector task using failureDetectorWorker executor
-<span class="nc" id="L297">                        .thenCompose(pollReport -&gt; runFailureDetectorTask(pollReport, ourLayout))</span>
+<span class="fc" id="L297">                        .thenCompose(pollReport -&gt; runFailureDetectorTask(pollReport, ourLayout))</span>
                         //Print exceptions to log
-<span class="nc" id="L299">                        .whenComplete((taskResult, ex) -&gt; {</span>
-<span class="nc bnc" id="L300" title="All 2 branches missed.">                            if (ex != null) {</span>
-<span class="nc" id="L301">                                log.error(&quot;Failure detection task finished with error&quot;, ex);</span>
+<span class="fc" id="L299">                        .whenComplete((taskResult, ex) -&gt; {</span>
+<span class="fc bfc" id="L300" title="All 2 branches covered.">                            if (ex != null) {</span>
+<span class="fc" id="L301">                                log.error(&quot;Failure detection task finished with error&quot;, ex);</span>
                             }
-<span class="nc" id="L303">                        });</span>
-<span class="nc" id="L304">    }</span>
+<span class="fc" id="L303">                        });</span>
+<span class="fc" id="L304">    }</span>
 
     private CompletableFuture&lt;PollReport&gt; pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
-<span class="nc" id="L307">        return CompletableFuture.supplyAsync(() -&gt; {</span>
-<span class="nc" id="L308">            CorfuRuntime corfuRuntime = getCorfuRuntime();</span>
+<span class="fc" id="L307">        return CompletableFuture.supplyAsync(() -&gt; {</span>
+<span class="fc" id="L308">            CorfuRuntime corfuRuntime = getCorfuRuntime();</span>
 
-<span class="nc" id="L310">            return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);</span>
+<span class="fc" id="L310">            return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);</span>
         }, failureDetectorWorker);
     }
 
@@ -329,87 +329,87 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture&lt;DetectorTask&gt; runFailureDetectorTask(
             PollReport pollReport, Layout ourLayout) {
 
-<span class="nc bnc" id="L332" title="All 2 branches missed.">        if (!pollReport.getClusterState().isReady()) {</span>
-<span class="nc" id="L333">            log.info(&quot;Cluster state is not ready: {}&quot;, pollReport.getClusterState());</span>
-<span class="nc" id="L334">            return DETECTOR_TASK_SKIPPED;</span>
+<span class="fc bfc" id="L332" title="All 2 branches covered.">        if (!pollReport.getClusterState().isReady()) {</span>
+<span class="fc" id="L333">            log.info(&quot;Cluster state is not ready: {}&quot;, pollReport.getClusterState());</span>
+<span class="fc" id="L334">            return DETECTOR_TASK_SKIPPED;</span>
         }
 
-<span class="nc" id="L337">        return CompletableFuture.supplyAsync(() -&gt; {</span>
+<span class="fc" id="L337">        return CompletableFuture.supplyAsync(() -&gt; {</span>
 
             // Corrects out of phase epoch issues if present in the report. This method
             // performs re-sealing of all nodes if required and catchup of a layout server to
             // the current state.
-<span class="nc" id="L342">            final Layout latestLayout = correctWrongEpochs(pollReport, ourLayout);</span>
+<span class="fc" id="L342">            final Layout latestLayout = correctWrongEpochs(pollReport, ourLayout);</span>
 
-<span class="nc" id="L344">            Result&lt;DetectorTask, RuntimeException&gt; failure = Result.of(() -&gt; {</span>
+<span class="fc" id="L344">            Result&lt;DetectorTask, RuntimeException&gt; failure = Result.of(() -&gt; {</span>
 
                 // This is just an optimization in case we receive a WrongEpochException
                 // while one of the other management clients is trying to move to a new layout.
                 // This check is merely trying to minimize the scenario in which we end up
                 // filling the slot with an outdated layout.
-<span class="nc bnc" id="L350" title="All 2 branches missed.">                if (!pollReport.areAllResponsiveServersSealed()) {</span>
-<span class="nc" id="L351">                    log.debug(&quot;All responsive servers have not been sealed yet. Skipping.&quot;);</span>
-<span class="nc" id="L352">                    return DetectorTask.COMPLETED;</span>
+<span class="fc bfc" id="L350" title="All 2 branches covered.">                if (!pollReport.areAllResponsiveServersSealed()) {</span>
+<span class="fc" id="L351">                    log.debug(&quot;All responsive servers have not been sealed yet. Skipping.&quot;);</span>
+<span class="fc" id="L352">                    return DetectorTask.COMPLETED;</span>
                 }
 
-<span class="nc" id="L355">                Optional&lt;Long&gt; unfilledSlot = pollReport.getLayoutSlotUnFilled(latestLayout);</span>
+<span class="fc" id="L355">                Optional&lt;Long&gt; unfilledSlot = pollReport.getLayoutSlotUnFilled(latestLayout);</span>
                 // If the latest slot has not been filled, fill it with the previous known layout.
-<span class="nc bnc" id="L357" title="All 2 branches missed.">                if (unfilledSlot.isPresent()) {</span>
-<span class="nc" id="L358">                    log.info(&quot;Trying to fill an unfilled slot {}. PollReport: {}&quot;,</span>
-<span class="nc" id="L359">                            unfilledSlot.get(), pollReport);</span>
-<span class="nc" id="L360">                    detectFailure(latestLayout, Collections.emptySet(), pollReport).join();</span>
-<span class="nc" id="L361">                    return DetectorTask.COMPLETED;</span>
+<span class="fc bfc" id="L357" title="All 2 branches covered.">                if (unfilledSlot.isPresent()) {</span>
+<span class="fc" id="L358">                    log.info(&quot;Trying to fill an unfilled slot {}. PollReport: {}&quot;,</span>
+<span class="fc" id="L359">                            unfilledSlot.get(), pollReport);</span>
+<span class="fc" id="L360">                    detectFailure(latestLayout, Collections.emptySet(), pollReport).join();</span>
+<span class="fc" id="L361">                    return DetectorTask.COMPLETED;</span>
                 }
 
-<span class="nc bnc" id="L364" title="All 2 branches missed.">                if (!pollReport.getWrongEpochs().isEmpty()) {</span>
-<span class="nc" id="L365">                    log.debug(&quot;Wait for next iteration. Poll report contains wrong epochs: {}&quot;,</span>
-<span class="nc" id="L366">                            pollReport.getWrongEpochs()</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">                if (!pollReport.getWrongEpochs().isEmpty()) {</span>
+<span class="fc" id="L365">                    log.debug(&quot;Wait for next iteration. Poll report contains wrong epochs: {}&quot;,</span>
+<span class="fc" id="L366">                            pollReport.getWrongEpochs()</span>
                     );
-<span class="nc" id="L368">                    return DetectorTask.COMPLETED;</span>
+<span class="fc" id="L368">                    return DetectorTask.COMPLETED;</span>
                 }
 
                 // If layout was updated by correcting wrong epochs,
                 // we can't continue with failure detection,
                 // as the cluster state have changed.
-<span class="nc bnc" id="L374" title="All 2 branches missed.">                if (!latestLayout.equals(ourLayout)){</span>
+<span class="pc bpc" id="L374" title="1 of 2 branches missed.">                if (!latestLayout.equals(ourLayout)){</span>
 <span class="nc" id="L375">                    log.warn(&quot;Layout was updated by correcting wrong epochs. &quot; +</span>
                             &quot;Cancel current round of failure detection.&quot;);
 <span class="nc" id="L377">                    return DetectorTask.COMPLETED;</span>
                 }
 
-<span class="nc" id="L380">                return DetectorTask.NOT_COMPLETED;</span>
+<span class="fc" id="L380">                return DetectorTask.NOT_COMPLETED;</span>
             });
 
-<span class="nc" id="L383">            failure.ifError(err -&gt; log.error(&quot;Can't fill slot. Poll report: {}&quot;, pollReport, err));</span>
+<span class="pc" id="L383">            failure.ifError(err -&gt; log.error(&quot;Can't fill slot. Poll report: {}&quot;, pollReport, err));</span>
 
-<span class="nc bnc" id="L385" title="All 4 branches missed.">            if (failure.isValue() &amp;&amp; failure.get() == DetectorTask.COMPLETED) {</span>
-<span class="nc" id="L386">                return DetectorTask.COMPLETED;</span>
+<span class="pc bpc" id="L385" title="1 of 4 branches missed.">            if (failure.isValue() &amp;&amp; failure.get() == DetectorTask.COMPLETED) {</span>
+<span class="fc" id="L386">                return DetectorTask.COMPLETED;</span>
             }
 
-<span class="nc" id="L389">            DetectorTask healing = detectHealing(pollReport, ourLayout);</span>
+<span class="fc" id="L389">            DetectorTask healing = detectHealing(pollReport, ourLayout);</span>
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
             //behave according to latest cluster state.
-<span class="nc bnc" id="L394" title="All 2 branches missed.">            if (healing == DetectorTask.COMPLETED) {</span>
+<span class="pc bpc" id="L394" title="1 of 2 branches missed.">            if (healing == DetectorTask.COMPLETED) {</span>
 <span class="nc" id="L395">                return DetectorTask.COMPLETED;</span>
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-<span class="nc" id="L399">            DetectorTask handleFailure = detectFailure(pollReport, ourLayout);</span>
+<span class="fc" id="L399">            DetectorTask handleFailure = detectFailure(pollReport, ourLayout);</span>
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
-<span class="nc bnc" id="L403" title="All 2 branches missed.">            if (handleFailure == DetectorTask.COMPLETED) {</span>
-<span class="nc" id="L404">                return DetectorTask.COMPLETED;</span>
+<span class="fc bfc" id="L403" title="All 2 branches covered.">            if (handleFailure == DetectorTask.COMPLETED) {</span>
+<span class="fc" id="L404">                return DetectorTask.COMPLETED;</span>
             }
 
             // Restores redundancy and merges multiple segments if present.
-<span class="nc" id="L408">            restoreRedundancyAndMergeSegments(ourLayout);</span>
+<span class="fc" id="L408">            restoreRedundancyAndMergeSegments(ourLayout);</span>
 
-<span class="nc" id="L410">            handleSequencer(ourLayout);</span>
+<span class="fc" id="L410">            handleSequencer(ourLayout);</span>
 
-<span class="nc" id="L412">            return DetectorTask.COMPLETED;</span>
+<span class="fc" id="L412">            return DetectorTask.COMPLETED;</span>
         }, failureDetectorWorker);
     }
 
@@ -421,25 +421,25 @@ public class RemoteMonitoringService implements MonitoringService {
      * @return Detector task.
      */
     private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
-<span class="nc" id="L424">        int segmentsCount = layout.getSegments().size();</span>
+<span class="fc" id="L424">        int segmentsCount = layout.getSegments().size();</span>
 
-<span class="nc bnc" id="L426" title="All 2 branches missed.">        if (segmentsCount == 1) {</span>
-<span class="nc" id="L427">            log.debug(&quot;No segments to merge. Skipping step.&quot;);</span>
-<span class="nc" id="L428">            return DetectorTask.SKIPPED;</span>
-<span class="nc bnc" id="L429" title="All 2 branches missed.">        } else if (!mergeSegmentsTask.isDone()) {</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">        if (segmentsCount == 1) {</span>
+<span class="fc" id="L427">            log.debug(&quot;No segments to merge. Skipping step.&quot;);</span>
+<span class="fc" id="L428">            return DetectorTask.SKIPPED;</span>
+<span class="pc bpc" id="L429" title="1 of 2 branches missed.">        } else if (!mergeSegmentsTask.isDone()) {</span>
 <span class="nc" id="L430">            log.debug(&quot;Merge segments task already in progress. Skipping spawning another task.&quot;);</span>
 <span class="nc" id="L431">            return DetectorTask.SKIPPED;</span>
         }
 
-<span class="nc" id="L434">        log.debug(&quot;Number of segments present: {}. Spawning task to merge segments.&quot;, segmentsCount);</span>
+<span class="fc" id="L434">        log.debug(&quot;Number of segments present: {}. Spawning task to merge segments.&quot;, segmentsCount);</span>
 
-<span class="nc" id="L436">        Supplier&lt;Boolean&gt; redundancyAction = () -&gt;</span>
-<span class="nc" id="L437">                ReconfigurationEventHandler.handleMergeSegments(</span>
-<span class="nc" id="L438">                        getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT</span>
+<span class="fc" id="L436">        Supplier&lt;Boolean&gt; redundancyAction = () -&gt;</span>
+<span class="fc" id="L437">                ReconfigurationEventHandler.handleMergeSegments(</span>
+<span class="fc" id="L438">                        getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT</span>
                 );
-<span class="nc" id="L440">        mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);</span>
+<span class="fc" id="L440">        mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);</span>
 
-<span class="nc" id="L442">        return DetectorTask.COMPLETED;</span>
+<span class="fc" id="L442">        return DetectorTask.COMPLETED;</span>
     }
 
     /**
@@ -452,40 +452,40 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param layout     current layout
      */
     private DetectorTask detectHealing(PollReport pollReport, Layout layout) {
-<span class="nc" id="L455">        log.trace(&quot;Handle healing, layout: {}&quot;, layout);</span>
+<span class="fc" id="L455">        log.trace(&quot;Handle healing, layout: {}&quot;, layout);</span>
 
-<span class="nc" id="L457">        Optional&lt;NodeRank&gt; healed = advisor.healedServer(pollReport.getClusterState());</span>
+<span class="fc" id="L457">        Optional&lt;NodeRank&gt; healed = advisor.healedServer(pollReport.getClusterState());</span>
 
         //Transform Optional value to a Set
-<span class="nc" id="L460">        Set&lt;String&gt; healedNodes = healed</span>
-<span class="nc" id="L461">                .map(NodeRank::getEndpoint)</span>
-<span class="nc" id="L462">                .map(ImmutableSet::of)</span>
-<span class="nc" id="L463">                .orElse(ImmutableSet.of());</span>
+<span class="fc" id="L460">        Set&lt;String&gt; healedNodes = healed</span>
+<span class="fc" id="L461">                .map(NodeRank::getEndpoint)</span>
+<span class="fc" id="L462">                .map(ImmutableSet::of)</span>
+<span class="fc" id="L463">                .orElse(ImmutableSet.of());</span>
 
-<span class="nc bnc" id="L465" title="All 2 branches missed.">        if (healedNodes.isEmpty()) {</span>
-<span class="nc" id="L466">            log.trace(&quot;Nothing to heal&quot;);</span>
-<span class="nc" id="L467">            return DetectorTask.SKIPPED;</span>
+<span class="fc bfc" id="L465" title="All 2 branches covered.">        if (healedNodes.isEmpty()) {</span>
+<span class="fc" id="L466">            log.trace(&quot;Nothing to heal&quot;);</span>
+<span class="fc" id="L467">            return DetectorTask.SKIPPED;</span>
         }
 
         //save history
-<span class="nc" id="L471">        FailureDetectorMetrics history = FailureDetectorMetrics.builder()</span>
-<span class="nc" id="L472">                .localNode(serverContext.getLocalEndpoint())</span>
-<span class="nc" id="L473">                .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())</span>
-<span class="nc" id="L474">                .healed(healed.get())</span>
-<span class="nc" id="L475">                .action(FailureDetectorAction.HEAL)</span>
-<span class="nc" id="L476">                .unresponsiveNodes(layout.getUnresponsiveServers())</span>
-<span class="nc" id="L477">                .layout(layout.getLayoutServers())</span>
-<span class="nc" id="L478">                .epoch(layout.getEpoch())</span>
-<span class="nc" id="L479">                .build();</span>
+<span class="fc" id="L471">        FailureDetectorMetrics history = FailureDetectorMetrics.builder()</span>
+<span class="fc" id="L472">                .localNode(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L473">                .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())</span>
+<span class="fc" id="L474">                .healed(healed.get())</span>
+<span class="fc" id="L475">                .action(FailureDetectorAction.HEAL)</span>
+<span class="fc" id="L476">                .unresponsiveNodes(layout.getUnresponsiveServers())</span>
+<span class="fc" id="L477">                .layout(layout.getLayoutServers())</span>
+<span class="fc" id="L478">                .epoch(layout.getEpoch())</span>
+<span class="fc" id="L479">                .build();</span>
 
-<span class="nc" id="L481">        log.info(&quot;Handle healing. Failure detector state: {}&quot;, history.toJson());</span>
+<span class="fc" id="L481">        log.info(&quot;Handle healing. Failure detector state: {}&quot;, history.toJson());</span>
 
         try {
-<span class="nc" id="L484">            CorfuRuntime corfuRuntime = getCorfuRuntime();</span>
+<span class="fc" id="L484">            CorfuRuntime corfuRuntime = getCorfuRuntime();</span>
 
-<span class="nc" id="L486">            corfuRuntime.getLayoutView()</span>
-<span class="nc" id="L487">                    .getRuntimeLayout(layout)</span>
-<span class="nc" id="L488">                    .getManagementClient(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L486">            corfuRuntime.getLayoutView()</span>
+<span class="fc" id="L487">                    .getRuntimeLayout(layout)</span>
+<span class="fc" id="L488">                    .getManagementClient(serverContext.getLocalEndpoint())</span>
                     //handle healing asynchronously
 <span class="nc" id="L490">                    .handleHealing(pollReport.getPollEpoch(), healedNodes)</span>
                     //completable future: wait this future to complete and get result
@@ -517,12 +517,12 @@ public class RemoteMonitoringService implements MonitoringService {
      * @return boolean result if failure was handled. False if there is no failure
      */
     private DetectorTask detectFailure(PollReport pollReport, Layout layout) {
-<span class="nc" id="L520">        log.trace(&quot;Handle failures for the report: {}&quot;, pollReport);</span>
+<span class="fc" id="L520">        log.trace(&quot;Handle failures for the report: {}&quot;, pollReport);</span>
 
         try {
-<span class="nc" id="L523">            ClusterState clusterState = pollReport.getClusterState();</span>
+<span class="fc" id="L523">            ClusterState clusterState = pollReport.getClusterState();</span>
 
-<span class="nc bnc" id="L525" title="All 2 branches missed.">            if (clusterState.size() != layout.getAllServers().size()) {</span>
+<span class="pc bpc" id="L525" title="1 of 2 branches missed.">            if (clusterState.size() != layout.getAllServers().size()) {</span>
 <span class="nc" id="L526">                String err = String.format(</span>
                         &quot;Cluster representation is different than layout. Cluster: %s, layout: %s&quot;,
                         clusterState, layout
@@ -530,33 +530,33 @@ public class RemoteMonitoringService implements MonitoringService {
 <span class="nc" id="L530">                throw new IllegalStateException(err);</span>
             }
 
-<span class="nc" id="L533">            Optional&lt;NodeRank&gt; maybeFailedNode = advisor.failedServer(clusterState);</span>
+<span class="fc" id="L533">            Optional&lt;NodeRank&gt; maybeFailedNode = advisor.failedServer(clusterState);</span>
 
-<span class="nc bnc" id="L535" title="All 2 branches missed.">            if (maybeFailedNode.isPresent()) {</span>
-<span class="nc" id="L536">                NodeRank failedNode = maybeFailedNode.get();</span>
+<span class="fc bfc" id="L535" title="All 2 branches covered.">            if (maybeFailedNode.isPresent()) {</span>
+<span class="fc" id="L536">                NodeRank failedNode = maybeFailedNode.get();</span>
 
                 //Collect failures history
-<span class="nc" id="L539">                FailureDetectorMetrics history = FailureDetectorMetrics.builder()</span>
-<span class="nc" id="L540">                        .localNode(serverContext.getLocalEndpoint())</span>
-<span class="nc" id="L541">                        .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())</span>
-<span class="nc" id="L542">                        .healed(failedNode)</span>
-<span class="nc" id="L543">                        .action(FailureDetectorAction.FAIL)</span>
-<span class="nc" id="L544">                        .unresponsiveNodes(layout.getUnresponsiveServers())</span>
-<span class="nc" id="L545">                        .layout(layout.getLayoutServers())</span>
-<span class="nc" id="L546">                        .epoch(layout.getEpoch())</span>
-<span class="nc" id="L547">                        .build();</span>
+<span class="fc" id="L539">                FailureDetectorMetrics history = FailureDetectorMetrics.builder()</span>
+<span class="fc" id="L540">                        .localNode(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L541">                        .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())</span>
+<span class="fc" id="L542">                        .healed(failedNode)</span>
+<span class="fc" id="L543">                        .action(FailureDetectorAction.FAIL)</span>
+<span class="fc" id="L544">                        .unresponsiveNodes(layout.getUnresponsiveServers())</span>
+<span class="fc" id="L545">                        .layout(layout.getLayoutServers())</span>
+<span class="fc" id="L546">                        .epoch(layout.getEpoch())</span>
+<span class="fc" id="L547">                        .build();</span>
 
-<span class="nc" id="L549">                serverContext.saveFailureDetectorMetrics(history);</span>
+<span class="fc" id="L549">                serverContext.saveFailureDetectorMetrics(history);</span>
 
-<span class="nc" id="L551">                Set&lt;String&gt; failedNodes = new HashSet&lt;&gt;();</span>
-<span class="nc" id="L552">                failedNodes.add(failedNode.getEndpoint());</span>
-<span class="nc" id="L553">                return detectFailure(layout, failedNodes, pollReport).get();</span>
+<span class="fc" id="L551">                Set&lt;String&gt; failedNodes = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L552">                failedNodes.add(failedNode.getEndpoint());</span>
+<span class="fc" id="L553">                return detectFailure(layout, failedNodes, pollReport).get();</span>
             }
-<span class="nc" id="L555">        } catch (Exception e) {</span>
-<span class="nc" id="L556">            log.error(&quot;Exception invoking failure handler&quot;, e);</span>
-<span class="nc" id="L557">        }</span>
+<span class="fc" id="L555">        } catch (Exception e) {</span>
+<span class="fc" id="L556">            log.error(&quot;Exception invoking failure handler&quot;, e);</span>
+<span class="fc" id="L557">        }</span>
 
-<span class="nc" id="L559">        return DetectorTask.NOT_COMPLETED;</span>
+<span class="fc" id="L559">        return DetectorTask.NOT_COMPLETED;</span>
     }
 
     /**
@@ -565,40 +565,40 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param layout current layout
      */
     private CompletableFuture&lt;DetectorTask&gt; handleSequencer(Layout layout) {
-<span class="nc" id="L568">        log.trace(&quot;Handling sequencer failures&quot;);</span>
+<span class="fc" id="L568">        log.trace(&quot;Handling sequencer failures&quot;);</span>
 
-<span class="nc" id="L570">        ClusterState clusterState = clusterContext.getClusterView();</span>
-<span class="nc" id="L571">        Optional&lt;NodeState&gt; primarySequencer = clusterState.getNode(layout.getPrimarySequencer());</span>
-<span class="nc bnc" id="L572" title="All 4 branches missed.">        if (primarySequencer.isPresent() &amp;&amp; primarySequencer.get().getSequencerMetrics() == SequencerMetrics.READY) {</span>
+<span class="fc" id="L570">        ClusterState clusterState = clusterContext.getClusterView();</span>
+<span class="fc" id="L571">        Optional&lt;NodeState&gt; primarySequencer = clusterState.getNode(layout.getPrimarySequencer());</span>
+<span class="pc bpc" id="L572" title="2 of 4 branches missed.">        if (primarySequencer.isPresent() &amp;&amp; primarySequencer.get().getSequencerMetrics() == SequencerMetrics.READY) {</span>
 <span class="nc" id="L573">            log.trace(&quot;Primary sequencer is already ready at: {} in {}&quot;, primarySequencer.get(), clusterState);</span>
 <span class="nc" id="L574">            return DETECTOR_TASK_SKIPPED;</span>
         }
 
         // If failures are not present we can check if the primary sequencer has been
         // bootstrapped from the heartbeat responses received.
-<span class="nc bnc" id="L579" title="All 2 branches missed.">        if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {</span>
+<span class="fc bfc" id="L579" title="All 2 branches covered.">        if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {</span>
             // If the epoch is different than the poll epoch, we reset the timeout state.
-<span class="nc" id="L581">            log.trace(&quot;Current epoch is different to layout epoch. Update current epoch to: {}&quot;, layout.getEpoch());</span>
-<span class="nc" id="L582">            sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);</span>
-<span class="nc" id="L583">            return DETECTOR_TASK_SKIPPED;</span>
+<span class="fc" id="L581">            log.trace(&quot;Current epoch is different to layout epoch. Update current epoch to: {}&quot;, layout.getEpoch());</span>
+<span class="fc" id="L582">            sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);</span>
+<span class="fc" id="L583">            return DETECTOR_TASK_SKIPPED;</span>
         }
 
         // If the epoch is same as the epoch being tracked in the tuple, we need to
         // increment the count and attempt to bootstrap the sequencer if the count has
         // crossed the threshold.
-<span class="nc" id="L589">        sequencerNotReadyCounter.increment();</span>
-<span class="nc bnc" id="L590" title="All 2 branches missed.">        if (sequencerNotReadyCounter.getCounter() &lt; SEQUENCER_NOT_READY_THRESHOLD) {</span>
-<span class="nc" id="L591">            return DETECTOR_TASK_SKIPPED;</span>
+<span class="fc" id="L589">        sequencerNotReadyCounter.increment();</span>
+<span class="fc bfc" id="L590" title="All 2 branches covered.">        if (sequencerNotReadyCounter.getCounter() &lt; SEQUENCER_NOT_READY_THRESHOLD) {</span>
+<span class="fc" id="L591">            return DETECTOR_TASK_SKIPPED;</span>
         }
 
         // Launch task to bootstrap the primary sequencer.
-<span class="nc" id="L595">        log.info(&quot;Attempting to bootstrap the primary sequencer. ClusterState {}&quot;, clusterState);</span>
+<span class="fc" id="L595">        log.info(&quot;Attempting to bootstrap the primary sequencer. ClusterState {}&quot;, clusterState);</span>
         // We do not care about the result of the trigger.
         // If it fails, we detect this again and retry in the next polling cycle.
-<span class="nc" id="L598">        return getCorfuRuntime()</span>
-<span class="nc" id="L599">                .getLayoutManagementView()</span>
-<span class="nc" id="L600">                .asyncSequencerBootstrap(layout, failureDetectorWorker)</span>
-<span class="nc" id="L601">                .thenApply(DetectorTask::fromBool);</span>
+<span class="fc" id="L598">        return getCorfuRuntime()</span>
+<span class="fc" id="L599">                .getLayoutManagementView()</span>
+<span class="fc" id="L600">                .asyncSequencerBootstrap(layout, failureDetectorWorker)</span>
+<span class="fc" id="L601">                .thenApply(DetectorTask::fromBool);</span>
     }
 
     /**
@@ -610,18 +610,18 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture&lt;DetectorTask&gt; detectFailure(
             Layout layout, Set&lt;String&gt; failedNodes, PollReport pollReport) {
 
-<span class="nc" id="L613">        ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());</span>
+<span class="fc" id="L613">        ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());</span>
 
-<span class="nc" id="L615">        log.info(&quot;Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}&quot;,</span>
-<span class="nc" id="L616">                failedNodes, pollReport.getLayoutSlotUnFilled(layout), graph.toJson()</span>
+<span class="fc" id="L615">        log.info(&quot;Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}&quot;,</span>
+<span class="fc" id="L616">                failedNodes, pollReport.getLayoutSlotUnFilled(layout), graph.toJson()</span>
         );
 
-<span class="nc" id="L619">        return getCorfuRuntime()</span>
-<span class="nc" id="L620">                .getLayoutView()</span>
-<span class="nc" id="L621">                .getRuntimeLayout(layout)</span>
-<span class="nc" id="L622">                .getManagementClient(serverContext.getLocalEndpoint())</span>
-<span class="nc" id="L623">                .handleFailure(layout.getEpoch(), failedNodes)</span>
-<span class="nc" id="L624">                .thenApply(DetectorTask::fromBool);</span>
+<span class="fc" id="L619">        return getCorfuRuntime()</span>
+<span class="fc" id="L620">                .getLayoutView()</span>
+<span class="fc" id="L621">                .getRuntimeLayout(layout)</span>
+<span class="fc" id="L622">                .getManagementClient(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L623">                .handleFailure(layout.getEpoch(), failedNodes)</span>
+<span class="fc" id="L624">                .thenApply(DetectorTask::fromBool);</span>
     }
 
     /**
@@ -633,17 +633,17 @@ public class RemoteMonitoringService implements MonitoringService {
      * @return Completable future which returns the result of the RPC request.
      */
     private CompletableFuture&lt;Layout&gt; getLayoutFromServer(Layout layout, String endpoint) {
-<span class="nc" id="L636">        CompletableFuture&lt;Layout&gt; completableFuture = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L636">        CompletableFuture&lt;Layout&gt; completableFuture = new CompletableFuture&lt;&gt;();</span>
         try {
-<span class="nc" id="L638">            completableFuture = getCorfuRuntime()</span>
-<span class="nc" id="L639">                    .getLayoutView()</span>
-<span class="nc" id="L640">                    .getRuntimeLayout(layout)</span>
-<span class="nc" id="L641">                    .getLayoutClient(endpoint)</span>
-<span class="nc" id="L642">                    .getLayout();</span>
+<span class="fc" id="L638">            completableFuture = getCorfuRuntime()</span>
+<span class="fc" id="L639">                    .getLayoutView()</span>
+<span class="fc" id="L640">                    .getRuntimeLayout(layout)</span>
+<span class="fc" id="L641">                    .getLayoutClient(endpoint)</span>
+<span class="fc" id="L642">                    .getLayout();</span>
 <span class="nc" id="L643">        } catch (Exception e) {</span>
 <span class="nc" id="L644">            completableFuture.completeExceptionally(e);</span>
-<span class="nc" id="L645">        }</span>
-<span class="nc" id="L646">        return completableFuture;</span>
+<span class="fc" id="L645">        }</span>
+<span class="fc" id="L646">        return completableFuture;</span>
     }
 
     /**
@@ -654,29 +654,29 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private Layout correctWrongEpochs(PollReport pollReport, Layout layout) {
 
-<span class="nc" id="L657">        Map&lt;String, Long&gt; wrongEpochs = pollReport.getWrongEpochs();</span>
-<span class="nc bnc" id="L658" title="All 2 branches missed.">        if (wrongEpochs.isEmpty()) {</span>
-<span class="nc" id="L659">            return layout;</span>
+<span class="fc" id="L657">        Map&lt;String, Long&gt; wrongEpochs = pollReport.getWrongEpochs();</span>
+<span class="fc bfc" id="L658" title="All 2 branches covered.">        if (wrongEpochs.isEmpty()) {</span>
+<span class="fc" id="L659">            return layout;</span>
         }
 
-<span class="nc" id="L662">        log.debug(&quot;Correct wrong epochs. Poll report: {}&quot;, pollReport);</span>
+<span class="fc" id="L662">        log.debug(&quot;Correct wrong epochs. Poll report: {}&quot;, pollReport);</span>
 
         try {
-<span class="nc" id="L665">            final Layout oldLayout = layout;</span>
+<span class="fc" id="L665">            final Layout oldLayout = layout;</span>
             // Query all layout servers to get quorum Layout.
-<span class="nc" id="L667">            Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; layoutCompletableFutureMap = layout</span>
-<span class="nc" id="L668">                    .getLayoutServers()</span>
-<span class="nc" id="L669">                    .stream()</span>
-<span class="nc" id="L670">                    .collect(Collectors.toMap(Function.identity(),</span>
-<span class="nc" id="L671">                            server -&gt; getLayoutFromServer(oldLayout, server))</span>
+<span class="fc" id="L667">            Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; layoutCompletableFutureMap = layout</span>
+<span class="fc" id="L668">                    .getLayoutServers()</span>
+<span class="fc" id="L669">                    .stream()</span>
+<span class="fc" id="L670">                    .collect(Collectors.toMap(Function.identity(),</span>
+<span class="fc" id="L671">                            server -&gt; getLayoutFromServer(oldLayout, server))</span>
                     );
 
             // Retrieve the correct layout from quorum of members to reseal servers.
             // If we are unable to reach a consensus from a quorum we get an exception and
             // abort the epoch correction phase.
-<span class="nc" id="L677">            Optional&lt;Layout&gt; latestLayout = fetchLatestLayout(layoutCompletableFutureMap);</span>
+<span class="fc" id="L677">            Optional&lt;Layout&gt; latestLayout = fetchLatestLayout(layoutCompletableFutureMap);</span>
 
-<span class="nc bnc" id="L679" title="All 2 branches missed.">            if (!latestLayout.isPresent()) {</span>
+<span class="pc bpc" id="L679" title="1 of 2 branches missed.">            if (!latestLayout.isPresent()) {</span>
 <span class="nc" id="L680">                log.error(&quot;Can't get a layout from any server in the cluster. Layout servers: {}, wrong epochs: {}&quot;,</span>
 <span class="nc" id="L681">                        layout.getLayoutServers(), wrongEpochs</span>
                 );
@@ -684,20 +684,20 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Update local layout copy.
-<span class="nc" id="L687">            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());</span>
+<span class="fc" id="L687">            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());</span>
 
-<span class="nc" id="L689">            sealWithLatestLayout(pollReport, newManagementLayout);</span>
+<span class="fc" id="L689">            sealWithLatestLayout(pollReport, newManagementLayout);</span>
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
-<span class="nc" id="L693">            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);</span>
-<span class="nc" id="L694">            return newManagementLayout;</span>
+<span class="fc" id="L693">            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);</span>
+<span class="fc" id="L694">            return newManagementLayout;</span>
 
-<span class="nc" id="L696">        } catch (QuorumUnreachableException e) {</span>
-<span class="nc" id="L697">            log.error(&quot;Error in correcting server epochs&quot;, e);</span>
+<span class="fc" id="L696">        } catch (QuorumUnreachableException e) {</span>
+<span class="fc" id="L697">            log.error(&quot;Error in correcting server epochs&quot;, e);</span>
         }
 
-<span class="nc" id="L700">        return serverContext.copyManagementLayout();</span>
+<span class="fc" id="L700">        return serverContext.copyManagementLayout();</span>
     }
 
     /**
@@ -712,19 +712,19 @@ public class RemoteMonitoringService implements MonitoringService {
         // committed to the layout servers via Paxos round.
         // Committing any other modified layout is extremely dangerous and can cause
         // inconsistencies. This latestLayout should not be modified.
-<span class="nc" id="L715">        Layout sealingLayout = new Layout(managementLayout);</span>
+<span class="fc" id="L715">        Layout sealingLayout = new Layout(managementLayout);</span>
 
         // In case of a partial seal, a set of servers can be sealed with a higher epoch.
         // We should be able to detect this and bring the rest of the servers to this epoch.
-<span class="nc" id="L719">        pollReport.getLayoutSlotUnFilled(sealingLayout).ifPresent(sealingLayout::setEpoch);</span>
+<span class="fc" id="L719">        pollReport.getLayoutSlotUnFilled(sealingLayout).ifPresent(sealingLayout::setEpoch);</span>
 
         // Re-seal all servers with the latestLayout epoch.
         // This has no effect on up-to-date servers. Only the trailing servers are caught up.
-<span class="nc" id="L723">        getCorfuRuntime()</span>
-<span class="nc" id="L724">                .getLayoutView()</span>
-<span class="nc" id="L725">                .getRuntimeLayout(sealingLayout)</span>
-<span class="nc" id="L726">                .sealMinServerSet();</span>
-<span class="nc" id="L727">    }</span>
+<span class="fc" id="L723">        getCorfuRuntime()</span>
+<span class="fc" id="L724">                .getLayoutView()</span>
+<span class="fc" id="L725">                .getRuntimeLayout(sealingLayout)</span>
+<span class="fc" id="L726">                .sealMinServerSet();</span>
+<span class="fc" id="L727">    }</span>
 
     /**
      * Fetches the latest layout from the cluster.
@@ -734,25 +734,25 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private Optional&lt;Layout&gt; fetchLatestLayout(Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; futureLayouts) {
         //Sort layouts according to epochs
-<span class="nc" id="L737">        TreeSet&lt;Layout&gt; layouts = new TreeSet&lt;&gt;(Layout.LAYOUT_COMPARATOR);</span>
+<span class="fc" id="L737">        TreeSet&lt;Layout&gt; layouts = new TreeSet&lt;&gt;(Layout.LAYOUT_COMPARATOR);</span>
 
-<span class="nc" id="L739">        futureLayouts.values()</span>
-<span class="nc" id="L740">                .stream()</span>
+<span class="fc" id="L739">        futureLayouts.values()</span>
+<span class="fc" id="L740">                .stream()</span>
                 //transform exceptions (connection errors) to optional values
-<span class="nc" id="L742">                .map(async -&gt; async.handle((layout, ex) -&gt; {</span>
+<span class="fc" id="L742">                .map(async -&gt; async.handle((layout, ex) -&gt; {</span>
                     //Ignore all connection errors
-<span class="nc bnc" id="L744" title="All 2 branches missed.">                    if (ex != null) {</span>
-<span class="nc" id="L745">                        return Optional.&lt;Layout&gt;empty();</span>
+<span class="fc bfc" id="L744" title="All 2 branches covered.">                    if (ex != null) {</span>
+<span class="fc" id="L745">                        return Optional.&lt;Layout&gt;empty();</span>
                     }
 
-<span class="nc" id="L748">                    return Optional.of(layout);</span>
+<span class="fc" id="L748">                    return Optional.of(layout);</span>
                 }))
                 //Get results synchronously
-<span class="nc" id="L751">                .map(CompletableFuture::join)</span>
+<span class="fc" id="L751">                .map(CompletableFuture::join)</span>
                 //Add all layouts to the set
-<span class="nc" id="L753">                .forEach(optionalLayout -&gt; optionalLayout.ifPresent(layouts::add));</span>
+<span class="fc" id="L753">                .forEach(optionalLayout -&gt; optionalLayout.ifPresent(layouts::add));</span>
 
-<span class="nc" id="L755">        return Optional.ofNullable(layouts.first());</span>
+<span class="fc" id="L755">        return Optional.ofNullable(layouts.first());</span>
     }
 
     /**
@@ -765,74 +765,74 @@ public class RemoteMonitoringService implements MonitoringService {
             Layout latestLayout, Map&lt;String, CompletableFuture&lt;Layout&gt;&gt; layoutCompletableFutureMap) {
 
         // Patch trailing layout servers with latestLayout.
-<span class="nc" id="L768">        layoutCompletableFutureMap.keySet().forEach(layoutServer -&gt; {</span>
-<span class="nc" id="L769">            Layout layout = null;</span>
+<span class="fc" id="L768">        layoutCompletableFutureMap.keySet().forEach(layoutServer -&gt; {</span>
+<span class="fc" id="L769">            Layout layout = null;</span>
             try {
-<span class="nc" id="L771">                layout = layoutCompletableFutureMap.get(layoutServer).get();</span>
-<span class="nc" id="L772">            } catch (ExecutionException ee) {</span>
+<span class="fc" id="L771">                layout = layoutCompletableFutureMap.get(layoutServer).get();</span>
+<span class="fc" id="L772">            } catch (ExecutionException ee) {</span>
                 // Expected wrong epoch exception if layout server fell behind and has stale
                 // layout and server epoch.
-<span class="nc" id="L775">                log.warn(&quot;updateTrailingLayoutServers: layout fetch from {} failed: {}&quot;,</span>
+<span class="fc" id="L775">                log.warn(&quot;updateTrailingLayoutServers: layout fetch from {} failed: {}&quot;,</span>
                         layoutServer, ee);
 <span class="nc" id="L777">            } catch (InterruptedException ie) {</span>
 <span class="nc" id="L778">                log.error(&quot;updateTrailingLayoutServers: layout fetch from {} failed: {}&quot;,</span>
                         layoutServer, ie);
 <span class="nc" id="L780">                throw new UnrecoverableCorfuInterruptedError(ie);</span>
-<span class="nc" id="L781">            }</span>
+<span class="fc" id="L781">            }</span>
 
             // Do nothing if this layout server is updated with the latestLayout.
-<span class="nc bnc" id="L784" title="All 4 branches missed.">            if (layout != null &amp;&amp; layout.equals(latestLayout)) {</span>
-<span class="nc" id="L785">                return;</span>
+<span class="fc bfc" id="L784" title="All 4 branches covered.">            if (layout != null &amp;&amp; layout.equals(latestLayout)) {</span>
+<span class="fc" id="L785">                return;</span>
             }
             try {
                 // Committing this layout directly to the trailing layout servers.
                 // This is safe because this layout is acquired by a quorum fetch which confirms
                 // that there was a consensus on this layout and has been committed to a quorum.
-<span class="nc" id="L791">                boolean result = getCorfuRuntime()</span>
-<span class="nc" id="L792">                        .getLayoutView()</span>
-<span class="nc" id="L793">                        .getRuntimeLayout(latestLayout)</span>
-<span class="nc" id="L794">                        .getLayoutClient(layoutServer)</span>
-<span class="nc" id="L795">                        .committed(latestLayout.getEpoch(), latestLayout)</span>
-<span class="nc" id="L796">                        .get();</span>
-<span class="nc bnc" id="L797" title="All 2 branches missed.">                if (result) {</span>
-<span class="nc" id="L798">                    log.debug(&quot;Layout Server: {} successfully patched with latest layout : {}&quot;,</span>
+<span class="fc" id="L791">                boolean result = getCorfuRuntime()</span>
+<span class="fc" id="L792">                        .getLayoutView()</span>
+<span class="fc" id="L793">                        .getRuntimeLayout(latestLayout)</span>
+<span class="fc" id="L794">                        .getLayoutClient(layoutServer)</span>
+<span class="fc" id="L795">                        .committed(latestLayout.getEpoch(), latestLayout)</span>
+<span class="fc" id="L796">                        .get();</span>
+<span class="pc bpc" id="L797" title="1 of 2 branches missed.">                if (result) {</span>
+<span class="fc" id="L798">                    log.debug(&quot;Layout Server: {} successfully patched with latest layout : {}&quot;,</span>
                             layoutServer, latestLayout);
                 } else {
 <span class="nc" id="L801">                    log.debug(&quot;Layout Server: {} patch with latest layout failed : {}&quot;, layoutServer, latestLayout);</span>
                 }
-<span class="nc" id="L803">            } catch (ExecutionException ee) {</span>
-<span class="nc" id="L804">                log.error(&quot;Updating layout servers failed due to&quot;, ee);</span>
+<span class="fc" id="L803">            } catch (ExecutionException ee) {</span>
+<span class="fc" id="L804">                log.error(&quot;Updating layout servers failed due to&quot;, ee);</span>
 <span class="nc" id="L805">            } catch (InterruptedException ie) {</span>
 <span class="nc" id="L806">                log.error(&quot;Updating layout servers failed due to&quot;, ie);</span>
 <span class="nc" id="L807">                throw new UnrecoverableCorfuInterruptedError(ie);</span>
-<span class="nc" id="L808">            }</span>
-<span class="nc" id="L809">        });</span>
-<span class="nc" id="L810">    }</span>
+<span class="fc" id="L808">            }</span>
+<span class="fc" id="L809">        });</span>
+<span class="fc" id="L810">    }</span>
 
     @Override
     public void shutdown() {
         // Shutting the fault detector.
-<span class="nc" id="L815">        detectionTasksScheduler.shutdownNow();</span>
-<span class="nc" id="L816">        failureDetectorWorker.shutdownNow();</span>
-<span class="nc" id="L817">        log.info(&quot;Fault Detection MonitoringService shutting down.&quot;);</span>
-<span class="nc" id="L818">    }</span>
+<span class="fc" id="L815">        detectionTasksScheduler.shutdownNow();</span>
+<span class="fc" id="L816">        failureDetectorWorker.shutdownNow();</span>
+<span class="fc" id="L817">        log.info(&quot;Fault Detection MonitoringService shutting down.&quot;);</span>
+<span class="fc" id="L818">    }</span>
 
-<span class="nc" id="L820">    public enum DetectorTask {</span>
+<span class="pc" id="L820">    public enum DetectorTask {</span>
         /**
          * The task is completed successfully
          */
-<span class="nc" id="L824">        COMPLETED,</span>
+<span class="fc" id="L824">        COMPLETED,</span>
         /**
          * The task is completed with an exception
          */
-<span class="nc" id="L828">        NOT_COMPLETED,</span>
+<span class="fc" id="L828">        NOT_COMPLETED,</span>
         /**
          * Skipped task
          */
-<span class="nc" id="L832">        SKIPPED;</span>
+<span class="fc" id="L832">        SKIPPED;</span>
 
         public static DetectorTask fromBool(boolean taskResult) {
-<span class="nc bnc" id="L835" title="All 2 branches missed.">            return taskResult ? COMPLETED : NOT_COMPLETED;</span>
+<span class="fc bfc" id="L835" title="All 2 branches covered.">            return taskResult ? COMPLETED : NOT_COMPLETED;</span>
         }
     }
 }

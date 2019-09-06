@@ -23,14 +23,14 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
  *
  * &lt;p&gt;Created by zlokhandwala on 2/20/18.
  */
-<span class="nc" id="L26">@Slf4j</span>
-<span class="nc" id="L27">public class BaseHandler implements IClient {</span>
+<span class="fc" id="L26">@Slf4j</span>
+<span class="fc" id="L27">public class BaseHandler implements IClient {</span>
 
     /**
      * The router to use for the client.
      */
-<span class="nc" id="L32">    @Getter</span>
-<span class="nc" id="L33">    @Setter</span>
+<span class="fc" id="L32">    @Getter</span>
+<span class="fc" id="L33">    @Setter</span>
     public IClientRouter router;
 
     /** Public functions which are exposed to clients. */
@@ -38,9 +38,9 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
     /**
      * The handler and handlers which implement this client.
      */
-<span class="nc" id="L41">    @Getter</span>
+<span class="fc" id="L41">    @Getter</span>
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-<span class="nc" id="L43">            .generateHandlers(MethodHandles.lookup(), this);</span>
+<span class="fc" id="L43">            .generateHandlers(MethodHandles.lookup(), this);</span>
 
     /**
      * Handle a ping request from the server.
@@ -66,7 +66,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
      */
     @ClientHandler(type = CorfuMsgType.PONG)
     private static Object handlePong(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L69">        return true;</span>
+<span class="fc" id="L69">        return true;</span>
     }
 
     /**
@@ -79,7 +79,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
      */
     @ClientHandler(type = CorfuMsgType.ACK)
     private static Object handleAck(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L82">        return true;</span>
+<span class="fc" id="L82">        return true;</span>
     }
 
     /**
@@ -92,7 +92,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
      */
     @ClientHandler(type = CorfuMsgType.NACK)
     private static Object handleNack(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L95">        return false;</span>
+<span class="fc" id="L95">        return false;</span>
     }
 
     /**
@@ -106,7 +106,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
     @ClientHandler(type = CorfuMsgType.WRONG_EPOCH)
     private static Object handleWrongEpoch(CorfuPayloadMsg&lt;Long&gt; msg, ChannelHandlerContext ctx,
                                            IClientRouter r) {
-<span class="nc" id="L109">        throw new WrongEpochException(msg.getPayload());</span>
+<span class="fc" id="L109">        throw new WrongEpochException(msg.getPayload());</span>
     }
 
     /**
@@ -120,12 +120,12 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
     @ClientHandler(type = CorfuMsgType.VERSION_RESPONSE)
     private static Object handleVersionResponse(JSONPayloadMsg&lt;VersionInfo&gt; msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L123">        return msg.getPayload();</span>
+<span class="fc" id="L123">        return msg.getPayload();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.NOT_READY)
     private static Object handleNotReady(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L128">        throw new ServerNotReadyException();</span>
+<span class="fc" id="L128">        throw new ServerNotReadyException();</span>
     }
 
     /**
@@ -135,9 +135,9 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
     private static Object handleServerException(CorfuPayloadMsg&lt;ExceptionMsg&gt; msg,
                                                 ChannelHandlerContext ctx, IClientRouter r)
             throws Throwable {
-<span class="nc" id="L138">        log.warn(&quot;Server threw exception for request {}&quot;, msg.getRequestID(),</span>
-<span class="nc" id="L139">                msg.getPayload().getThrowable());</span>
-<span class="nc" id="L140">        throw msg.getPayload().getThrowable();</span>
+<span class="fc" id="L138">        log.warn(&quot;Server threw exception for request {}&quot;, msg.getRequestID(),</span>
+<span class="fc" id="L139">                msg.getPayload().getThrowable());</span>
+<span class="fc" id="L140">        throw msg.getPayload().getThrowable();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

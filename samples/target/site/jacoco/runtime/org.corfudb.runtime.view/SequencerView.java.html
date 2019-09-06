@@ -33,32 +33,32 @@ public class SequencerView extends AbstractView {
     private Timer sequencerDeprecatedNextOneStream;
     private Timer sequencerDeprecatedNextMultipleStream;
     private Timer sequencerTrimCache;
-<span class="nc" id="L36">    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
+<span class="fc" id="L36">    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
 
     public SequencerView(CorfuRuntime runtime) {
-<span class="nc" id="L39">        super(runtime);</span>
+<span class="fc" id="L39">        super(runtime);</span>
 
         // Setup timers
-<span class="nc" id="L42">        setupTimers();</span>
-<span class="nc" id="L43">    }</span>
+<span class="fc" id="L42">        setupTimers();</span>
+<span class="fc" id="L43">    }</span>
 
     /**
      * Set up timers for different sequencer request from the client perspective
      */
     private void setupTimers() {
-<span class="nc" id="L49">        sequencerQuery = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
+<span class="fc" id="L49">        sequencerQuery = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
                 &quot;query&quot;);
-<span class="nc" id="L51">        sequencerTrimCache = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
+<span class="fc" id="L51">        sequencerTrimCache = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
                 &quot;trim-cache&quot;);
-<span class="nc" id="L53">        sequencerNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
+<span class="fc" id="L53">        sequencerNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
                 &quot;particular-next&quot;);
-<span class="nc" id="L55">        sequencerNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
+<span class="fc" id="L55">        sequencerNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
                 &quot;multiple-next&quot;);
-<span class="nc" id="L57">        sequencerDeprecatedNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
+<span class="fc" id="L57">        sequencerDeprecatedNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
                 &quot;deprecated-particular-next&quot;);
-<span class="nc" id="L59">        sequencerDeprecatedNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
+<span class="fc" id="L59">        sequencerDeprecatedNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +</span>
                 &quot;deprecated-multiple-next&quot;);
-<span class="nc" id="L61">    }</span>
+<span class="fc" id="L61">    }</span>
 
     /**
      * Return the next token in the sequencer for the global tail or the tails
@@ -68,15 +68,15 @@ public class SequencerView extends AbstractView {
      * @return the global tail or a list of tails
      */
     public TokenResponse query(UUID... streamIds) {
-<span class="nc" id="L71">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)){</span>
-<span class="nc bnc" id="L72" title="All 2 branches missed.">            if (streamIds.length == 0) {</span>
-<span class="nc" id="L73">                return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
-<span class="nc" id="L74">                        .nextToken(Collections.emptyList(), 0)));</span>
+<span class="pc" id="L71">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)){</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">            if (streamIds.length == 0) {</span>
+<span class="fc" id="L73">                return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
+<span class="fc" id="L74">                        .nextToken(Collections.emptyList(), 0)));</span>
             } else {
-<span class="nc" id="L76">                return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
-<span class="nc" id="L77">                        .nextToken(Arrays.asList(streamIds), 0)));</span>
+<span class="fc" id="L76">                return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
+<span class="fc" id="L77">                        .nextToken(Arrays.asList(streamIds), 0)));</span>
             }
-<span class="nc bnc" id="L79" title="All 12 branches missed.">        }</span>
+<span class="pc bpc" id="L79" title="10 of 12 branches missed.">        }</span>
     }
 
     /**
@@ -86,10 +86,10 @@ public class SequencerView extends AbstractView {
      * @return the stream tail
      */
     public long query(UUID streamId) {
-<span class="nc" id="L89">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)) {</span>
-<span class="nc" id="L90">                return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
-<span class="nc" id="L91">                        .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);</span>
-<span class="nc bnc" id="L92" title="All 8 branches missed.">        }</span>
+<span class="pc" id="L89">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)) {</span>
+<span class="fc" id="L90">                return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
+<span class="fc" id="L91">                        .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);</span>
+<span class="pc bpc" id="L92" title="7 of 8 branches missed.">        }</span>
     }
 
     /**
@@ -99,10 +99,10 @@ public class SequencerView extends AbstractView {
      * @return The first token retrieved.
      */
     public TokenResponse next(UUID ... streamIds) {
-<span class="nc" id="L102">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {</span>
-<span class="nc" id="L103">            return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
-<span class="nc" id="L104">                    .nextToken(Arrays.asList(streamIds), 1)));</span>
-<span class="nc bnc" id="L105" title="All 8 branches missed.">        }</span>
+<span class="fc" id="L102">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {</span>
+<span class="fc" id="L103">            return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
+<span class="fc" id="L104">                    .nextToken(Arrays.asList(streamIds), 1)));</span>
+<span class="pc bpc" id="L105" title="6 of 8 branches missed.">        }</span>
     }
 
     /**
@@ -112,7 +112,7 @@ public class SequencerView extends AbstractView {
      * @return address space composed of the trim mark and collection of all addresses belonging to this stream.
      */
     public StreamAddressSpace getStreamAddressSpace(StreamAddressRange streamsAddressesRange) {
-<span class="nc" id="L115">        return getStreamsAddressSpace(Arrays.asList(streamsAddressesRange)).get(streamsAddressesRange.getStreamID());</span>
+<span class="fc" id="L115">        return getStreamsAddressSpace(Arrays.asList(streamsAddressesRange)).get(streamsAddressesRange.getStreamID());</span>
     }
 
     /**
@@ -122,12 +122,12 @@ public class SequencerView extends AbstractView {
      * @return address space for each stream in the request.
      */
     public Map&lt;UUID, StreamAddressSpace&gt; getStreamsAddressSpace(List&lt;StreamAddressRange&gt; streamsAddressesRange) {
-<span class="nc" id="L125">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {</span>
-<span class="nc" id="L126">            StreamsAddressResponse streamsAddressResponse = layoutHelper(e -&gt;</span>
-<span class="nc" id="L127">                    CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
-<span class="nc" id="L128">                            .getStreamsAddressSpace(streamsAddressesRange)));</span>
-<span class="nc" id="L129">            return streamsAddressResponse.getAddressMap();</span>
-<span class="nc bnc" id="L130" title="All 8 branches missed.">        }</span>
+<span class="pc" id="L125">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {</span>
+<span class="fc" id="L126">            StreamsAddressResponse streamsAddressResponse = layoutHelper(e -&gt;</span>
+<span class="fc" id="L127">                    CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
+<span class="fc" id="L128">                            .getStreamsAddressSpace(streamsAddressesRange)));</span>
+<span class="fc" id="L129">            return streamsAddressResponse.getAddressMap();</span>
+<span class="pc bpc" id="L130" title="7 of 8 branches missed.">        }</span>
     }
 
     /**
@@ -139,10 +139,10 @@ public class SequencerView extends AbstractView {
      * @return First token to be written for the streams if there are no conflicts
      */
     public TokenResponse next(TxResolutionInfo conflictInfo, UUID ... streamIds) {
-<span class="nc" id="L142">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextMultipleStream)) {</span>
-<span class="nc" id="L143">            return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
-<span class="nc" id="L144">                    .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));</span>
-<span class="nc bnc" id="L145" title="All 8 branches missed.">        }</span>
+<span class="pc" id="L142">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextMultipleStream)) {</span>
+<span class="fc" id="L143">            return layoutHelper(e -&gt; CFUtils.getUninterruptibly(e.getPrimarySequencerClient()</span>
+<span class="fc" id="L144">                    .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));</span>
+<span class="pc bpc" id="L145" title="7 of 8 branches missed.">        }</span>
     }
 
     /**
@@ -174,9 +174,9 @@ public class SequencerView extends AbstractView {
     }
 
     public void trimCache(long address) {
-<span class="nc" id="L177">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerTrimCache)){</span>
-<span class="nc" id="L178">            runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);</span>
-<span class="nc bnc" id="L179" title="All 8 branches missed.">        }</span>
-<span class="nc" id="L180">    }</span>
+<span class="pc" id="L177">        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerTrimCache)){</span>
+<span class="fc" id="L178">            runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);</span>
+<span class="pc bpc" id="L179" title="7 of 8 branches missed.">        }</span>
+<span class="fc" id="L180">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

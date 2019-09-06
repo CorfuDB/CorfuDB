@@ -13,51 +13,51 @@ import java.util.stream.Collectors;
  *
  * @author Maithem
  */
-<span class="nc" id="L16">@AllArgsConstructor</span>
+<span class="pc" id="L16">@AllArgsConstructor</span>
 public enum OrchestratorRequestType {
 
     /**
      * Query a workflow id
      */
-<span class="nc" id="L22">    QUERY(0, QueryRequest::new),</span>
+<span class="fc" id="L22">    QUERY(0, QueryRequest::new),</span>
 
     /**
      * Add a new node to the cluster
      */
-<span class="nc" id="L27">    ADD_NODE(1, AddNodeRequest::new),</span>
+<span class="fc" id="L27">    ADD_NODE(1, AddNodeRequest::new),</span>
 
     /**
      * Remove a node from the cluster
      */
-<span class="nc" id="L32">    REMOVE_NODE(2, RemoveNodeRequest::new),</span>
+<span class="fc" id="L32">    REMOVE_NODE(2, RemoveNodeRequest::new),</span>
 
     /**
      * Heal an existing node in the cluster
      */
-<span class="nc" id="L37">    HEAL_NODE(3, HealNodeRequest::new),</span>
+<span class="fc" id="L37">    HEAL_NODE(3, HealNodeRequest::new),</span>
 
     /**
      * Force remove a node from the cluster
      */
-<span class="nc" id="L42">    FORCE_REMOVE_NODE(4, ForceRemoveNodeRequest::new),</span>
+<span class="fc" id="L42">    FORCE_REMOVE_NODE(4, ForceRemoveNodeRequest::new),</span>
 
     /**
      * Restore redundancy and merge segments in the layout.
      */
-<span class="nc" id="L47">    RESTORE_REDUNDANCY_MERGE_SEGMENTS(5, RestoreRedundancyMergeSegmentsRequest::new);</span>
+<span class="fc" id="L47">    RESTORE_REDUNDANCY_MERGE_SEGMENTS(5, RestoreRedundancyMergeSegmentsRequest::new);</span>
 
 
-<span class="nc" id="L50">    @Getter</span>
+<span class="fc" id="L50">    @Getter</span>
     public final int type;
 
-<span class="nc" id="L53">    @Getter</span>
+<span class="fc" id="L53">    @Getter</span>
     final Function&lt;byte[], Request&gt; requestGenerator;
 
     /**
      * Map an int to an enum.
      */
-<span class="nc" id="L59">    static final Map&lt;Integer, OrchestratorRequestType&gt; typeMap =</span>
-<span class="nc" id="L60">            Arrays.stream(OrchestratorRequestType.values())</span>
-<span class="nc" id="L61">                    .collect(Collectors.toMap(OrchestratorRequestType::getType, Function.identity()));</span>
+<span class="fc" id="L59">    static final Map&lt;Integer, OrchestratorRequestType&gt; typeMap =</span>
+<span class="fc" id="L60">            Arrays.stream(OrchestratorRequestType.values())</span>
+<span class="fc" id="L61">                    .collect(Collectors.toMap(OrchestratorRequestType::getType, Function.identity()));</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

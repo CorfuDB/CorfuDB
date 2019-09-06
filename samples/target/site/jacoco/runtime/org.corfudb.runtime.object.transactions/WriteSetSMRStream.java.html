@@ -57,13 +57,13 @@ import org.corfudb.util.Utils;
  * It supports navigating forward/backward across the SMREntries in the entire transaction stack.
  *
  */
-<span class="nc" id="L60">@Slf4j</span>
+<span class="fc" id="L60">@Slf4j</span>
 @SuppressWarnings(&quot;checkstyle:abbreviationaswordinname&quot;)
 public class WriteSetSMRStream implements ISMRStream {
 
     private List&lt;AbstractTransactionalContext&gt; contexts;
 
-<span class="nc" id="L66">    int currentContext = 0;</span>
+<span class="fc" id="L66">    int currentContext = 0;</span>
 
     /**
      * Current position in {@link WriteSetSMRStream#contexts}
@@ -84,11 +84,11 @@ public class WriteSetSMRStream implements ISMRStream {
      * @param id  stream id
      */
     public WriteSetSMRStream(List&lt;AbstractTransactionalContext&gt; contexts,
-<span class="nc" id="L87">                             UUID id) {</span>
-<span class="nc" id="L88">        this.contexts = contexts;</span>
-<span class="nc" id="L89">        this.id = id;</span>
-<span class="nc" id="L90">        reset();</span>
-<span class="nc" id="L91">    }</span>
+<span class="fc" id="L87">                             UUID id) {</span>
+<span class="fc" id="L88">        this.contexts = contexts;</span>
+<span class="fc" id="L89">        this.id = id;</span>
+<span class="fc" id="L90">        reset();</span>
+<span class="fc" id="L91">    }</span>
 
     /** Return whether stream current transaction is the thread current transaction.
      *
@@ -99,8 +99,8 @@ public class WriteSetSMRStream implements ISMRStream {
      *          False otherwise.
      */
     public boolean isStreamCurrentContextThreadCurrentContext() {
-<span class="nc" id="L102">        return contexts.get(currentContext)</span>
-<span class="nc" id="L103">                .equals(TransactionalContext.getCurrentContext());</span>
+<span class="fc" id="L102">        return contexts.get(currentContext)</span>
+<span class="fc" id="L103">                .equals(TransactionalContext.getCurrentContext());</span>
     }
 
     /** Return whether we are the stream for this current thread
@@ -112,8 +112,8 @@ public class WriteSetSMRStream implements ISMRStream {
      *          False otherwise.
      */
     public boolean isStreamForThisThread() {
-<span class="nc" id="L115">        return contexts.get(0)</span>
-<span class="nc" id="L116">                .equals(TransactionalContext.getRootContext());</span>
+<span class="fc" id="L115">        return contexts.get(0)</span>
+<span class="fc" id="L116">                .equals(TransactionalContext.getRootContext());</span>
     }
 
     void mergeTransaction() {
@@ -141,89 +141,89 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public List&lt;SMREntry&gt; remainingUpTo(long maxGlobal) {
         // Check for any new contexts
-<span class="nc" id="L144">        if (TransactionalContext.getTransactionStack().size()</span>
-<span class="nc bnc" id="L145" title="All 2 branches missed.">                &gt; contexts.size()) {</span>
+<span class="fc" id="L144">        if (TransactionalContext.getTransactionStack().size()</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">                &gt; contexts.size()) {</span>
 <span class="nc" id="L146">            contexts = TransactionalContext.getTransactionStackAsList();</span>
-<span class="nc" id="L147">        } else if (TransactionalContext.getTransactionStack().size()</span>
-<span class="nc bnc" id="L148" title="All 2 branches missed.">                &lt; contexts.size()) {</span>
+<span class="fc" id="L147">        } else if (TransactionalContext.getTransactionStack().size()</span>
+<span class="pc bpc" id="L148" title="1 of 2 branches missed.">                &lt; contexts.size()) {</span>
 <span class="nc" id="L149">            mergeTransaction();</span>
         }
-<span class="nc" id="L151">        List&lt;SMREntry&gt; entryList = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L151">        List&lt;SMREntry&gt; entryList = new LinkedList&lt;&gt;();</span>
 
 
-<span class="nc bnc" id="L154" title="All 2 branches missed.">        for (int i = currentContext; i &lt; contexts.size(); i++) {</span>
-<span class="nc" id="L155">            final List&lt;SMREntry&gt; writeSet = contexts.get(i)</span>
-<span class="nc" id="L156">                    .getWriteSetEntryList(id);</span>
-<span class="nc bnc" id="L157" title="All 2 branches missed.">            long readContextStart = i == currentContext ? currentContextPos + 1 : 0;</span>
-<span class="nc bnc" id="L158" title="All 2 branches missed.">            for (long j = readContextStart; j &lt; writeSet.size(); j++) {</span>
-<span class="nc" id="L159">                entryList.add(writeSet.get((int) j));</span>
-<span class="nc" id="L160">                writePos++;</span>
+<span class="fc bfc" id="L154" title="All 2 branches covered.">        for (int i = currentContext; i &lt; contexts.size(); i++) {</span>
+<span class="fc" id="L155">            final List&lt;SMREntry&gt; writeSet = contexts.get(i)</span>
+<span class="fc" id="L156">                    .getWriteSetEntryList(id);</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">            long readContextStart = i == currentContext ? currentContextPos + 1 : 0;</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">            for (long j = readContextStart; j &lt; writeSet.size(); j++) {</span>
+<span class="fc" id="L159">                entryList.add(writeSet.get((int) j));</span>
+<span class="fc" id="L160">                writePos++;</span>
             }
-<span class="nc bnc" id="L162" title="All 2 branches missed.">            if (writeSet.size() &gt; 0) {</span>
-<span class="nc" id="L163">                currentContext = i;</span>
-<span class="nc" id="L164">                currentContextPos = writeSet.size() - 1;</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">            if (writeSet.size() &gt; 0) {</span>
+<span class="fc" id="L163">                currentContext = i;</span>
+<span class="fc" id="L164">                currentContextPos = writeSet.size() - 1;</span>
             }
         }
-<span class="nc" id="L167">        return entryList;</span>
+<span class="fc" id="L167">        return entryList;</span>
     }
 
     @Override
     public List&lt;SMREntry&gt; current() {
-<span class="nc bnc" id="L172" title="All 2 branches missed.">        if (Address.nonAddress(writePos)) {</span>
+<span class="pc bpc" id="L172" title="1 of 2 branches missed.">        if (Address.nonAddress(writePos)) {</span>
 <span class="nc" id="L173">            return Collections.emptyList();</span>
         }
 
-<span class="nc bnc" id="L176" title="All 2 branches missed.">        if (Address.nonAddress(currentContextPos)) {</span>
+<span class="pc bpc" id="L176" title="1 of 2 branches missed.">        if (Address.nonAddress(currentContextPos)) {</span>
 <span class="nc" id="L177">            currentContextPos = -1;</span>
         }
 
-<span class="nc" id="L180">        return Collections.singletonList(contexts</span>
-<span class="nc" id="L181">                .get(currentContext)</span>
-<span class="nc" id="L182">                .getWriteSetEntryList(id)</span>
-<span class="nc" id="L183">                .get((int)(currentContextPos)));</span>
+<span class="fc" id="L180">        return Collections.singletonList(contexts</span>
+<span class="fc" id="L181">                .get(currentContext)</span>
+<span class="fc" id="L182">                .getWriteSetEntryList(id)</span>
+<span class="fc" id="L183">                .get((int)(currentContextPos)));</span>
     }
 
     @Override
     public List&lt;SMREntry&gt; previous() {
-<span class="nc" id="L188">        writePos--;</span>
+<span class="fc" id="L188">        writePos--;</span>
 
-<span class="nc bnc" id="L190" title="All 2 branches missed.">        if (writePos &lt;= Address.maxNonAddress()) {</span>
-<span class="nc" id="L191">            writePos = Address.maxNonAddress();</span>
-<span class="nc" id="L192">            return Collections.emptyList();</span>
+<span class="fc bfc" id="L190" title="All 2 branches covered.">        if (writePos &lt;= Address.maxNonAddress()) {</span>
+<span class="fc" id="L191">            writePos = Address.maxNonAddress();</span>
+<span class="fc" id="L192">            return Collections.emptyList();</span>
         }
 
-<span class="nc" id="L195">        currentContextPos--;</span>
+<span class="fc" id="L195">        currentContextPos--;</span>
         // Pop the context if we're at the beginning of it
-<span class="nc bnc" id="L197" title="All 2 branches missed.">        if (currentContextPos &lt;= Address.maxNonAddress()) {</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">        if (currentContextPos &lt;= Address.maxNonAddress()) {</span>
             do {
-<span class="nc bnc" id="L199" title="All 2 branches missed.">                if (currentContext == 0) {</span>
+<span class="pc bpc" id="L199" title="1 of 2 branches missed.">                if (currentContext == 0) {</span>
 <span class="nc" id="L200">                    throw new RuntimeException(</span>
 <span class="nc" id="L201">                            &quot;Attempted to pop first context (pos=&quot; + pos() + &quot;)&quot;);</span>
                 } else {
-<span class="nc" id="L203">                    currentContext--;</span>
+<span class="fc" id="L203">                    currentContext--;</span>
                 }
-<span class="nc" id="L205">            } while (contexts</span>
-<span class="nc" id="L206">                    .get(currentContext)</span>
-<span class="nc bnc" id="L207" title="All 2 branches missed.">                    .getWriteSetEntrySize(id) == 0);</span>
-<span class="nc" id="L208">            currentContextPos = contexts</span>
-<span class="nc" id="L209">                    .get(currentContext)</span>
-<span class="nc" id="L210">                    .getWriteSetEntrySize(id) - 1 ;</span>
+<span class="fc" id="L205">            } while (contexts</span>
+<span class="fc" id="L206">                    .get(currentContext)</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">                    .getWriteSetEntrySize(id) == 0);</span>
+<span class="fc" id="L208">            currentContextPos = contexts</span>
+<span class="fc" id="L209">                    .get(currentContext)</span>
+<span class="fc" id="L210">                    .getWriteSetEntrySize(id) - 1 ;</span>
         }
 
-<span class="nc" id="L213">        return current();</span>
+<span class="fc" id="L213">        return current();</span>
     }
 
     @Override
     public long pos() {
-<span class="nc" id="L218">        return writePos;</span>
+<span class="fc" id="L218">        return writePos;</span>
     }
 
     @Override
     public void reset() {
-<span class="nc" id="L223">        writePos = Address.maxNonAddress();</span>
-<span class="nc" id="L224">        currentContext = 0;</span>
-<span class="nc" id="L225">        currentContextPos = Address.maxNonAddress();</span>
-<span class="nc" id="L226">    }</span>
+<span class="fc" id="L223">        writePos = Address.maxNonAddress();</span>
+<span class="fc" id="L224">        currentContext = 0;</span>
+<span class="fc" id="L225">        currentContextPos = Address.maxNonAddress();</span>
+<span class="fc" id="L226">    }</span>
 
     @Override
     public void seek(long globalAddress) {
@@ -237,8 +237,8 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public Stream&lt;SMREntry&gt; streamUpTo(long maxGlobal) {
-<span class="nc" id="L240">        return remainingUpTo(maxGlobal)</span>
-<span class="nc" id="L241">                .stream();</span>
+<span class="fc" id="L240">        return remainingUpTo(maxGlobal)</span>
+<span class="fc" id="L241">                .stream();</span>
     }
 
     @Override

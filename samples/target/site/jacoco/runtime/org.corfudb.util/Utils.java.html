@@ -44,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Created by crossbach on 5/22/15.
  */
-<span class="nc" id="L47">@Slf4j</span>
+<span class="fc" id="L47">@Slf4j</span>
 public class Utils {
 
     private static final int DEFAULT_LOGUNIT = 0;
@@ -53,10 +53,10 @@ public class Utils {
         // prevent instantiation of this class
 <span class="nc" id="L54">    }</span>
 
-<span class="nc" id="L56">    private static final Printer printer = new Textifier();</span>
-<span class="nc" id="L57">    private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);</span>
+<span class="fc" id="L56">    private static final Printer printer = new Textifier();</span>
+<span class="fc" id="L57">    private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);</span>
 
-<span class="nc" id="L59">    private static final char[] hexArray = &quot;0123456789ABCDEF&quot;.toCharArray();</span>
+<span class="fc" id="L59">    private static final char[] hexArray = &quot;0123456789ABCDEF&quot;.toCharArray();</span>
 
     /** Convert a byte array to a hex string.
      * Source:
@@ -66,20 +66,20 @@ public class Utils {
      * @return      Hex string representation.
      */
     public static String bytesToHex(byte[] bytes) {
-<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (bytes == null) {</span>
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">        if (bytes == null) {</span>
 <span class="nc" id="L70">            return &quot;(null)&quot;;</span>
         }
-<span class="nc" id="L72">        char[] hexChars = new char[bytes.length * 2];</span>
-<span class="nc bnc" id="L73" title="All 2 branches missed.">        for ( int j = 0; j &lt; bytes.length; j++ ) {</span>
-<span class="nc" id="L74">            int v = bytes[j] &amp; 0xFF;</span>
-<span class="nc" id="L75">            hexChars[j * 2] = hexArray[v &gt;&gt;&gt; 4];</span>
-<span class="nc" id="L76">            hexChars[j * 2 + 1] = hexArray[v &amp; 0x0F];</span>
+<span class="fc" id="L72">        char[] hexChars = new char[bytes.length * 2];</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">        for ( int j = 0; j &lt; bytes.length; j++ ) {</span>
+<span class="fc" id="L74">            int v = bytes[j] &amp; 0xFF;</span>
+<span class="fc" id="L75">            hexChars[j * 2] = hexArray[v &gt;&gt;&gt; 4];</span>
+<span class="fc" id="L76">            hexChars[j * 2 + 1] = hexArray[v &amp; 0x0F];</span>
         }
-<span class="nc" id="L78">        return new String(hexChars);</span>
+<span class="fc" id="L78">        return new String(hexChars);</span>
     }
 
     public static byte[] intToBigEndianByteArray(int in) {
-<span class="nc" id="L82">        return new byte[] {</span>
+<span class="fc" id="L82">        return new byte[] {</span>
                 (byte) ((in &gt;&gt; 24) &amp; 0xFF),
                 (byte) ((in &gt;&gt; 16) &amp; 0xFF),
                 (byte) ((in &gt;&gt; 8) &amp; 0xFF),
@@ -88,7 +88,7 @@ public class Utils {
 
 
     public static byte[] longToBigEndianByteArray(long in) {
-<span class="nc" id="L91">        return new byte[] {</span>
+<span class="fc" id="L91">        return new byte[] {</span>
                 (byte) ((in &gt;&gt; 56) &amp; 0xFF),
                 (byte) ((in &gt;&gt; 48) &amp; 0xFF),
                 (byte) ((in &gt;&gt; 40) &amp; 0xFF),
@@ -135,17 +135,17 @@ public class Utils {
      * @return
      */
     public static long parseLong(final Object toParseObj) {
-<span class="nc bnc" id="L138" title="All 2 branches missed.">        if (toParseObj == null) {</span>
+<span class="pc bpc" id="L138" title="1 of 2 branches missed.">        if (toParseObj == null) {</span>
 <span class="nc" id="L139">            return 0;</span>
         }
-<span class="nc bnc" id="L141" title="All 2 branches missed.">        if (toParseObj instanceof Long) {</span>
-<span class="nc" id="L142">            return (Long) toParseObj;</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        if (toParseObj instanceof Long) {</span>
+<span class="fc" id="L142">            return (Long) toParseObj;</span>
         }
-<span class="nc bnc" id="L144" title="All 2 branches missed.">        if (toParseObj instanceof Integer) {</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">        if (toParseObj instanceof Integer) {</span>
 <span class="nc" id="L145">            return (Integer) toParseObj;</span>
         }
-<span class="nc" id="L147">        String toParse = (String) toParseObj;</span>
-<span class="nc bnc" id="L148" title="All 2 branches missed.">        if (toParse.matches(&quot;[0-9]*[A-Za-z]$&quot;)) {</span>
+<span class="fc" id="L147">        String toParse = (String) toParseObj;</span>
+<span class="pc bpc" id="L148" title="1 of 2 branches missed.">        if (toParse.matches(&quot;[0-9]*[A-Za-z]$&quot;)) {</span>
             long multiplier;
 <span class="nc" id="L150">            char suffix = toParse.toUpperCase().charAt(toParse.length() - 1);</span>
 <span class="nc bnc" id="L151" title="All 7 branches missed.">            switch (suffix) {</span>
@@ -172,7 +172,7 @@ public class Utils {
             }
 <span class="nc" id="L173">            return Long.parseLong(toParse.substring(0, toParse.length() - 2)) * multiplier;</span>
         } else {
-<span class="nc" id="L175">            return Long.parseLong(toParse);</span>
+<span class="fc" id="L175">            return Long.parseLong(toParse);</span>
         }
     }
 
@@ -239,22 +239,22 @@ public class Utils {
      * @return A string for bytes (i.e, 10GB).
      */
     public static String convertToByteStringRepresentation(final long value) {
-<span class="nc" id="L242">        final long[] dividers = new long[]{1_000_000_000_000L, 1_000_000_000, 1_000_000, 1_000, 1};</span>
-<span class="nc" id="L243">        final String[] units = new String[]{&quot;TB&quot;, &quot;GB&quot;, &quot;MB&quot;, &quot;KB&quot;, &quot;B&quot;};</span>
-<span class="nc bnc" id="L244" title="All 2 branches missed.">        if (value &lt; 1) {</span>
+<span class="fc" id="L242">        final long[] dividers = new long[]{1_000_000_000_000L, 1_000_000_000, 1_000_000, 1_000, 1};</span>
+<span class="fc" id="L243">        final String[] units = new String[]{&quot;TB&quot;, &quot;GB&quot;, &quot;MB&quot;, &quot;KB&quot;, &quot;B&quot;};</span>
+<span class="pc bpc" id="L244" title="1 of 2 branches missed.">        if (value &lt; 1) {</span>
 <span class="nc" id="L245">            throw new IllegalArgumentException(&quot;Invalid file size: &quot; + value);</span>
         }
-<span class="nc" id="L247">        String result = null;</span>
-<span class="nc bnc" id="L248" title="All 2 branches missed.">        for (int i = 0; i &lt; dividers.length; i++) {</span>
-<span class="nc" id="L249">            final long divider = dividers[i];</span>
-<span class="nc bnc" id="L250" title="All 2 branches missed.">            if (value &gt;= divider) {</span>
-<span class="nc bnc" id="L251" title="All 2 branches missed.">                final double cresult =</span>
+<span class="fc" id="L247">        String result = null;</span>
+<span class="pc bpc" id="L248" title="1 of 2 branches missed.">        for (int i = 0; i &lt; dividers.length; i++) {</span>
+<span class="fc" id="L249">            final long divider = dividers[i];</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">            if (value &gt;= divider) {</span>
+<span class="pc bpc" id="L251" title="1 of 2 branches missed.">                final double cresult =</span>
                         divider &gt; 1 ? (double) value / (double) divider : (double) value;
-<span class="nc" id="L253">                result = new DecimalFormat(&quot;#,##0.#&quot;).format(cresult) + &quot; &quot; + units[i];</span>
-<span class="nc" id="L254">                break;</span>
+<span class="fc" id="L253">                result = new DecimalFormat(&quot;#,##0.#&quot;).format(cresult) + &quot; &quot; + units[i];</span>
+<span class="fc" id="L254">                break;</span>
             }
         }
-<span class="nc" id="L257">        return result;</span>
+<span class="fc" id="L257">        return result;</span>
     }
 
     /**
@@ -429,7 +429,7 @@ public class Utils {
      * @return      A human readable UUID string
      */
     public static String toReadableId(UUID id) {
-<span class="nc" id="L432">        return Long.toHexString((id.getLeastSignificantBits()) &amp; 0xFFFF);</span>
+<span class="fc" id="L432">        return Long.toHexString((id.getLeastSignificantBits()) &amp; 0xFFFF);</span>
     }
 
     /** Print the anatomy of a LogData
@@ -473,25 +473,25 @@ public class Utils {
      * @return Log global tail
      */
     public static long getLogTail(Layout layout, CorfuRuntime runtime) {
-<span class="nc" id="L476">        long globalLogTail = Address.NON_EXIST;</span>
+<span class="fc" id="L476">        long globalLogTail = Address.NON_EXIST;</span>
 
-<span class="nc" id="L478">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
+<span class="fc" id="L478">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
 
         // Query the head log unit in every stripe.
-<span class="nc bnc" id="L481" title="All 2 branches missed.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
-<span class="nc bnc" id="L482" title="All 2 branches missed.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
+<span class="pc bpc" id="L481" title="1 of 2 branches missed.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
+<span class="fc bfc" id="L482" title="All 2 branches covered.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
 
-<span class="nc" id="L484">                TailsResponse response = CFUtils.getUninterruptibly(</span>
-<span class="nc" id="L485">                        runtime.getLayoutView().getRuntimeLayout(layout)</span>
-<span class="nc" id="L486">                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))</span>
-<span class="nc" id="L487">                                .getLogTail());</span>
-<span class="nc" id="L488">                globalLogTail = Long.max(globalLogTail, response.getLogTail());</span>
-<span class="nc" id="L489">            }</span>
+<span class="fc" id="L484">                TailsResponse response = CFUtils.getUninterruptibly(</span>
+<span class="fc" id="L485">                        runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="fc" id="L486">                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))</span>
+<span class="fc" id="L487">                                .getLogTail());</span>
+<span class="fc" id="L488">                globalLogTail = Long.max(globalLogTail, response.getLogTail());</span>
+<span class="fc" id="L489">            }</span>
 <span class="nc bnc" id="L490" title="All 2 branches missed.">        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {</span>
 <span class="nc" id="L491">            throw new UnsupportedOperationException();</span>
         }
 
-<span class="nc" id="L494">        return globalLogTail;</span>
+<span class="fc" id="L494">        return globalLogTail;</span>
     }
 
     /**
@@ -504,25 +504,25 @@ public class Utils {
      * @return The max global log tail obtained from the log unit servers.
      */
     public static TailsResponse getAllTails(Layout layout, CorfuRuntime runtime) {
-<span class="nc" id="L507">        Set&lt;TailsResponse&gt; luResponses = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L507">        Set&lt;TailsResponse&gt; luResponses = new HashSet&lt;&gt;();</span>
 
-<span class="nc" id="L509">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
+<span class="fc" id="L509">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
 
         // Query the tail of the head log unit in every stripe.
-<span class="nc bnc" id="L512" title="All 2 branches missed.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
-<span class="nc bnc" id="L513" title="All 2 branches missed.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
+<span class="pc bpc" id="L512" title="1 of 2 branches missed.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
+<span class="fc bfc" id="L513" title="All 2 branches covered.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
 
-<span class="nc" id="L515">                TailsResponse res = CFUtils.getUninterruptibly(</span>
-<span class="nc" id="L516">                        runtime.getLayoutView().getRuntimeLayout(layout)</span>
-<span class="nc" id="L517">                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))</span>
-<span class="nc" id="L518">                                .getAllTails());</span>
-<span class="nc" id="L519">                luResponses.add(res);</span>
-<span class="nc" id="L520">            }</span>
+<span class="fc" id="L515">                TailsResponse res = CFUtils.getUninterruptibly(</span>
+<span class="fc" id="L516">                        runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="fc" id="L517">                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))</span>
+<span class="fc" id="L518">                                .getAllTails());</span>
+<span class="fc" id="L519">                luResponses.add(res);</span>
+<span class="fc" id="L520">            }</span>
 <span class="nc bnc" id="L521" title="All 2 branches missed.">        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {</span>
 <span class="nc" id="L522">            throw new UnsupportedOperationException();</span>
         }
 
-<span class="nc" id="L525">        return aggregateLogUnitTails(luResponses);</span>
+<span class="fc" id="L525">        return aggregateLogUnitTails(luResponses);</span>
     }
 
     /**
@@ -533,34 +533,34 @@ public class Utils {
      * @return An max-aggregation of all tails
      */
     static TailsResponse aggregateLogUnitTails(Set&lt;TailsResponse&gt; responses) {
-<span class="nc" id="L536">        long globalTail = Address.NON_ADDRESS;</span>
-<span class="nc" id="L537">        Map&lt;UUID, Long&gt; globalStreamTails = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L536">        long globalTail = Address.NON_ADDRESS;</span>
+<span class="fc" id="L537">        Map&lt;UUID, Long&gt; globalStreamTails = new HashMap&lt;&gt;();</span>
 
-<span class="nc bnc" id="L539" title="All 2 branches missed.">        for (TailsResponse res : responses) {</span>
-<span class="nc" id="L540">            globalTail = Math.max(globalTail, res.getLogTail());</span>
+<span class="fc bfc" id="L539" title="All 2 branches covered.">        for (TailsResponse res : responses) {</span>
+<span class="fc" id="L540">            globalTail = Math.max(globalTail, res.getLogTail());</span>
 
-<span class="nc bnc" id="L542" title="All 2 branches missed.">            for (Map.Entry&lt;UUID, Long&gt; stream : res.getStreamTails().entrySet()) {</span>
-<span class="nc" id="L543">                long streamTail = globalStreamTails.getOrDefault(stream.getKey(), Address.NON_ADDRESS);</span>
-<span class="nc" id="L544">                globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));</span>
-<span class="nc" id="L545">            }</span>
-<span class="nc" id="L546">        }</span>
+<span class="fc bfc" id="L542" title="All 2 branches covered.">            for (Map.Entry&lt;UUID, Long&gt; stream : res.getStreamTails().entrySet()) {</span>
+<span class="fc" id="L543">                long streamTail = globalStreamTails.getOrDefault(stream.getKey(), Address.NON_ADDRESS);</span>
+<span class="fc" id="L544">                globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));</span>
+<span class="fc" id="L545">            }</span>
+<span class="fc" id="L546">        }</span>
         // All epochs should be equal as all the tails are queried using a single runtime layout.
-<span class="nc" id="L548">        return new TailsResponse(globalTail, globalStreamTails);</span>
+<span class="fc" id="L548">        return new TailsResponse(globalTail, globalStreamTails);</span>
     }
 
     static Map&lt;UUID, StreamAddressSpace&gt; aggregateStreamAddressMap(Map&lt;UUID, StreamAddressSpace&gt; streamAddressSpaceMap,
                                                                    Map&lt;UUID, StreamAddressSpace&gt; aggregated) {
-<span class="nc bnc" id="L553" title="All 2 branches missed.">        for (Map.Entry&lt;UUID, StreamAddressSpace&gt; stream : streamAddressSpaceMap.entrySet()) {</span>
-<span class="nc bnc" id="L554" title="All 2 branches missed.">            if (aggregated.containsKey(stream.getKey())) {</span>
+<span class="fc bfc" id="L553" title="All 2 branches covered.">        for (Map.Entry&lt;UUID, StreamAddressSpace&gt; stream : streamAddressSpaceMap.entrySet()) {</span>
+<span class="pc bpc" id="L554" title="1 of 2 branches missed.">            if (aggregated.containsKey(stream.getKey())) {</span>
 <span class="nc" id="L555">                long currentTrimMark = aggregated.get(stream.getKey()).getTrimMark();</span>
 <span class="nc" id="L556">                aggregated.get(stream.getKey()).getAddressMap().or(stream.getValue().getAddressMap());</span>
 <span class="nc" id="L557">                aggregated.get(stream.getKey()).setTrimMark(Math.max(currentTrimMark, stream.getValue().getTrimMark()));</span>
 <span class="nc" id="L558">            } else {</span>
-<span class="nc" id="L559">                aggregated.put(stream.getKey(), stream.getValue());</span>
+<span class="fc" id="L559">                aggregated.put(stream.getKey(), stream.getValue());</span>
             }
-<span class="nc" id="L561">        }</span>
+<span class="fc" id="L561">        }</span>
 
-<span class="nc" id="L563">        return aggregated;</span>
+<span class="fc" id="L563">        return aggregated;</span>
     }
 
     /**
@@ -572,36 +572,36 @@ public class Utils {
      * @return response with all streams addresses and global log tail.
      */
     public static StreamsAddressResponse getLogAddressSpace(Layout layout, CorfuRuntime runtime) {
-<span class="nc" id="L575">        Set&lt;StreamsAddressResponse&gt; luResponses = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L575">        Set&lt;StreamsAddressResponse&gt; luResponses = new HashSet&lt;&gt;();</span>
 
-<span class="nc" id="L577">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
+<span class="fc" id="L577">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
 
-        // Query the tail of the head log unit in every stripe.
-<span class="nc bnc" id="L580" title="All 2 branches missed.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
-<span class="nc bnc" id="L581" title="All 2 branches missed.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
+        // Query the head log unit in every stripe.
+<span class="fc bfc" id="L580" title="All 2 branches covered.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
+<span class="fc bfc" id="L581" title="All 2 branches covered.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
 
-<span class="nc" id="L583">                StreamsAddressResponse res = CFUtils.getUninterruptibly(</span>
-<span class="nc" id="L584">                        runtime.getLayoutView().getRuntimeLayout(layout)</span>
-<span class="nc" id="L585">                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))</span>
-<span class="nc" id="L586">                                .getLogAddressSpace());</span>
-<span class="nc" id="L587">                luResponses.add(res);</span>
-<span class="nc" id="L588">            }</span>
-<span class="nc bnc" id="L589" title="All 2 branches missed.">        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {</span>
-<span class="nc" id="L590">            throw new UnsupportedOperationException();</span>
+<span class="fc" id="L583">                StreamsAddressResponse res = CFUtils.getUninterruptibly(</span>
+<span class="fc" id="L584">                        runtime.getLayoutView().getRuntimeLayout(layout)</span>
+<span class="fc" id="L585">                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))</span>
+<span class="fc" id="L586">                                .getLogAddressSpace());</span>
+<span class="fc" id="L587">                luResponses.add(res);</span>
+<span class="fc" id="L588">            }</span>
+<span class="pc bpc" id="L589" title="1 of 2 branches missed.">        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {</span>
+<span class="fc" id="L590">            throw new UnsupportedOperationException();</span>
         }
 
-<span class="nc" id="L593">        return aggregateLogAddressSpace(luResponses);</span>
+<span class="fc" id="L593">        return aggregateLogAddressSpace(luResponses);</span>
     }
 
     static StreamsAddressResponse aggregateLogAddressSpace(Set&lt;StreamsAddressResponse&gt; responses) {
-<span class="nc" id="L597">        Map&lt;UUID, StreamAddressSpace&gt; globalStreamTails = new HashMap&lt;&gt;();</span>
-<span class="nc" id="L598">        long logTail = Address.NON_ADDRESS;</span>
+<span class="fc" id="L597">        Map&lt;UUID, StreamAddressSpace&gt; streamAddressSpace = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L598">        long logTail = Address.NON_ADDRESS;</span>
 
-<span class="nc bnc" id="L600" title="All 2 branches missed.">        for (StreamsAddressResponse res : responses) {</span>
-<span class="nc" id="L601">            logTail = Math.max(logTail, res.getLogTail());</span>
-<span class="nc" id="L602">            globalStreamTails = aggregateStreamAddressMap(res.getAddressMap(), globalStreamTails);</span>
-<span class="nc" id="L603">        }</span>
-<span class="nc" id="L604">        return new StreamsAddressResponse(logTail, globalStreamTails);</span>
+<span class="fc bfc" id="L600" title="All 2 branches covered.">        for (StreamsAddressResponse res : responses) {</span>
+<span class="fc" id="L601">            logTail = Math.max(logTail, res.getLogTail());</span>
+<span class="fc" id="L602">            streamAddressSpace = aggregateStreamAddressMap(res.getAddressMap(), streamAddressSpace);</span>
+<span class="fc" id="L603">        }</span>
+<span class="fc" id="L604">        return new StreamsAddressResponse(logTail, streamAddressSpace);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

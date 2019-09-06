@@ -29,13 +29,14 @@ public class TrimmedException extends LogUnitException {
 <span class="nc" id="L29">    public TrimmedException() {</span>
 <span class="nc" id="L30">    }</span>
 
-<span class="nc" id="L32">    public TrimmedException(List&lt;Long&gt; trimmed) {</span>
-<span class="nc" id="L33">        trimmedAddresses = trimmed;</span>
-<span class="nc" id="L34">    }</span>
+    public TrimmedException(List&lt;Long&gt; trimmed) {
+<span class="nc" id="L33">        super(String.format(&quot;Trimmed addresses {}&quot;, trimmed));</span>
+<span class="nc" id="L34">        trimmedAddresses = trimmed;</span>
+<span class="nc" id="L35">    }</span>
 
     public TrimmedException(String message) {
-<span class="nc" id="L37">        super(message);</span>
-<span class="nc" id="L38">        retriable = true;</span>
-<span class="nc" id="L39">    }</span>
+<span class="nc" id="L38">        super(message);</span>
+<span class="nc" id="L39">        retriable = true;</span>
+<span class="nc" id="L40">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

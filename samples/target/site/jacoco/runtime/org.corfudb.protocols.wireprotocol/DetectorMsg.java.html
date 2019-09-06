@@ -12,23 +12,23 @@ import lombok.Data;
  * Created by zlokhandwala on 11/8/16.
  */
 <span class="nc bnc" id="L14" title="All 30 branches missed.">@Data</span>
-<span class="nc" id="L15">@AllArgsConstructor</span>
+<span class="fc" id="L15">@AllArgsConstructor</span>
 public class DetectorMsg implements ICorfuPayload&lt;DetectorMsg&gt; {
-<span class="nc" id="L17">    private Long detectorEpoch;</span>
-<span class="nc" id="L18">    private Set&lt;String&gt; failedNodes;</span>
-<span class="nc" id="L19">    private Set&lt;String&gt; healedNodes;</span>
+<span class="fc" id="L17">    private Long detectorEpoch;</span>
+<span class="fc" id="L18">    private Set&lt;String&gt; failedNodes;</span>
+<span class="fc" id="L19">    private Set&lt;String&gt; healedNodes;</span>
 
-<span class="nc" id="L21">    public DetectorMsg(ByteBuf buf) {</span>
-<span class="nc" id="L22">        detectorEpoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L23">        failedNodes = ICorfuPayload.setFromBuffer(buf, String.class);</span>
-<span class="nc" id="L24">        healedNodes = ICorfuPayload.setFromBuffer(buf, String.class);</span>
-<span class="nc" id="L25">    }</span>
+<span class="fc" id="L21">    public DetectorMsg(ByteBuf buf) {</span>
+<span class="fc" id="L22">        detectorEpoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L23">        failedNodes = ICorfuPayload.setFromBuffer(buf, String.class);</span>
+<span class="fc" id="L24">        healedNodes = ICorfuPayload.setFromBuffer(buf, String.class);</span>
+<span class="fc" id="L25">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L29">        ICorfuPayload.serialize(buf, detectorEpoch);</span>
-<span class="nc" id="L30">        ICorfuPayload.serialize(buf, failedNodes);</span>
-<span class="nc" id="L31">        ICorfuPayload.serialize(buf, healedNodes);</span>
-<span class="nc" id="L32">    }</span>
+<span class="fc" id="L29">        ICorfuPayload.serialize(buf, detectorEpoch);</span>
+<span class="fc" id="L30">        ICorfuPayload.serialize(buf, failedNodes);</span>
+<span class="fc" id="L31">        ICorfuPayload.serialize(buf, healedNodes);</span>
+<span class="fc" id="L32">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

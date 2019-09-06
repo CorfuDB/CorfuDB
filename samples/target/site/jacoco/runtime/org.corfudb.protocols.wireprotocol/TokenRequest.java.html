@@ -33,16 +33,16 @@ public class TokenRequest implements ICorfuPayload&lt;TokenRequest&gt; {
     public static final byte TK_TX = 4;
 
     /** The type of request, one of the above. */
-<span class="nc" id="L36">    final byte reqType;</span>
+<span class="fc" id="L36">    final byte reqType;</span>
 
     /** The number of tokens to request. */
-<span class="nc" id="L39">    final Long numTokens;</span>
+<span class="fc" id="L39">    final Long numTokens;</span>
 
     /** The streams which are written to by this token request. */
-<span class="nc" id="L42">    final List&lt;UUID&gt; streams;</span>
+<span class="fc" id="L42">    final List&lt;UUID&gt; streams;</span>
 
     /* used for transaction resolution. */
-<span class="nc" id="L45">    final TxResolutionInfo txnResolution;</span>
+<span class="fc" id="L45">    final TxResolutionInfo txnResolution;</span>
 
     /**
      * Constructor for generating TokenRequest.
@@ -52,12 +52,12 @@ public class TokenRequest implements ICorfuPayload&lt;TokenRequest&gt; {
      * @param conflictInfo transaction resolution information
      */
     public TokenRequest(Long numTokens, List&lt;UUID&gt; streams,
-<span class="nc" id="L55">                        TxResolutionInfo conflictInfo) {</span>
-<span class="nc" id="L56">        reqType = TK_TX;</span>
-<span class="nc" id="L57">        this.numTokens = numTokens;</span>
-<span class="nc" id="L58">        this.streams = streams;</span>
-<span class="nc" id="L59">        txnResolution = conflictInfo;</span>
-<span class="nc" id="L60">    }</span>
+<span class="fc" id="L55">                        TxResolutionInfo conflictInfo) {</span>
+<span class="fc" id="L56">        reqType = TK_TX;</span>
+<span class="fc" id="L57">        this.numTokens = numTokens;</span>
+<span class="fc" id="L58">        this.streams = streams;</span>
+<span class="fc" id="L59">        txnResolution = conflictInfo;</span>
+<span class="fc" id="L60">    }</span>
 
     /**
      * Constructor for generating TokenRequest.
@@ -65,52 +65,52 @@ public class TokenRequest implements ICorfuPayload&lt;TokenRequest&gt; {
      * @param numTokens number of tokens to request
      * @param streams streams UUIDs required in the token request
      */
-<span class="nc" id="L68">    public TokenRequest(Long numTokens, List&lt;UUID&gt; streams) {</span>
-<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (numTokens == 0) {</span>
-<span class="nc" id="L70">            this.reqType = TK_QUERY;</span>
-<span class="nc bnc" id="L71" title="All 4 branches missed.">        } else if (streams == null || streams.isEmpty()) {</span>
-<span class="nc" id="L72">            this.reqType = TK_RAW;</span>
+<span class="fc" id="L68">    public TokenRequest(Long numTokens, List&lt;UUID&gt; streams) {</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">        if (numTokens == 0) {</span>
+<span class="fc" id="L70">            this.reqType = TK_QUERY;</span>
+<span class="fc bfc" id="L71" title="All 4 branches covered.">        } else if (streams == null || streams.isEmpty()) {</span>
+<span class="fc" id="L72">            this.reqType = TK_RAW;</span>
         } else {
-<span class="nc" id="L74">            this.reqType = TK_MULTI_STREAM;</span>
+<span class="fc" id="L74">            this.reqType = TK_MULTI_STREAM;</span>
         }
-<span class="nc" id="L76">        this.numTokens = numTokens;</span>
-<span class="nc" id="L77">        this.streams = streams;</span>
-<span class="nc" id="L78">        txnResolution = null;</span>
-<span class="nc" id="L79">    }</span>
+<span class="fc" id="L76">        this.numTokens = numTokens;</span>
+<span class="fc" id="L77">        this.streams = streams;</span>
+<span class="fc" id="L78">        txnResolution = null;</span>
+<span class="fc" id="L79">    }</span>
 
     /**
      * Deserialization Constructor from Bytebuf to TokenRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L86">    public TokenRequest(ByteBuf buf) {</span>
-<span class="nc" id="L87">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
+<span class="fc" id="L86">    public TokenRequest(ByteBuf buf) {</span>
+<span class="fc" id="L87">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
 
-<span class="nc bnc" id="L89" title="All 5 branches missed.">        switch (reqType) {</span>
+<span class="pc bpc" id="L89" title="1 of 5 branches missed.">        switch (reqType) {</span>
 
             case TK_QUERY:
-<span class="nc" id="L92">                numTokens = 0L;</span>
-<span class="nc" id="L93">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
-<span class="nc" id="L94">                txnResolution = null;</span>
-<span class="nc" id="L95">                break;</span>
+<span class="fc" id="L92">                numTokens = 0L;</span>
+<span class="fc" id="L93">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
+<span class="fc" id="L94">                txnResolution = null;</span>
+<span class="fc" id="L95">                break;</span>
 
             case TK_RAW:
-<span class="nc" id="L98">                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L99">                streams = null;</span>
-<span class="nc" id="L100">                txnResolution = null;</span>
-<span class="nc" id="L101">                break;</span>
+<span class="fc" id="L98">                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L99">                streams = null;</span>
+<span class="fc" id="L100">                txnResolution = null;</span>
+<span class="fc" id="L101">                break;</span>
 
             case TK_MULTI_STREAM:
-<span class="nc" id="L104">                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L105">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
-<span class="nc" id="L106">                txnResolution = null;</span>
-<span class="nc" id="L107">                break;</span>
+<span class="fc" id="L104">                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L105">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
+<span class="fc" id="L106">                txnResolution = null;</span>
+<span class="fc" id="L107">                break;</span>
 
             case TK_TX:
-<span class="nc" id="L110">                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L111">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
-<span class="nc" id="L112">                txnResolution = new TxResolutionInfo(buf);</span>
-<span class="nc" id="L113">                break;</span>
+<span class="fc" id="L110">                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L111">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
+<span class="fc" id="L112">                txnResolution = new TxResolutionInfo(buf);</span>
+<span class="fc" id="L113">                break;</span>
 
             default:
 <span class="nc" id="L116">                numTokens = -1L;</span>
@@ -118,22 +118,22 @@ public class TokenRequest implements ICorfuPayload&lt;TokenRequest&gt; {
 <span class="nc" id="L118">                txnResolution = null;</span>
                 break;
         }
-<span class="nc" id="L121">    }</span>
+<span class="fc" id="L121">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L125">        ICorfuPayload.serialize(buf, reqType);</span>
-<span class="nc bnc" id="L126" title="All 2 branches missed.">        if (reqType != TK_QUERY) {</span>
-<span class="nc" id="L127">            ICorfuPayload.serialize(buf, numTokens);</span>
+<span class="fc" id="L125">        ICorfuPayload.serialize(buf, reqType);</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        if (reqType != TK_QUERY) {</span>
+<span class="fc" id="L127">            ICorfuPayload.serialize(buf, numTokens);</span>
         }
 
-<span class="nc bnc" id="L130" title="All 2 branches missed.">        if (reqType != TK_RAW) {</span>
-<span class="nc" id="L131">            ICorfuPayload.serialize(buf, streams);</span>
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        if (reqType != TK_RAW) {</span>
+<span class="fc" id="L131">            ICorfuPayload.serialize(buf, streams);</span>
         }
 
-<span class="nc bnc" id="L134" title="All 2 branches missed.">        if (reqType == TK_TX) {</span>
-<span class="nc" id="L135">            ICorfuPayload.serialize(buf, txnResolution);</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        if (reqType == TK_TX) {</span>
+<span class="fc" id="L135">            ICorfuPayload.serialize(buf, txnResolution);</span>
         }
-<span class="nc" id="L137">    }</span>
+<span class="fc" id="L137">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

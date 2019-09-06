@@ -11,26 +11,26 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
  * This container is used by the logunit to add work to the batch writer. Its also used
  * to coordinate job completion.
  */
-<span class="nc bnc" id="L14" title="All 38 branches missed.">@Data</span>
+<span class="pc bnc" id="L14" title="All 38 branches missed.">@Data</span>
 <span class="nc" id="L15">@ToString</span>
 public class BatchWriterOperation&lt;T&gt; {
-<span class="nc" id="L17">    public enum Type {</span>
-<span class="nc" id="L18">        SHUTDOWN,</span>
-<span class="nc" id="L19">        WRITE,</span>
-<span class="nc" id="L20">        RANGE_WRITE,</span>
-<span class="nc" id="L21">        TRIM,</span>
-<span class="nc" id="L22">        PREFIX_TRIM,</span>
-<span class="nc" id="L23">        SEAL,</span>
-<span class="nc" id="L24">        RESET,</span>
-<span class="nc" id="L25">        TAILS_QUERY,</span>
-<span class="nc" id="L26">        LOG_ADDRESS_SPACE_QUERY</span>
+<span class="pc" id="L17">    public enum Type {</span>
+<span class="fc" id="L18">        SHUTDOWN,</span>
+<span class="fc" id="L19">        WRITE,</span>
+<span class="fc" id="L20">        RANGE_WRITE,</span>
+<span class="fc" id="L21">        TRIM,</span>
+<span class="fc" id="L22">        PREFIX_TRIM,</span>
+<span class="fc" id="L23">        SEAL,</span>
+<span class="fc" id="L24">        RESET,</span>
+<span class="fc" id="L25">        TAILS_QUERY,</span>
+<span class="fc" id="L26">        LOG_ADDRESS_SPACE_QUERY</span>
     }
 
-<span class="nc" id="L29">    private final Type type;</span>
-<span class="nc" id="L30">    private final CorfuPayloadMsg msg;</span>
-<span class="nc" id="L31">    private T resultValue;</span>
-<span class="nc" id="L32">    private final CompletableFuture&lt;T&gt; futureResult = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L29">    private final Type type;</span>
+<span class="fc" id="L30">    private final CorfuPayloadMsg msg;</span>
+<span class="fc" id="L31">    private T resultValue;</span>
+<span class="fc" id="L32">    private final CompletableFuture&lt;T&gt; futureResult = new CompletableFuture&lt;&gt;();</span>
 
-<span class="nc" id="L34">    public static BatchWriterOperation&lt;Void&gt; SHUTDOWN = new BatchWriterOperation&lt;&gt;(Type.SHUTDOWN, null);</span>
+<span class="fc" id="L34">    public static BatchWriterOperation&lt;Void&gt; SHUTDOWN = new BatchWriterOperation&lt;&gt;(Type.SHUTDOWN, null);</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

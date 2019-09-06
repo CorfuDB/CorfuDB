@@ -22,16 +22,16 @@ import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSeg
  * the layout has only one segment left.
  * Created by Zeeshan on 2019-02-06.
  */
-<span class="nc" id="L25">@Slf4j</span>
+<span class="fc" id="L25">@Slf4j</span>
 public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
 
 
     private final RestoreRedundancyMergeSegmentsRequest request;
 
-<span class="nc" id="L31">    @Getter</span>
+<span class="fc" id="L31">    @Getter</span>
     private final UUID id;
 
-<span class="nc" id="L34">    @Getter</span>
+<span class="fc" id="L34">    @Getter</span>
     private final List&lt;Action&gt; actions;
 
     /**
@@ -39,15 +39,15 @@ public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
      *
      * @param request request to restore redundancy and merge a segment.
      */
-<span class="nc" id="L42">    public RestoreRedundancyMergeSegmentsWorkflow(RestoreRedundancyMergeSegmentsRequest request) {</span>
-<span class="nc" id="L43">        this.id = UUID.randomUUID();</span>
-<span class="nc" id="L44">        this.request = request;</span>
-<span class="nc" id="L45">        this.actions = ImmutableList.of(new RestoreRedundancyMergeSegments());</span>
-<span class="nc" id="L46">    }</span>
+<span class="fc" id="L42">    public RestoreRedundancyMergeSegmentsWorkflow(RestoreRedundancyMergeSegmentsRequest request) {</span>
+<span class="fc" id="L43">        this.id = UUID.randomUUID();</span>
+<span class="fc" id="L44">        this.request = request;</span>
+<span class="fc" id="L45">        this.actions = ImmutableList.of(new RestoreRedundancyMergeSegments());</span>
+<span class="fc" id="L46">    }</span>
 
     @Override
     public String getName() {
-<span class="nc" id="L50">        return RESTORE_REDUNDANCY_MERGE_SEGMENTS.toString();</span>
+<span class="fc" id="L50">        return RESTORE_REDUNDANCY_MERGE_SEGMENTS.toString();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -17,8 +17,8 @@ public class CorfuSharedCounter$CORFUSMR extends CorfuSharedCounter implements I
   public ICorfuSMRProxy<CorfuSharedCounter> proxy_CORFUSMR;
 
   public final Map<String, ICorfuSMRUpcallTarget<CorfuSharedCounter>> upcallMap_CORFUSMR = new ImmutableMap.Builder<String, ICorfuSMRUpcallTarget<CorfuSharedCounter>>()
-  .put("setValue", (obj, args) -> { obj.setValue((int) args[0]);return null;})
-  .put("CAS", (obj, args) -> { return obj.CAS((int) args[0], (int) args[1]);}).build();
+  .put("CAS", (obj, args) -> { return obj.CAS((int) args[0], (int) args[1]);})
+  .put("setValue", (obj, args) -> { obj.setValue((int) args[0]);return null;}).build();
 
   public final Map<String, IUndoRecordFunction<CorfuSharedCounter>> undoRecordMap_CORFUSMR = new ImmutableMap.Builder<String, IUndoRecordFunction<CorfuSharedCounter>>().build();
 
@@ -43,11 +43,8 @@ public class CorfuSharedCounter$CORFUSMR extends CorfuSharedCounter implements I
   }
 
   @Override
-  @Mutator(
-      name = "setValue"
-  )
-  public void setValue(int newValue) {
-    proxy_CORFUSMR.logUpdate("setValue",false,null,newValue);
+  public boolean equals(Object arg0) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
   }
 
   @Override
@@ -71,13 +68,16 @@ public class CorfuSharedCounter$CORFUSMR extends CorfuSharedCounter implements I
   }
 
   @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  @Mutator(
+      name = "setValue"
+  )
+  public void setValue(int newValue) {
+    proxy_CORFUSMR.logUpdate("setValue",false,null,newValue);
   }
 
   @Override
-  public boolean equals(Object arg0) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
   }
 
   public Map<String, ICorfuSMRUpcallTarget<CorfuSharedCounter>> getCorfuSMRUpcallMap() {

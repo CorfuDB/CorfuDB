@@ -30,7 +30,7 @@ import java.util.UUID;
  *
  * @param &lt;E&gt;   Type of the entry to be enqueued into the persisted queue
  */
-<span class="nc" id="L33">@Slf4j</span>
+<span class="fc" id="L33">@Slf4j</span>
 public class CorfuQueue&lt;E&gt; {
     /**
      * The main CorfuTable which contains the primary key-value mappings.
@@ -39,15 +39,15 @@ public class CorfuQueue&lt;E&gt; {
     private final CorfuRuntime runtime;
     private final CorfuGuidGenerator guidGenerator;
 
-<span class="nc" id="L42">    public CorfuQueue(CorfuRuntime runtime, String streamName) {</span>
-<span class="nc" id="L43">        this.runtime = runtime;</span>
-<span class="nc" id="L44">        corfuTable = runtime.getObjectsView().build()</span>
-<span class="nc" id="L45">                .setTypeToken(new TypeToken&lt;CorfuTable&lt;Long, E&gt;&gt;() {})</span>
-<span class="nc" id="L46">                .setStreamName(streamName)</span>
-<span class="nc" id="L47">                .setArguments(CorfuTable.IndexRegistry.empty(), new LinkedHashMap&lt;Long, E&gt;())</span>
-<span class="nc" id="L48">                .open();</span>
-<span class="nc" id="L49">        guidGenerator = new CorfuGuidGenerator(runtime);</span>
-<span class="nc" id="L50">    }</span>
+<span class="fc" id="L42">    public CorfuQueue(CorfuRuntime runtime, String streamName) {</span>
+<span class="fc" id="L43">        this.runtime = runtime;</span>
+<span class="fc" id="L44">        corfuTable = runtime.getObjectsView().build()</span>
+<span class="fc" id="L45">                .setTypeToken(new TypeToken&lt;CorfuTable&lt;Long, E&gt;&gt;() {})</span>
+<span class="fc" id="L46">                .setStreamName(streamName)</span>
+<span class="fc" id="L47">                .setArguments(CorfuTable.IndexRegistry.empty(), new LinkedHashMap&lt;Long, E&gt;())</span>
+<span class="fc" id="L48">                .open();</span>
+<span class="fc" id="L49">        guidGenerator = new CorfuGuidGenerator(runtime);</span>
+<span class="fc" id="L50">    }</span>
 
     /**
      * Returns the size of the queue at a given point in time.
@@ -64,22 +64,22 @@ public class CorfuQueue&lt;E&gt; {
      */
     public static class CorfuRecordId implements Comparable&lt;CorfuRecordId&gt; {
         private final UUID id;
-<span class="nc" id="L67">        public CorfuRecordId(long ordering, long uniqueId) {</span>
-<span class="nc" id="L68">            this.id = new UUID(ordering, uniqueId);</span>
-<span class="nc" id="L69">        }</span>
+<span class="fc" id="L67">        public CorfuRecordId(long ordering, long uniqueId) {</span>
+<span class="fc" id="L68">            this.id = new UUID(ordering, uniqueId);</span>
+<span class="fc" id="L69">        }</span>
 
         /**
          * @return Return only the unique part of the id without the ordering
          */
         public long getEntryId() {
-<span class="nc" id="L75">            return id.getLeastSignificantBits();</span>
+<span class="fc" id="L75">            return id.getLeastSignificantBits();</span>
         }
 
         /**
          * @return Return only the ordering part of the entry without the id.
          */
         public long getOrdering() {
-<span class="nc" id="L82">            return id.getMostSignificantBits();</span>
+<span class="fc" id="L82">            return id.getMostSignificantBits();</span>
         }
 
         /**
@@ -90,18 +90,18 @@ public class CorfuQueue&lt;E&gt; {
          */
         @Override
         public int compareTo(CorfuRecordId o) {
-<span class="nc bnc" id="L93" title="All 4 branches missed.">            if (this.id.getMostSignificantBits() == 0 &amp;&amp; o.id.getMostSignificantBits() != 0) {</span>
-<span class="nc" id="L94">                throw new IllegalArgumentException(</span>
+<span class="pc bpc" id="L93" title="1 of 4 branches missed.">            if (this.id.getMostSignificantBits() == 0 &amp;&amp; o.id.getMostSignificantBits() != 0) {</span>
+<span class="fc" id="L94">                throw new IllegalArgumentException(</span>
                         &quot;Incompatible CorfuRecordId comparison: ordering unavailable&quot;);
             }
-<span class="nc bnc" id="L97" title="All 4 branches missed.">            if (this.id.getMostSignificantBits() !=0 &amp;&amp; o.id.getMostSignificantBits() == 0) {</span>
+<span class="pc bpc" id="L97" title="2 of 4 branches missed.">            if (this.id.getMostSignificantBits() !=0 &amp;&amp; o.id.getMostSignificantBits() == 0) {</span>
 <span class="nc" id="L98">               throw new IllegalArgumentException(</span>
                        &quot;Incompatible CorfuRecordId comparison: order of compared object unknown&quot;);
             }
-<span class="nc bnc" id="L101" title="All 2 branches missed.">            if (this.id.getLeastSignificantBits() == o.id.getLeastSignificantBits()) {</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">            if (this.id.getLeastSignificantBits() == o.id.getLeastSignificantBits()) {</span>
 <span class="nc" id="L102">                return 0;</span>
             }
-<span class="nc" id="L104">            return id.compareTo(o.id);</span>
+<span class="fc" id="L104">            return id.compareTo(o.id);</span>
         }
 
         /**
@@ -110,11 +110,11 @@ public class CorfuQueue&lt;E&gt; {
          * @return
          */
         public boolean equals(CorfuRecordId o) {
-<span class="nc bnc" id="L113" title="All 2 branches missed.">            return id.getLeastSignificantBits() == o.id.getLeastSignificantBits();</span>
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">            return id.getLeastSignificantBits() == o.id.getLeastSignificantBits();</span>
         }
 
         public String toString() {
-<span class="nc" id="L117">            return id.toString();</span>
+<span class="fc" id="L117">            return id.toString();</span>
         }
     }
 
@@ -137,9 +137,9 @@ public class CorfuQueue&lt;E&gt; {
      *          The ID returned here is only really useful for remove() operations.
      */
     public CorfuRecordId enqueue(E e) {
-<span class="nc" id="L140">        final Long id = guidGenerator.nextLong();</span>
-<span class="nc" id="L141">        corfuTable.put(id, e);</span>
-<span class="nc" id="L142">        return new CorfuRecordId(0, id);</span>
+<span class="fc" id="L140">        final Long id = guidGenerator.nextLong();</span>
+<span class="fc" id="L141">        corfuTable.put(id, e);</span>
+<span class="fc" id="L142">        return new CorfuRecordId(0, id);</span>
     }
 
     /**
@@ -158,24 +158,24 @@ public class CorfuQueue&lt;E&gt; {
          * However it cannot be compared with ID returned from the enqueue method for ordering
          * because if this method is wrapped in a transaction, the order is established only later.
          */
-<span class="nc" id="L161">        @Getter</span>
+<span class="fc" id="L161">        @Getter</span>
         private final CorfuRecordId recordId;
 
-<span class="nc" id="L164">        @Getter</span>
+<span class="fc" id="L164">        @Getter</span>
         private final E entry;
 
         public String toString() {
 <span class="nc" id="L168">            return String.format(&quot;%s=&gt;%s&quot;, recordId, entry);</span>
         }
 
-<span class="nc" id="L171">        CorfuQueueRecord(long ordering, long entryId, E entry) {</span>
-<span class="nc" id="L172">            this.recordId = new CorfuRecordId(ordering, entryId);</span>
-<span class="nc" id="L173">            this.entry = entry;</span>
-<span class="nc" id="L174">        }</span>
+<span class="fc" id="L171">        CorfuQueueRecord(long ordering, long entryId, E entry) {</span>
+<span class="fc" id="L172">            this.recordId = new CorfuRecordId(ordering, entryId);</span>
+<span class="fc" id="L173">            this.entry = entry;</span>
+<span class="fc" id="L174">        }</span>
 
         @Override
         public int compareTo(CorfuQueueRecord&lt;? extends E&gt; o) {
-<span class="nc" id="L178">            return this.recordId.compareTo(o.getRecordId());</span>
+<span class="fc" id="L178">            return this.recordId.compareTo(o.getRecordId());</span>
         }
     }
 
@@ -219,57 +219,57 @@ public class CorfuQueue&lt;E&gt; {
      * @return List of Entries sorted by their enqueue order
      */
     public List&lt;CorfuQueueRecord&lt;E&gt;&gt; entryList(int maxEntries) {
-<span class="nc bnc" id="L222" title="All 2 branches missed.">        if (maxEntries &lt;= 0) {</span>
+<span class="pc bpc" id="L222" title="1 of 2 branches missed.">        if (maxEntries &lt;= 0) {</span>
 <span class="nc" id="L223">            throw new IllegalArgumentException(&quot;entryList given negative maxEntries&quot;);</span>
         }
-<span class="nc bnc" id="L225" title="All 2 branches missed.">        if (maxEntries &gt; MAX_INDEX_ENTRIES) {</span>
-<span class="nc" id="L226">            throw new IllegalArgumentException(</span>
+<span class="fc bfc" id="L225" title="All 2 branches covered.">        if (maxEntries &gt; MAX_INDEX_ENTRIES) {</span>
+<span class="fc" id="L226">            throw new IllegalArgumentException(</span>
                     &quot;entryList can't return more than &quot;+MAX_INDEX_ENTRIES+&quot; entries&quot;
             );
         }
 
         // Bind the iteration order to a snapshot of the Queue using a transaction.
         long snapshotVersion;
-<span class="nc" id="L233">        boolean startedNewTransaction = false;</span>
-<span class="nc bnc" id="L234" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
+<span class="fc" id="L233">        boolean startedNewTransaction = false;</span>
+<span class="pc bpc" id="L234" title="1 of 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
 <span class="nc" id="L235">            snapshotVersion = TransactionalContext.getCurrentContext()</span>
 <span class="nc" id="L236">                    .getSnapshotTimestamp().getSequence();</span>
         } else {
-<span class="nc" id="L238">            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE)</span>
-<span class="nc" id="L239">                    .build()</span>
-<span class="nc" id="L240">                    .begin();</span>
-<span class="nc" id="L241">            snapshotVersion = TransactionalContext.getCurrentContext()</span>
-<span class="nc" id="L242">                    .getSnapshotTimestamp().getSequence();</span>
-<span class="nc" id="L243">            startedNewTransaction = true;</span>
+<span class="fc" id="L238">            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE)</span>
+<span class="fc" id="L239">                    .build()</span>
+<span class="fc" id="L240">                    .begin();</span>
+<span class="fc" id="L241">            snapshotVersion = TransactionalContext.getCurrentContext()</span>
+<span class="fc" id="L242">                    .getSnapshotTimestamp().getSequence();</span>
+<span class="fc" id="L243">            startedNewTransaction = true;</span>
         }
-<span class="nc" id="L245">        List&lt;CorfuQueueRecord&lt;E&gt;&gt; copy = new ArrayList&lt;&gt;(</span>
-<span class="nc" id="L246">                Math.min(corfuTable.size(), maxEntries)</span>
+<span class="fc" id="L245">        List&lt;CorfuQueueRecord&lt;E&gt;&gt; copy = new ArrayList&lt;&gt;(</span>
+<span class="fc" id="L246">                Math.min(corfuTable.size(), maxEntries)</span>
         );
-<span class="nc" id="L248">        int index = 0;</span>
-<span class="nc bnc" id="L249" title="All 2 branches missed.">        for (Map.Entry&lt;Long, E&gt; entry : corfuTable.entrySet()) {</span>
-<span class="nc bnc" id="L250" title="All 2 branches missed.">            if (++index &gt;= maxEntries) {</span>
+<span class="fc" id="L248">        int index = 0;</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">        for (Map.Entry&lt;Long, E&gt; entry : corfuTable.entrySet()) {</span>
+<span class="pc bpc" id="L250" title="1 of 2 branches missed.">            if (++index &gt;= maxEntries) {</span>
 <span class="nc" id="L251">                break;</span>
             }
             // Note that index is already limited to fit within MAX_BITS_FOR_INDEX
-<span class="nc" id="L254">            long ordering = (snapshotVersion &lt;&lt; MAX_BITS_FOR_INDEX) | index;</span>
-<span class="nc" id="L255">            long entryId = entry.getKey();</span>
-<span class="nc" id="L256">            CorfuQueueRecord&lt;E&gt; record = new CorfuQueueRecord&lt;&gt;(</span>
-<span class="nc" id="L257">                    ordering, entryId, entry.getValue()</span>
+<span class="fc" id="L254">            long ordering = (snapshotVersion &lt;&lt; MAX_BITS_FOR_INDEX) | index;</span>
+<span class="fc" id="L255">            long entryId = entry.getKey();</span>
+<span class="fc" id="L256">            CorfuQueueRecord&lt;E&gt; record = new CorfuQueueRecord&lt;&gt;(</span>
+<span class="fc" id="L257">                    ordering, entryId, entry.getValue()</span>
             );
-<span class="nc" id="L259">            copy.add(record);</span>
-<span class="nc" id="L260">        }</span>
+<span class="fc" id="L259">            copy.add(record);</span>
+<span class="fc" id="L260">        }</span>
         // Given that we are using a WRITE_AFTER_WRITE on a read-only txn, we expect no aborts.
-<span class="nc bnc" id="L262" title="All 2 branches missed.">        if (startedNewTransaction) {</span>
-<span class="nc" id="L263">            runtime.getObjectsView().TXEnd();</span>
+<span class="pc bpc" id="L262" title="1 of 2 branches missed.">        if (startedNewTransaction) {</span>
+<span class="fc" id="L263">            runtime.getObjectsView().TXEnd();</span>
         }
-<span class="nc" id="L265">        return copy;</span>
+<span class="fc" id="L265">        return copy;</span>
     }
 
     /**
      * @return all the entries in the Queue
      */
     public List&lt;CorfuQueueRecord&lt;E&gt;&gt; entryList() {
-<span class="nc" id="L272">        return this.entryList(MAX_INDEX_ENTRIES);</span>
+<span class="fc" id="L272">        return this.entryList(MAX_INDEX_ENTRIES);</span>
     }
 
     public boolean isEmpty() {
@@ -295,7 +295,7 @@ public class CorfuQueue&lt;E&gt; {
      * @return The entry that was successfully removed or null if there was no mapping.
      */
     public E removeEntry(CorfuRecordId entryId) {
-<span class="nc" id="L298">        return corfuTable.remove(entryId.id.getLeastSignificantBits());</span>
+<span class="fc" id="L298">        return corfuTable.remove(entryId.id.getLeastSignificantBits());</span>
     }
 
     /**

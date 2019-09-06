@@ -27,7 +27,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
  * Factory for custom futures used by the quorum replication.
  * Created by Konstantin Spirov on 2/3/2017.
  */
-<span class="nc" id="L30">@Slf4j</span>
+<span class="fc" id="L30">@Slf4j</span>
 <span class="nc" id="L31">public class QuorumFuturesFactory {</span>
 
     /**
@@ -48,7 +48,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
      */
     static &lt;R&gt; CompositeFuture&lt;R&gt; getQuorumFuture(Comparator&lt;R&gt; comparator,
                                                   CompletableFuture&lt;R&gt;... futures) {
-<span class="nc" id="L51">        return new CompositeFuture&lt;R&gt;(comparator, (futures.length / 2) + 1, futures);</span>
+<span class="fc" id="L51">        return new CompositeFuture&lt;R&gt;(comparator, (futures.length / 2) + 1, futures);</span>
     }
 
 
@@ -75,7 +75,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
     public static &lt;R&gt; CompositeFuture&lt;R&gt; getQuorumFuture(Comparator&lt;R&gt; comparator,
                                                          CompletableFuture&lt;R&gt;[] futures,
                                                          Class... failFastThrowables) {
-<span class="nc" id="L78">        return new CompositeFuture(comparator, (futures.length / 2) + 1, futures,</span>
+<span class="fc" id="L78">        return new CompositeFuture(comparator, (futures.length / 2) + 1, futures,</span>
                 failFastThrowables);
     }
 
@@ -98,7 +98,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
      */
     static &lt;R&gt; CompositeFuture&lt;R&gt; getFirstWinsFuture(Comparator&lt;R&gt; comparator,
                                                      CompletableFuture&lt;R&gt;... futures) {
-<span class="nc" id="L101">        return new CompositeFuture&lt;R&gt;(comparator, 1, futures);</span>
+<span class="fc" id="L101">        return new CompositeFuture&lt;R&gt;(comparator, 1, futures);</span>
     }
 
 
@@ -108,109 +108,109 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
         private final int quorum;
         private final CompletableFuture&lt;R&gt;[] futures;
         private final Set&lt;Class&gt; failFastThrowables;
-<span class="nc" id="L111">        private final Set&lt;Throwable&gt; throwables = ConcurrentHashMap.newKeySet();</span>
-<span class="nc" id="L112">        private volatile boolean done = false;</span>
-<span class="nc" id="L113">        private volatile boolean canceled = false;</span>
-<span class="nc" id="L114">        private volatile boolean conflict = false;</span>
+<span class="fc" id="L111">        private final Set&lt;Throwable&gt; throwables = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L112">        private volatile boolean done = false;</span>
+<span class="fc" id="L113">        private volatile boolean canceled = false;</span>
+<span class="fc" id="L114">        private volatile boolean conflict = false;</span>
 
         private CompositeFuture(Comparator&lt;R&gt; comparator,  int quorum,
-<span class="nc" id="L117">                                CompletableFuture&lt;R&gt;[] futures,  Class... failFastThrowables) {</span>
-<span class="nc" id="L118">            this.failFastThrowables =  ImmutableSet.copyOf(failFastThrowables);</span>
-<span class="nc" id="L119">            this.comparator = comparator;</span>
-<span class="nc" id="L120">            this.quorum = quorum;</span>
-<span class="nc" id="L121">            this.futures = futures;</span>
-<span class="nc" id="L122">        }</span>
+<span class="fc" id="L117">                                CompletableFuture&lt;R&gt;[] futures,  Class... failFastThrowables) {</span>
+<span class="fc" id="L118">            this.failFastThrowables =  ImmutableSet.copyOf(failFastThrowables);</span>
+<span class="fc" id="L119">            this.comparator = comparator;</span>
+<span class="fc" id="L120">            this.quorum = quorum;</span>
+<span class="fc" id="L121">            this.futures = futures;</span>
+<span class="fc" id="L122">        }</span>
 
         @Override
         public R get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException,
                 TimeoutException {
 
-<span class="nc" id="L128">            Comparator&lt;Integer&gt; ic = Integer::compareTo;</span>
-<span class="nc" id="L129">            TreeMultimap&lt;Integer, R&gt; valuesSortedByCount = TreeMultimap.create(ic.reversed(),</span>
+<span class="fc" id="L128">            Comparator&lt;Integer&gt; ic = Integer::compareTo;</span>
+<span class="fc" id="L129">            TreeMultimap&lt;Integer, R&gt; valuesSortedByCount = TreeMultimap.create(ic.reversed(),</span>
                     comparator);
-<span class="nc" id="L131">            TreeMultimap&lt;R, Integer&gt; indexesByValue = TreeMultimap.create(comparator, ic);</span>
+<span class="fc" id="L131">            TreeMultimap&lt;R, Integer&gt; indexesByValue = TreeMultimap.create(comparator, ic);</span>
 
-<span class="nc" id="L133">            long until = 0;</span>
-<span class="nc bnc" id="L134" title="All 2 branches missed.">            boolean infinite = (timeout == Long.MAX_VALUE);</span>
-<span class="nc bnc" id="L135" title="All 2 branches missed.">            if (!infinite) {</span>
-<span class="nc" id="L136">                until = System.nanoTime() + unit.toNanos(timeout);</span>
+<span class="fc" id="L133">            long until = 0;</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">            boolean infinite = (timeout == Long.MAX_VALUE);</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">            if (!infinite) {</span>
+<span class="fc" id="L136">                until = System.nanoTime() + unit.toNanos(timeout);</span>
             }
-<span class="nc bnc" id="L138" title="All 4 branches missed.">            while (infinite || System.nanoTime() &lt; until) {</span>
-<span class="nc" id="L139">                int numIncompleteFutures = 0;</span>
-<span class="nc" id="L140">                CompletableFuture aggregatedFuture = null; // block until some future completes</span>
-<span class="nc bnc" id="L141" title="All 2 branches missed.">                for (int i = 0; i &lt; futures.length; i++) {</span>
-<span class="nc" id="L142">                    CompletableFuture&lt;R&gt; c = futures[i];</span>
-<span class="nc bnc" id="L143" title="All 2 branches missed.">                    if (!c.isDone()) {</span>
-<span class="nc" id="L144">                        numIncompleteFutures++;</span>
-<span class="nc bnc" id="L145" title="All 2 branches missed.">                        if (aggregatedFuture == null) {</span>
-<span class="nc" id="L146">                            aggregatedFuture = c;</span>
+<span class="pc bpc" id="L138" title="1 of 4 branches missed.">            while (infinite || System.nanoTime() &lt; until) {</span>
+<span class="fc" id="L139">                int numIncompleteFutures = 0;</span>
+<span class="fc" id="L140">                CompletableFuture aggregatedFuture = null; // block until some future completes</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">                for (int i = 0; i &lt; futures.length; i++) {</span>
+<span class="fc" id="L142">                    CompletableFuture&lt;R&gt; c = futures[i];</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">                    if (!c.isDone()) {</span>
+<span class="fc" id="L144">                        numIncompleteFutures++;</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">                        if (aggregatedFuture == null) {</span>
+<span class="fc" id="L146">                            aggregatedFuture = c;</span>
                         } else {
-<span class="nc" id="L148">                            aggregatedFuture = CompletableFuture.anyOf(aggregatedFuture, c);</span>
+<span class="fc" id="L148">                            aggregatedFuture = CompletableFuture.anyOf(aggregatedFuture, c);</span>
                         }
                     } else {
-<span class="nc bnc" id="L151" title="All 2 branches missed.">                        if (!c.isCancelled()) {</span>
-<span class="nc bnc" id="L152" title="All 2 branches missed.">                            if (c.isCompletedExceptionally()) {</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">                        if (!c.isCancelled()) {</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">                            if (c.isCompletedExceptionally()) {</span>
                                 try {
 <span class="nc" id="L154">                                    futures[i].get(); // this will throw the ExecutionException</span>
-<span class="nc" id="L155">                                } catch (ExecutionException e) {</span>
-<span class="nc" id="L156">                                    Throwable t = e.getCause();</span>
-<span class="nc" id="L157">                                    throwables.add(t);</span>
-<span class="nc bnc" id="L158" title="All 2 branches missed.">                                    if (failFastThrowables.contains(t.getClass())) {</span>
-<span class="nc" id="L159">                                        done = canceled = true;</span>
-<span class="nc" id="L160">                                        throw e;</span>
+<span class="fc" id="L155">                                } catch (ExecutionException e) {</span>
+<span class="fc" id="L156">                                    Throwable t = e.getCause();</span>
+<span class="fc" id="L157">                                    throwables.add(t);</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">                                    if (failFastThrowables.contains(t.getClass())) {</span>
+<span class="fc" id="L159">                                        done = canceled = true;</span>
+<span class="fc" id="L160">                                        throw e;</span>
                                     }
-<span class="nc" id="L162">                                }</span>
+<span class="pc" id="L162">                                }</span>
                             } else {
-<span class="nc" id="L164">                                R value = c.get();</span>
-<span class="nc" id="L165">                                Set&lt;Integer&gt; indexes = indexesByValue.get(value);</span>
-<span class="nc bnc" id="L166" title="All 2 branches missed.">                                if (!indexes.contains(i)) {</span>
-<span class="nc" id="L167">                                    valuesSortedByCount.remove(indexes.size(), value);</span>
-<span class="nc" id="L168">                                    indexes.add(i);</span>
-<span class="nc" id="L169">                                    valuesSortedByCount.put(indexes.size(), value);</span>
+<span class="fc" id="L164">                                R value = c.get();</span>
+<span class="fc" id="L165">                                Set&lt;Integer&gt; indexes = indexesByValue.get(value);</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">                                if (!indexes.contains(i)) {</span>
+<span class="fc" id="L167">                                    valuesSortedByCount.remove(indexes.size(), value);</span>
+<span class="fc" id="L168">                                    indexes.add(i);</span>
+<span class="fc" id="L169">                                    valuesSortedByCount.put(indexes.size(), value);</span>
                                 }
-<span class="nc bnc" id="L171" title="All 2 branches missed.">                                if (indexesByValue.keySet().size() &gt; 1) {</span>
-<span class="nc" id="L172">                                    conflict = true;</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">                                if (indexesByValue.keySet().size() &gt; 1) {</span>
+<span class="fc" id="L172">                                    conflict = true;</span>
                                 }
                             }
                         }
                     }
                 }
 
-<span class="nc bnc" id="L179" title="All 2 branches missed.">                int greatestNumCompleteFutures = valuesSortedByCount.size() == 0 ? 0 :</span>
-<span class="nc" id="L180">                        valuesSortedByCount.keySet().iterator().next();</span>
-<span class="nc bnc" id="L181" title="All 2 branches missed.">                if (greatestNumCompleteFutures &gt;= quorum) { // normal exit, quorum</span>
-<span class="nc" id="L182">                    done = true;</span>
-<span class="nc" id="L183">                    return valuesSortedByCount.entries().iterator().next().getValue();</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">                int greatestNumCompleteFutures = valuesSortedByCount.size() == 0 ? 0 :</span>
+<span class="fc" id="L180">                        valuesSortedByCount.keySet().iterator().next();</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">                if (greatestNumCompleteFutures &gt;= quorum) { // normal exit, quorum</span>
+<span class="fc" id="L182">                    done = true;</span>
+<span class="fc" id="L183">                    return valuesSortedByCount.entries().iterator().next().getValue();</span>
                 }
-<span class="nc bnc" id="L185" title="All 2 branches missed.">                boolean noMoreHope = numIncompleteFutures + greatestNumCompleteFutures &lt; quorum;</span>
-<span class="nc bnc" id="L186" title="All 2 branches missed.">                if (noMoreHope) {</span>
-<span class="nc" id="L187">                    done = canceled = true;</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">                boolean noMoreHope = numIncompleteFutures + greatestNumCompleteFutures &lt; quorum;</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">                if (noMoreHope) {</span>
+<span class="fc" id="L187">                    done = canceled = true;</span>
                     // Check if we have a quorum over any exception type
-<span class="nc" id="L189">                    Multiset&lt;Throwable&gt; exceptionCounter = HashMultiset.create();</span>
-<span class="nc bnc" id="L190" title="All 2 branches missed.">                    for (Throwable t: getThrowables()) {</span>
-<span class="nc" id="L191">                        log.debug(&quot;QuorumGet: Exception {}&quot;, t.getClass().getSimpleName());</span>
-<span class="nc" id="L192">                        exceptionCounter.add(t);</span>
-<span class="nc" id="L193">                    }</span>
+<span class="fc" id="L189">                    Multiset&lt;Throwable&gt; exceptionCounter = HashMultiset.create();</span>
+<span class="fc bfc" id="L190" title="All 2 branches covered.">                    for (Throwable t: getThrowables()) {</span>
+<span class="fc" id="L191">                        log.debug(&quot;QuorumGet: Exception {}&quot;, t.getClass().getSimpleName());</span>
+<span class="fc" id="L192">                        exceptionCounter.add(t);</span>
+<span class="fc" id="L193">                    }</span>
                     // Iterate over each exception type, and throw the first one with a quorum
-<span class="nc bnc" id="L195" title="All 2 branches missed.">                    for (Throwable t : exceptionCounter.elementSet()) {</span>
-<span class="nc bnc" id="L196" title="All 2 branches missed.">                        if (exceptionCounter.count(t) &gt;= quorum) {</span>
-<span class="nc" id="L197">                            throw new ExecutionException(t);</span>
+<span class="fc bfc" id="L195" title="All 2 branches covered.">                    for (Throwable t : exceptionCounter.elementSet()) {</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">                        if (exceptionCounter.count(t) &gt;= quorum) {</span>
+<span class="fc" id="L197">                            throw new ExecutionException(t);</span>
                         }
-<span class="nc" id="L199">                    }</span>
-<span class="nc" id="L200">                    throw new ExecutionException(</span>
+<span class="fc" id="L199">                    }</span>
+<span class="fc" id="L200">                    throw new ExecutionException(</span>
                             new QuorumUnreachableException(greatestNumCompleteFutures, quorum));
                 }
                 try {
-<span class="nc bnc" id="L204" title="All 2 branches missed.">                    if (infinite) {</span>
-<span class="nc" id="L205">                        aggregatedFuture.get();</span>
+<span class="pc bpc" id="L204" title="1 of 2 branches missed.">                    if (infinite) {</span>
+<span class="fc" id="L205">                        aggregatedFuture.get();</span>
                     } else {
 <span class="nc" id="L207">                        aggregatedFuture.get(timeout, unit);</span>
                     }
-<span class="nc" id="L209">                } catch (ExecutionException t) {</span>
+<span class="fc" id="L209">                } catch (ExecutionException t) {</span>
                     // The exceptions after after constructing the future will be handled on
                     // the next loop
-<span class="nc" id="L212">                }</span>
-<span class="nc" id="L213">            } // while</span>
+<span class="fc" id="L212">                }</span>
+<span class="fc" id="L213">            } // while</span>
 <span class="nc" id="L214">            throw new TimeoutException();</span>
         }
 
@@ -218,7 +218,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
         @Override
         public R get() throws InterruptedException, ExecutionException {
             try {
-<span class="nc" id="L221">                return get(Long.MAX_VALUE, null);</span>
+<span class="fc" id="L221">                return get(Long.MAX_VALUE, null);</span>
 <span class="nc" id="L222">            } catch (TimeoutException e) {</span>
 <span class="nc" id="L223">                log.error(e.getMessage(), e); // not likely to happen in near future</span>
 <span class="nc" id="L224">                return null;</span>
@@ -241,19 +241,19 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
          */
         @Override
         public boolean isCancelled() {
-<span class="nc" id="L244">            return canceled;</span>
+<span class="fc" id="L244">            return canceled;</span>
         }
 
         @Override
         public boolean isDone() {
-<span class="nc" id="L249">            return done;</span>
+<span class="fc" id="L249">            return done;</span>
         }
 
         /**
          * Returns true if there were two successful results with different values, otherwise false.
          */
         public boolean isConflict() {
-<span class="nc" id="L256">            return conflict;</span>
+<span class="fc" id="L256">            return conflict;</span>
         }
 
         /**
@@ -263,7 +263,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
          * @return Read-only set containing the Throwable classes
          */
         public Set&lt;Throwable&gt; getThrowables() {
-<span class="nc" id="L266">            return ImmutableSet.copyOf(throwables);</span>
+<span class="fc" id="L266">            return ImmutableSet.copyOf(throwables);</span>
         }
 
         /**

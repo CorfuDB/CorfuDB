@@ -13,45 +13,45 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
  *
  *  @deprecated Sleep doesn't have any advantages over TimeUnit. Please always use TimeUnit.
  */
-<span class="nc" id="L16">@Deprecated</span>
-<span class="nc" id="L17">public enum Sleep {</span>
-<span class="nc" id="L18">    NANOSECONDS {</span>
+<span class="pc" id="L16">@Deprecated</span>
+<span class="fc" id="L17">public enum Sleep {</span>
+<span class="fc" id="L18">    NANOSECONDS {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L21">            return TimeUnit.NANOSECONDS.toMillis(duration);</span>
         }
     },
-<span class="nc" id="L24">    MICROSECONDS {</span>
+<span class="fc" id="L24">    MICROSECONDS {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L27">            return TimeUnit.MICROSECONDS.toMillis(duration);</span>
         }
     },
-<span class="nc" id="L30">    MILLISECONDS {</span>
+<span class="fc" id="L30">    MILLISECONDS {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L33">            return TimeUnit.MILLISECONDS.toMillis(duration);</span>
         }
     },
-<span class="nc" id="L36">    SECONDS {</span>
+<span class="fc" id="L36">    SECONDS {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L39">            return TimeUnit.SECONDS.toMillis(duration);</span>
         }
     },
-<span class="nc" id="L42">    MINUTES {</span>
+<span class="fc" id="L42">    MINUTES {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L45">            return TimeUnit.MINUTES.toMillis(duration);</span>
         }
     },
-<span class="nc" id="L48">    HOURS {</span>
+<span class="fc" id="L48">    HOURS {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L51">            return TimeUnit.HOURS.toMillis(duration);</span>
         }
     },
-<span class="nc" id="L54">    DAYS {</span>
+<span class="fc" id="L54">    DAYS {</span>
         @Override
         long toMillis(long duration) {
 <span class="nc" id="L57">            return TimeUnit.DAYS.toMillis(duration);</span>
@@ -75,13 +75,13 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
      * @param duration      The duration to sleep.
      */
     public static void sleepUninterruptibly(Duration duration) {
-<span class="nc" id="L78">        final long milliseconds = duration.toMillis();</span>
-<span class="nc bnc" id="L79" title="All 2 branches missed.">        if (milliseconds == 0) {</span>
+<span class="fc" id="L78">        final long milliseconds = duration.toMillis();</span>
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">        if (milliseconds == 0) {</span>
 <span class="nc" id="L80">            sleepUninterruptibly(duration.toNanos(), TimeUnit.NANOSECONDS);</span>
         } else {
-<span class="nc" id="L82">            sleepUninterruptibly(duration.toMillis(), TimeUnit.MILLISECONDS);</span>
+<span class="fc" id="L82">            sleepUninterruptibly(duration.toMillis(), TimeUnit.MILLISECONDS);</span>
         }
-<span class="nc" id="L84">    }</span>
+<span class="fc" id="L84">    }</span>
 
     /**
      * Sleep, without recovery logic in case the sleep is interrupted.
@@ -95,10 +95,10 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
     @SuppressWarnings(&quot;checkstyle:ThreadSleep&quot;)
     private static void sleepUninterruptibly(long duration, TimeUnit timeUnit) {
         try {
-<span class="nc" id="L98">            timeUnit.sleep(duration);</span>
-<span class="nc" id="L99">        } catch (InterruptedException ie) {</span>
-<span class="nc" id="L100">            throw new UnrecoverableCorfuInterruptedError(&quot;Uninterruptible sleep interrupted&quot;, ie);</span>
-<span class="nc" id="L101">        }</span>
-<span class="nc" id="L102">    }</span>
+<span class="fc" id="L98">            timeUnit.sleep(duration);</span>
+<span class="fc" id="L99">        } catch (InterruptedException ie) {</span>
+<span class="fc" id="L100">            throw new UnrecoverableCorfuInterruptedError(&quot;Uninterruptible sleep interrupted&quot;, ie);</span>
+<span class="fc" id="L101">        }</span>
+<span class="fc" id="L102">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

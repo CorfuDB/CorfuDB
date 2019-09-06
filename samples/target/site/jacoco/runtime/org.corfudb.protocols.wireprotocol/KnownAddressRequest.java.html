@@ -10,26 +10,26 @@ import lombok.Data;
  * Created by zlokhandwala on 2019-06-01.
  */
 <span class="nc bnc" id="L12" title="All 22 branches missed.">@Data</span>
-<span class="nc" id="L13">@AllArgsConstructor</span>
+<span class="fc" id="L13">@AllArgsConstructor</span>
 public class KnownAddressRequest implements ICorfuPayload&lt;KnownAddressRequest&gt; {
 
-<span class="nc" id="L16">    private final Long startRange;</span>
-<span class="nc" id="L17">    private final Long endRange;</span>
+<span class="fc" id="L16">    private final Long startRange;</span>
+<span class="fc" id="L17">    private final Long endRange;</span>
 
     /**
      * Deserialization Constructor from Bytebuf to KnownAddressRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L24">    public KnownAddressRequest(ByteBuf buf) {</span>
-<span class="nc" id="L25">        startRange = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L26">        endRange = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L24">    public KnownAddressRequest(ByteBuf buf) {</span>
+<span class="fc" id="L25">        startRange = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L26">        endRange = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L31">        ICorfuPayload.serialize(buf, startRange);</span>
-<span class="nc" id="L32">        ICorfuPayload.serialize(buf, endRange);</span>
-<span class="nc" id="L33">    }</span>
+<span class="fc" id="L31">        ICorfuPayload.serialize(buf, startRange);</span>
+<span class="fc" id="L32">        ICorfuPayload.serialize(buf, endRange);</span>
+<span class="fc" id="L33">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

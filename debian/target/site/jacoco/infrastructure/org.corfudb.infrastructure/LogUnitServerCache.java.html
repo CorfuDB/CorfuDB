@@ -18,20 +18,20 @@ import org.corfudb.protocols.wireprotocol.LogData;
  * &lt;p&gt;
  * Created by WenbinZhu on 5/30/19.
  */
-<span class="nc" id="L21">@Slf4j</span>
+<span class="fc" id="L21">@Slf4j</span>
 public class LogUnitServerCache {
 
     private final LoadingCache&lt;Long, ILogData&gt; dataCache;
     private final StreamLog streamLog;
 
-<span class="nc" id="L27">    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {</span>
-<span class="nc" id="L28">        this.streamLog = streamLog;</span>
-<span class="nc" id="L29">        this.dataCache = Caffeine.newBuilder()</span>
-<span class="nc" id="L30">                .&lt;Long, ILogData&gt;weigher((addr, logData) -&gt; logData.getSizeEstimate())</span>
-<span class="nc" id="L31">                .maximumWeight(config.getMaxCacheSize())</span>
-<span class="nc" id="L32">                .removalListener(this::handleEviction)</span>
-<span class="nc" id="L33">                .build(this::handleRetrieval);</span>
-<span class="nc" id="L34">    }</span>
+<span class="fc" id="L27">    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {</span>
+<span class="fc" id="L28">        this.streamLog = streamLog;</span>
+<span class="fc" id="L29">        this.dataCache = Caffeine.newBuilder()</span>
+<span class="fc" id="L30">                .&lt;Long, ILogData&gt;weigher((addr, logData) -&gt; logData.getSizeEstimate())</span>
+<span class="fc" id="L31">                .maximumWeight(config.getMaxCacheSize())</span>
+<span class="fc" id="L32">                .removalListener(this::handleEviction)</span>
+<span class="fc" id="L33">                .build(this::handleRetrieval);</span>
+<span class="fc" id="L34">    }</span>
 
     /**
      * Retrieves the LogUnitEntry from disk, given an address.
@@ -44,14 +44,14 @@ public class LogUnitServerCache {
      * as un-written (null).
      */
     private ILogData handleRetrieval(long address) {
-<span class="nc" id="L47">        LogData entry = streamLog.read(address);</span>
-<span class="nc" id="L48">        log.trace(&quot;handleRetrieval: Retrieved[{} : {}]&quot;, address, entry);</span>
-<span class="nc" id="L49">        return entry;</span>
+<span class="fc" id="L47">        LogData entry = streamLog.read(address);</span>
+<span class="fc" id="L48">        log.trace(&quot;handleRetrieval: Retrieved[{} : {}]&quot;, address, entry);</span>
+<span class="fc" id="L49">        return entry;</span>
     }
 
     private void handleEviction(long address, ILogData entry, RemovalCause cause) {
-<span class="nc" id="L53">        log.trace(&quot;handleEviction: Eviction[{}]: {}&quot;, address, cause);</span>
-<span class="nc" id="L54">    }</span>
+<span class="fc" id="L53">        log.trace(&quot;handleEviction: Eviction[{}]: {}&quot;, address, cause);</span>
+<span class="fc" id="L54">    }</span>
 
     /**
      * Returns the log entry form the cache or retrieves it from the underlying storage.
@@ -64,12 +64,12 @@ public class LogUnitServerCache {
      * @return the log entry read from cache or retrieved the underlying storage
      */
     public ILogData get(long address, boolean cacheable) {
-<span class="nc bnc" id="L67" title="All 2 branches missed.">        if (!cacheable) {</span>
-<span class="nc" id="L68">            ILogData ld = dataCache.getIfPresent(address);</span>
-<span class="nc bnc" id="L69" title="All 2 branches missed.">            return ld != null ? ld : handleRetrieval(address);</span>
+<span class="fc bfc" id="L67" title="All 2 branches covered.">        if (!cacheable) {</span>
+<span class="fc" id="L68">            ILogData ld = dataCache.getIfPresent(address);</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">            return ld != null ? ld : handleRetrieval(address);</span>
         }
 
-<span class="nc" id="L72">        return dataCache.get(address);</span>
+<span class="fc" id="L72">        return dataCache.get(address);</span>
     }
 
     /**
@@ -79,7 +79,7 @@ public class LogUnitServerCache {
      * @return the log entry read from cache or retrieved the underlying storage
      */
     public ILogData get(long address) {
-<span class="nc" id="L82">        return get(address, true);</span>
+<span class="fc" id="L82">        return get(address, true);</span>
     }
 
     /**
@@ -90,21 +90,21 @@ public class LogUnitServerCache {
      * @param entry   the log entry to write
      */
     public void put(long address, ILogData entry) {
-<span class="nc" id="L93">        log.trace(&quot;LogUnitServerCache.put: Cache write[{} : {}]&quot;, address, entry);</span>
-<span class="nc" id="L94">        dataCache.put(address, entry);</span>
-<span class="nc" id="L95">    }</span>
+<span class="fc" id="L93">        log.trace(&quot;LogUnitServerCache.put: Cache write[{} : {}]&quot;, address, entry);</span>
+<span class="fc" id="L94">        dataCache.put(address, entry);</span>
+<span class="fc" id="L95">    }</span>
 
     /**
      * Discards all the entries in the cache.
      * {@link LoadingCache#invalidateAll()}
      */
     public void invalidateAll() {
-<span class="nc" id="L102">        dataCache.invalidateAll();</span>
-<span class="nc" id="L103">    }</span>
+<span class="fc" id="L102">        dataCache.invalidateAll();</span>
+<span class="fc" id="L103">    }</span>
 
     @VisibleForTesting
     public int getSize() {
-<span class="nc" id="L107">        return dataCache.asMap().size();</span>
+<span class="fc" id="L107">        return dataCache.asMap().size();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

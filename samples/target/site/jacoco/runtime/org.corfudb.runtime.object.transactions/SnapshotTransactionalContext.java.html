@@ -29,12 +29,12 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     /** In a snapshot transaction, no proxies are ever modified.
      *
      */
-<span class="nc" id="L32">    @Getter</span>
-<span class="nc" id="L33">    private Set&lt;ICorfuSMRProxyInternal&gt; modifiedProxies = ImmutableSet.of();</span>
+<span class="pc" id="L32">    @Getter</span>
+<span class="fc" id="L33">    private Set&lt;ICorfuSMRProxyInternal&gt; modifiedProxies = ImmutableSet.of();</span>
 
     public SnapshotTransactionalContext(Transaction transaction) {
-<span class="nc" id="L36">        super(transaction);</span>
-<span class="nc" id="L37">    }</span>
+<span class="fc" id="L36">        super(transaction);</span>
+<span class="fc" id="L37">    }</span>
 
     /**
      * {@inheritDoc}
@@ -47,13 +47,13 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set
         // do not add: addToReadSet(proxy, conflictObject);
-<span class="nc" id="L50">        return proxy.getUnderlyingObject().access(o -&gt; o.getVersionUnsafe()</span>
-<span class="nc bnc" id="L51" title="All 2 branches missed.">                        == getSnapshotTimestamp().getSequence()</span>
-<span class="nc bnc" id="L52" title="All 2 branches missed.">                        &amp;&amp; !o.isOptimisticallyModifiedUnsafe(),</span>
+<span class="fc" id="L50">        return proxy.getUnderlyingObject().access(o -&gt; o.getVersionUnsafe()</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">                        == getSnapshotTimestamp().getSequence()</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">                        &amp;&amp; !o.isOptimisticallyModifiedUnsafe(),</span>
                 o -&gt; {
-<span class="nc" id="L54">                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);</span>
-<span class="nc" id="L55">                },</span>
-<span class="nc" id="L56">                o -&gt; accessFunction.access(o));</span>
+<span class="fc" id="L54">                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);</span>
+<span class="fc" id="L55">                },</span>
+<span class="fc" id="L56">                o -&gt; accessFunction.access(o));</span>
     }
 
     /**

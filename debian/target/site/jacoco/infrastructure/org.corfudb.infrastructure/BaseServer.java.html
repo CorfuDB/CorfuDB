@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 /**
  * Created by mwei on 12/8/15.
  */
-<span class="nc" id="L25">@Slf4j</span>
+<span class="fc" id="L25">@Slf4j</span>
 public class BaseServer extends AbstractServer {
 
     final ServerContext serverContext;
@@ -31,29 +31,29 @@ public class BaseServer extends AbstractServer {
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-<span class="nc bnc" id="L34" title="All 2 branches missed.">        return getState() == ServerState.READY;</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">        return getState() == ServerState.READY;</span>
     }
 
     @Override
     public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-<span class="nc" id="L39">        return executor;</span>
+<span class="fc" id="L39">        return executor;</span>
     }
 
     @Override
     public List&lt;ExecutorService&gt; getExecutors() {
-<span class="nc" id="L44">        return Collections.singletonList(executor);</span>
+<span class="fc" id="L44">        return Collections.singletonList(executor);</span>
     }
 
-<span class="nc" id="L47">    public BaseServer(@Nonnull ServerContext context) {</span>
-<span class="nc" id="L48">        this.serverContext = context;</span>
-<span class="nc" id="L49">        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),</span>
+<span class="fc" id="L47">    public BaseServer(@Nonnull ServerContext context) {</span>
+<span class="fc" id="L48">        this.serverContext = context;</span>
+<span class="fc" id="L49">        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),</span>
                 new ServerThreadFactory(&quot;baseServer-&quot;, new ServerThreadFactory.ExceptionHandler()));
-<span class="nc" id="L51">    }</span>
+<span class="fc" id="L51">    }</span>
 
     /** Handler for the base server. */
-<span class="nc" id="L54">    @Getter</span>
+<span class="fc" id="L54">    @Getter</span>
     private final CorfuMsgHandler handler =
-<span class="nc" id="L56">            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);</span>
+<span class="fc" id="L56">            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);</span>
 
     /**
      * Respond to a ping message.
@@ -64,8 +64,8 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.PING)
     private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-<span class="nc" id="L67">        r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());</span>
-<span class="nc" id="L68">    }</span>
+<span class="fc" id="L67">        r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());</span>
+<span class="fc" id="L68">    }</span>
 
     /**
      * Respond to a keep alive message.
@@ -89,10 +89,10 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.VERSION_REQUEST)
     private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-<span class="nc" id="L92">        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),</span>
-<span class="nc" id="L93">                                         serverContext.getNodeIdBase64());</span>
-<span class="nc" id="L94">        r.sendResponse(ctx, msg, new JSONPayloadMsg&lt;&gt;(vi, CorfuMsgType.VERSION_RESPONSE));</span>
-<span class="nc" id="L95">    }</span>
+<span class="fc" id="L92">        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),</span>
+<span class="fc" id="L93">                                         serverContext.getNodeIdBase64());</span>
+<span class="fc" id="L94">        r.sendResponse(ctx, msg, new JSONPayloadMsg&lt;&gt;(vi, CorfuMsgType.VERSION_RESPONSE));</span>
+<span class="fc" id="L95">    }</span>
 
     /**
      * Respond to a epoch change message.
@@ -103,28 +103,28 @@ public class BaseServer extends AbstractServer {
      * @param r   The server router.
      */
     @ServerHandler(type = CorfuMsgType.SEAL)
-<span class="nc bnc" id="L106" title="All 2 branches missed.">    public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg&lt;Long&gt; msg,</span>
+<span class="pc bpc" id="L106" title="1 of 2 branches missed.">    public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg&lt;Long&gt; msg,</span>
                                                    ChannelHandlerContext ctx,
-<span class="nc bnc" id="L108" title="All 2 branches missed.">                                                   @NonNull IServerRouter r) {</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">                                                   @NonNull IServerRouter r) {</span>
         try {
-<span class="nc" id="L110">            long epoch = msg.getPayload();</span>
+<span class="fc" id="L110">            long epoch = msg.getPayload();</span>
             String remoteHostAddress;
             try {
 <span class="nc" id="L113">                remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();</span>
-<span class="nc" id="L114">            } catch (NullPointerException e) {</span>
-<span class="nc" id="L115">                remoteHostAddress = &quot;unavailable&quot;;</span>
+<span class="fc" id="L114">            } catch (NullPointerException e) {</span>
+<span class="fc" id="L115">                remoteHostAddress = &quot;unavailable&quot;;</span>
 <span class="nc" id="L116">            }</span>
-<span class="nc" id="L117">            log.info(&quot;handleMessageSetEpoch: Received SEAL from (clientId={}:{}), moving to new epoch {}&quot;,</span>
-<span class="nc" id="L118">                    msg.getClientID(), remoteHostAddress, epoch);</span>
-<span class="nc" id="L119">            serverContext.setServerEpoch(epoch, r);</span>
-<span class="nc" id="L120">            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());</span>
-<span class="nc" id="L121">        } catch (WrongEpochException e) {</span>
-<span class="nc" id="L122">            log.debug(&quot;handleMessageSetEpoch: Rejected SEAL current={}, requested={}&quot;,</span>
-<span class="nc" id="L123">                    e.getCorrectEpoch(), msg.getPayload());</span>
-<span class="nc" id="L124">            r.sendResponse(ctx, msg,</span>
-<span class="nc" id="L125">                    new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));</span>
-<span class="nc" id="L126">        }</span>
-<span class="nc" id="L127">    }</span>
+<span class="fc" id="L117">            log.info(&quot;handleMessageSetEpoch: Received SEAL from (clientId={}:{}), moving to new epoch {}&quot;,</span>
+<span class="fc" id="L118">                    msg.getClientID(), remoteHostAddress, epoch);</span>
+<span class="fc" id="L119">            serverContext.setServerEpoch(epoch, r);</span>
+<span class="fc" id="L120">            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());</span>
+<span class="fc" id="L121">        } catch (WrongEpochException e) {</span>
+<span class="fc" id="L122">            log.debug(&quot;handleMessageSetEpoch: Rejected SEAL current={}, requested={}&quot;,</span>
+<span class="fc" id="L123">                    e.getCorrectEpoch(), msg.getPayload());</span>
+<span class="fc" id="L124">            r.sendResponse(ctx, msg,</span>
+<span class="fc" id="L125">                    new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));</span>
+<span class="fc" id="L126">        }</span>
+<span class="fc" id="L127">    }</span>
 
     /**
      * Reset the JVM. This mechanism leverages that corfu_server runs in a bash script

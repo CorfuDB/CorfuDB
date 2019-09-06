@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * Aggregates cluster state from a list of collected states.
  */
-<span class="nc bnc" id="L18" title="All 6 branches missed.">@Builder</span>
+<span class="pc bpc" id="L18" title="3 of 6 branches missed.">@Builder</span>
 public class ClusterStateAggregator {
 
     @NonNull
@@ -44,39 +44,39 @@ public class ClusterStateAggregator {
      * @return aggregated cluster state
      */
     public ClusterState getAggregatedState() {
-<span class="nc bnc" id="L47" title="All 2 branches missed.">        if (clusterStates.isEmpty()) {</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        if (clusterStates.isEmpty()) {</span>
 <span class="nc" id="L48">            throw new IllegalStateException(&quot;Insufficient cluster state&quot;);</span>
         }
 
-<span class="nc bnc" id="L51" title="All 2 branches missed.">        if (clusterStates.size() == 1) {</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">        if (clusterStates.size() == 1) {</span>
 <span class="nc" id="L52">            return clusterStates.get(0);</span>
         }
 
-<span class="nc" id="L55">        Map&lt;String, NodeState&gt; stateMap = clusterStates.stream()</span>
-<span class="nc" id="L56">                .map(ClusterState::getNodes)</span>
-<span class="nc" id="L57">                .reduce((prevNodes, currNodes) -&gt; {</span>
-<span class="nc" id="L58">                    Map&lt;String, NodeState&gt; actualState = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L55">        Map&lt;String, NodeState&gt; stateMap = clusterStates.stream()</span>
+<span class="fc" id="L56">                .map(ClusterState::getNodes)</span>
+<span class="fc" id="L57">                .reduce((prevNodes, currNodes) -&gt; {</span>
+<span class="fc" id="L58">                    Map&lt;String, NodeState&gt; actualState = new HashMap&lt;&gt;();</span>
 
-<span class="nc bnc" id="L60" title="All 2 branches missed.">                    for (String endpoint : currNodes.keySet()) {</span>
-<span class="nc" id="L61">                        NodeState prevNodeState = prevNodes.get(endpoint);</span>
-<span class="nc" id="L62">                        NodeState currNodeState = currNodes.get(endpoint);</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">                    for (String endpoint : currNodes.keySet()) {</span>
+<span class="fc" id="L61">                        NodeState prevNodeState = prevNodes.get(endpoint);</span>
+<span class="fc" id="L62">                        NodeState currNodeState = currNodes.get(endpoint);</span>
 
                         //update the old node state by the new one
-<span class="nc bnc" id="L65" title="All 4 branches missed.">                        if (currNodeState.isConnected() || !prevNodeState.isConnected()) {</span>
-<span class="nc" id="L66">                            actualState.put(endpoint, currNodeState);</span>
+<span class="fc bfc" id="L65" title="All 4 branches covered.">                        if (currNodeState.isConnected() || !prevNodeState.isConnected()) {</span>
+<span class="fc" id="L66">                            actualState.put(endpoint, currNodeState);</span>
                         } else {
-<span class="nc" id="L68">                            actualState.put(endpoint, prevNodeState);</span>
+<span class="fc" id="L68">                            actualState.put(endpoint, prevNodeState);</span>
                         }
-<span class="nc" id="L70">                    }</span>
+<span class="fc" id="L70">                    }</span>
 
-<span class="nc" id="L72">                    return ImmutableMap.copyOf(actualState);</span>
-<span class="nc" id="L73">                }).orElse(ImmutableMap.of());</span>
+<span class="fc" id="L72">                    return ImmutableMap.copyOf(actualState);</span>
+<span class="fc" id="L73">                }).orElse(ImmutableMap.of());</span>
 
-<span class="nc" id="L75">        return ClusterState.builder()</span>
-<span class="nc" id="L76">                .localEndpoint(localEndpoint)</span>
-<span class="nc" id="L77">                .unresponsiveNodes(unresponsiveNodes)</span>
-<span class="nc" id="L78">                .nodes(stateMap)</span>
-<span class="nc" id="L79">                .build();</span>
+<span class="fc" id="L75">        return ClusterState.builder()</span>
+<span class="fc" id="L76">                .localEndpoint(localEndpoint)</span>
+<span class="fc" id="L77">                .unresponsiveNodes(unresponsiveNodes)</span>
+<span class="fc" id="L78">                .nodes(stateMap)</span>
+<span class="fc" id="L79">                .build();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

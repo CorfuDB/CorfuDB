@@ -17,35 +17,35 @@ import static org.corfudb.runtime.object.transactions.TransactionalContext.getRo
  * transaction execution.
  */
 @Getter
-<span class="nc" id="L20">public class WriteSetInfo extends ConflictSetInfo {</span>
+<span class="fc" id="L20">public class WriteSetInfo extends ConflictSetInfo {</span>
 
     /** The set of mutated objects. */
-<span class="nc" id="L23">    Set&lt;UUID&gt; affectedStreams = new HashSet&lt;&gt;();</span>
+<span class="pc" id="L23">    Set&lt;UUID&gt; affectedStreams = new HashSet&lt;&gt;();</span>
 
     /** The actual updates to mutated objects. */
-<span class="nc" id="L26">    MultiObjectSMREntry writeSet = new MultiObjectSMREntry();</span>
+<span class="fc" id="L26">    MultiObjectSMREntry writeSet = new MultiObjectSMREntry();</span>
 
     public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
-<span class="nc" id="L29">        synchronized (getRootContext().getTransactionID()) {</span>
+<span class="fc" id="L29">        synchronized (getRootContext().getTransactionID()) {</span>
 
             // add the SMRentry to the list of updates for this stream
-<span class="nc" id="L32">            writeSet.addTo(proxy.getStreamID(), updateEntry);</span>
+<span class="fc" id="L32">            writeSet.addTo(proxy.getStreamID(), updateEntry);</span>
 
-<span class="nc" id="L34">            super.add(proxy, conflictObjects);</span>
+<span class="fc" id="L34">            super.add(proxy, conflictObjects);</span>
 
-<span class="nc" id="L36">            return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;</span>
+<span class="fc" id="L36">            return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;</span>
 <span class="nc" id="L37">        }</span>
     }
 
     @Override
     public void mergeInto(ConflictSetInfo other) {
-<span class="nc bnc" id="L42" title="All 2 branches missed.">        if (!(other instanceof WriteSetInfo)) {</span>
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">        if (!(other instanceof WriteSetInfo)) {</span>
 <span class="nc" id="L43">            throw new UnsupportedOperationException(&quot;Merging write set with read set unsupported&quot;);</span>
         }
 
-<span class="nc" id="L46">        super.mergeInto(other);</span>
-<span class="nc" id="L47">        affectedStreams.addAll(((WriteSetInfo) other).affectedStreams);</span>
-<span class="nc" id="L48">        writeSet.mergeInto(((WriteSetInfo) other).writeSet);</span>
-<span class="nc" id="L49">    }</span>
+<span class="fc" id="L46">        super.mergeInto(other);</span>
+<span class="fc" id="L47">        affectedStreams.addAll(((WriteSetInfo) other).affectedStreams);</span>
+<span class="fc" id="L48">        writeSet.mergeInto(((WriteSetInfo) other).writeSet);</span>
+<span class="fc" id="L49">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * &lt;p&gt;Created by mwei on 7/27/16.
  */
-<span class="nc" id="L24">@Slf4j</span>
+<span class="fc" id="L24">@Slf4j</span>
 public class ClientMsgHandler {
 
     @FunctionalInterface
@@ -42,10 +42,10 @@ public class ClientMsgHandler {
     /**
      * Construct a new instance of ClientMsgHandler.
      */
-<span class="nc" id="L45">    public ClientMsgHandler(IClient client) {</span>
-<span class="nc" id="L46">        this.client = client;</span>
-<span class="nc" id="L47">        handlerMap = new ConcurrentHashMap&lt;&gt;();</span>
-<span class="nc" id="L48">    }</span>
+<span class="fc" id="L45">    public ClientMsgHandler(IClient client) {</span>
+<span class="fc" id="L46">        this.client = client;</span>
+<span class="fc" id="L47">        handlerMap = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L48">    }</span>
 
     /**
      * Add a handler to this message handler.
@@ -70,17 +70,17 @@ public class ClientMsgHandler {
      */
     @SuppressWarnings(&quot;unchecked&quot;)
     public boolean handle(CorfuMsg message, ChannelHandlerContext ctx) {
-<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (handlerMap.containsKey(message.getMsgType())) {</span>
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">        if (handlerMap.containsKey(message.getMsgType())) {</span>
             try {
-<span class="nc" id="L75">                Object ret = handlerMap.get(message.getMsgType())</span>
-<span class="nc" id="L76">                        .handle(message, ctx, client.getRouter());</span>
-<span class="nc bnc" id="L77" title="All 2 branches missed.">                if (ret != null) {</span>
-<span class="nc" id="L78">                    client.getRouter().completeRequest(message.getRequestID(), ret);</span>
+<span class="fc" id="L75">                Object ret = handlerMap.get(message.getMsgType())</span>
+<span class="fc" id="L76">                        .handle(message, ctx, client.getRouter());</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">                if (ret != null) {</span>
+<span class="fc" id="L78">                    client.getRouter().completeRequest(message.getRequestID(), ret);</span>
                 }
-<span class="nc" id="L80">            } catch (Exception ex) {</span>
-<span class="nc" id="L81">                client.getRouter().completeExceptionally(message.getRequestID(), ex);</span>
-<span class="nc" id="L82">            }</span>
-<span class="nc" id="L83">            return true;</span>
+<span class="fc" id="L80">            } catch (Exception ex) {</span>
+<span class="fc" id="L81">                client.getRouter().completeExceptionally(message.getRequestID(), ex);</span>
+<span class="fc" id="L82">            }</span>
+<span class="fc" id="L83">            return true;</span>
         }
 <span class="nc" id="L85">        return false;</span>
     }
@@ -93,33 +93,33 @@ public class ClientMsgHandler {
      * @param o      The object that implements the client.
      * @return Returns a handler to handle incoming messages to clients.
      */
-<span class="nc bnc" id="L96" title="All 2 branches missed.">    public ClientMsgHandler generateHandlers(@NonNull final MethodHandles.Lookup caller,</span>
-<span class="nc bnc" id="L97" title="All 2 branches missed.">                                             @NonNull final Object o) {</span>
-<span class="nc" id="L98">        Arrays.stream(o.getClass().getDeclaredMethods())</span>
-<span class="nc" id="L99">                .filter(x -&gt; x.isAnnotationPresent(ClientHandler.class))</span>
-<span class="nc" id="L100">                .forEach(x -&gt; {</span>
-<span class="nc" id="L101">                    ClientHandler a = x.getAnnotation(ClientHandler.class);</span>
-<span class="nc" id="L102">                    if (!x.getParameterTypes()[0]</span>
-<span class="nc bnc" id="L103" title="All 2 branches missed.">                            .isAssignableFrom(a.type().messageType.getRawType())) {</span>
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">    public ClientMsgHandler generateHandlers(@NonNull final MethodHandles.Lookup caller,</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">                                             @NonNull final Object o) {</span>
+<span class="fc" id="L98">        Arrays.stream(o.getClass().getDeclaredMethods())</span>
+<span class="fc" id="L99">                .filter(x -&gt; x.isAnnotationPresent(ClientHandler.class))</span>
+<span class="fc" id="L100">                .forEach(x -&gt; {</span>
+<span class="fc" id="L101">                    ClientHandler a = x.getAnnotation(ClientHandler.class);</span>
+<span class="fc" id="L102">                    if (!x.getParameterTypes()[0]</span>
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">                            .isAssignableFrom(a.type().messageType.getRawType())) {</span>
 <span class="nc" id="L104">                        throw new RuntimeException(&quot;Incorrect message type, expected &quot;</span>
 <span class="nc" id="L105">                                + a.type().messageType.getRawType() + &quot; but provided &quot;</span>
 <span class="nc" id="L106">                                + x.getParameterTypes()[0]);</span>
                     }
-<span class="nc bnc" id="L108" title="All 2 branches missed.">                    if (handlerMap.containsKey(a.type())) {</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">                    if (handlerMap.containsKey(a.type())) {</span>
 <span class="nc" id="L109">                        throw new RuntimeException(&quot;Handler for &quot; + a.type()</span>
                                 + &quot; already registered!&quot;);
                     }
                     // convert the method into a Java8 Lambda for maximum execution speed...
                     try {
-<span class="nc bnc" id="L114" title="All 2 branches missed.">                        if (Modifier.isStatic(x.getModifiers())) {</span>
-<span class="nc" id="L115">                            MethodHandle mh = caller.unreflect(x);</span>
-<span class="nc" id="L116">                            MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);</span>
-<span class="nc" id="L117">                            handlerMap.put(a.type(), (ClientMsgHandler.Handler) LambdaMetafactory</span>
-<span class="nc" id="L118">                                    .metafactory(caller, &quot;handle&quot;,</span>
-<span class="nc" id="L119">                                            MethodType.methodType(ClientMsgHandler.Handler.class),</span>
-<span class="nc" id="L120">                                            mt, mh, mh.type())</span>
-<span class="nc" id="L121">                                    .getTarget().invokeExact());</span>
-<span class="nc" id="L122">                        } else {</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">                        if (Modifier.isStatic(x.getModifiers())) {</span>
+<span class="fc" id="L115">                            MethodHandle mh = caller.unreflect(x);</span>
+<span class="fc" id="L116">                            MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);</span>
+<span class="fc" id="L117">                            handlerMap.put(a.type(), (ClientMsgHandler.Handler) LambdaMetafactory</span>
+<span class="fc" id="L118">                                    .metafactory(caller, &quot;handle&quot;,</span>
+<span class="fc" id="L119">                                            MethodType.methodType(ClientMsgHandler.Handler.class),</span>
+<span class="fc" id="L120">                                            mt, mh, mh.type())</span>
+<span class="fc" id="L121">                                    .getTarget().invokeExact());</span>
+<span class="fc" id="L122">                        } else {</span>
                             // instance method, so we need to capture the type.
 <span class="nc" id="L124">                            MethodType mt = MethodType</span>
 <span class="nc" id="L125">                                    .methodType(x.getReturnType(), x.getParameterTypes());</span>
@@ -138,9 +138,9 @@ public class ClientMsgHandler {
 <span class="nc" id="L138">                    } catch (Throwable e) {</span>
 <span class="nc" id="L139">                        log.error(&quot;Exception during incoming message handling&quot;, e);</span>
 <span class="nc" id="L140">                        throw new RuntimeException(e);</span>
-<span class="nc" id="L141">                    }</span>
-<span class="nc" id="L142">                });</span>
-<span class="nc" id="L143">        return this;</span>
+<span class="fc" id="L141">                    }</span>
+<span class="fc" id="L142">                });</span>
+<span class="fc" id="L143">        return this;</span>
     }
 
     /**
@@ -149,7 +149,7 @@ public class ClientMsgHandler {
      * @return The types this handler will handle.
      */
     public Set&lt;CorfuMsgType&gt; getHandledTypes() {
-<span class="nc" id="L152">        return handlerMap.keySet();</span>
+<span class="fc" id="L152">        return handlerMap.keySet();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

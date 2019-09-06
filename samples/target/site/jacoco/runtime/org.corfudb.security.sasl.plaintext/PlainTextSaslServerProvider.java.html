@@ -15,14 +15,14 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslServer.PlainTextSaslServ
 public class PlainTextSaslServerProvider extends Provider {
 
     protected PlainTextSaslServerProvider() {
-<span class="nc" id="L18">        super(&quot;PlainTextSaslServerProvider&quot;, 1.0,</span>
+<span class="fc" id="L18">        super(&quot;PlainTextSaslServerProvider&quot;, 1.0,</span>
                 &quot;Plain Text Sasl Server Provider for CorfuDB&quot;);
-<span class="nc" id="L20">        super.put(&quot;SaslServerFactory.&quot; + PlainTextSaslServer.MECHANISM,</span>
-<span class="nc" id="L21">                PlainTextSaslServerFactory.class.getName());</span>
-<span class="nc" id="L22">    }</span>
+<span class="fc" id="L20">        super.put(&quot;SaslServerFactory.&quot; + PlainTextSaslServer.MECHANISM,</span>
+<span class="fc" id="L21">                PlainTextSaslServerFactory.class.getName());</span>
+<span class="fc" id="L22">    }</span>
 
     public static void initialize() {
-<span class="nc" id="L25">        Security.addProvider(new PlainTextSaslServerProvider());</span>
-<span class="nc" id="L26">    }</span>
+<span class="fc" id="L25">        Security.addProvider(new PlainTextSaslServerProvider());</span>
+<span class="fc" id="L26">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

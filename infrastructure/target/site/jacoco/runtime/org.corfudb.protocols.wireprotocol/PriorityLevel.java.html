@@ -13,21 +13,21 @@ import java.util.stream.Collectors;
  *
  * Created by Maithem on 6/24/19.
  */
-<span class="nc" id="L16">@AllArgsConstructor</span>
+<span class="pc" id="L16">@AllArgsConstructor</span>
 public enum PriorityLevel {
     // This is the default priority for all requests
-<span class="nc" id="L19">    NORMAL(0),</span>
+<span class="fc" id="L19">    NORMAL(0),</span>
 
     // The priority for clients that need to bypass quota checks (i.e. management clients, checkpointer)
-<span class="nc" id="L22">    HIGH(1);</span>
+<span class="fc" id="L22">    HIGH(1);</span>
 
     public final int type;
 
     public byte asByte() {
-<span class="nc" id="L27">        return (byte) type;</span>
+<span class="fc" id="L27">        return (byte) type;</span>
     }
 
-<span class="nc" id="L30">    public static final Map&lt;Byte, PriorityLevel&gt; typeMap =</span>
-<span class="nc" id="L31">            Arrays.stream(PriorityLevel.values()).collect(Collectors.toMap(PriorityLevel::asByte, Function.identity()));</span>
+<span class="fc" id="L30">    public static final Map&lt;Byte, PriorityLevel&gt; typeMap =</span>
+<span class="fc" id="L31">            Arrays.stream(PriorityLevel.values()).collect(Collectors.toMap(PriorityLevel::asByte, Function.identity()));</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

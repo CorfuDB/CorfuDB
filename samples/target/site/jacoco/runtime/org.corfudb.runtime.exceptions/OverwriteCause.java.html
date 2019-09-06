@@ -2,30 +2,30 @@
 
 import lombok.Getter;
 
-<span class="nc" id="L5">@Getter</span>
+<span class="pc" id="L5">@Getter</span>
 public enum OverwriteCause {
     /** Indicates this address has been already written by a hole.*/
-<span class="nc" id="L8">    HOLE(0),</span>
+<span class="fc" id="L8">    HOLE(0),</span>
     /** Indicates this address has been already written and it is 'potentially' the same data
      * (i.e., based on data length). The client will drive final verification. This intends to be
      * a hint so verification is only driven in very specific cases.*/
-<span class="nc" id="L12">    SAME_DATA(1),</span>
+<span class="fc" id="L12">    SAME_DATA(1),</span>
     /** Indicates this address has been already written and it is a different data (derived from the length).*/
-<span class="nc" id="L14">    DIFF_DATA(2),</span>
+<span class="fc" id="L14">    DIFF_DATA(2),</span>
     /** Indicates this address was already trimmed.*/
-<span class="nc" id="L16">    TRIM(3),</span>
+<span class="fc" id="L16">    TRIM(3),</span>
     /** Indicates there is no actual cause for the overwrite, hence no overwrite exception has occurred. */
-<span class="nc" id="L18">    NONE(4);</span>
+<span class="fc" id="L18">    NONE(4);</span>
 
-<span class="nc" id="L20">    private int id;</span>
-<span class="nc" id="L21">    OverwriteCause(int i) {</span>
-<span class="nc" id="L22">        this.id = i;</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L20">    private int id;</span>
+<span class="fc" id="L21">    OverwriteCause(int i) {</span>
+<span class="fc" id="L22">        this.id = i;</span>
+<span class="fc" id="L23">    }</span>
 
     public static OverwriteCause fromId(int id) {
-<span class="nc bnc" id="L26" title="All 2 branches missed.">        for (OverwriteCause type : values()) {</span>
-<span class="nc bnc" id="L27" title="All 2 branches missed.">            if (type.getId() == id) {</span>
-<span class="nc" id="L28">                return type;</span>
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">        for (OverwriteCause type : values()) {</span>
+<span class="fc bfc" id="L27" title="All 2 branches covered.">            if (type.getId() == id) {</span>
+<span class="fc" id="L28">                return type;</span>
             }
         }
 <span class="nc" id="L31">        return null;</span>

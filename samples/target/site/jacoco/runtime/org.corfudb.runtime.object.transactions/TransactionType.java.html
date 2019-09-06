@@ -7,11 +7,11 @@ import lombok.RequiredArgsConstructor;
 /**
  * Created by mwei on 11/21/16.
  */
-<span class="nc" id="L10">@RequiredArgsConstructor</span>
+<span class="pc" id="L10">@RequiredArgsConstructor</span>
 public enum TransactionType {
-<span class="nc" id="L12">    OPTIMISTIC(OptimisticTransactionalContext::new),</span>
-<span class="nc" id="L13">    SNAPSHOT(SnapshotTransactionalContext::new),</span>
-<span class="nc" id="L14">    WRITE_AFTER_WRITE(WriteAfterWriteTransactionalContext::new);</span>
+<span class="fc" id="L12">    OPTIMISTIC(OptimisticTransactionalContext::new),</span>
+<span class="fc" id="L13">    SNAPSHOT(SnapshotTransactionalContext::new),</span>
+<span class="fc" id="L14">    WRITE_AFTER_WRITE(WriteAfterWriteTransactionalContext::new);</span>
 
     final Function&lt;Transaction, ? extends AbstractTransactionalContext&gt; get;
 }

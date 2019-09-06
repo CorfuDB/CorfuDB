@@ -30,20 +30,20 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
   public ICorfuSMRProxy<SMRMap<K, V>> proxy_CORFUSMR;
 
   public final Map<String, ICorfuSMRUpcallTarget<SMRMap<K, V>>> upcallMap_CORFUSMR = new ImmutableMap.Builder<String, ICorfuSMRUpcallTarget<SMRMap<K, V>>>()
+  .put("putAll", (obj, args) -> { obj.putAll((java.util.Map<? extends K,? extends V>) args[0]);return null;})
   .put("put", (obj, args) -> { return obj.put((K) args[0], (V) args[1]);})
-  .put("clear", (obj, args) -> { obj.clear();return null;})
   .put("remove", (obj, args) -> { return obj.remove((java.lang.Object) args[0]);})
-  .put("putAll", (obj, args) -> { obj.putAll((java.util.Map<? extends K,? extends V>) args[0]);return null;}).build();
+  .put("clear", (obj, args) -> { obj.clear();return null;}).build();
 
   public final Map<String, IUndoRecordFunction<SMRMap<K, V>>> undoRecordMap_CORFUSMR = new ImmutableMap.Builder<String, IUndoRecordFunction<SMRMap<K, V>>>()
+  .put("putAll", (obj, args) -> { return ISMRMap.super.undoPutAllRecord(obj,(java.util.Map<? extends K,? extends V>) args[0]);})
   .put("put", (obj, args) -> { return ISMRMap.super.undoPutRecord(obj,(K) args[0], (V) args[1]);})
-  .put("remove", (obj, args) -> { return ISMRMap.super.undoRemoveRecord(obj,(K) args[0]);})
-  .put("putAll", (obj, args) -> { return ISMRMap.super.undoPutAllRecord(obj,(java.util.Map<? extends K,? extends V>) args[0]);}).build();
+  .put("remove", (obj, args) -> { return ISMRMap.super.undoRemoveRecord(obj,(K) args[0]);}).build();
 
   public final Map<String, IUndoFunction<SMRMap<K, V>>> undoMap_CORFUSMR = new ImmutableMap.Builder<String, IUndoFunction<SMRMap<K, V>>>()
+  .put("putAll", (obj, undoRecord, args) -> {ISMRMap.super.undoPutAll(obj, (java.util.Map<K, V>) undoRecord, (java.util.Map<? extends K,? extends V>) args[0]);})
   .put("put", (obj, undoRecord, args) -> {ISMRMap.super.undoPut(obj, (V) undoRecord, (K) args[0], (V) args[1]);})
-  .put("remove", (obj, undoRecord, args) -> {ISMRMap.super.undoRemove(obj, (V) undoRecord, (K) args[0]);})
-  .put("putAll", (obj, undoRecord, args) -> {ISMRMap.super.undoPutAll(obj, (java.util.Map<K, V>) undoRecord, (java.util.Map<? extends K,? extends V>) args[0]);}).build();
+  .put("remove", (obj, undoRecord, args) -> {ISMRMap.super.undoRemove(obj, (V) undoRecord, (K) args[0]);}).build();
 
   public final Set<String> resetSet_CORFUSMR = new ImmutableSet.Builder<String>()
   .add("clear").build();
@@ -62,26 +62,14 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
 
   @Override
   @TransactionalMethod
-  public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.compute(key, remappingFunction);
-    });}
-
-  @Override
-  @TransactionalMethod
-  public V replace(K key, V value) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.replace(key, value);
-    });}
-
-  @Override
-  @TransactionalMethod
-  public boolean remove(Object key, Object value) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.remove(key, value);
+  public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.computeIfPresent(key, remappingFunction);
     });}
 
   @Override
   @Accessor
-  public boolean equals(Object obj) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(obj);},null);
+  public Set<K> keySet() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.keySet();},null);
   }
 
   @Override
@@ -95,48 +83,9 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
   }
 
   @Override
-  @MutatorAccessor(
-      name = "put",
-      undoFunction = "undoPut",
-      undoRecordFunction = "undoPutRecord"
-  )
-  public V put(@ConflictParameter K key, V value) {
-    Object[] conflictField_CORFUSMR = new Object[]{key};
-    long address_CORFUSMR = proxy_CORFUSMR.logUpdate("put",true,conflictField_CORFUSMR,key, value);
-    return (V) proxy_CORFUSMR.getUpcallResult(address_CORFUSMR, conflictField_CORFUSMR);
-  }
-
-  @Override
-  @TransactionalMethod
-  public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
-    proxy_CORFUSMR.TXExecute(() -> {super.replaceAll(function);
-    return null; });}
-
-  @Override
-  @TransactionalMethod
-  public V putIfAbsent(K key, V value) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.putIfAbsent(key, value);
-    });}
-
-  @Override
-  @Mutator(
-      name = "clear",
-      reset = true
-  )
-  public void clear() {
-    proxy_CORFUSMR.logUpdate("clear",false,null);
-  }
-
-  @Override
   @Accessor
-  public Set<K> keySet() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.keySet();},null);
-  }
-
-  @Override
-  @Accessor
-  public Collection<V> values() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.values();},null);
+  public Set<Map.Entry<K, V>> entrySet() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.entrySet();},null);
   }
 
   @Override
@@ -147,13 +96,106 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
 
   @Override
   @Accessor
-  public boolean isEmpty() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.isEmpty();},null);
+  public int size() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.size();},null);
   }
 
   @Override
-  public Object clone() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.clone();},null);
+  @Accessor
+  public V get(@ConflictParameter Object key) {
+    Object[] conflictField_CORFUSMR = new Object[]{key};
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.get(key);},conflictField_CORFUSMR);
+  }
+
+  @Override
+  @Accessor
+  public boolean equals(Object obj) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(obj);},null);
+  }
+
+  @Override
+  @Accessor
+  public boolean containsKey(@ConflictParameter Object key) {
+    Object[] conflictField_CORFUSMR = new Object[]{key};
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.containsKey(key);},conflictField_CORFUSMR);
+  }
+
+  @Override
+  @TransactionalMethod
+  public boolean replace(K key, V oldValue, V newValue) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.replace(key, oldValue, newValue);
+    });}
+
+  @Override
+  @Mutator(
+      name = "putAll",
+      undoFunction = "undoPutAll",
+      undoRecordFunction = "undoPutAllRecord",
+      conflictParameterFunction = "putAllConflictFunction"
+  )
+  public void putAll(Map<? extends K, ? extends V> m) {
+    Object[] conflictField_CORFUSMR = putAllConflictFunction(m);
+    proxy_CORFUSMR.logUpdate("putAll",false,conflictField_CORFUSMR,m);
+  }
+
+  @Override
+  @Accessor
+  public Collection<V> values() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.values();},null);
+  }
+
+  @Override
+  @TransactionalMethod
+  public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.computeIfAbsent(key, mappingFunction);
+    });}
+
+  @Override
+  @TransactionalMethod
+  public boolean remove(Object key, Object value) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.remove(key, value);
+    });}
+
+  @Override
+  @TransactionalMethod
+  public V replace(K key, V value) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.replace(key, value);
+    });}
+
+  @Override
+  @Accessor
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  }
+
+  @Override
+  @TransactionalMethod
+  public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.compute(key, remappingFunction);
+    });}
+
+  @Override
+  @Accessor
+  public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>> entryPredicate) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.scanAndFilterByEntry(entryPredicate);},null);
+  }
+
+  @Override
+  @TransactionalMethod
+  public V putIfAbsent(K key, V value) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.putIfAbsent(key, value);
+    });}
+
+  @Override
+  @MutatorAccessor(
+      name = "put",
+      undoFunction = "undoPut",
+      undoRecordFunction = "undoPutRecord"
+  )
+  public V put(@ConflictParameter K key, V value) {
+    Object[] conflictField_CORFUSMR = new Object[]{key};
+    long address_CORFUSMR = proxy_CORFUSMR.logUpdate("put",true,conflictField_CORFUSMR,key, value);
+    return (V) proxy_CORFUSMR.getUpcallResult(address_CORFUSMR, conflictField_CORFUSMR);
   }
 
   @Override
@@ -169,35 +211,8 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
   }
 
   @Override
-  @Mutator(
-      name = "putAll",
-      undoFunction = "undoPutAll",
-      undoRecordFunction = "undoPutAllRecord",
-      conflictParameterFunction = "putAllConflictFunction"
-  )
-  public void putAll(Map<? extends K, ? extends V> m) {
-    Object[] conflictField_CORFUSMR = putAllConflictFunction(m);
-    proxy_CORFUSMR.logUpdate("putAll",false,conflictField_CORFUSMR,m);
-  }
-
-  @Override
-  @TransactionalMethod
-  public boolean replace(K key, V oldValue, V newValue) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.replace(key, oldValue, newValue);
-    });}
-
-  @Override
-  @TransactionalMethod(
-      readOnly = true
-  )
-  public V getOrDefault(Object key, V defaultValue) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.getOrDefault(key, defaultValue);
-    });}
-
-  @Override
-  @Accessor
-  public Set<Map.Entry<K, V>> entrySet() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.entrySet();},null);
+  public Object clone() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.clone();},null);
   }
 
   @Override
@@ -207,24 +222,22 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
   }
 
   @Override
-  @Accessor
-  public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>> entryPredicate) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.scanAndFilterByEntry(entryPredicate);},null);
-  }
+  @TransactionalMethod
+  public void forEach(BiConsumer<? super K, ? super V> action) {
+    proxy_CORFUSMR.TXExecute(() -> {super.forEach(action);
+    return null; });}
 
   @Override
-  @Accessor
-  public V get(@ConflictParameter Object key) {
-    Object[] conflictField_CORFUSMR = new Object[]{key};
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.get(key);},conflictField_CORFUSMR);
-  }
+  @TransactionalMethod
+  public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
+    proxy_CORFUSMR.TXExecute(() -> {super.replaceAll(function);
+    return null; });}
 
   @Override
-  @Accessor
-  public boolean containsKey(@ConflictParameter Object key) {
-    Object[] conflictField_CORFUSMR = new Object[]{key};
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.containsKey(key);},conflictField_CORFUSMR);
-  }
+  @TransactionalMethod
+  public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.merge(key, value, remappingFunction);
+    });}
 
   @Override
   @Accessor
@@ -234,38 +247,25 @@ public class SMRMap$CORFUSMR<K, V> extends SMRMap<K, V> implements ICorfuSMR<SMR
 
   @Override
   @Accessor
-  public int size() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.size();},null);
+  public boolean isEmpty() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.isEmpty();},null);
   }
 
   @Override
-  @TransactionalMethod
-  public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.computeIfAbsent(key, mappingFunction);
-    });}
-
-  @Override
-  @TransactionalMethod
-  public void forEach(BiConsumer<? super K, ? super V> action) {
-    proxy_CORFUSMR.TXExecute(() -> {super.forEach(action);
-    return null; });}
-
-  @Override
-  @Accessor
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  @Mutator(
+      name = "clear",
+      reset = true
+  )
+  public void clear() {
+    proxy_CORFUSMR.logUpdate("clear",false,null);
   }
 
   @Override
-  @TransactionalMethod
-  public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.computeIfPresent(key, remappingFunction);
-    });}
-
-  @Override
-  @TransactionalMethod
-  public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.merge(key, value, remappingFunction);
+  @TransactionalMethod(
+      readOnly = true
+  )
+  public V getOrDefault(Object key, V defaultValue) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.getOrDefault(key, defaultValue);
     });}
 
   public Map<String, ICorfuSMRUpcallTarget<SMRMap<K, V>>> getCorfuSMRUpcallMap() {

@@ -40,6 +40,23 @@ public class ConflictParameterClass$CORFUSMR extends ConflictParameterClass impl
   }
 
   @Override
+  @Accessor
+  public int accessorTest(@ConflictParameter String test1, String test2) {
+    Object[] conflictField_CORFUSMR = new Object[]{test1};
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.accessorTest(test1, test2);},conflictField_CORFUSMR);
+  }
+
+  @Override
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  }
+
+  @Override
+  public int hashCode() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
+  }
+
+  @Override
   @Mutator(
       name = "mutatorTest"
   )
@@ -61,23 +78,6 @@ public class ConflictParameterClass$CORFUSMR extends ConflictParameterClass impl
   @Override
   public boolean equals(Object arg0) {
     return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
-  }
-
-  @Override
-  public int hashCode() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
-  }
-
-  @Override
-  @Accessor
-  public int accessorTest(@ConflictParameter String test1, String test2) {
-    Object[] conflictField_CORFUSMR = new Object[]{test1};
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.accessorTest(test1, test2);},conflictField_CORFUSMR);
-  }
-
-  @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
   }
 
   public Map<String, ICorfuSMRUpcallTarget<ConflictParameterClass>> getCorfuSMRUpcallMap() {

@@ -1299,17 +1299,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
          * @return checksum of bytes
          */
         public static int getChecksum(byte[] bytes) {
-<span class="nc" id="L1302">            Hasher hasher = Hashing.crc32c().newHasher();</span>
-<span class="nc bnc" id="L1303" title="All 2 branches missed.">            for (byte a : bytes) {</span>
-<span class="nc" id="L1304">                hasher.putByte(a);</span>
+<span class="fc" id="L1302">            Hasher hasher = Hashing.crc32c().newHasher();</span>
+<span class="fc bfc" id="L1303" title="All 2 branches covered.">            for (byte a : bytes) {</span>
+<span class="fc" id="L1304">                hasher.putByte(a);</span>
             }
 
-<span class="nc" id="L1307">            return hasher.hash().asInt();</span>
+<span class="fc" id="L1307">            return hasher.hash().asInt();</span>
         }
 
         public static int getChecksum(int num) {
-<span class="nc" id="L1311">            Hasher hasher = Hashing.crc32c().newHasher();</span>
-<span class="nc" id="L1312">            return hasher.putInt(num).hash().asInt();</span>
+<span class="fc" id="L1311">            Hasher hasher = Hashing.crc32c().newHasher();</span>
+<span class="fc" id="L1312">            return hasher.putInt(num).hash().asInt();</span>
         }
     }
 

@@ -20,7 +20,7 @@ import org.corfudb.util.CFUtils;
  *
  * &lt;p&gt;Created by zlokhandwala on 3/10/17.&lt;/p&gt;
  */
-<span class="nc" id="L23">@Slf4j</span>
+<span class="fc" id="L23">@Slf4j</span>
 <span class="nc" id="L24">public class SealServersHelper {</span>
 
     /**
@@ -33,16 +33,16 @@ import org.corfudb.util.CFUtils;
      */
     public static Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; asyncSealServers(
             RuntimeLayout runtimeLayout) {
-<span class="nc" id="L36">        Layout layout = runtimeLayout.getLayout();</span>
-<span class="nc" id="L37">        Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; resultMap = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L36">        Layout layout = runtimeLayout.getLayout();</span>
+<span class="fc" id="L37">        Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; resultMap = new HashMap&lt;&gt;();</span>
         // Seal all servers
-<span class="nc" id="L39">        layout.getAllServers().forEach(server -&gt; {</span>
-<span class="nc" id="L40">            CompletableFuture&lt;Boolean&gt; cf =</span>
-<span class="nc" id="L41">                    runtimeLayout.getBaseClient(server).sealRemoteServer(layout.getEpoch());</span>
-<span class="nc" id="L42">            resultMap.put(server, cf);</span>
-<span class="nc" id="L43">        });</span>
+<span class="fc" id="L39">        layout.getAllServers().forEach(server -&gt; {</span>
+<span class="fc" id="L40">            CompletableFuture&lt;Boolean&gt; cf =</span>
+<span class="fc" id="L41">                    runtimeLayout.getBaseClient(server).sealRemoteServer(layout.getEpoch());</span>
+<span class="fc" id="L42">            resultMap.put(server, cf);</span>
+<span class="fc" id="L43">        });</span>
 
-<span class="nc" id="L45">        return resultMap;</span>
+<span class="fc" id="L45">        return resultMap;</span>
     }
 
     /**
@@ -56,10 +56,10 @@ import org.corfudb.util.CFUtils;
     public static void waitForLayoutSeal(List&lt;String&gt; layoutServers, Map&lt;String,
             CompletableFuture&lt;Boolean&gt;&gt; completableFutureMap)
             throws QuorumUnreachableException {
-<span class="nc" id="L59">        CompletableFuture&lt;Boolean&gt;[] completableFutures =</span>
-<span class="nc" id="L60">                filterFutureMapAndGetArray(completableFutureMap, layoutServers::contains);</span>
-<span class="nc" id="L61">        waitForQuorum(completableFutures);</span>
-<span class="nc" id="L62">    }</span>
+<span class="fc" id="L59">        CompletableFuture&lt;Boolean&gt;[] completableFutures =</span>
+<span class="fc" id="L60">                filterFutureMapAndGetArray(completableFutureMap, layoutServers::contains);</span>
+<span class="fc" id="L61">        waitForQuorum(completableFutures);</span>
+<span class="fc" id="L62">    }</span>
 
     /**
      * Wait for at least one log unit servers in every stripe to be sealed.
@@ -72,33 +72,33 @@ import org.corfudb.util.CFUtils;
     public static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment, Map&lt;String,
             CompletableFuture&lt;Boolean&gt;&gt; completableFutureMap)
             throws QuorumUnreachableException {
-<span class="nc bnc" id="L75" title="All 2 branches missed.">        for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {</span>
-<span class="nc" id="L76">            CompletableFuture&lt;Boolean&gt;[] completableFutures =</span>
-<span class="nc" id="L77">                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);</span>
-<span class="nc" id="L78">            QuorumFuturesFactory.CompositeFuture&lt;Boolean&gt; quorumFuture =</span>
-<span class="nc" id="L79">                    QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {</span>
+<span class="fc" id="L76">            CompletableFuture&lt;Boolean&gt;[] completableFutures =</span>
+<span class="fc" id="L77">                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);</span>
+<span class="fc" id="L78">            QuorumFuturesFactory.CompositeFuture&lt;Boolean&gt; quorumFuture =</span>
+<span class="fc" id="L79">                    QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);</span>
 
-<span class="nc" id="L81">            boolean success = false;</span>
+<span class="fc" id="L81">            boolean success = false;</span>
             try {
-<span class="nc" id="L83">                success = CFUtils.getUninterruptibly(quorumFuture,</span>
+<span class="fc" id="L83">                success = CFUtils.getUninterruptibly(quorumFuture,</span>
                         TimeoutException.class, QuorumUnreachableException.class);
-<span class="nc" id="L85">            } catch (TimeoutException e) {</span>
-<span class="nc" id="L86">                log.error(&quot;waitForChainSegmentSeal: timeout&quot;, e);</span>
-<span class="nc" id="L87">            }</span>
+<span class="fc" id="L85">            } catch (TimeoutException e) {</span>
+<span class="fc" id="L86">                log.error(&quot;waitForChainSegmentSeal: timeout&quot;, e);</span>
+<span class="fc" id="L87">            }</span>
 
-<span class="nc bnc" id="L89" title="All 2 branches missed.">            if (success) {</span>
-<span class="nc" id="L90">                log.debug(&quot;waitForChainSegmentSeal: Successfully waited at least one &quot; +</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">            if (success) {</span>
+<span class="fc" id="L90">                log.debug(&quot;waitForChainSegmentSeal: Successfully waited at least one &quot; +</span>
                         &quot;log unit server in every strip&quot;);
-<span class="nc" id="L92">                continue;</span>
+<span class="fc" id="L92">                continue;</span>
             }
 
-<span class="nc" id="L95">            int reachableServers = (int) Arrays.stream(completableFutures)</span>
-<span class="nc" id="L96">                    .filter(booleanCompletableFuture -&gt;</span>
-<span class="nc bnc" id="L97" title="All 2 branches missed.">                            !booleanCompletableFuture.isCompletedExceptionally())</span>
-<span class="nc" id="L98">                    .count();</span>
-<span class="nc" id="L99">            throw new QuorumUnreachableException(reachableServers, completableFutures.length);</span>
+<span class="fc" id="L95">            int reachableServers = (int) Arrays.stream(completableFutures)</span>
+<span class="fc" id="L96">                    .filter(booleanCompletableFuture -&gt;</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">                            !booleanCompletableFuture.isCompletedExceptionally())</span>
+<span class="fc" id="L98">                    .count();</span>
+<span class="fc" id="L99">            throw new QuorumUnreachableException(reachableServers, completableFutures.length);</span>
         }
-<span class="nc" id="L101">    }</span>
+<span class="fc" id="L101">    }</span>
 
     /**
      * Wait for a quorum of log unit servers to respond to be sealed.
@@ -111,12 +111,12 @@ import org.corfudb.util.CFUtils;
     public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment, Map&lt;String,
             CompletableFuture&lt;Boolean&gt;&gt; completableFutureMap)
             throws QuorumUnreachableException {
-<span class="nc bnc" id="L114" title="All 2 branches missed.">        for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {</span>
-<span class="nc" id="L115">            CompletableFuture&lt;Boolean&gt;[] completableFutures =</span>
-<span class="nc" id="L116">                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);</span>
-<span class="nc" id="L117">            waitForQuorum(completableFutures);</span>
-<span class="nc" id="L118">        }</span>
-<span class="nc" id="L119">    }</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">        for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {</span>
+<span class="fc" id="L115">            CompletableFuture&lt;Boolean&gt;[] completableFutures =</span>
+<span class="fc" id="L116">                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);</span>
+<span class="fc" id="L117">            waitForQuorum(completableFutures);</span>
+<span class="fc" id="L118">        }</span>
+<span class="fc" id="L119">    }</span>
 
     /**
      * Wait for a quorum of responses from the completable futures.
@@ -126,22 +126,22 @@ import org.corfudb.util.CFUtils;
      */
     public static void waitForQuorum(CompletableFuture&lt;Boolean&gt;[] completableFutures)
             throws QuorumUnreachableException {
-<span class="nc" id="L129">        Boolean success = false;</span>
-<span class="nc" id="L130">        QuorumFuturesFactory.CompositeFuture&lt;Boolean&gt; quorumFuture =</span>
-<span class="nc" id="L131">                QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, completableFutures);</span>
+<span class="fc" id="L129">        Boolean success = false;</span>
+<span class="fc" id="L130">        QuorumFuturesFactory.CompositeFuture&lt;Boolean&gt; quorumFuture =</span>
+<span class="fc" id="L131">                QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, completableFutures);</span>
         try {
-<span class="nc" id="L133">            success = quorumFuture.get();</span>
-<span class="nc" id="L134">        } catch (InterruptedException ie) {</span>
-<span class="nc" id="L135">            throw new UnrecoverableCorfuInterruptedError(&quot;Sealing interrupted&quot;, ie);</span>
-<span class="nc" id="L136">        } catch (ExecutionException e) {</span>
-<span class="nc bnc" id="L137" title="All 2 branches missed.">            if (e.getCause() instanceof QuorumUnreachableException) {</span>
-<span class="nc" id="L138">                throw (QuorumUnreachableException) e.getCause();</span>
+<span class="fc" id="L133">            success = quorumFuture.get();</span>
+<span class="fc" id="L134">        } catch (InterruptedException ie) {</span>
+<span class="fc" id="L135">            throw new UnrecoverableCorfuInterruptedError(&quot;Sealing interrupted&quot;, ie);</span>
+<span class="fc" id="L136">        } catch (ExecutionException e) {</span>
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">            if (e.getCause() instanceof QuorumUnreachableException) {</span>
+<span class="fc" id="L138">                throw (QuorumUnreachableException) e.getCause();</span>
             }
-<span class="nc" id="L140">        }</span>
+<span class="fc" id="L140">        }</span>
 
-<span class="nc bnc" id="L142" title="All 2 branches missed.">        if (success) {</span>
-<span class="nc" id="L143">            log.debug(&quot;Successfully waited for quorum&quot;);</span>
-<span class="nc" id="L144">            return;</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">        if (success) {</span>
+<span class="fc" id="L143">            log.debug(&quot;Successfully waited for quorum&quot;);</span>
+<span class="fc" id="L144">            return;</span>
         }
 
 <span class="nc" id="L147">        int reachableServers = (int) Arrays.stream(completableFutures)</span>
@@ -155,10 +155,10 @@ import org.corfudb.util.CFUtils;
     private static CompletableFuture&lt;Boolean&gt;[] filterFutureMapAndGetArray(
             Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; completableFutureMap,
             Predicate&lt;String&gt; filterPredicate) {
-<span class="nc" id="L158">        return completableFutureMap.entrySet().stream()</span>
-<span class="nc" id="L159">                .filter(pair -&gt; filterPredicate.test(pair.getKey()))</span>
-<span class="nc" id="L160">                .map(Map.Entry::getValue)</span>
-<span class="nc" id="L161">                .toArray(CompletableFuture[]::new);</span>
+<span class="fc" id="L158">        return completableFutureMap.entrySet().stream()</span>
+<span class="fc" id="L159">                .filter(pair -&gt; filterPredicate.test(pair.getKey()))</span>
+<span class="fc" id="L160">                .map(Map.Entry::getValue)</span>
+<span class="fc" id="L161">                .toArray(CompletableFuture[]::new);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

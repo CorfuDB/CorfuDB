@@ -5,21 +5,21 @@ import lombok.RequiredArgsConstructor;
 /**
  * Created by dalia on 4/8/17.
  */
-<span class="nc" id="L8">@RequiredArgsConstructor</span>
+<span class="pc" id="L8">@RequiredArgsConstructor</span>
 public enum AbortCause {
     //TODO(Maithem): these types are redundant and should be removed,
     // we should just expose the throwable
-<span class="nc" id="L12">    CONFLICT,</span>
-<span class="nc" id="L13">    OVERWRITE, /** Aborted because of slow writer, i.e., continuously gets overwritten (hole filled by faster reader) */</span>
-<span class="nc" id="L14">    NEW_SEQUENCER,</span>
-<span class="nc" id="L15">    SIZE_EXCEEDED,</span>
-<span class="nc" id="L16">    USER,</span>
-<span class="nc" id="L17">    NETWORK,</span>
-<span class="nc" id="L18">    TRIM, /** Aborted because an access to this snapshot resulted in a trim exception. */</span>
-<span class="nc" id="L19">    SEQUENCER_OVERFLOW,</span>
-<span class="nc" id="L20">    SEQUENCER_TRIM,</span>
-<span class="nc" id="L21">    QUOTA_EXCEEDED,</span>
-<span class="nc" id="L22">    UNSUPPORTED,</span>
-<span class="nc" id="L23">    UNDEFINED;</span>
+<span class="fc" id="L12">    CONFLICT,</span>
+<span class="fc" id="L13">    OVERWRITE, /** Aborted because of slow writer, i.e., continuously gets overwritten (hole filled by faster reader) */</span>
+<span class="fc" id="L14">    NEW_SEQUENCER,</span>
+<span class="fc" id="L15">    SIZE_EXCEEDED,</span>
+<span class="fc" id="L16">    USER,</span>
+<span class="fc" id="L17">    NETWORK,</span>
+<span class="fc" id="L18">    TRIM, /** Aborted because an access to this snapshot resulted in a trim exception. */</span>
+<span class="fc" id="L19">    SEQUENCER_OVERFLOW,</span>
+<span class="fc" id="L20">    SEQUENCER_TRIM,</span>
+<span class="fc" id="L21">    QUOTA_EXCEEDED,</span>
+<span class="fc" id="L22">    UNSUPPORTED,</span>
+<span class="fc" id="L23">    UNDEFINED;</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

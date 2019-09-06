@@ -29,26 +29,26 @@ import java.util.concurrent.ConcurrentHashMap;
  * This is a wrapper over the layout to provide the clients required to communicate with the nodes.
  * &lt;p&gt;Created by zlokhandwala on 3/8/18.
  */
-<span class="nc" id="L32">@Slf4j</span>
+<span class="fc" id="L32">@Slf4j</span>
 <span class="nc bnc" id="L33" title="All 30 branches missed.">@Data</span>
 public class RuntimeLayout {
 
-<span class="nc" id="L36">    @Getter</span>
+<span class="fc" id="L36">    @Getter</span>
     private final Layout layout;
 
     /**
      * The org.corfudb.runtime this layout is associated with.
      */
-<span class="nc" id="L42">    @Getter</span>
+<span class="fc" id="L42">    @Getter</span>
     private final CorfuRuntime runtime;
 
     /**
      * Constructor taking a reference of the layout to stamp the clients.
      */
-<span class="nc" id="L48">    public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {</span>
-<span class="nc" id="L49">        this.layout = layout;</span>
-<span class="nc" id="L50">        this.runtime = corfuRuntime;</span>
-<span class="nc" id="L51">    }</span>
+<span class="fc" id="L48">    public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {</span>
+<span class="fc" id="L49">        this.layout = layout;</span>
+<span class="fc" id="L50">        this.runtime = corfuRuntime;</span>
+<span class="fc" id="L51">    }</span>
 
     /**
      * Attempts to move all servers in the system to the epoch of this layout.
@@ -62,22 +62,22 @@ public class RuntimeLayout {
      */
     public void sealMinServerSet()
             throws WrongEpochException, QuorumUnreachableException {
-<span class="nc" id="L65">        log.debug(&quot;Requested move of servers to new epoch {} servers are {}&quot;, layout.getEpoch(),</span>
-<span class="nc" id="L66">                layout.getAllServers());</span>
+<span class="fc" id="L65">        log.debug(&quot;Requested move of servers to new epoch {} servers are {}&quot;, layout.getEpoch(),</span>
+<span class="fc" id="L66">                layout.getAllServers());</span>
 
         // Set remote epoch on all servers in layout.
-<span class="nc" id="L69">        Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; resultMap = SealServersHelper.asyncSealServers(this);</span>
+<span class="fc" id="L69">        Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt; resultMap = SealServersHelper.asyncSealServers(this);</span>
 
         // Validate if we received enough layout server responses.
-<span class="nc" id="L72">        SealServersHelper.waitForLayoutSeal(layout.getLayoutServers(), resultMap);</span>
+<span class="fc" id="L72">        SealServersHelper.waitForLayoutSeal(layout.getLayoutServers(), resultMap);</span>
         // Validate if we received enough log unit server responses depending on the
         // replication mode.
-<span class="nc bnc" id="L75" title="All 2 branches missed.">        for (LayoutSegment layoutSegment : layout.getSegments()) {</span>
-<span class="nc" id="L76">            layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);</span>
-<span class="nc" id="L77">        }</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        for (LayoutSegment layoutSegment : layout.getSegments()) {</span>
+<span class="fc" id="L76">            layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);</span>
+<span class="fc" id="L77">        }</span>
 
-<span class="nc" id="L79">        log.debug(&quot;Layout has been sealed successfully.&quot;);</span>
-<span class="nc" id="L80">    }</span>
+<span class="fc" id="L79">        log.debug(&quot;Layout has been sealed successfully.&quot;);</span>
+<span class="fc" id="L80">    }</span>
 
 
     /**
@@ -86,7 +86,7 @@ public class RuntimeLayout {
      * This ensures that a client for a particular endpoint stamped with the required epoch is
      * created only once.
      */
-<span class="nc" id="L89">    private final Map&lt;Class&lt;? extends IClient&gt;,</span>
+<span class="fc" id="L89">    private final Map&lt;Class&lt;? extends IClient&gt;,</span>
 <span class="nc" id="L90">            Map&lt;String, IClient&gt;&gt; senderClientMap = new ConcurrentHashMap&lt;&gt;();</span>
 
     /**
@@ -101,54 +101,54 @@ public class RuntimeLayout {
      */
     private IClient getClient(final Class&lt;? extends IClient&gt; clientClass,
                               final String endpoint) {
-<span class="nc" id="L104">        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -&gt; {</span>
-<span class="nc" id="L105">            Map&lt;String, IClient&gt; endpointClientMap = stringEntryMap;</span>
-<span class="nc bnc" id="L106" title="All 2 branches missed.">            if (endpointClientMap == null) {</span>
-<span class="nc" id="L107">                endpointClientMap = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L104">        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -&gt; {</span>
+<span class="fc" id="L105">            Map&lt;String, IClient&gt; endpointClientMap = stringEntryMap;</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">            if (endpointClientMap == null) {</span>
+<span class="fc" id="L107">                endpointClientMap = new HashMap&lt;&gt;();</span>
             }
 
-<span class="nc" id="L110">            endpointClientMap.computeIfAbsent(endpoint, s -&gt; {</span>
+<span class="fc" id="L110">            endpointClientMap.computeIfAbsent(endpoint, s -&gt; {</span>
                 try {
-<span class="nc" id="L112">                    Constructor&lt;? extends IClient&gt; ctor =</span>
-<span class="nc" id="L113">                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class);</span>
-<span class="nc" id="L114">                    IClient inst = ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());</span>
-<span class="nc" id="L115">                    inst.setPriorityLevel(getRuntime().getParameters().getPriorityLevel());</span>
-<span class="nc" id="L116">                    return inst;</span>
+<span class="fc" id="L112">                    Constructor&lt;? extends IClient&gt; ctor =</span>
+<span class="fc" id="L113">                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class);</span>
+<span class="fc" id="L114">                    IClient inst = ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());</span>
+<span class="fc" id="L115">                    inst.setPriorityLevel(getRuntime().getParameters().getPriorityLevel());</span>
+<span class="fc" id="L116">                    return inst;</span>
 <span class="nc" id="L117">                } catch (NoSuchMethodException | IllegalAccessException | InstantiationException</span>
                         | InvocationTargetException e) {
 <span class="nc" id="L119">                    throw new UnrecoverableCorfuError(e);</span>
                 }
             });
-<span class="nc" id="L122">            return endpointClientMap;</span>
-<span class="nc" id="L123">        }).get(endpoint);</span>
+<span class="fc" id="L122">            return endpointClientMap;</span>
+<span class="fc" id="L123">        }).get(endpoint);</span>
     }
 
     public BaseClient getBaseClient(String endpoint) {
-<span class="nc" id="L127">        return (BaseClient) getClient(BaseClient.class, endpoint);</span>
+<span class="fc" id="L127">        return (BaseClient) getClient(BaseClient.class, endpoint);</span>
     }
 
     public LayoutClient getLayoutClient(String endpoint) {
-<span class="nc" id="L131">        return (LayoutClient) getClient(LayoutClient.class, endpoint);</span>
+<span class="fc" id="L131">        return (LayoutClient) getClient(LayoutClient.class, endpoint);</span>
     }
 
     public SequencerClient getPrimarySequencerClient() {
-<span class="nc" id="L135">        return getSequencerClient(layout.getSequencers().get(0));</span>
+<span class="fc" id="L135">        return getSequencerClient(layout.getSequencers().get(0));</span>
     }
 
     public SequencerClient getSequencerClient(String endpoint) {
-<span class="nc" id="L139">        return (SequencerClient) getClient(SequencerClient.class, endpoint);</span>
+<span class="fc" id="L139">        return (SequencerClient) getClient(SequencerClient.class, endpoint);</span>
     }
 
     public LogUnitClient getLogUnitClient(long address, int index) {
-<span class="nc" id="L143">        return getLogUnitClient(layout.getStripe(address).getLogServers().get(index));</span>
+<span class="fc" id="L143">        return getLogUnitClient(layout.getStripe(address).getLogServers().get(index));</span>
     }
 
     public LogUnitClient getLogUnitClient(String endpoint) {
-<span class="nc" id="L147">        return ((LogUnitClient) getClient(LogUnitClient.class, endpoint));</span>
+<span class="fc" id="L147">        return ((LogUnitClient) getClient(LogUnitClient.class, endpoint));</span>
     }
 
     public ManagementClient getManagementClient(String endpoint) {
-<span class="nc" id="L151">        return (ManagementClient) getClient(ManagementClient.class, endpoint);</span>
+<span class="fc" id="L151">        return (ManagementClient) getClient(ManagementClient.class, endpoint);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

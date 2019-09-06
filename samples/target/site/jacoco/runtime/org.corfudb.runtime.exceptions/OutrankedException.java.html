@@ -7,7 +7,7 @@ import org.corfudb.runtime.view.Layout;
  * Created by mwei on 12/14/15.
  */
 public class OutrankedException extends Exception {
-<span class="nc" id="L10">    @Getter</span>
+<span class="fc" id="L10">    @Getter</span>
     long newRank;
 
 <span class="nc" id="L13">    @Getter</span>
@@ -18,10 +18,10 @@ public class OutrankedException extends Exception {
      * @param newRank rank encountered
      */
     public OutrankedException(long newRank) {
-<span class="nc" id="L21">        super(&quot;Higher rank &quot; + newRank + &quot; encountered, layout = null&quot;);</span>
-<span class="nc" id="L22">        this.newRank = newRank;</span>
-<span class="nc" id="L23">        this.layout = null;</span>
-<span class="nc" id="L24">    }</span>
+<span class="fc" id="L21">        super(&quot;Higher rank &quot; + newRank + &quot; encountered, layout = null&quot;);</span>
+<span class="fc" id="L22">        this.newRank = newRank;</span>
+<span class="fc" id="L23">        this.layout = null;</span>
+<span class="fc" id="L24">    }</span>
 
     /**
      * Constructor.
@@ -29,10 +29,10 @@ public class OutrankedException extends Exception {
      * @param layout layout
      */
     public OutrankedException(long newRank, Layout layout) {
-<span class="nc bnc" id="L32" title="All 2 branches missed.">        super(&quot;Higher rank &quot; + newRank + &quot; encountered, layout = &quot; + ((layout == null)</span>
-<span class="nc" id="L33">                ? &quot;null&quot; : layout.toString()));</span>
-<span class="nc" id="L34">        this.newRank = newRank;</span>
-<span class="nc" id="L35">        this.layout = layout;</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc bfc" id="L32" title="All 2 branches covered.">        super(&quot;Higher rank &quot; + newRank + &quot; encountered, layout = &quot; + ((layout == null)</span>
+<span class="fc" id="L33">                ? &quot;null&quot; : layout.toString()));</span>
+<span class="fc" id="L34">        this.newRank = newRank;</span>
+<span class="fc" id="L35">        this.layout = layout;</span>
+<span class="fc" id="L36">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

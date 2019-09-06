@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.LongAdder;
  * to JVM given directory.
  */
 @Slf4j
-public class PerformanceTest {
+public class BenchmarkTest {
     private static class Args {
         @Parameter(names = {"-h", "--help"}, description = "Help message", help = true)
         boolean help;
@@ -54,23 +54,9 @@ public class PerformanceTest {
      * Server endpoint.
      */
     protected String endpoint = null;
-    /**
-     * Counter for checking total request number.
-     */
-    protected LongAdder requestsCompleted = null;
-    /**
-     * recorder for the test.
-     */
-    protected Recorder recorder = null;
-
-    protected ExecutorService service = null;
-    /**
-     * trace for each thread.
-     */
-    protected SimpleTrace[] traces = null;
     protected CorfuRuntime[] rts = null;
 
-    public PerformanceTest(String[] args) {
+    public BenchmarkTest(String[] args) {
         setArgs(args);
         rts = new CorfuRuntime[numRuntimes];
 
@@ -78,12 +64,6 @@ public class PerformanceTest {
             rts[x] = new CorfuRuntime(endpoint).connect();
         }
         log.info("Connected {} runtimes...", numRuntimes);
-
-        service = Executors.newFixedThreadPool(numThreads);
-        requestsCompleted = new LongAdder();
-        recorder = new Recorder(TimeUnit.SECONDS.toMillis(120000), 5);
-        traces = new SimpleTrace[numThreads];
-        MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
     }
 
     public void setArgs(String[] args) {

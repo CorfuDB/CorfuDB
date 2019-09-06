@@ -18,7 +18,6 @@ public class StatusReporter extends Thread {
         this.recorder = recorder;
     }
 
-    @SuppressWarnings("checkstyle:printLine")
     @Override
     public void run() {
         long currTs;
@@ -40,21 +39,12 @@ public class StatusReporter extends Thread {
                         histogram.getValueAtPercentile (95) / 1000.0,
                         histogram.getValueAtPercentile (99) / 1000.0);
 
-                System.out.printf("Throughput %f req/sec   Latency{ total{%f}ms  mean{%f}ms fiftyPercent{%f}ms NintyFivePercent{%f}ms NintyNinePercent{%f}ms\n",
-                        throughput,
-                        histogram.getTotalCount () / 1000.0,
-                        histogram.getMean () / 1000.0,
-                        histogram.getValueAtPercentile (50) / 1000.0,
-                        histogram.getValueAtPercentile (95) / 1000.0,
-                        histogram.getValueAtPercentile (99) / 1000.0);
-
                 Sleep.sleepUninterruptibly (Duration.ofMillis (1000 * 3));
                 prevTs = currTs;
                 prevMsgCnt = currMsgCnt;
             } catch (Exception e) {
                 // ignore exception
                 log.warn ("statusReporter: encountered exception", e);
-                //System.out.println("statusReporter: encountered exception" + e);
             }
         }
     }

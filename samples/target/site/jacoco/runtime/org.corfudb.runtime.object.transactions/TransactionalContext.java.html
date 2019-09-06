@@ -16,14 +16,14 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
  *
  * &lt;p&gt;Created by mwei on 1/11/16.
  */
-<span class="nc" id="L19">@Slf4j</span>
+<span class="fc" id="L19">@Slf4j</span>
 <span class="nc" id="L20">public class TransactionalContext {</span>
 
     /** A thread local stack containing all transaction contexts
      * for a given thread.
      */
     private static final ThreadLocal&lt;Deque&lt;AbstractTransactionalContext&gt;&gt;
-<span class="nc" id="L26">            threadTransactionStack = ThreadLocal.withInitial(</span>
+<span class="fc" id="L26">            threadTransactionStack = ThreadLocal.withInitial(</span>
             LinkedList&lt;AbstractTransactionalContext&gt;::new);
 
     /** Whether or not the current thread is in a nested transaction.
@@ -31,7 +31,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return  True, if the current thread is in a nested transaction.
      */
     public static boolean isInNestedTransaction() {
-<span class="nc bnc" id="L34" title="All 2 branches missed.">        return threadTransactionStack.get().size() &gt; 1;</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">        return threadTransactionStack.get().size() &gt; 1;</span>
     }
 
     /**
@@ -40,7 +40,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return The transaction stack for the calling thread.
      */
     public static Deque&lt;AbstractTransactionalContext&gt; getTransactionStack() {
-<span class="nc" id="L43">        return threadTransactionStack.get();</span>
+<span class="fc" id="L43">        return threadTransactionStack.get();</span>
     }
 
     /**
@@ -49,7 +49,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return The current transactional context for the calling thread.
      */
     public static AbstractTransactionalContext getCurrentContext() {
-<span class="nc" id="L52">        return getTransactionStack().peekFirst();</span>
+<span class="fc" id="L52">        return getTransactionStack().peekFirst();</span>
     }
 
     /**
@@ -58,7 +58,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return The last transactional context for the calling thread.
      */
     public static AbstractTransactionalContext getRootContext() {
-<span class="nc" id="L61">        return getTransactionStack().peekLast();</span>
+<span class="fc" id="L61">        return getTransactionStack().peekLast();</span>
     }
 
     /**
@@ -67,7 +67,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return True, if the calling thread is in a transaction.  False otherwise.
      */
     public static boolean isInTransaction() {
-<span class="nc bnc" id="L70" title="All 2 branches missed.">        return getTransactionStack().peekFirst() != null;</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">        return getTransactionStack().peekFirst() != null;</span>
     }
 
     /** Add a new transactional context to the thread's transaction stack.
@@ -76,9 +76,9 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return          The context which was added to the transaction stack.
      */
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
-<span class="nc" id="L79">        log.debug(&quot;TX begin[{}]&quot;, context);</span>
-<span class="nc" id="L80">        getTransactionStack().addFirst(context);</span>
-<span class="nc" id="L81">        return context;</span>
+<span class="fc" id="L79">        log.debug(&quot;TX begin[{}]&quot;, context);</span>
+<span class="fc" id="L80">        getTransactionStack().addFirst(context);</span>
+<span class="fc" id="L81">        return context;</span>
     }
 
     /** Remove the most recent transaction context from the transaction stack.
@@ -86,13 +86,13 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      * @return          The context which was removed from the transaction stack.
      */
     public static AbstractTransactionalContext removeContext() {
-<span class="nc" id="L89">        AbstractTransactionalContext r = getTransactionStack().pollFirst();</span>
-<span class="nc bnc" id="L90" title="All 2 branches missed.">        if (getTransactionStack().isEmpty()) {</span>
-<span class="nc" id="L91">            synchronized (getTransactionStack()) {</span>
-<span class="nc" id="L92">                getTransactionStack().notifyAll();</span>
-<span class="nc" id="L93">            }</span>
+<span class="fc" id="L89">        AbstractTransactionalContext r = getTransactionStack().pollFirst();</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        if (getTransactionStack().isEmpty()) {</span>
+<span class="fc" id="L91">            synchronized (getTransactionStack()) {</span>
+<span class="fc" id="L92">                getTransactionStack().notifyAll();</span>
+<span class="pc" id="L93">            }</span>
         }
-<span class="nc" id="L95">        return r;</span>
+<span class="fc" id="L95">        return r;</span>
     }
 
     /**
@@ -101,9 +101,9 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
      */
     public static List&lt;AbstractTransactionalContext&gt; getTransactionStackAsList() {
         List&lt;AbstractTransactionalContext&gt; listReverse =
-<span class="nc" id="L104">                getTransactionStack().stream().collect(Collectors.toList());</span>
-<span class="nc" id="L105">        Collections.reverse(listReverse);</span>
-<span class="nc" id="L106">        return listReverse;</span>
+<span class="fc" id="L104">                getTransactionStack().stream().collect(Collectors.toList());</span>
+<span class="fc" id="L105">        Collections.reverse(listReverse);</span>
+<span class="fc" id="L106">        return listReverse;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -15,25 +15,25 @@ public class RestoreRedundancyMergeSegmentsRequest implements CreateRequest {
     /**
      * Endpoint to restore redundancy to. Data needs to be transferred to this node.
      */
-<span class="nc" id="L18">    @Getter</span>
+<span class="fc" id="L18">    @Getter</span>
     private final String endpoint;
 
-<span class="nc" id="L21">    public RestoreRedundancyMergeSegmentsRequest(String endpoint) {</span>
-<span class="nc" id="L22">        this.endpoint = endpoint;</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L21">    public RestoreRedundancyMergeSegmentsRequest(String endpoint) {</span>
+<span class="fc" id="L22">        this.endpoint = endpoint;</span>
+<span class="fc" id="L23">    }</span>
 
-<span class="nc" id="L25">    public RestoreRedundancyMergeSegmentsRequest(byte[] buf) {</span>
-<span class="nc" id="L26">        endpoint = new String(buf, StandardCharsets.UTF_8);</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L25">    public RestoreRedundancyMergeSegmentsRequest(byte[] buf) {</span>
+<span class="fc" id="L26">        endpoint = new String(buf, StandardCharsets.UTF_8);</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public OrchestratorRequestType getType() {
-<span class="nc" id="L31">        return RESTORE_REDUNDANCY_MERGE_SEGMENTS;</span>
+<span class="fc" id="L31">        return RESTORE_REDUNDANCY_MERGE_SEGMENTS;</span>
     }
 
     @Override
     public byte[] getSerialized() {
-<span class="nc" id="L36">        return endpoint.getBytes(StandardCharsets.UTF_8);</span>
+<span class="fc" id="L36">        return endpoint.getBytes(StandardCharsets.UTF_8);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

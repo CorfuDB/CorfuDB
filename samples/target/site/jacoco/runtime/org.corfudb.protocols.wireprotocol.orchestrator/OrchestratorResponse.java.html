@@ -13,26 +13,26 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 public class OrchestratorResponse implements ICorfuPayload&lt;OrchestratorResponse&gt; {
 
-<span class="nc" id="L16">    @Getter</span>
+<span class="fc" id="L16">    @Getter</span>
     public final Response response;
 
-<span class="nc" id="L19">    public OrchestratorResponse(Response response) {</span>
-<span class="nc" id="L20">        this.response = response;</span>
-<span class="nc" id="L21">    }</span>
+<span class="fc" id="L19">    public OrchestratorResponse(Response response) {</span>
+<span class="fc" id="L20">        this.response = response;</span>
+<span class="fc" id="L21">    }</span>
 
-<span class="nc" id="L23">    public OrchestratorResponse(ByteBuf buf) {</span>
-<span class="nc" id="L24">        OrchestratorResponseType responseType = OrchestratorResponseType.typeMap.get(buf.readInt());</span>
-<span class="nc" id="L25">        byte[] bytes = new byte[buf.readInt()];</span>
-<span class="nc" id="L26">        buf.readBytes(bytes);</span>
-<span class="nc" id="L27">        response = responseType.getResponseGenerator().apply(bytes);</span>
-<span class="nc" id="L28">    }</span>
+<span class="fc" id="L23">    public OrchestratorResponse(ByteBuf buf) {</span>
+<span class="fc" id="L24">        OrchestratorResponseType responseType = OrchestratorResponseType.typeMap.get(buf.readInt());</span>
+<span class="fc" id="L25">        byte[] bytes = new byte[buf.readInt()];</span>
+<span class="fc" id="L26">        buf.readBytes(bytes);</span>
+<span class="fc" id="L27">        response = responseType.getResponseGenerator().apply(bytes);</span>
+<span class="fc" id="L28">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L32">        buf.writeInt(response.getType().getType());</span>
-<span class="nc" id="L33">        byte[] bytes = response.getSerialized();</span>
-<span class="nc" id="L34">        buf.writeInt(bytes.length);</span>
-<span class="nc" id="L35">        buf.writeBytes(bytes);</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L32">        buf.writeInt(response.getType().getType());</span>
+<span class="fc" id="L33">        byte[] bytes = response.getSerialized();</span>
+<span class="fc" id="L34">        buf.writeInt(bytes.length);</span>
+<span class="fc" id="L35">        buf.writeBytes(bytes);</span>
+<span class="fc" id="L36">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -12,19 +12,19 @@ import java.util.function.LongBinaryOperator;
 /**
  * Created by mwei on 10/1/15.
  */
-<span class="nc" id="L15">@Slf4j</span>
-<span class="nc" id="L16">public class NettyCorfuMessageEncoder extends MessageToByteEncoder&lt;CorfuMsg&gt; {</span>
+<span class="fc" id="L15">@Slf4j</span>
+<span class="fc" id="L16">public class NettyCorfuMessageEncoder extends MessageToByteEncoder&lt;CorfuMsg&gt; {</span>
 
 
-<span class="nc" id="L19">    final LongAccumulator maxValue = new LongAccumulator(Math::max, Long.MIN_VALUE);</span>
+<span class="fc" id="L19">    final LongAccumulator maxValue = new LongAccumulator(Math::max, Long.MIN_VALUE);</span>
 
     @Override
     protected void encode(ChannelHandlerContext channelHandlerContext,
                           CorfuMsg corfuMsg,
                           ByteBuf byteBuf) throws Exception {
         try {
-<span class="nc" id="L26">            corfuMsg.serialize(byteBuf);</span>
-<span class="nc bnc" id="L27" title="All 2 branches missed.">            if(log.isDebugEnabled()) {</span>
+<span class="fc" id="L26">            corfuMsg.serialize(byteBuf);</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">            if(log.isDebugEnabled()) {</span>
 <span class="nc" id="L28">                long prev = maxValue.get();</span>
 <span class="nc" id="L29">                maxValue.accumulate(byteBuf.readableBytes());</span>
 <span class="nc" id="L30">                long curr = maxValue.get();</span>
@@ -36,7 +36,7 @@ import java.util.function.LongBinaryOperator;
 
 <span class="nc" id="L37">        } catch (Exception e) {</span>
 <span class="nc" id="L38">            log.error(&quot;encode: Error during serialization!&quot;, e);</span>
-<span class="nc" id="L39">        }</span>
-<span class="nc" id="L40">    }</span>
+<span class="fc" id="L39">        }</span>
+<span class="fc" id="L40">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

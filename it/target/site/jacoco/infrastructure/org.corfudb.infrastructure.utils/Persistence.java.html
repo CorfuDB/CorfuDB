@@ -24,10 +24,10 @@ import java.nio.file.Paths;
      * @throws IOException
      */
     public static void syncDirectory(String dir) throws IOException {
-<span class="nc" id="L27">        Path dirPath = Paths.get(dir);</span>
-<span class="nc" id="L28">        try (FileChannel channel = FileChannel.open(dirPath)) {</span>
-<span class="nc" id="L29">            channel.force(true);</span>
-<span class="nc bnc" id="L30" title="All 8 branches missed.">        }</span>
-<span class="nc" id="L31">    }</span>
+<span class="fc" id="L27">        Path dirPath = Paths.get(dir);</span>
+<span class="pc" id="L28">        try (FileChannel channel = FileChannel.open(dirPath)) {</span>
+<span class="fc" id="L29">            channel.force(true);</span>
+<span class="pc bpc" id="L30" title="6 of 8 branches missed.">        }</span>
+<span class="fc" id="L31">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

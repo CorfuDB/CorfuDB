@@ -51,7 +51,7 @@ import java.util.function.UnaryOperator;
 /**
  * Created by mwei on 3/24/16.
  */
-<span class="nc" id="L54">@Slf4j</span>
+<span class="fc" id="L54">@Slf4j</span>
 public class LambdaUtils {
 
 <span class="nc" id="L57">    private LambdaUtils() {</span>
@@ -59,84 +59,84 @@ public class LambdaUtils {
 <span class="nc" id="L59">    }</span>
 
     private static final Map&lt;Class&lt;Object&gt;,
-<span class="nc" id="L62">            LambdaResolver&lt;Object&gt;&gt; dispatchMap = generateDispatchMap();</span>
+<span class="fc" id="L62">            LambdaResolver&lt;Object&gt;&gt; dispatchMap = generateDispatchMap();</span>
 
     @SuppressWarnings(&quot;unchecked&quot;)
     private static Map&lt;Class&lt;Object&gt;, LambdaResolver&lt;Object&gt;&gt; generateDispatchMap() {
         ImmutableMap.Builder&lt;Class&lt;Object&gt;, LambdaResolver&lt;Object&gt;&gt; builder =
-<span class="nc" id="L67">                ImmutableMap.&lt;Class&lt;Object&gt;, LambdaResolver&lt;Object&gt;&gt;builder();</span>
+<span class="fc" id="L67">                ImmutableMap.&lt;Class&lt;Object&gt;, LambdaResolver&lt;Object&gt;&gt;builder();</span>
 
-<span class="nc" id="L69">        typedPut(builder, BiConsumer.class, (f, a) -&gt; {</span>
+<span class="fc" id="L69">        typedPut(builder, BiConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L70">            f.accept(a[0], a[1]);</span>
 <span class="nc" id="L71">            return null;</span>
         });
-<span class="nc" id="L73">        typedPut(builder, BiFunction.class, (f, a) -&gt; f.apply(a[0], a[1]));</span>
-<span class="nc" id="L74">        typedPut(builder, BinaryOperator.class, (f, a) -&gt; f.apply(a[0], a[1]));</span>
-<span class="nc" id="L75">        typedPut(builder, BiPredicate.class, (f, a) -&gt; f.test(a[0], a[1]));</span>
-<span class="nc" id="L76">        typedPut(builder, BooleanSupplier.class, (f, a) -&gt; f.getAsBoolean());</span>
-<span class="nc" id="L77">        typedPut(builder, Consumer.class, (f, a) -&gt; {</span>
+<span class="pc" id="L73">        typedPut(builder, BiFunction.class, (f, a) -&gt; f.apply(a[0], a[1]));</span>
+<span class="pc" id="L74">        typedPut(builder, BinaryOperator.class, (f, a) -&gt; f.apply(a[0], a[1]));</span>
+<span class="pc" id="L75">        typedPut(builder, BiPredicate.class, (f, a) -&gt; f.test(a[0], a[1]));</span>
+<span class="pc" id="L76">        typedPut(builder, BooleanSupplier.class, (f, a) -&gt; f.getAsBoolean());</span>
+<span class="fc" id="L77">        typedPut(builder, Consumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L78">            f.accept(a[0]);</span>
 <span class="nc" id="L79">            return null;</span>
         });
-<span class="nc" id="L81">        typedPut(builder, DoubleBinaryOperator.class, (f, a) -&gt; f.applyAsDouble((double) a[0],</span>
+<span class="pc" id="L81">        typedPut(builder, DoubleBinaryOperator.class, (f, a) -&gt; f.applyAsDouble((double) a[0],</span>
 <span class="nc" id="L82">                (double) a[1]));</span>
-<span class="nc" id="L83">        typedPut(builder, DoubleConsumer.class, (f, a) -&gt; {</span>
+<span class="fc" id="L83">        typedPut(builder, DoubleConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L84">            f.accept((double) a[0]);</span>
 <span class="nc" id="L85">            return null;</span>
         });
-<span class="nc" id="L87">        typedPut(builder, DoubleFunction.class, (f, a) -&gt; f.apply((double) a[0]));</span>
-<span class="nc" id="L88">        typedPut(builder, DoublePredicate.class, (f, a) -&gt; f.test((double) a[0]));</span>
-<span class="nc" id="L89">        typedPut(builder, DoubleSupplier.class, (f, a) -&gt; f.getAsDouble());</span>
-<span class="nc" id="L90">        typedPut(builder, DoubleToIntFunction.class, (f, a) -&gt; f.applyAsInt((double) a[0]));</span>
-<span class="nc" id="L91">        typedPut(builder, DoubleToLongFunction.class, (f, a) -&gt; f.applyAsLong((double) a[0]));</span>
-<span class="nc" id="L92">        typedPut(builder, DoubleUnaryOperator.class, (f, a) -&gt; f.applyAsDouble((double) a[0]));</span>
-<span class="nc" id="L93">        typedPut(builder, Function.class, (f, a) -&gt; f.apply(a[0]));</span>
-<span class="nc" id="L94">        typedPut(builder, IntBinaryOperator.class, (f, a) -&gt; f.applyAsInt((int) a[0], (int) a[1]));</span>
-<span class="nc" id="L95">        typedPut(builder, IntConsumer.class, (f, a) -&gt; {</span>
+<span class="pc" id="L87">        typedPut(builder, DoubleFunction.class, (f, a) -&gt; f.apply((double) a[0]));</span>
+<span class="pc" id="L88">        typedPut(builder, DoublePredicate.class, (f, a) -&gt; f.test((double) a[0]));</span>
+<span class="pc" id="L89">        typedPut(builder, DoubleSupplier.class, (f, a) -&gt; f.getAsDouble());</span>
+<span class="pc" id="L90">        typedPut(builder, DoubleToIntFunction.class, (f, a) -&gt; f.applyAsInt((double) a[0]));</span>
+<span class="pc" id="L91">        typedPut(builder, DoubleToLongFunction.class, (f, a) -&gt; f.applyAsLong((double) a[0]));</span>
+<span class="pc" id="L92">        typedPut(builder, DoubleUnaryOperator.class, (f, a) -&gt; f.applyAsDouble((double) a[0]));</span>
+<span class="pc" id="L93">        typedPut(builder, Function.class, (f, a) -&gt; f.apply(a[0]));</span>
+<span class="pc" id="L94">        typedPut(builder, IntBinaryOperator.class, (f, a) -&gt; f.applyAsInt((int) a[0], (int) a[1]));</span>
+<span class="fc" id="L95">        typedPut(builder, IntConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L96">            f.accept((int) a[0]);</span>
 <span class="nc" id="L97">            return null;</span>
         });
-<span class="nc" id="L99">        typedPut(builder, IntFunction.class, (f, a) -&gt; f.apply((int) a[0]));</span>
-<span class="nc" id="L100">        typedPut(builder, IntPredicate.class, (f, a) -&gt; f.test((int) a[0]));</span>
-<span class="nc" id="L101">        typedPut(builder, IntSupplier.class, (f, a) -&gt; f.getAsInt());</span>
-<span class="nc" id="L102">        typedPut(builder, IntToDoubleFunction.class, (f, a) -&gt; f.applyAsDouble((int) a[0]));</span>
-<span class="nc" id="L103">        typedPut(builder, IntToLongFunction.class, (f, a) -&gt; f.applyAsLong((int) a[0]));</span>
-<span class="nc" id="L104">        typedPut(builder, IntUnaryOperator.class, (f, a) -&gt; f.applyAsInt((int) a[0]));</span>
-<span class="nc" id="L105">        typedPut(builder, LongBinaryOperator.class, (f, a) -&gt; f.applyAsLong((long) a[0],</span>
+<span class="pc" id="L99">        typedPut(builder, IntFunction.class, (f, a) -&gt; f.apply((int) a[0]));</span>
+<span class="pc" id="L100">        typedPut(builder, IntPredicate.class, (f, a) -&gt; f.test((int) a[0]));</span>
+<span class="pc" id="L101">        typedPut(builder, IntSupplier.class, (f, a) -&gt; f.getAsInt());</span>
+<span class="pc" id="L102">        typedPut(builder, IntToDoubleFunction.class, (f, a) -&gt; f.applyAsDouble((int) a[0]));</span>
+<span class="pc" id="L103">        typedPut(builder, IntToLongFunction.class, (f, a) -&gt; f.applyAsLong((int) a[0]));</span>
+<span class="pc" id="L104">        typedPut(builder, IntUnaryOperator.class, (f, a) -&gt; f.applyAsInt((int) a[0]));</span>
+<span class="pc" id="L105">        typedPut(builder, LongBinaryOperator.class, (f, a) -&gt; f.applyAsLong((long) a[0],</span>
 <span class="nc" id="L106">                (long) a[1]));</span>
-<span class="nc" id="L107">        typedPut(builder, LongConsumer.class, (f, a) -&gt; {</span>
+<span class="fc" id="L107">        typedPut(builder, LongConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L108">            f.accept((long) a[0]);</span>
 <span class="nc" id="L109">            return null;</span>
         });
-<span class="nc" id="L111">        typedPut(builder, LongFunction.class, (f, a) -&gt; f.apply((long) a[0]));</span>
-<span class="nc" id="L112">        typedPut(builder, LongPredicate.class, (f, a) -&gt; f.test((long) a[0]));</span>
-<span class="nc" id="L113">        typedPut(builder, LongSupplier.class, (f, a) -&gt; f.getAsLong());</span>
-<span class="nc" id="L114">        typedPut(builder, LongToDoubleFunction.class, (f, a) -&gt; f.applyAsDouble((long) a[0]));</span>
-<span class="nc" id="L115">        typedPut(builder, LongToIntFunction.class, (f, a) -&gt; f.applyAsInt((long) a[0]));</span>
-<span class="nc" id="L116">        typedPut(builder, LongUnaryOperator.class, (f, a) -&gt; f.applyAsLong((long) a[0]));</span>
-<span class="nc" id="L117">        typedPut(builder, ObjDoubleConsumer.class, (f, a) -&gt; {</span>
+<span class="pc" id="L111">        typedPut(builder, LongFunction.class, (f, a) -&gt; f.apply((long) a[0]));</span>
+<span class="pc" id="L112">        typedPut(builder, LongPredicate.class, (f, a) -&gt; f.test((long) a[0]));</span>
+<span class="pc" id="L113">        typedPut(builder, LongSupplier.class, (f, a) -&gt; f.getAsLong());</span>
+<span class="pc" id="L114">        typedPut(builder, LongToDoubleFunction.class, (f, a) -&gt; f.applyAsDouble((long) a[0]));</span>
+<span class="pc" id="L115">        typedPut(builder, LongToIntFunction.class, (f, a) -&gt; f.applyAsInt((long) a[0]));</span>
+<span class="pc" id="L116">        typedPut(builder, LongUnaryOperator.class, (f, a) -&gt; f.applyAsLong((long) a[0]));</span>
+<span class="fc" id="L117">        typedPut(builder, ObjDoubleConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L118">            f.accept(a[0], (double) a[1]);</span>
 <span class="nc" id="L119">            return null;</span>
         });
-<span class="nc" id="L121">        typedPut(builder, ObjIntConsumer.class, (f, a) -&gt; {</span>
+<span class="fc" id="L121">        typedPut(builder, ObjIntConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L122">            f.accept(a[0], (int) a[1]);</span>
 <span class="nc" id="L123">            return null;</span>
         });
-<span class="nc" id="L125">        typedPut(builder, ObjLongConsumer.class, (f, a) -&gt; {</span>
+<span class="fc" id="L125">        typedPut(builder, ObjLongConsumer.class, (f, a) -&gt; {</span>
 <span class="nc" id="L126">            f.accept(a[0], (long) a[1]);</span>
 <span class="nc" id="L127">            return null;</span>
         });
-<span class="nc" id="L129">        typedPut(builder, Predicate.class, (f, a) -&gt; f.test(a[0]));</span>
-<span class="nc" id="L130">        typedPut(builder, Supplier.class, (f, a) -&gt; f.get());</span>
-<span class="nc" id="L131">        typedPut(builder, ToDoubleBiFunction.class, (f, a) -&gt; f.applyAsDouble(a[0], a[1]));</span>
-<span class="nc" id="L132">        typedPut(builder, ToDoubleFunction.class, (f, a) -&gt; f.applyAsDouble(a[0]));</span>
-<span class="nc" id="L133">        typedPut(builder, ToIntBiFunction.class, (f, a) -&gt; f.applyAsInt(a[0], a[1]));</span>
-<span class="nc" id="L134">        typedPut(builder, ToIntFunction.class, (f, a) -&gt; f.applyAsInt(a[0]));</span>
-<span class="nc" id="L135">        typedPut(builder, ToLongBiFunction.class, (f, a) -&gt; f.applyAsLong(a[0], a[1]));</span>
-<span class="nc" id="L136">        typedPut(builder, ToLongFunction.class, (f, a) -&gt; f.applyAsLong(a[0]));</span>
-<span class="nc" id="L137">        typedPut(builder, UnaryOperator.class, (f, a) -&gt; f.apply(a[0]));</span>
+<span class="pc" id="L129">        typedPut(builder, Predicate.class, (f, a) -&gt; f.test(a[0]));</span>
+<span class="pc" id="L130">        typedPut(builder, Supplier.class, (f, a) -&gt; f.get());</span>
+<span class="pc" id="L131">        typedPut(builder, ToDoubleBiFunction.class, (f, a) -&gt; f.applyAsDouble(a[0], a[1]));</span>
+<span class="pc" id="L132">        typedPut(builder, ToDoubleFunction.class, (f, a) -&gt; f.applyAsDouble(a[0]));</span>
+<span class="pc" id="L133">        typedPut(builder, ToIntBiFunction.class, (f, a) -&gt; f.applyAsInt(a[0], a[1]));</span>
+<span class="pc" id="L134">        typedPut(builder, ToIntFunction.class, (f, a) -&gt; f.applyAsInt(a[0]));</span>
+<span class="pc" id="L135">        typedPut(builder, ToLongBiFunction.class, (f, a) -&gt; f.applyAsLong(a[0], a[1]));</span>
+<span class="pc" id="L136">        typedPut(builder, ToLongFunction.class, (f, a) -&gt; f.applyAsLong(a[0]));</span>
+<span class="pc" id="L137">        typedPut(builder, UnaryOperator.class, (f, a) -&gt; f.apply(a[0]));</span>
 
-<span class="nc" id="L139">        return builder.build();</span>
+<span class="fc" id="L139">        return builder.build();</span>
     }
 
     @SuppressWarnings(&quot;unchecked&quot;)
@@ -144,7 +144,7 @@ public class LambdaUtils {
             ImmutableMap.Builder&lt;Class&lt;T&gt;, LambdaResolver&lt;T&gt;&gt; builder,
             Class&lt;U&gt; cls,
             LambdaResolver&lt;U&gt; fn) {
-<span class="nc" id="L147">        return builder.put((Class&lt;T&gt;) cls, (LambdaResolver&lt;T&gt;) fn);</span>
+<span class="fc" id="L147">        return builder.put((Class&lt;T&gt;) cls, (LambdaResolver&lt;T&gt;) fn);</span>
     }
 
     /**
@@ -169,10 +169,10 @@ public class LambdaUtils {
      */
     public static void runSansThrow(Runnable runnable) {
         try {
-<span class="nc" id="L172">            runnable.run();</span>
-<span class="nc" id="L173">        } catch (Exception e) {</span>
-<span class="nc" id="L174">            log.error(&quot;runSansThrow: Suppressing exception while executing runnable: &quot;, e);</span>
-<span class="nc" id="L175">        }</span>
-<span class="nc" id="L176">    }</span>
+<span class="fc" id="L172">            runnable.run();</span>
+<span class="fc" id="L173">        } catch (Exception e) {</span>
+<span class="fc" id="L174">            log.error(&quot;runSansThrow: Suppressing exception while executing runnable: &quot;, e);</span>
+<span class="fc" id="L175">        }</span>
+<span class="fc" id="L176">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

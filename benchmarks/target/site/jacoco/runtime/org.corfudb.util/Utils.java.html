@@ -576,7 +576,7 @@ public class Utils {
 
 <span class="nc" id="L577">        Layout.LayoutSegment segment = layout.getLatestSegment();</span>
 
-        // Query the tail of the head log unit in every stripe.
+        // Query the head log unit in every stripe.
 <span class="nc bnc" id="L580" title="All 2 branches missed.">        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {</span>
 <span class="nc bnc" id="L581" title="All 2 branches missed.">            for (Layout.LayoutStripe stripe : segment.getStripes()) {</span>
 
@@ -594,14 +594,14 @@ public class Utils {
     }
 
     static StreamsAddressResponse aggregateLogAddressSpace(Set&lt;StreamsAddressResponse&gt; responses) {
-<span class="nc" id="L597">        Map&lt;UUID, StreamAddressSpace&gt; globalStreamTails = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L597">        Map&lt;UUID, StreamAddressSpace&gt; streamAddressSpace = new HashMap&lt;&gt;();</span>
 <span class="nc" id="L598">        long logTail = Address.NON_ADDRESS;</span>
 
 <span class="nc bnc" id="L600" title="All 2 branches missed.">        for (StreamsAddressResponse res : responses) {</span>
 <span class="nc" id="L601">            logTail = Math.max(logTail, res.getLogTail());</span>
-<span class="nc" id="L602">            globalStreamTails = aggregateStreamAddressMap(res.getAddressMap(), globalStreamTails);</span>
+<span class="nc" id="L602">            streamAddressSpace = aggregateStreamAddressMap(res.getAddressMap(), streamAddressSpace);</span>
 <span class="nc" id="L603">        }</span>
-<span class="nc" id="L604">        return new StreamsAddressResponse(logTail, globalStreamTails);</span>
+<span class="nc" id="L604">        return new StreamsAddressResponse(logTail, streamAddressSpace);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

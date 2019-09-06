@@ -13,35 +13,35 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
  * Created by rmichoud on 6/20/17.
  */
 <span class="nc bnc" id="L15" title="All 38 branches missed.">@Data</span>
-<span class="nc" id="L16">@AllArgsConstructor</span>
+<span class="fc" id="L16">@AllArgsConstructor</span>
 public class SequencerRecoveryMsg implements ICorfuPayload&lt;SequencerRecoveryMsg&gt; {
 
-<span class="nc" id="L19">    private final Long globalTail;</span>
-<span class="nc" id="L20">    private final Map&lt;UUID, StreamAddressSpace&gt; streamsAddressMap;</span>
-<span class="nc" id="L21">    private final Long sequencerEpoch;</span>
+<span class="fc" id="L19">    private final Long globalTail;</span>
+<span class="fc" id="L20">    private final Map&lt;UUID, StreamAddressSpace&gt; streamsAddressMap;</span>
+<span class="fc" id="L21">    private final Long sequencerEpoch;</span>
 
     /**
      * Boolean flag to denote whether this bootstrap message is just updating an existing primary
      * sequencer with the new epoch (if set to true) or bootstrapping a currently NOT_READY
      * sequencer.
      */
-<span class="nc" id="L28">    private Boolean bootstrapWithoutTailsUpdate;</span>
+<span class="fc" id="L28">    private Boolean bootstrapWithoutTailsUpdate;</span>
 
-<span class="nc" id="L30">    public SequencerRecoveryMsg(ByteBuf buf) {</span>
-<span class="nc" id="L31">        globalTail = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L32">        streamsAddressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);</span>
-<span class="nc" id="L33">        sequencerEpoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L34">        bootstrapWithoutTailsUpdate = ICorfuPayload.fromBuffer(buf, Boolean.class);</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L30">    public SequencerRecoveryMsg(ByteBuf buf) {</span>
+<span class="fc" id="L31">        globalTail = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L32">        streamsAddressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);</span>
+<span class="fc" id="L33">        sequencerEpoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L34">        bootstrapWithoutTailsUpdate = ICorfuPayload.fromBuffer(buf, Boolean.class);</span>
+<span class="fc" id="L35">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
 
-<span class="nc" id="L40">        ICorfuPayload.serialize(buf, globalTail);</span>
-<span class="nc" id="L41">        ICorfuPayload.serialize(buf, streamsAddressMap);</span>
-<span class="nc" id="L42">        ICorfuPayload.serialize(buf, sequencerEpoch);</span>
-<span class="nc" id="L43">        ICorfuPayload.serialize(buf, bootstrapWithoutTailsUpdate);</span>
-<span class="nc" id="L44">    }</span>
+<span class="fc" id="L40">        ICorfuPayload.serialize(buf, globalTail);</span>
+<span class="fc" id="L41">        ICorfuPayload.serialize(buf, streamsAddressMap);</span>
+<span class="fc" id="L42">        ICorfuPayload.serialize(buf, sequencerEpoch);</span>
+<span class="fc" id="L43">        ICorfuPayload.serialize(buf, bootstrapWithoutTailsUpdate);</span>
+<span class="fc" id="L44">    }</span>
 }
 
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

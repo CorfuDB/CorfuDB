@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * Local Metrics Polling Service polls the local server state.
  * Created by zlokhandwala on 11/2/18.
  */
-<span class="nc" id="L25">@Slf4j</span>
+<span class="fc" id="L25">@Slf4j</span>
 class LocalMonitoringService implements MonitoringService {
-<span class="nc" id="L27">    private static final CompletableFuture&lt;SequencerMetrics&gt; UNKNOWN = CompletableFuture</span>
-<span class="nc" id="L28">            .completedFuture(SequencerMetrics.UNKNOWN);</span>
+<span class="fc" id="L27">    private static final CompletableFuture&lt;SequencerMetrics&gt; UNKNOWN = CompletableFuture</span>
+<span class="fc" id="L28">            .completedFuture(SequencerMetrics.UNKNOWN);</span>
 
     private final ServerContext serverContext;
     private final SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource;
@@ -34,21 +34,21 @@ class LocalMonitoringService implements MonitoringService {
 
     private final AtomicReference&lt;CompletableFuture&lt;SequencerMetrics&gt;&gt; sequencerMetricsHolder;
 
-<span class="nc bnc" id="L37" title="All 2 branches missed.">    LocalMonitoringService(@NonNull ServerContext serverContext,</span>
-<span class="nc bnc" id="L38" title="All 2 branches missed.">                           @NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource) {</span>
-<span class="nc" id="L39">        this.serverContext = serverContext;</span>
-<span class="nc" id="L40">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
-<span class="nc" id="L41">        sequencerMetricsHolder = new AtomicReference&lt;&gt;(UNKNOWN);</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">    LocalMonitoringService(@NonNull ServerContext serverContext,</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">                           @NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource) {</span>
+<span class="fc" id="L39">        this.serverContext = serverContext;</span>
+<span class="fc" id="L40">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
+<span class="fc" id="L41">        sequencerMetricsHolder = new AtomicReference&lt;&gt;(UNKNOWN);</span>
 
-<span class="nc" id="L43">        this.pollingService = Executors.newSingleThreadScheduledExecutor(</span>
+<span class="fc" id="L43">        this.pollingService = Executors.newSingleThreadScheduledExecutor(</span>
                 new ThreadFactoryBuilder()
-<span class="nc" id="L45">                        .setDaemon(true)</span>
-<span class="nc" id="L46">                        .setNameFormat(serverContext.getThreadPrefix() + &quot;LocalMetricsPolling&quot;)</span>
-<span class="nc" id="L47">                        .build());</span>
-<span class="nc" id="L48">    }</span>
+<span class="fc" id="L45">                        .setDaemon(true)</span>
+<span class="fc" id="L46">                        .setNameFormat(serverContext.getThreadPrefix() + &quot;LocalMetricsPolling&quot;)</span>
+<span class="fc" id="L47">                        .build());</span>
+<span class="fc" id="L48">    }</span>
 
     private CorfuRuntime getCorfuRuntime() {
-<span class="nc" id="L51">        return runtimeSingletonResource.get();</span>
+<span class="fc" id="L51">        return runtimeSingletonResource.get();</span>
     }
 
     /**
@@ -61,24 +61,24 @@ class LocalMonitoringService implements MonitoringService {
     private CompletableFuture&lt;SequencerMetrics&gt; queryLocalSequencerMetrics(Layout layout) {
         // This is an optimization. If this node is not the primary sequencer for the current
         // layout, there is no reason to request metrics from this sequencer.
-<span class="nc bnc" id="L64" title="All 2 branches missed.">        if (!layout.getPrimarySequencer().equals(serverContext.getLocalEndpoint())) {</span>
-<span class="nc" id="L65">            return UNKNOWN;</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        if (!layout.getPrimarySequencer().equals(serverContext.getLocalEndpoint())) {</span>
+<span class="fc" id="L65">            return UNKNOWN;</span>
         }
 
 
-<span class="nc" id="L69">        return getCorfuRuntime()</span>
-<span class="nc" id="L70">                .getLayoutView()</span>
-<span class="nc" id="L71">                .getRuntimeLayout(layout)</span>
-<span class="nc" id="L72">                .getSequencerClient(serverContext.getLocalEndpoint())</span>
-<span class="nc" id="L73">                .requestMetrics()</span>
+<span class="fc" id="L69">        return getCorfuRuntime()</span>
+<span class="fc" id="L70">                .getLayoutView()</span>
+<span class="fc" id="L71">                .getRuntimeLayout(layout)</span>
+<span class="fc" id="L72">                .getSequencerClient(serverContext.getLocalEndpoint())</span>
+<span class="fc" id="L73">                .requestMetrics()</span>
                 //Handle possible exceptions and transform to the sequencer status
-<span class="nc" id="L75">                .exceptionally(ex -&gt; {</span>
-<span class="nc bnc" id="L76" title="All 2 branches missed.">                    if (ex.getCause() instanceof ServerNotReadyException) {</span>
-<span class="nc" id="L77">                        return SequencerMetrics.NOT_READY;</span>
+<span class="fc" id="L75">                .exceptionally(ex -&gt; {</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">                    if (ex.getCause() instanceof ServerNotReadyException) {</span>
+<span class="fc" id="L77">                        return SequencerMetrics.NOT_READY;</span>
                     }
 
-<span class="nc" id="L80">                    log.error(&quot;Error while requesting metrics from the sequencer: &quot;, ex);</span>
-<span class="nc" id="L81">                    return SequencerMetrics.UNKNOWN;</span>
+<span class="fc" id="L80">                    log.error(&quot;Error while requesting metrics from the sequencer: &quot;, ex);</span>
+<span class="fc" id="L81">                    return SequencerMetrics.UNKNOWN;</span>
                 });
     }
 
@@ -92,15 +92,15 @@ class LocalMonitoringService implements MonitoringService {
 
         // Initializing the status of components
         // No need to poll unless node is bootstrapped.
-<span class="nc" id="L95">        Layout layout = serverContext.copyManagementLayout();</span>
-<span class="nc bnc" id="L96" title="All 2 branches missed.">        if (layout == null) {</span>
+<span class="fc" id="L95">        Layout layout = serverContext.copyManagementLayout();</span>
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">        if (layout == null) {</span>
 <span class="nc" id="L97">            log.debug(&quot;updateLocalMetrics: Cannot update local metrics. Management Server not bootstrapped.&quot;);</span>
 <span class="nc" id="L98">            return;</span>
         }
 
         // Build and replace existing locally stored sequencerMetrics
-<span class="nc" id="L102">        sequencerMetricsHolder.set(queryLocalSequencerMetrics(layout));</span>
-<span class="nc" id="L103">    }</span>
+<span class="fc" id="L102">        sequencerMetricsHolder.set(queryLocalSequencerMetrics(layout));</span>
+<span class="fc" id="L103">    }</span>
 
     /**
      * Runs the task to periodically poll the local server metrics.
@@ -108,13 +108,13 @@ class LocalMonitoringService implements MonitoringService {
     @Override
     public void start(Duration monitoringInterval) {
         // Initiating periodic task to poll for failures.
-<span class="nc" id="L111">        pollingService.scheduleAtFixedRate(</span>
-<span class="nc" id="L112">                () -&gt; runSansThrow(this::updateLocalMetrics),</span>
+<span class="fc" id="L111">        pollingService.scheduleAtFixedRate(</span>
+<span class="fc" id="L112">                () -&gt; runSansThrow(this::updateLocalMetrics),</span>
                 0,
-<span class="nc" id="L114">                monitoringInterval.toMillis(),</span>
+<span class="fc" id="L114">                monitoringInterval.toMillis(),</span>
                 TimeUnit.MILLISECONDS
         );
-<span class="nc" id="L117">    }</span>
+<span class="fc" id="L117">    }</span>
 
     /**
      * Shutsdown the local metrics polling executor service.
@@ -122,12 +122,12 @@ class LocalMonitoringService implements MonitoringService {
     @Override
     public void shutdown() {
         // Shutting the local metrics polling task.
-<span class="nc" id="L125">        pollingService.shutdownNow();</span>
-<span class="nc" id="L126">        log.info(&quot;Local Metrics Polling Task shutting down.&quot;);</span>
-<span class="nc" id="L127">    }</span>
+<span class="fc" id="L125">        pollingService.shutdownNow();</span>
+<span class="fc" id="L126">        log.info(&quot;Local Metrics Polling Task shutting down.&quot;);</span>
+<span class="fc" id="L127">    }</span>
 
     public CompletableFuture&lt;SequencerMetrics&gt; getMetrics() {
-<span class="nc" id="L130">        return sequencerMetricsHolder.get();</span>
+<span class="fc" id="L130">        return sequencerMetricsHolder.get();</span>
     }
 
 }

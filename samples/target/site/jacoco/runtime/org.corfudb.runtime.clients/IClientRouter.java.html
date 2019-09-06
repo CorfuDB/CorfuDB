@@ -58,7 +58,7 @@ public interface IClientRouter {
      *      or a timeout in the case there is no response.
      */
     default &lt;T&gt; CompletableFuture&lt;T&gt; sendMessageAndGetCompletable(CorfuMsg message) {
-<span class="nc" id="L61">        return sendMessageAndGetCompletable(null, message);</span>
+<span class="fc" id="L61">        return sendMessageAndGetCompletable(null, message);</span>
     }
 
     /**

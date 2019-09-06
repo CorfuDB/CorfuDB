@@ -16,7 +16,7 @@ import org.corfudb.runtime.view.Layout;
  * Sending a workflow request to restore all redundancies and merge all segments.
  * Created by Zeeshan on 2019-02-06.
  */
-<span class="nc" id="L19">@Slf4j</span>
+<span class="fc" id="L19">@Slf4j</span>
 public class RestoreRedundancyMergeSegments extends WorkflowRequest {
 
     /**
@@ -28,17 +28,17 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
      * @param timeout                     Workflow timeout.
      * @param pollPeriod                  Poll interval to check workflow status.
      */
-<span class="nc bnc" id="L31" title="All 2 branches missed.">    public RestoreRedundancyMergeSegments(@NonNull String endpointToRestoreRedundancy,</span>
-<span class="nc bnc" id="L32" title="All 2 branches missed.">                                          @NonNull CorfuRuntime runtime,</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">    public RestoreRedundancyMergeSegments(@NonNull String endpointToRestoreRedundancy,</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">                                          @NonNull CorfuRuntime runtime,</span>
                                           int retry,
-<span class="nc bnc" id="L34" title="All 2 branches missed.">                                          @NonNull Duration timeout,</span>
-<span class="nc bnc" id="L35" title="All 2 branches missed.">                                          @NonNull Duration pollPeriod) {</span>
-<span class="nc" id="L36">        this.nodeForWorkflow = endpointToRestoreRedundancy;</span>
-<span class="nc" id="L37">        this.runtime = runtime;</span>
-<span class="nc" id="L38">        this.retry = retry;</span>
-<span class="nc" id="L39">        this.timeout = timeout;</span>
-<span class="nc" id="L40">        this.pollPeriod = pollPeriod;</span>
-<span class="nc" id="L41">    }</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">                                          @NonNull Duration timeout,</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">                                          @NonNull Duration pollPeriod) {</span>
+<span class="fc" id="L36">        this.nodeForWorkflow = endpointToRestoreRedundancy;</span>
+<span class="fc" id="L37">        this.runtime = runtime;</span>
+<span class="fc" id="L38">        this.retry = retry;</span>
+<span class="fc" id="L39">        this.timeout = timeout;</span>
+<span class="fc" id="L40">        this.pollPeriod = pollPeriod;</span>
+<span class="fc" id="L41">    }</span>
 
     /**
      * Creates and sends the workflow request to restore redundancy and merge the segments.
@@ -48,12 +48,12 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
      * @throws TimeoutException thrown is orchestrator request was not acknowledged within the RPC timeout.
      */
     @Override
-<span class="nc bnc" id="L51" title="All 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
-<span class="nc" id="L52">        CreateWorkflowResponse resp = managementClient.mergeSegments(nodeForWorkflow);</span>
-<span class="nc" id="L53">        log.info(&quot;sendRequest: request to restore redundancy and merge segments for endpoint {} on orchestrator {}:{}&quot;,</span>
-<span class="nc" id="L54">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
-<span class="nc" id="L55">                managementClient.getRouter().getPort());</span>
-<span class="nc" id="L56">        return resp.getWorkflowId();</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
+<span class="fc" id="L52">        CreateWorkflowResponse resp = managementClient.mergeSegments(nodeForWorkflow);</span>
+<span class="fc" id="L53">        log.info(&quot;sendRequest: request to restore redundancy and merge segments for endpoint {} on orchestrator {}:{}&quot;,</span>
+<span class="fc" id="L54">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
+<span class="fc" id="L55">                managementClient.getRouter().getPort());</span>
+<span class="fc" id="L56">        return resp.getWorkflowId();</span>
     }
 
     /**
@@ -63,9 +63,9 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
      * @return True if the layout has only one segment. False otherwise.
      */
     @Override
-<span class="nc bnc" id="L66" title="All 2 branches missed.">    protected boolean verifyRequest(@NonNull Layout layout) {</span>
-<span class="nc" id="L67">        log.info(&quot;verifyRequest: {} in {}&quot;, this, layout);</span>
-<span class="nc bnc" id="L68" title="All 2 branches missed.">        return layout.getSegments().size() == 1;</span>
+<span class="pc bpc" id="L66" title="1 of 2 branches missed.">    protected boolean verifyRequest(@NonNull Layout layout) {</span>
+<span class="fc" id="L67">        log.info(&quot;verifyRequest: {} in {}&quot;, this, layout);</span>
+<span class="pc bpc" id="L68" title="1 of 2 branches missed.">        return layout.getSegments().size() == 1;</span>
     }
 
     @Override

@@ -18,10 +18,10 @@ public class PlainTextCallbackHandler implements CallbackHandler {
     private final String username;
     private final String password;
 
-<span class="nc" id="L21">    public PlainTextCallbackHandler(String username, String password) {</span>
-<span class="nc" id="L22">        this.username = username;</span>
-<span class="nc" id="L23">        this.password = password;</span>
-<span class="nc" id="L24">    }</span>
+<span class="fc" id="L21">    public PlainTextCallbackHandler(String username, String password) {</span>
+<span class="fc" id="L22">        this.username = username;</span>
+<span class="fc" id="L23">        this.password = password;</span>
+<span class="fc" id="L24">    }</span>
 
     /**
      * Call functions for username &amp; password for SASL callbacks.
@@ -31,18 +31,18 @@ public class PlainTextCallbackHandler implements CallbackHandler {
      */
     public void handle(Callback[] callbacks)
             throws UnsupportedCallbackException {
-<span class="nc bnc" id="L34" title="All 2 branches missed.">        for (int i = 0; i &lt; callbacks.length; i++) {</span>
-<span class="nc bnc" id="L35" title="All 2 branches missed.">            if (callbacks[i] instanceof NameCallback) {</span>
-<span class="nc" id="L36">                NameCallback nc = (NameCallback)callbacks[i];</span>
-<span class="nc" id="L37">                nc.setName(username);</span>
-<span class="nc bnc" id="L38" title="All 2 branches missed.">            } else if (callbacks[i] instanceof PasswordCallback) {</span>
-<span class="nc" id="L39">                PasswordCallback pc = (PasswordCallback)callbacks[i];</span>
-<span class="nc" id="L40">                pc.setPassword(password.toCharArray());</span>
-<span class="nc" id="L41">            } else {</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">        for (int i = 0; i &lt; callbacks.length; i++) {</span>
+<span class="fc bfc" id="L35" title="All 2 branches covered.">            if (callbacks[i] instanceof NameCallback) {</span>
+<span class="fc" id="L36">                NameCallback nc = (NameCallback)callbacks[i];</span>
+<span class="fc" id="L37">                nc.setName(username);</span>
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">            } else if (callbacks[i] instanceof PasswordCallback) {</span>
+<span class="fc" id="L39">                PasswordCallback pc = (PasswordCallback)callbacks[i];</span>
+<span class="fc" id="L40">                pc.setPassword(password.toCharArray());</span>
+<span class="fc" id="L41">            } else {</span>
 <span class="nc" id="L42">                throw new UnsupportedCallbackException(callbacks[i],</span>
                         &quot;Unsupported Callback&quot;);
             }
         }
-<span class="nc" id="L46">    }</span>
+<span class="fc" id="L46">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

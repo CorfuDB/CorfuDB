@@ -54,13 +54,13 @@ public class TestClass$CORFUSMR extends TestClass implements ICorfuSMR<TestClass
   }
 
   @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  public boolean equals(Object arg0) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
   }
 
   @Override
-  public boolean equals(Object arg0) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
   }
 
   public Map<String, ICorfuSMRUpcallTarget<TestClass>> getCorfuSMRUpcallMap() {

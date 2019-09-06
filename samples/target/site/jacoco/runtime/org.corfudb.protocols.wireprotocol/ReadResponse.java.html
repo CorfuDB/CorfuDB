@@ -16,24 +16,24 @@ import lombok.Getter;
 <span class="nc" id="L16">@AllArgsConstructor</span>
 public class ReadResponse implements ICorfuPayload&lt;ReadResponse&gt; {
 
-<span class="nc" id="L19">    @Getter</span>
+<span class="fc" id="L19">    @Getter</span>
     Map&lt;Long, LogData&gt; addresses;
 
-<span class="nc" id="L22">    public ReadResponse(ByteBuf buf) {</span>
-<span class="nc" id="L23">        addresses = ICorfuPayload.mapFromBuffer(buf, Long.class, LogData.class);</span>
-<span class="nc" id="L24">    }</span>
+<span class="fc" id="L22">    public ReadResponse(ByteBuf buf) {</span>
+<span class="fc" id="L23">        addresses = ICorfuPayload.mapFromBuffer(buf, Long.class, LogData.class);</span>
+<span class="fc" id="L24">    }</span>
 
-<span class="nc" id="L26">    public ReadResponse() {</span>
-<span class="nc" id="L27">        addresses = new HashMap&lt;Long, LogData&gt;();</span>
-<span class="nc" id="L28">    }</span>
+<span class="fc" id="L26">    public ReadResponse() {</span>
+<span class="fc" id="L27">        addresses = new HashMap&lt;Long, LogData&gt;();</span>
+<span class="fc" id="L28">    }</span>
 
     public void put(Long address, LogData data) {
-<span class="nc" id="L31">        addresses.put(address, data);</span>
-<span class="nc" id="L32">    }</span>
+<span class="fc" id="L31">        addresses.put(address, data);</span>
+<span class="fc" id="L32">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L36">        ICorfuPayload.serialize(buf, addresses);</span>
-<span class="nc" id="L37">    }</span>
+<span class="fc" id="L36">        ICorfuPayload.serialize(buf, addresses);</span>
+<span class="fc" id="L37">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -12,10 +12,10 @@ import javax.annotation.Nonnull;
  * Created by Maithem on 10/25/17.
  */
 
-<span class="nc" id="L15">@Slf4j</span>
-<span class="nc" id="L16">public abstract class Action {</span>
+<span class="fc" id="L15">@Slf4j</span>
+<span class="fc" id="L16">public abstract class Action {</span>
 
-<span class="nc" id="L18">    ActionStatus status = ActionStatus.CREATED;</span>
+<span class="fc" id="L18">    ActionStatus status = ActionStatus.CREATED;</span>
 
     /**
      * Returns the name of this action.
@@ -36,12 +36,12 @@ import javax.annotation.Nonnull;
      */
     @Nonnull
     public void execute(@Nonnull CorfuRuntime runtime, int numRetry) {
-<span class="nc bnc" id="L39" title="All 2 branches missed.">        for (int x = 0; x &lt; numRetry; x++) {</span>
+<span class="pc bpc" id="L39" title="1 of 2 branches missed.">        for (int x = 0; x &lt; numRetry; x++) {</span>
             try {
-<span class="nc" id="L41">                changeStatus(ActionStatus.STARTED);</span>
-<span class="nc" id="L42">                impl(runtime);</span>
-<span class="nc" id="L43">                changeStatus(ActionStatus.COMPLETED);</span>
-<span class="nc" id="L44">                return;</span>
+<span class="fc" id="L41">                changeStatus(ActionStatus.STARTED);</span>
+<span class="fc" id="L42">                impl(runtime);</span>
+<span class="fc" id="L43">                changeStatus(ActionStatus.COMPLETED);</span>
+<span class="fc" id="L44">                return;</span>
 <span class="nc" id="L45">            } catch (Exception e) {</span>
 <span class="nc" id="L46">                log.error(&quot;execute: Error executing action {} on retry {}. Invalidating layout.&quot;,</span>
 <span class="nc" id="L47">                        getName(), x, e);</span>
@@ -56,7 +56,7 @@ import javax.annotation.Nonnull;
      * @return ActionStatus
      */
     public ActionStatus getStatus() {
-<span class="nc" id="L59">        return status;</span>
+<span class="fc" id="L59">        return status;</span>
     }
 
     /**
@@ -64,8 +64,8 @@ import javax.annotation.Nonnull;
      * @param newStatus the new status
      */
     void changeStatus(ActionStatus newStatus) {
-<span class="nc" id="L67">        status = newStatus;</span>
-<span class="nc" id="L68">    }</span>
+<span class="fc" id="L67">        status = newStatus;</span>
+<span class="fc" id="L68">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

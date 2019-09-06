@@ -17,7 +17,7 @@ import lombok.extern.slf4j.Slf4j;
  *
  * Created by zjohnny on 9/18/17.
  */
-<span class="nc" id="L20">@Slf4j</span>
+<span class="fc" id="L20">@Slf4j</span>
 public class ReloadableTrustManager implements X509TrustManager {
     private final String trustStorePath;
     private final String trustPasswordPath;
@@ -33,27 +33,27 @@ public class ReloadableTrustManager implements X509TrustManager {
      * @throws SSLException
      *          Thrown when there's an issue with loading the trust store.
      */
-<span class="nc" id="L36">    public ReloadableTrustManager(String trustStorePath, String trustPasswordPath) throws SSLException {</span>
-<span class="nc" id="L37">        this.trustStorePath = trustStorePath;</span>
-<span class="nc" id="L38">        this.trustPasswordPath = trustPasswordPath;</span>
-<span class="nc" id="L39">        reloadTrustStore();</span>
-<span class="nc" id="L40">    }</span>
+<span class="fc" id="L36">    public ReloadableTrustManager(String trustStorePath, String trustPasswordPath) throws SSLException {</span>
+<span class="fc" id="L37">        this.trustStorePath = trustStorePath;</span>
+<span class="fc" id="L38">        this.trustPasswordPath = trustPasswordPath;</span>
+<span class="fc" id="L39">        reloadTrustStore();</span>
+<span class="fc" id="L40">    }</span>
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-<span class="nc" id="L44">        reloadTrustStoreWrapper();</span>
-<span class="nc" id="L45">        trustManager.checkClientTrusted(chain, authType);</span>
-<span class="nc" id="L46">    }</span>
+<span class="fc" id="L44">        reloadTrustStoreWrapper();</span>
+<span class="fc" id="L45">        trustManager.checkClientTrusted(chain, authType);</span>
+<span class="fc" id="L46">    }</span>
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-<span class="nc" id="L50">        reloadTrustStoreWrapper();</span>
-<span class="nc" id="L51">        trustManager.checkServerTrusted(chain, authType);</span>
-<span class="nc" id="L52">    }</span>
+<span class="fc" id="L50">        reloadTrustStoreWrapper();</span>
+<span class="fc" id="L51">        trustManager.checkServerTrusted(chain, authType);</span>
+<span class="fc" id="L52">    }</span>
 
     @Override
     public X509Certificate[] getAcceptedIssuers() {
-<span class="nc" id="L56">        return new X509Certificate[0];</span>
+<span class="fc" id="L56">        return new X509Certificate[0];</span>
     }
 
     /**
@@ -64,13 +64,13 @@ public class ReloadableTrustManager implements X509TrustManager {
      */
     private void reloadTrustStoreWrapper() throws CertificateException {
         try {
-<span class="nc" id="L67">            reloadTrustStore();</span>
+<span class="fc" id="L67">            reloadTrustStore();</span>
 <span class="nc" id="L68">        } catch (SSLException e) {</span>
 <span class="nc" id="L69">            String message = &quot;Unable to reload trust store &quot; + trustStorePath + &quot;.&quot;;</span>
 <span class="nc" id="L70">            log.error(message, e);</span>
 <span class="nc" id="L71">            throw new CertificateException(message, e);</span>
-<span class="nc" id="L72">        }</span>
-<span class="nc" id="L73">    }</span>
+<span class="fc" id="L72">        }</span>
+<span class="fc" id="L73">    }</span>
 
     /**
      * Reload the trust manager.
@@ -79,13 +79,13 @@ public class ReloadableTrustManager implements X509TrustManager {
      *          Thrown when there's an issue with loading the trust store.
      */
     private void reloadTrustStore() throws SSLException {
-<span class="nc" id="L82">        String trustPassword = TlsUtils.getKeyStorePassword(trustPasswordPath);</span>
-<span class="nc" id="L83">        KeyStore trustStore = TlsUtils.openKeyStore(trustStorePath, trustPassword);</span>
+<span class="fc" id="L82">        String trustPassword = TlsUtils.getKeyStorePassword(trustPasswordPath);</span>
+<span class="fc" id="L83">        KeyStore trustStore = TlsUtils.openKeyStore(trustStorePath, trustPassword);</span>
 
         TrustManagerFactory tmf;
         try {
-<span class="nc" id="L87">            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());</span>
-<span class="nc" id="L88">            tmf.init(trustStore);</span>
+<span class="fc" id="L87">            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());</span>
+<span class="fc" id="L88">            tmf.init(trustStore);</span>
 <span class="nc" id="L89">        } catch (NoSuchAlgorithmException e) {</span>
 <span class="nc" id="L90">            String errorMessage = &quot;No support for TrustManagerFactory default algorithm &quot;</span>
 <span class="nc" id="L91">                    + TrustManagerFactory.getDefaultAlgorithm() + &quot;.&quot;;</span>
@@ -95,12 +95,12 @@ public class ReloadableTrustManager implements X509TrustManager {
 <span class="nc" id="L95">            String errorMessage = &quot;Unable to load trust store &quot; + trustStorePath + &quot;.&quot;;</span>
 <span class="nc" id="L96">            log.error(errorMessage, e);</span>
 <span class="nc" id="L97">            throw new SSLException(errorMessage, e);</span>
-<span class="nc" id="L98">        }</span>
+<span class="fc" id="L98">        }</span>
 
-<span class="nc bnc" id="L100" title="All 2 branches missed.">        for (TrustManager tm: tmf.getTrustManagers()) {</span>
-<span class="nc bnc" id="L101" title="All 2 branches missed.">            if (tm instanceof X509TrustManager) {</span>
-<span class="nc" id="L102">                trustManager = (X509TrustManager)tm;</span>
-<span class="nc" id="L103">                return;</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">        for (TrustManager tm: tmf.getTrustManagers()) {</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">            if (tm instanceof X509TrustManager) {</span>
+<span class="fc" id="L102">                trustManager = (X509TrustManager)tm;</span>
+<span class="fc" id="L103">                return;</span>
             }
         }
 

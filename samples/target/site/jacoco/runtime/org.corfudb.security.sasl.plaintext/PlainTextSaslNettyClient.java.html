@@ -21,42 +21,42 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
  * as per:
  * https://tools.ietf.org/html/rfc4616
  */
-<span class="nc" id="L24">@Slf4j</span>
+<span class="fc" id="L24">@Slf4j</span>
 public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
 
     private SaslClient saslClient;
 
-<span class="nc" id="L29">    private final String[] mechanisms = {&quot;PLAIN&quot;};</span>
+<span class="fc" id="L29">    private final String[] mechanisms = {&quot;PLAIN&quot;};</span>
 
     /** Plaintext client constructor. */
     public PlainTextSaslNettyClient(String username, String password)
-<span class="nc" id="L33">            throws SaslException {</span>
-<span class="nc" id="L34">        PlainTextCallbackHandler cbh = new PlainTextCallbackHandler(username,</span>
+<span class="fc" id="L33">            throws SaslException {</span>
+<span class="fc" id="L34">        PlainTextCallbackHandler cbh = new PlainTextCallbackHandler(username,</span>
                 password);
-<span class="nc" id="L36">        saslClient = Sasl.createSaslClient(mechanisms, username,</span>
+<span class="fc" id="L36">        saslClient = Sasl.createSaslClient(mechanisms, username,</span>
             &quot;plain&quot;, null, null, cbh);
-<span class="nc" id="L38">    }</span>
+<span class="fc" id="L38">    }</span>
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-<span class="nc" id="L42">        byte[] response = new byte[0];</span>
-<span class="nc bnc" id="L43" title="All 2 branches missed.">        while (!saslClient.isComplete()) {</span>
+<span class="fc" id="L42">        byte[] response = new byte[0];</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">        while (!saslClient.isComplete()) {</span>
             try {
-<span class="nc" id="L45">                response = saslClient.evaluateChallenge(null);</span>
+<span class="fc" id="L45">                response = saslClient.evaluateChallenge(null);</span>
 <span class="nc" id="L46">            } catch (SaslException se) {</span>
 <span class="nc" id="L47">                log.error(&quot;SaslException {}&quot;, se.toString());</span>
 <span class="nc" id="L48">                break;</span>
-<span class="nc" id="L49">            }</span>
+<span class="fc" id="L49">            }</span>
         }
 
-<span class="nc bnc" id="L52" title="All 2 branches missed.">        if (saslClient.isComplete()) {</span>
-<span class="nc" id="L53">            ByteBuf buf = ctx.alloc().heapBuffer(response.length);</span>
-<span class="nc" id="L54">            ByteBuf encoded = buf.writeBytes(response);</span>
-<span class="nc" id="L55">            ctx.writeAndFlush(encoded);</span>
-<span class="nc" id="L56">            ctx.pipeline().remove(this);</span>
-<span class="nc" id="L57">            super.channelActive(ctx);</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">        if (saslClient.isComplete()) {</span>
+<span class="fc" id="L53">            ByteBuf buf = ctx.alloc().heapBuffer(response.length);</span>
+<span class="fc" id="L54">            ByteBuf encoded = buf.writeBytes(response);</span>
+<span class="fc" id="L55">            ctx.writeAndFlush(encoded);</span>
+<span class="fc" id="L56">            ctx.pipeline().remove(this);</span>
+<span class="fc" id="L57">            super.channelActive(ctx);</span>
         }
-<span class="nc" id="L59">    }</span>
+<span class="fc" id="L59">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

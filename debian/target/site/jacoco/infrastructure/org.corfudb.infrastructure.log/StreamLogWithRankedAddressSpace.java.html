@@ -41,30 +41,30 @@ public interface StreamLogWithRankedAddressSpace extends StreamLog {
      */
     default void assertAppendPermittedUnsafe(long address, LogData newEntry)
             throws DataOutrankedException, ValueAdoptedException {
-<span class="nc" id="L44">        LogData oldEntry = read(address);</span>
-<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (oldEntry.getType() == DataType.EMPTY) {</span>
+<span class="fc" id="L44">        LogData oldEntry = read(address);</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">        if (oldEntry.getType() == DataType.EMPTY) {</span>
 <span class="nc" id="L46">            return;</span>
         }
-<span class="nc bnc" id="L48" title="All 2 branches missed.">        if (newEntry.getRank().getRank() == 0) {</span>
+<span class="fc bfc" id="L48" title="All 2 branches covered.">        if (newEntry.getRank().getRank() == 0) {</span>
             // data consistency in danger
-<span class="nc" id="L50">            throw new OverwriteException(OverwriteCause.DIFF_DATA);</span>
+<span class="fc" id="L50">            throw new OverwriteException(OverwriteCause.DIFF_DATA);</span>
         }
-<span class="nc" id="L52">        int compare = newEntry.getRank().compareTo(oldEntry.getRank());</span>
-<span class="nc bnc" id="L53" title="All 2 branches missed.">        if (compare &lt; 0) {</span>
-<span class="nc" id="L54">            throw new DataOutrankedException();</span>
+<span class="fc" id="L52">        int compare = newEntry.getRank().compareTo(oldEntry.getRank());</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">        if (compare &lt; 0) {</span>
+<span class="fc" id="L54">            throw new DataOutrankedException();</span>
         }
-<span class="nc bnc" id="L56" title="All 2 branches missed.">        if (compare &gt; 0) {</span>
-<span class="nc bnc" id="L57" title="All 2 branches missed.">            if (newEntry.getType() == DataType.RANK_ONLY</span>
-<span class="nc bnc" id="L58" title="All 2 branches missed.">                    &amp;&amp; oldEntry.getType() != DataType.RANK_ONLY) {</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">        if (compare &gt; 0) {</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">            if (newEntry.getType() == DataType.RANK_ONLY</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">                    &amp;&amp; oldEntry.getType() != DataType.RANK_ONLY) {</span>
                 // the new data is a proposal, the other data is not,
                 // so the old value should be adopted
-<span class="nc" id="L61">                ReadResponse resp = new ReadResponse();</span>
-<span class="nc" id="L62">                resp.put(address, oldEntry);</span>
-<span class="nc" id="L63">                throw new ValueAdoptedException(resp);</span>
+<span class="fc" id="L61">                ReadResponse resp = new ReadResponse();</span>
+<span class="fc" id="L62">                resp.put(address, oldEntry);</span>
+<span class="fc" id="L63">                throw new ValueAdoptedException(resp);</span>
             } else {
-<span class="nc" id="L65">                return;</span>
+<span class="fc" id="L65">                return;</span>
             }
         }
-<span class="nc" id="L68">    }</span>
+<span class="fc" id="L68">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

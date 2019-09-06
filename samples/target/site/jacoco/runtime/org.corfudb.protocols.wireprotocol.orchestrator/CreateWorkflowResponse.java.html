@@ -14,29 +14,29 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRespon
  */
 public class CreateWorkflowResponse implements Response {
 
-<span class="nc" id="L17">    @Getter</span>
+<span class="fc" id="L17">    @Getter</span>
     public UUID workflowId;
 
-<span class="nc" id="L20">    public CreateWorkflowResponse(UUID workflowId) {</span>
-<span class="nc" id="L21">        this.workflowId = workflowId;</span>
-<span class="nc" id="L22">    }</span>
+<span class="fc" id="L20">    public CreateWorkflowResponse(UUID workflowId) {</span>
+<span class="fc" id="L21">        this.workflowId = workflowId;</span>
+<span class="fc" id="L22">    }</span>
 
-<span class="nc" id="L24">    public CreateWorkflowResponse(byte[] buf) {</span>
-<span class="nc" id="L25">        ByteBuffer bytes = ByteBuffer.wrap(buf);</span>
-<span class="nc" id="L26">        this.workflowId = new UUID(bytes.getLong(), bytes.getLong());</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L24">    public CreateWorkflowResponse(byte[] buf) {</span>
+<span class="fc" id="L25">        ByteBuffer bytes = ByteBuffer.wrap(buf);</span>
+<span class="fc" id="L26">        this.workflowId = new UUID(bytes.getLong(), bytes.getLong());</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public OrchestratorResponseType getType() {
-<span class="nc" id="L31">        return WORKFLOW_CREATED;</span>
+<span class="fc" id="L31">        return WORKFLOW_CREATED;</span>
     }
 
     @Override
     public byte[] getSerialized() {
-<span class="nc" id="L36">        ByteBuffer buf = ByteBuffer.allocate(Long.BYTES * 2);</span>
-<span class="nc" id="L37">        buf.putLong(workflowId.getMostSignificantBits());</span>
-<span class="nc" id="L38">        buf.putLong(workflowId.getLeastSignificantBits());</span>
-<span class="nc" id="L39">        return buf.array();</span>
+<span class="fc" id="L36">        ByteBuffer buf = ByteBuffer.allocate(Long.BYTES * 2);</span>
+<span class="fc" id="L37">        buf.putLong(workflowId.getMostSignificantBits());</span>
+<span class="fc" id="L38">        buf.putLong(workflowId.getLeastSignificantBits());</span>
+<span class="fc" id="L39">        return buf.array();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

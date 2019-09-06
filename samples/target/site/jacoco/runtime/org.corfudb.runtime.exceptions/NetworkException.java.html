@@ -13,9 +13,9 @@ public class NetworkException extends RuntimeException {
 
 
     public NetworkException(String message, NodeLocator node) {
-<span class="nc" id="L16">        super(message + &quot; [endpoint=&quot; + node.toString() + &quot;]&quot;);</span>
-<span class="nc" id="L17">        this.node = node;</span>
-<span class="nc" id="L18">    }</span>
+<span class="fc" id="L16">        super(message + &quot; [endpoint=&quot; + node.toString() + &quot;]&quot;);</span>
+<span class="fc" id="L17">        this.node = node;</span>
+<span class="fc" id="L18">    }</span>
 
     public NetworkException(String message, NodeLocator node, Throwable cause) {
 <span class="nc" id="L21">        super(message + &quot; [endpoint=&quot; + node.toString() + &quot;]&quot;, cause);</span>

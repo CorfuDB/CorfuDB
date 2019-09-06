@@ -8,24 +8,24 @@ import lombok.Getter;
  *
  * Created by maithem on 6/20/17.
  */
-<span class="nc bnc" id="L11" title="All 4 branches missed.">@Builder</span>
+<span class="pc bfc" id="L11" title="All 4 branches covered.">@Builder</span>
 public class StreamOptions {
-<span class="nc" id="L13">    public static StreamOptions DEFAULT = StreamOptions.builder()</span>
-<span class="nc" id="L14">            .ignoreTrimmed(false)</span>
-<span class="nc" id="L15">            .cacheEntries(true)</span>
-<span class="nc" id="L16">            .build();</span>
+<span class="fc" id="L13">    public static StreamOptions DEFAULT = StreamOptions.builder()</span>
+<span class="fc" id="L14">            .ignoreTrimmed(false)</span>
+<span class="fc" id="L15">            .cacheEntries(true)</span>
+<span class="fc" id="L16">            .build();</span>
 
     /**
      * Ignore trimmed exceptions encountered while syncing
      */
-<span class="nc" id="L21">    @Getter</span>
+<span class="fc" id="L21">    @Getter</span>
     @Builder.Default
     private final boolean ignoreTrimmed = false;
 
     /**
      * Cache this stream's entries
      */
-<span class="nc" id="L28">    @Getter</span>
+<span class="fc" id="L28">    @Getter</span>
     @Builder.Default
     private final boolean cacheEntries = true;
 }

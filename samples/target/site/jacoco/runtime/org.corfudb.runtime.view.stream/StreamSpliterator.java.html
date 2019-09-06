@@ -23,7 +23,7 @@ import org.corfudb.runtime.view.Address;
  *
  * &lt;p&gt;Created by mwei on 4/24/17.
  */
-<span class="nc" id="L26">@Slf4j</span>
+<span class="fc" id="L26">@Slf4j</span>
 public class StreamSpliterator extends Spliterators.AbstractSpliterator&lt;ILogData&gt; {
 
     /** The stream view which backs the spliterator. */
@@ -44,11 +44,11 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator&lt;ILogD
      * @param maxGlobal     The maximum global address to limit reads up to.
      */
     public StreamSpliterator(IStreamView view, long maxGlobal) {
-<span class="nc" id="L47">        super(maxGlobal - view.getCurrentGlobalPosition(),</span>
+<span class="fc" id="L47">        super(maxGlobal - view.getCurrentGlobalPosition(),</span>
                 Spliterator.ORDERED | Spliterator.SORTED);
-<span class="nc" id="L49">        streamView = view;</span>
-<span class="nc" id="L50">        this.maxGlobal = maxGlobal;</span>
-<span class="nc" id="L51">    }</span>
+<span class="fc" id="L49">        streamView = view;</span>
+<span class="fc" id="L50">        this.maxGlobal = maxGlobal;</span>
+<span class="fc" id="L51">    }</span>
 
     /**
      * {@inheritDoc}
@@ -56,14 +56,14 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator&lt;ILogD
     @Override
     public boolean tryAdvance(Consumer&lt;? super ILogData&gt; action) {
         // Get the next entry in the stream.
-<span class="nc" id="L59">        ILogData next = streamView.nextUpTo(maxGlobal);</span>
+<span class="fc" id="L59">        ILogData next = streamView.nextUpTo(maxGlobal);</span>
         // If null, end.
-<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (next == null) {</span>
-<span class="nc" id="L62">            return false;</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">        if (next == null) {</span>
+<span class="fc" id="L62">            return false;</span>
         }
         // Otherwise, apply
-<span class="nc" id="L65">        action.accept(next);</span>
-<span class="nc" id="L66">        return true;</span>
+<span class="fc" id="L65">        action.accept(next);</span>
+<span class="fc" id="L66">        return true;</span>
     }
 
     /**
@@ -71,7 +71,7 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator&lt;ILogD
      * */
     @Override
     public Comparator&lt;? super ILogData&gt; getComparator() {
-<span class="nc" id="L74">        return ILogData::compareTo;</span>
+<span class="fc" id="L74">        return ILogData::compareTo;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

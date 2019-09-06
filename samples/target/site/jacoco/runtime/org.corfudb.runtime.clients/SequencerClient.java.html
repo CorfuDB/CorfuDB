@@ -26,14 +26,14 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 public class SequencerClient extends AbstractClient {
 
     public SequencerClient(IClientRouter router, long epoch) {
-<span class="nc" id="L29">        super(router, epoch);</span>
-<span class="nc" id="L30">    }</span>
+<span class="fc" id="L29">        super(router, epoch);</span>
+<span class="fc" id="L30">    }</span>
 
     /**
      * Sends a metrics request to the sequencer server.
      */
     public CompletableFuture&lt;SequencerMetrics&gt; requestMetrics() {
-<span class="nc" id="L36">        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_METRICS_REQUEST.msg());</span>
+<span class="fc" id="L36">        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_METRICS_REQUEST.msg());</span>
     }
 
     /**
@@ -44,8 +44,8 @@ public class SequencerClient extends AbstractClient {
      * @return A completable future with the token response from the sequencer.
      */
     public CompletableFuture&lt;TokenResponse&gt; nextToken(List&lt;UUID&gt; streamIDs, long numTokens) {
-<span class="nc" id="L47">        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(</span>
-<span class="nc" id="L48">                new TokenRequest(numTokens, streamIDs)));</span>
+<span class="fc" id="L47">        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(</span>
+<span class="fc" id="L48">                new TokenRequest(numTokens, streamIDs)));</span>
     }
 
     /**
@@ -55,7 +55,7 @@ public class SequencerClient extends AbstractClient {
      * @return streams address maps in the given range.
      */
     public CompletableFuture&lt;StreamsAddressResponse&gt; getStreamsAddressSpace(List&lt;StreamAddressRange&gt; streamsAddressesRange) {
-<span class="nc" id="L58">        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(</span>
+<span class="fc" id="L58">        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(</span>
                 new StreamsAddressRequest(streamsAddressesRange)));
     }
 
@@ -69,12 +69,12 @@ public class SequencerClient extends AbstractClient {
      */
     public CompletableFuture&lt;TokenResponse&gt; nextToken(List&lt;UUID&gt; streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
-<span class="nc" id="L72">        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(</span>
-<span class="nc" id="L73">                new TokenRequest(numTokens, streamIDs, conflictInfo)));</span>
+<span class="fc" id="L72">        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(</span>
+<span class="fc" id="L73">                new TokenRequest(numTokens, streamIDs, conflictInfo)));</span>
     }
 
     public CompletableFuture&lt;Void&gt; trimCache(Long address) {
-<span class="nc" id="L77">        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));</span>
+<span class="fc" id="L77">        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));</span>
     }
 
     /**
@@ -91,9 +91,9 @@ public class SequencerClient extends AbstractClient {
     public CompletableFuture&lt;Boolean&gt; bootstrap(Long initialToken, Map&lt;UUID, StreamAddressSpace&gt; streamAddressSpaceMap,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
-<span class="nc" id="L94">        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(</span>
+<span class="fc" id="L94">        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(</span>
                 new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
-<span class="nc" id="L96">                        bootstrapWithoutTailsUpdate)));</span>
+<span class="fc" id="L96">                        bootstrapWithoutTailsUpdate)));</span>
     }
 
     /**

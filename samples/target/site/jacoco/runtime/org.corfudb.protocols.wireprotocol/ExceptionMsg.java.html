@@ -12,16 +12,16 @@ import org.corfudb.util.serializer.Serializers;
 public class ExceptionMsg implements ICorfuPayload&lt;ExceptionMsg&gt; {
 
     /** The throwable that was thrown remotely. */
-<span class="nc" id="L15">    @Getter</span>
+<span class="fc" id="L15">    @Getter</span>
     final Throwable throwable;
 
     /** Constructor for ExceptionMsg.
      *
      * @param t     The throwable to send.
      */
-<span class="nc" id="L22">    public ExceptionMsg(Throwable t) {</span>
-<span class="nc" id="L23">        throwable = t;</span>
-<span class="nc" id="L24">    }</span>
+<span class="fc" id="L22">    public ExceptionMsg(Throwable t) {</span>
+<span class="fc" id="L23">        throwable = t;</span>
+<span class="fc" id="L24">    }</span>
 
     /** Represents an exception which failed serialization. */
     public static class SerializationFailedException extends Exception {
@@ -53,15 +53,15 @@ public class ExceptionMsg implements ICorfuPayload&lt;ExceptionMsg&gt; {
      *
      * @param b The buffer to serialize from.
      */
-<span class="nc" id="L56">    public ExceptionMsg(ByteBuf b) {</span>
+<span class="fc" id="L56">    public ExceptionMsg(ByteBuf b) {</span>
         Throwable t;
         try {
-<span class="nc" id="L59">            t = (Throwable) Serializers.JAVA.deserialize(b, null);</span>
+<span class="fc" id="L59">            t = (Throwable) Serializers.JAVA.deserialize(b, null);</span>
 <span class="nc" id="L60">        } catch (Exception e) {</span>
 <span class="nc" id="L61">            t = new DeserializationFailedException();</span>
-<span class="nc" id="L62">        }</span>
-<span class="nc" id="L63">        throwable = t;</span>
-<span class="nc" id="L64">    }</span>
+<span class="fc" id="L62">        }</span>
+<span class="fc" id="L63">        throwable = t;</span>
+<span class="fc" id="L64">    }</span>
 
     /** Serialize an exception message into a bytebuf.
      *
@@ -70,10 +70,10 @@ public class ExceptionMsg implements ICorfuPayload&lt;ExceptionMsg&gt; {
     @Override
     public void doSerialize(ByteBuf buf) {
         try {
-<span class="nc" id="L73">            Serializers.JAVA.serialize(throwable, buf);</span>
+<span class="fc" id="L73">            Serializers.JAVA.serialize(throwable, buf);</span>
 <span class="nc" id="L74">        } catch (Exception ex) {</span>
 <span class="nc" id="L75">            Serializers.JAVA.serialize(new SerializationFailedException(throwable.getClass()), buf);</span>
-<span class="nc" id="L76">        }</span>
-<span class="nc" id="L77">    }</span>
+<span class="fc" id="L76">        }</span>
+<span class="fc" id="L77">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

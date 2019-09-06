@@ -11,23 +11,23 @@ import org.corfudb.runtime.view.Address;
  *
  * &lt;p&gt;Created by zlokhandwala on 4/7/17.&lt;/p&gt;
  */
-<span class="nc" id="L14">@Data</span>
-<span class="nc" id="L15">@AllArgsConstructor</span>
-<span class="nc bnc" id="L16" title="All 10 branches missed.">@EqualsAndHashCode</span>
+<span class="fc" id="L14">@Data</span>
+<span class="fc" id="L15">@AllArgsConstructor</span>
+<span class="pc bpc" id="L16" title="2 of 10 branches missed.">@EqualsAndHashCode</span>
 public class Token implements IToken, Comparable&lt;Token&gt; {
 
-<span class="nc" id="L19">    public static final Token UNINITIALIZED = new Token(Address.NON_ADDRESS, Address.NON_ADDRESS);</span>
+<span class="fc" id="L19">    public static final Token UNINITIALIZED = new Token(Address.NON_ADDRESS, Address.NON_ADDRESS);</span>
 
-<span class="nc" id="L21">    private final long epoch;</span>
-<span class="nc" id="L22">    private final long sequence;</span>
+<span class="fc" id="L21">    private final long epoch;</span>
+<span class="fc" id="L22">    private final long sequence;</span>
 
     @Override
     public int compareTo(Token o) {
-<span class="nc" id="L26">        int epochCmp = Long.compare(epoch, o.getEpoch());</span>
-<span class="nc bnc" id="L27" title="All 2 branches missed.">        if (epochCmp == 0) {</span>
-<span class="nc" id="L28">            return Long.compare(sequence, o.getSequence());</span>
+<span class="fc" id="L26">        int epochCmp = Long.compare(epoch, o.getEpoch());</span>
+<span class="fc bfc" id="L27" title="All 2 branches covered.">        if (epochCmp == 0) {</span>
+<span class="fc" id="L28">            return Long.compare(sequence, o.getSequence());</span>
         }
-<span class="nc" id="L30">        return epochCmp;</span>
+<span class="fc" id="L30">        return epochCmp;</span>
     }
 
     /**
@@ -45,7 +45,7 @@ public class Token implements IToken, Comparable&lt;Token&gt; {
     }
 
     public static Token of(long epoch, long sequence) {
-<span class="nc" id="L48">        return new Token(epoch, sequence);</span>
+<span class="fc" id="L48">        return new Token(epoch, sequence);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

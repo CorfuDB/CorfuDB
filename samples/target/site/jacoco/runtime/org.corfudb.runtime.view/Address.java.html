@@ -17,7 +17,7 @@ import lombok.Getter;
      * @return true for all flag non-address constants
      */
     public static boolean nonAddress(long addr) {
-<span class="nc bnc" id="L20" title="All 2 branches missed.">        return !isAddress(addr);</span>
+<span class="fc bfc" id="L20" title="All 2 branches covered.">        return !isAddress(addr);</span>
     }
 
     /**
@@ -27,7 +27,7 @@ import lombok.Getter;
      * @return true is addr is a legitimate address; false for all flag non-address constants
      */
     public static boolean isAddress(long addr) {
-<span class="nc bnc" id="L30" title="All 2 branches missed.">        return addr &gt;= 0;</span>
+<span class="fc bfc" id="L30" title="All 2 branches covered.">        return addr &gt;= 0;</span>
     }
 
     /**
@@ -35,8 +35,8 @@ import lombok.Getter;
      *
      * @return a constant which can be used as the base for address iterations
      */
-<span class="nc" id="L38">    @Getter</span>
-<span class="nc" id="L39">    private static long minAddress = 0L;</span>
+<span class="fc" id="L38">    @Getter</span>
+<span class="fc" id="L39">    private static long minAddress = 0L;</span>
 
     public static boolean isMinAddress(long addr) {
 <span class="nc bnc" id="L42" title="All 2 branches missed.">        return addr == minAddress;</span>
@@ -44,7 +44,7 @@ import lombok.Getter;
 
     // TODO should clean this up soon
     public static long maxNonAddress() {
-<span class="nc" id="L47">        return -1L;</span>
+<span class="fc" id="L47">        return -1L;</span>
     }
 
     /**

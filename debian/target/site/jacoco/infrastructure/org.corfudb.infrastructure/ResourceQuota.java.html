@@ -17,42 +17,42 @@ public class ResourceQuota {
 <span class="nc" id="L17">    @Getter</span>
     private final long limit;
 
-<span class="nc" id="L20">    private final AtomicLong used = new AtomicLong();</span>
+<span class="fc" id="L20">    private final AtomicLong used = new AtomicLong();</span>
 
-<span class="nc" id="L22">    public ResourceQuota(String name, long limit) {</span>
-<span class="nc" id="L23">        this.name = name;</span>
-<span class="nc bnc" id="L24" title="All 2 branches missed.">        if (limit &lt;= 0) {</span>
-<span class="nc" id="L25">            throw new IllegalArgumentException(&quot;Resource limit has to be positive: &quot; + limit);</span>
+<span class="fc" id="L22">    public ResourceQuota(String name, long limit) {</span>
+<span class="fc" id="L23">        this.name = name;</span>
+<span class="fc bfc" id="L24" title="All 2 branches covered.">        if (limit &lt;= 0) {</span>
+<span class="fc" id="L25">            throw new IllegalArgumentException(&quot;Resource limit has to be positive: &quot; + limit);</span>
         }
-<span class="nc" id="L27">        this.limit = limit;</span>
-<span class="nc" id="L28">    }</span>
+<span class="fc" id="L27">        this.limit = limit;</span>
+<span class="fc" id="L28">    }</span>
 
     /**
      * Consumes an amount of the resource quota.
      */
     public void consume(long amount) {
-<span class="nc" id="L34">        used.updateAndGet(currVal -&gt; Math.min(Math.addExact(currVal, amount), Long.MAX_VALUE));</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L34">        used.updateAndGet(currVal -&gt; Math.min(Math.addExact(currVal, amount), Long.MAX_VALUE));</span>
+<span class="fc" id="L35">    }</span>
 
     /**
      * Checks if the resource quota has been exceeded.
      */
     public boolean hasAvailable() {
-<span class="nc bnc" id="L41" title="All 2 branches missed.">        return used.get() &lt; limit;</span>
+<span class="fc bfc" id="L41" title="All 2 branches covered.">        return used.get() &lt; limit;</span>
     }
 
     /**
      * Returns some amount of the resource to the quota
      */
     public void release(long amount) {
-<span class="nc" id="L48">        used.updateAndGet(currVal -&gt; Math.max(0, Math.subtractExact(currVal, amount)));</span>
-<span class="nc" id="L49">    }</span>
+<span class="fc" id="L48">        used.updateAndGet(currVal -&gt; Math.max(0, Math.subtractExact(currVal, amount)));</span>
+<span class="fc" id="L49">    }</span>
 
     /**
      * Returns the amount of available resources
      */
     public long getAvailable() {
-<span class="nc" id="L55">        return Math.max(limit - used.get(), 0);</span>
+<span class="fc" id="L55">        return Math.max(limit - used.get(), 0);</span>
     }
 
 }

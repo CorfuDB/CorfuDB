@@ -22,14 +22,14 @@ import org.corfudb.runtime.view.Layout;
  * Created by zlokhandwala on 11/2/18.
  */
 @Getter
-<span class="nc" id="L25">@Builder</span>
-<span class="nc" id="L26">@AllArgsConstructor</span>
-<span class="nc bnc" id="L27" title="All 30 branches missed.">@EqualsAndHashCode</span>
+<span class="pc" id="L25">@Builder</span>
+<span class="fc" id="L26">@AllArgsConstructor</span>
+<span class="pc bpc" id="L27" title="29 of 30 branches missed.">@EqualsAndHashCode</span>
 public class NodeState implements ICorfuPayload&lt;NodeState&gt; {
 
     public static final long INVALID_HEARTBEAT_COUNTER = -1L;
 
-<span class="nc" id="L32">    private final NodeConnectivity connectivity;</span>
+<span class="fc" id="L32">    private final NodeConnectivity connectivity;</span>
 
 <span class="nc" id="L34">    private final HeartbeatTimestamp heartbeat;</span>
 
@@ -38,30 +38,30 @@ public class NodeState implements ICorfuPayload&lt;NodeState&gt; {
      */
 <span class="nc" id="L39">    private final SequencerMetrics sequencerMetrics;</span>
 
-<span class="nc" id="L41">    public NodeState(ByteBuf buf) {</span>
-<span class="nc" id="L42">        connectivity = ICorfuPayload.fromBuffer(buf, NodeConnectivity.class);</span>
-<span class="nc" id="L43">        heartbeat = ICorfuPayload.fromBuffer(buf, HeartbeatTimestamp.class);</span>
-<span class="nc" id="L44">        sequencerMetrics = ICorfuPayload.fromBuffer(buf, SequencerMetrics.class);</span>
-<span class="nc" id="L45">    }</span>
+<span class="fc" id="L41">    public NodeState(ByteBuf buf) {</span>
+<span class="fc" id="L42">        connectivity = ICorfuPayload.fromBuffer(buf, NodeConnectivity.class);</span>
+<span class="fc" id="L43">        heartbeat = ICorfuPayload.fromBuffer(buf, HeartbeatTimestamp.class);</span>
+<span class="fc" id="L44">        sequencerMetrics = ICorfuPayload.fromBuffer(buf, SequencerMetrics.class);</span>
+<span class="fc" id="L45">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L49">        ICorfuPayload.serialize(buf, connectivity);</span>
-<span class="nc" id="L50">        ICorfuPayload.serialize(buf, heartbeat);</span>
-<span class="nc" id="L51">        ICorfuPayload.serialize(buf, sequencerMetrics);</span>
-<span class="nc" id="L52">    }</span>
+<span class="fc" id="L49">        ICorfuPayload.serialize(buf, connectivity);</span>
+<span class="fc" id="L50">        ICorfuPayload.serialize(buf, heartbeat);</span>
+<span class="fc" id="L51">        ICorfuPayload.serialize(buf, sequencerMetrics);</span>
+<span class="fc" id="L52">    }</span>
 
     public static NodeState getUnavailableNodeState(String endpoint){
-<span class="nc" id="L55">        return new NodeState(</span>
-<span class="nc" id="L56">                NodeConnectivity.unavailable(endpoint),</span>
+<span class="fc" id="L55">        return new NodeState(</span>
+<span class="fc" id="L56">                NodeConnectivity.unavailable(endpoint),</span>
                 new HeartbeatTimestamp(Layout.INVALID_EPOCH, INVALID_HEARTBEAT_COUNTER),
                 SequencerMetrics.UNKNOWN
         );
     }
 
     public static NodeState getNotReadyNodeState(String endpoint, long epoch, long counter){
-<span class="nc" id="L63">        return new NodeState(</span>
-<span class="nc" id="L64">                NodeConnectivity.notReady(endpoint),</span>
+<span class="fc" id="L63">        return new NodeState(</span>
+<span class="fc" id="L64">                NodeConnectivity.notReady(endpoint),</span>
                 //Layout.INVALID_EPOCH, INVALID_HEARTBEAT_COUNTER - default values for heartbeat
                 new HeartbeatTimestamp(epoch, counter),
                 SequencerMetrics.UNKNOWN
@@ -69,7 +69,7 @@ public class NodeState implements ICorfuPayload&lt;NodeState&gt; {
     }
 
     public boolean isConnected() {
-<span class="nc bnc" id="L72" title="All 2 branches missed.">        return connectivity.getType() == NodeConnectivityType.CONNECTED;</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        return connectivity.getType() == NodeConnectivityType.CONNECTED;</span>
     }
 
     /**
@@ -80,7 +80,7 @@ public class NodeState implements ICorfuPayload&lt;NodeState&gt; {
      */
 <span class="nc" id="L81">    @ToString</span>
 <span class="nc bnc" id="L82" title="All 10 branches missed.">    @EqualsAndHashCode</span>
-<span class="nc" id="L83">    @AllArgsConstructor</span>
+<span class="fc" id="L83">    @AllArgsConstructor</span>
     public static class HeartbeatTimestamp implements Comparable&lt;HeartbeatTimestamp&gt;, ICorfuPayload&lt;HeartbeatTimestamp&gt; {
         final long epoch;
         final long counter;
@@ -90,16 +90,16 @@ public class NodeState implements ICorfuPayload&lt;NodeState&gt; {
 <span class="nc" id="L90">            return Long.compare(epoch, heartbeatTimestamp.epoch);</span>
         }
 
-<span class="nc" id="L93">        public HeartbeatTimestamp(ByteBuf buf) {</span>
-<span class="nc" id="L94">            epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L95">            counter = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L96">        }</span>
+<span class="fc" id="L93">        public HeartbeatTimestamp(ByteBuf buf) {</span>
+<span class="fc" id="L94">            epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L95">            counter = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L96">        }</span>
 
         @Override
         public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L100">            ICorfuPayload.serialize(buf, epoch);</span>
-<span class="nc" id="L101">            ICorfuPayload.serialize(buf, counter);</span>
-<span class="nc" id="L102">        }</span>
+<span class="fc" id="L100">            ICorfuPayload.serialize(buf, epoch);</span>
+<span class="fc" id="L101">            ICorfuPayload.serialize(buf, counter);</span>
+<span class="fc" id="L102">        }</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

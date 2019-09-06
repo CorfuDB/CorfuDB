@@ -13,18 +13,18 @@ import java.util.List;
  * @author Maithem
  */
 <span class="nc bnc" id="L15" title="All 14 branches missed.">@Data</span>
-<span class="nc" id="L16">@AllArgsConstructor</span>
+<span class="fc" id="L16">@AllArgsConstructor</span>
 public class RangeWriteMsg implements ICorfuPayload&lt;RangeWriteMsg&gt; {
 
-<span class="nc" id="L19">    private List&lt;LogData&gt; entries;</span>
+<span class="fc" id="L19">    private List&lt;LogData&gt; entries;</span>
 
-<span class="nc" id="L21">    public RangeWriteMsg(ByteBuf buf) {</span>
-<span class="nc" id="L22">        entries = ICorfuPayload.listFromBuffer(buf, LogData.class);</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L21">    public RangeWriteMsg(ByteBuf buf) {</span>
+<span class="fc" id="L22">        entries = ICorfuPayload.listFromBuffer(buf, LogData.class);</span>
+<span class="fc" id="L23">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L27">        ICorfuPayload.serialize(buf, entries);</span>
-<span class="nc" id="L28">    }</span>
+<span class="fc" id="L27">        ICorfuPayload.serialize(buf, entries);</span>
+<span class="fc" id="L28">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

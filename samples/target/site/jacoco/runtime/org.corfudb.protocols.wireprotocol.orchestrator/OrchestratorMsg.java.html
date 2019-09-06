@@ -15,26 +15,26 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 public class OrchestratorMsg implements ICorfuPayload&lt;OrchestratorMsg&gt; {
 
-<span class="nc" id="L18">    @Getter</span>
+<span class="fc" id="L18">    @Getter</span>
     public final Request request;
 
-<span class="nc" id="L21">    public OrchestratorMsg(Request request) {</span>
-<span class="nc" id="L22">        this.request = request;</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L21">    public OrchestratorMsg(Request request) {</span>
+<span class="fc" id="L22">        this.request = request;</span>
+<span class="fc" id="L23">    }</span>
 
-<span class="nc" id="L25">    public OrchestratorMsg(ByteBuf buf) {</span>
-<span class="nc" id="L26">        OrchestratorRequestType requestType = OrchestratorRequestType.typeMap.get(buf.readInt());</span>
-<span class="nc" id="L27">        byte[] bytes = new byte[buf.readInt()];</span>
-<span class="nc" id="L28">        buf.readBytes(bytes);</span>
-<span class="nc" id="L29">        request = requestType.getRequestGenerator().apply(bytes);</span>
-<span class="nc" id="L30">    }</span>
+<span class="fc" id="L25">    public OrchestratorMsg(ByteBuf buf) {</span>
+<span class="fc" id="L26">        OrchestratorRequestType requestType = OrchestratorRequestType.typeMap.get(buf.readInt());</span>
+<span class="fc" id="L27">        byte[] bytes = new byte[buf.readInt()];</span>
+<span class="fc" id="L28">        buf.readBytes(bytes);</span>
+<span class="fc" id="L29">        request = requestType.getRequestGenerator().apply(bytes);</span>
+<span class="fc" id="L30">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L34">        buf.writeInt(request.getType().getType());</span>
-<span class="nc" id="L35">        byte[] bytes = request.getSerialized();</span>
-<span class="nc" id="L36">        buf.writeInt(bytes.length);</span>
-<span class="nc" id="L37">        buf.writeBytes(bytes);</span>
-<span class="nc" id="L38">    }</span>
+<span class="fc" id="L34">        buf.writeInt(request.getType().getType());</span>
+<span class="fc" id="L35">        byte[] bytes = request.getSerialized();</span>
+<span class="fc" id="L36">        buf.writeInt(bytes.length);</span>
+<span class="fc" id="L37">        buf.writeBytes(bytes);</span>
+<span class="fc" id="L38">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

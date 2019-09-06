@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
  * https://tools.ietf.org/html/rfc4616
  * https://tools.ietf.org/html/rfc4422
  */
-<span class="nc" id="L24">@Slf4j</span>
+<span class="fc" id="L24">@Slf4j</span>
 public class PlainTextSaslServer implements SaslServer {
 
     public static final String MECHANISM = &quot;PLAIN&quot;;
@@ -30,9 +30,9 @@ public class PlainTextSaslServer implements SaslServer {
 
     private String authorizationId;
 
-<span class="nc" id="L33">    public PlainTextSaslServer() {</span>
-<span class="nc" id="L34">        authenticated = false;</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L33">    public PlainTextSaslServer() {</span>
+<span class="fc" id="L34">        authenticated = false;</span>
+<span class="fc" id="L35">    }</span>
 
     @Override
     public String getMechanismName() {
@@ -42,53 +42,53 @@ public class PlainTextSaslServer implements SaslServer {
     private void verify(String authzid, String authcid, String passwd)
             throws SaslException {
 
-<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (authcid.isEmpty()) {</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">        if (authcid.isEmpty()) {</span>
 <span class="nc" id="L46">            throw new SaslException(&quot;Authentication failed due to empty username&quot;);</span>
         }
-<span class="nc bnc" id="L48" title="All 2 branches missed.">        if (passwd.isEmpty()) {</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">        if (passwd.isEmpty()) {</span>
 <span class="nc" id="L49">            throw new SaslException(&quot;Authentication failed due to empty password&quot;);</span>
         }
 
-<span class="nc bnc" id="L52" title="All 2 branches missed.">        if (authzid.isEmpty()) {</span>
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">        if (authzid.isEmpty()) {</span>
 <span class="nc" id="L53">            authorizationId = authcid;</span>
         } else {
-<span class="nc" id="L55">            authorizationId = authzid;</span>
+<span class="fc" id="L55">            authorizationId = authzid;</span>
         }
 
         try {
-<span class="nc" id="L59">            LoginContext lc = new LoginContext(&quot;CorfuDB&quot;,</span>
+<span class="fc" id="L59">            LoginContext lc = new LoginContext(&quot;CorfuDB&quot;,</span>
                     new PlainTextCallbackHandler(authcid, passwd));
-<span class="nc" id="L61">            lc.login();</span>
-<span class="nc" id="L62">        } catch (LoginException le) {</span>
-<span class="nc" id="L63">            throw new SaslException(&quot;Login attempt by '&quot; + authcid + &quot;' failed&quot;);</span>
-<span class="nc" id="L64">        }</span>
-<span class="nc" id="L65">        log.debug(&quot;Login by {} is successful&quot;, authcid);</span>
+<span class="fc" id="L61">            lc.login();</span>
+<span class="fc" id="L62">        } catch (LoginException le) {</span>
+<span class="fc" id="L63">            throw new SaslException(&quot;Login attempt by '&quot; + authcid + &quot;' failed&quot;);</span>
+<span class="fc" id="L64">        }</span>
+<span class="fc" id="L65">        log.debug(&quot;Login by {} is successful&quot;, authcid);</span>
 
-<span class="nc" id="L67">        authenticated = true;</span>
-<span class="nc" id="L68">    }</span>
+<span class="fc" id="L67">        authenticated = true;</span>
+<span class="fc" id="L68">    }</span>
 
     @Override
     public byte[] evaluateResponse(byte[] response)
             throws SaslException {
         String[] tokens;
         try {
-<span class="nc" id="L75">            tokens = new String(response, &quot;UTF-8&quot;).split(&quot;\u0000&quot;);</span>
+<span class="fc" id="L75">            tokens = new String(response, &quot;UTF-8&quot;).split(&quot;\u0000&quot;);</span>
 <span class="nc" id="L76">        } catch (UnsupportedEncodingException ue) {</span>
 <span class="nc" id="L77">            throw new SaslException(&quot;Unsupported charset&quot;);</span>
-<span class="nc" id="L78">        }</span>
+<span class="fc" id="L78">        }</span>
 
-<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (tokens.length != 3) {</span>
-<span class="nc" id="L81">            throw new SaslException(&quot;Malformed plain text response received&quot;);</span>
+<span class="fc bfc" id="L80" title="All 2 branches covered.">        if (tokens.length != 3) {</span>
+<span class="fc" id="L81">            throw new SaslException(&quot;Malformed plain text response received&quot;);</span>
         }
 
-<span class="nc" id="L84">        verify(tokens[0], tokens[1], tokens[2]);</span>
+<span class="fc" id="L84">        verify(tokens[0], tokens[1], tokens[2]);</span>
 
-<span class="nc" id="L86">        return null;</span>
+<span class="fc" id="L86">        return null;</span>
     }
 
     @Override
     public boolean isComplete() {
-<span class="nc" id="L91">        return authenticated;</span>
+<span class="fc" id="L91">        return authenticated;</span>
     }
 
     @Override
@@ -127,7 +127,7 @@ public class PlainTextSaslServer implements SaslServer {
     public void dispose() throws SaslException {
 <span class="nc" id="L128">    }</span>
 
-<span class="nc" id="L130">    public static class PlainTextSaslServerFactory implements SaslServerFactory {</span>
+<span class="fc" id="L130">    public static class PlainTextSaslServerFactory implements SaslServerFactory {</span>
 
         @Override
         public SaslServer createSaslServer(String mechanism, String protocol,
@@ -135,10 +135,10 @@ public class PlainTextSaslServer implements SaslServer {
                                            CallbackHandler cbh)
                 throws SaslException {
 
-<span class="nc bnc" id="L138" title="All 2 branches missed.">            if (!mechanism.equals(MECHANISM)) {</span>
+<span class="pc bpc" id="L138" title="1 of 2 branches missed.">            if (!mechanism.equals(MECHANISM)) {</span>
 <span class="nc" id="L139">                throw new SaslException(&quot;Unsupported mechanism: &quot; + mechanism);</span>
             }
-<span class="nc" id="L141">            return new PlainTextSaslServer();</span>
+<span class="fc" id="L141">            return new PlainTextSaslServer();</span>
         }
 
         @Override

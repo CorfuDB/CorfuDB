@@ -12,17 +12,17 @@ import lombok.Data;
  * &lt;p&gt;Created by mdhawan on 10/24/16.&lt;/p&gt;
  */
 <span class="nc bnc" id="L14" title="All 8 branches missed.">@Data</span>
-<span class="nc" id="L15">@AllArgsConstructor</span>
+<span class="fc" id="L15">@AllArgsConstructor</span>
 public class LayoutProposeResponse implements ICorfuPayload&lt;LayoutProposeResponse&gt; {
-<span class="nc" id="L17">    private long rank;</span>
+<span class="fc" id="L17">    private long rank;</span>
 
-<span class="nc" id="L19">    public LayoutProposeResponse(ByteBuf buf) {</span>
-<span class="nc" id="L20">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L21">    }</span>
+<span class="fc" id="L19">    public LayoutProposeResponse(ByteBuf buf) {</span>
+<span class="fc" id="L20">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L21">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L25">        ICorfuPayload.serialize(buf, rank);</span>
-<span class="nc" id="L26">    }</span>
+<span class="fc" id="L25">        ICorfuPayload.serialize(buf, rank);</span>
+<span class="fc" id="L26">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * SequencerServerCache achieves consistency by using single threaded cache. It's done by following code:
  * `.executor(Runnable::run)`
  */
-<span class="nc" id="L31">@Slf4j</span>
+<span class="fc" id="L31">@Slf4j</span>
 public class SequencerServerCache {
     /**
      * TX conflict-resolution information:
@@ -41,7 +41,7 @@ public class SequencerServerCache {
      * A &quot;wildcard&quot; representing the maximal update timestamp of
      * all the conflict keys which were evicted from the cache
      */
-<span class="nc" id="L44">    @Getter</span>
+<span class="fc" id="L44">    @Getter</span>
     private long maxConflictWildcard = Address.NOT_FOUND;
 
     /**
@@ -50,19 +50,19 @@ public class SequencerServerCache {
      * the primary sequencer. This means that any snapshot timestamp below this
      * actual threshold would abort due to NEW_SEQUENCER cause.
      */
-<span class="nc" id="L53">    @Getter</span>
+<span class="fc" id="L53">    @Getter</span>
     private long maxConflictNewSequencer = Address.NOT_FOUND;
 
     @VisibleForTesting
-<span class="nc" id="L57">    public SequencerServerCache(long cacheSize, CacheWriter&lt;ConflictTxStream, Long&gt; writer) {</span>
-<span class="nc" id="L58">        this.conflictCache = Caffeine.newBuilder()</span>
-<span class="nc" id="L59">                .maximumSize(cacheSize)</span>
-<span class="nc" id="L60">                .writer(writer)</span>
+<span class="fc" id="L57">    public SequencerServerCache(long cacheSize, CacheWriter&lt;ConflictTxStream, Long&gt; writer) {</span>
+<span class="fc" id="L58">        this.conflictCache = Caffeine.newBuilder()</span>
+<span class="fc" id="L59">                .maximumSize(cacheSize)</span>
+<span class="fc" id="L60">                .writer(writer)</span>
                 //Performing periodic maintenance using current thread (synchronously)
-<span class="nc" id="L62">                .executor(Runnable::run)</span>
-<span class="nc" id="L63">                .recordStats()</span>
-<span class="nc" id="L64">                .build();</span>
-<span class="nc" id="L65">    }</span>
+<span class="fc" id="L62">                .executor(Runnable::run)</span>
+<span class="fc" id="L63">                .recordStats()</span>
+<span class="fc" id="L64">                .build();</span>
+<span class="fc" id="L65">    }</span>
 
     /**
      * The cache limited by size.
@@ -71,18 +71,18 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
-<span class="nc" id="L74">    public SequencerServerCache(long cacheSize) {</span>
-<span class="nc" id="L75">        this.conflictCache = Caffeine.newBuilder()</span>
-<span class="nc" id="L76">                .maximumSize(cacheSize)</span>
+<span class="fc" id="L74">    public SequencerServerCache(long cacheSize) {</span>
+<span class="fc" id="L75">        this.conflictCache = Caffeine.newBuilder()</span>
+<span class="fc" id="L76">                .maximumSize(cacheSize)</span>
                 //Performing periodic maintenance using current thread (synchronously)
-<span class="nc" id="L78">                .executor(Runnable::run)</span>
-<span class="nc" id="L79">                .writer(getDefaultCacheWriter())</span>
-<span class="nc" id="L80">                .recordStats()</span>
-<span class="nc" id="L81">                .build();</span>
-<span class="nc" id="L82">    }</span>
+<span class="fc" id="L78">                .executor(Runnable::run)</span>
+<span class="fc" id="L79">                .writer(getDefaultCacheWriter())</span>
+<span class="fc" id="L80">                .recordStats()</span>
+<span class="fc" id="L81">                .build();</span>
+<span class="fc" id="L82">    }</span>
 
     private CacheWriter&lt;ConflictTxStream, Long&gt; getDefaultCacheWriter() {
-<span class="nc" id="L85">        return new CacheWriter&lt;ConflictTxStream, Long&gt;() {</span>
+<span class="fc" id="L85">        return new CacheWriter&lt;ConflictTxStream, Long&gt;() {</span>
             /**
              * Don't do any additional actions during the write operation. Let caffeine write the record into the cache
              * @param key a key
@@ -91,7 +91,7 @@ public class SequencerServerCache {
             @Override
             public void write(@Nonnull ConflictTxStream key, @Nonnull Long value) {
                 //ignore
-<span class="nc" id="L94">            }</span>
+<span class="fc" id="L94">            }</span>
 
             /**
              * Eviction policy https://github.com/ben-manes/caffeine/wiki/Writer
@@ -101,21 +101,21 @@ public class SequencerServerCache {
              */
             @Override
             public void delete(@Nonnull ConflictTxStream key, Long globalAddress, @Nonnull RemovalCause cause) {
-<span class="nc bnc" id="L104" title="All 2 branches missed.">                if (cause == RemovalCause.REPLACED) {</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">                if (cause == RemovalCause.REPLACED) {</span>
 <span class="nc" id="L105">                    String errMsg = String.format(&quot;Override error. Conflict key: %s, address: %s&quot;, key, globalAddress);</span>
 <span class="nc" id="L106">                    throw new IllegalStateException(errMsg);</span>
                 }
 
-<span class="nc" id="L109">                log.trace(</span>
+<span class="fc" id="L109">                log.trace(</span>
                         &quot;Updating maxConflictWildcard. Old = '{}', new ='{}' conflictParam = '{}'. Cause = '{}'&quot;,
-<span class="nc" id="L111">                        maxConflictWildcard, globalAddress, key, cause</span>
+<span class="fc" id="L111">                        maxConflictWildcard, globalAddress, key, cause</span>
                 );
 
-<span class="nc bnc" id="L114" title="All 2 branches missed.">                if (globalAddress == null) {</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">                if (globalAddress == null) {</span>
 <span class="nc" id="L115">                    globalAddress = Address.NOT_FOUND;</span>
                 }
-<span class="nc" id="L117">                maxConflictWildcard = Math.max(globalAddress, maxConflictWildcard);</span>
-<span class="nc" id="L118">            }</span>
+<span class="fc" id="L117">                maxConflictWildcard = Math.max(globalAddress, maxConflictWildcard);</span>
+<span class="fc" id="L118">            }</span>
         };
     }
 
@@ -127,7 +127,7 @@ public class SequencerServerCache {
      * @return global address
      */
     public Long getIfPresent(ConflictTxStream conflictKey) {
-<span class="nc" id="L130">        return conflictCache.getIfPresent(conflictKey);</span>
+<span class="fc" id="L130">        return conflictCache.getIfPresent(conflictKey);</span>
     }
 
     /**
@@ -136,21 +136,21 @@ public class SequencerServerCache {
      * @param trimMark trim mark
      */
     public void invalidateUpTo(long trimMark) {
-<span class="nc" id="L139">        log.debug(&quot;Invalidate sequencer cache. Trim mark: {}&quot;, trimMark);</span>
+<span class="fc" id="L139">        log.debug(&quot;Invalidate sequencer cache. Trim mark: {}&quot;, trimMark);</span>
 
-<span class="nc" id="L141">        AtomicLong entries = new AtomicLong();</span>
+<span class="fc" id="L141">        AtomicLong entries = new AtomicLong();</span>
 
-<span class="nc" id="L143">        conflictCache.asMap().forEach((key, txVersion) -&gt; {</span>
-<span class="nc bnc" id="L144" title="All 4 branches missed.">            if (txVersion == null || txVersion &gt;= trimMark) {</span>
-<span class="nc" id="L145">                return;</span>
+<span class="fc" id="L143">        conflictCache.asMap().forEach((key, txVersion) -&gt; {</span>
+<span class="pc bpc" id="L144" title="1 of 4 branches missed.">            if (txVersion == null || txVersion &gt;= trimMark) {</span>
+<span class="fc" id="L145">                return;</span>
             }
 
-<span class="nc" id="L148">            conflictCache.invalidate(key);</span>
-<span class="nc" id="L149">            entries.incrementAndGet();</span>
-<span class="nc" id="L150">        });</span>
+<span class="fc" id="L148">            conflictCache.invalidate(key);</span>
+<span class="fc" id="L149">            entries.incrementAndGet();</span>
+<span class="fc" id="L150">        });</span>
 
-<span class="nc" id="L152">        log.info(&quot;Invalidated entries: {}&quot;, entries.get());</span>
-<span class="nc" id="L153">    }</span>
+<span class="fc" id="L152">        log.info(&quot;Invalidated entries: {}&quot;, entries.get());</span>
+<span class="fc" id="L153">    }</span>
 
     /**
      * The cache size
@@ -158,7 +158,7 @@ public class SequencerServerCache {
      * @return cache size
      */
     public long size() {
-<span class="nc" id="L161">        return conflictCache.estimatedSize();</span>
+<span class="fc" id="L161">        return conflictCache.estimatedSize();</span>
     }
 
     /**
@@ -168,16 +168,16 @@ public class SequencerServerCache {
      * @param newTail        global tail
      */
     public void put(ConflictTxStream conflictStream, long newTail) {
-<span class="nc" id="L171">        conflictCache.put(conflictStream, newTail);</span>
-<span class="nc" id="L172">    }</span>
+<span class="fc" id="L171">        conflictCache.put(conflictStream, newTail);</span>
+<span class="fc" id="L172">    }</span>
 
     /**
      * Discard all entries in the cache
      */
     public void invalidateAll() {
-<span class="nc" id="L178">        log.info(&quot;Invalidate sequencer server cache&quot;);</span>
-<span class="nc" id="L179">        conflictCache.invalidateAll();</span>
-<span class="nc" id="L180">    }</span>
+<span class="fc" id="L178">        log.info(&quot;Invalidate sequencer server cache&quot;);</span>
+<span class="fc" id="L179">        conflictCache.invalidateAll();</span>
+<span class="fc" id="L180">    }</span>
 
     /**
      * Update max conflict wildcard by a new address
@@ -185,23 +185,23 @@ public class SequencerServerCache {
      * @param newMaxConflictWildcard new conflict wildcard
      */
     public void updateMaxConflictAddress(long newMaxConflictWildcard) {
-<span class="nc" id="L188">        log.info(&quot;updateMaxConflictAddress, new address: {}&quot;, newMaxConflictWildcard);</span>
-<span class="nc" id="L189">        maxConflictWildcard = newMaxConflictWildcard;</span>
-<span class="nc" id="L190">        maxConflictNewSequencer = newMaxConflictWildcard;</span>
-<span class="nc" id="L191">    }</span>
+<span class="fc" id="L188">        log.info(&quot;updateMaxConflictAddress, new address: {}&quot;, newMaxConflictWildcard);</span>
+<span class="fc" id="L189">        maxConflictWildcard = newMaxConflictWildcard;</span>
+<span class="fc" id="L190">        maxConflictNewSequencer = newMaxConflictWildcard;</span>
+<span class="fc" id="L191">    }</span>
 
     /**
      * Contains the conflict hash code for a stream ID and conflict param.
      */
-<span class="nc bnc" id="L196" title="All 16 branches missed.">    @EqualsAndHashCode</span>
+<span class="pc bpc" id="L196" title="8 of 16 branches missed.">    @EqualsAndHashCode</span>
     public static class ConflictTxStream {
         private final UUID streamId;
         private final byte[] conflictParam;
 
-<span class="nc" id="L201">        public ConflictTxStream(UUID streamId, byte[] conflictParam) {</span>
-<span class="nc" id="L202">            this.streamId = streamId;</span>
-<span class="nc" id="L203">            this.conflictParam = conflictParam;</span>
-<span class="nc" id="L204">        }</span>
+<span class="fc" id="L201">        public ConflictTxStream(UUID streamId, byte[] conflictParam) {</span>
+<span class="fc" id="L202">            this.streamId = streamId;</span>
+<span class="fc" id="L203">            this.conflictParam = conflictParam;</span>
+<span class="fc" id="L204">        }</span>
 
         @Override
         public String toString() {

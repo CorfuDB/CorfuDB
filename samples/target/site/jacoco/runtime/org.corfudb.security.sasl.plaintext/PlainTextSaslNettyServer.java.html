@@ -18,41 +18,41 @@ import lombok.extern.slf4j.Slf4j;
  * expects the username/password from the remote end as per:
  * https://tools.ietf.org/html/rfc4616
  */
-<span class="nc" id="L21">@Slf4j</span>
+<span class="fc" id="L21">@Slf4j</span>
 public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler&lt;ByteBuf&gt; {
 
     private SaslServer saslServer;
 
-<span class="nc" id="L26">    private final String mechanisms = &quot;PLAIN&quot;;</span>
+<span class="fc" id="L26">    private final String mechanisms = &quot;PLAIN&quot;;</span>
 
     static {
-<span class="nc" id="L29">        PlainTextSaslServerProvider.initialize();</span>
-<span class="nc" id="L30">    }</span>
+<span class="fc" id="L29">        PlainTextSaslServerProvider.initialize();</span>
+<span class="fc" id="L30">    }</span>
 
-<span class="nc" id="L32">    public PlainTextSaslNettyServer() throws SaslException {</span>
-<span class="nc" id="L33">        saslServer = Sasl.createSaslServer(mechanisms, &quot;plain&quot;, null, null, null);</span>
-<span class="nc" id="L34">    }</span>
+<span class="fc" id="L32">    public PlainTextSaslNettyServer() throws SaslException {</span>
+<span class="fc" id="L33">        saslServer = Sasl.createSaslServer(mechanisms, &quot;plain&quot;, null, null, null);</span>
+<span class="fc" id="L34">    }</span>
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf buf)
             throws Exception {
 
-<span class="nc" id="L40">        byte[] msg = new byte[buf.readableBytes()];</span>
-<span class="nc" id="L41">        buf.getBytes(0, msg);</span>
+<span class="fc" id="L40">        byte[] msg = new byte[buf.readableBytes()];</span>
+<span class="fc" id="L41">        buf.getBytes(0, msg);</span>
 
-<span class="nc bnc" id="L43" title="All 2 branches missed.">        while (!saslServer.isComplete()) {</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">        while (!saslServer.isComplete()) {</span>
             try {
-<span class="nc" id="L45">                byte[] challenge = saslServer.evaluateResponse(msg);</span>
-<span class="nc" id="L46">            } catch (SaslException se) {</span>
-<span class="nc" id="L47">                log.error(&quot;SaslException {}&quot;, se.toString());</span>
-<span class="nc" id="L48">                break;</span>
-<span class="nc" id="L49">            }</span>
+<span class="fc" id="L45">                byte[] challenge = saslServer.evaluateResponse(msg);</span>
+<span class="fc" id="L46">            } catch (SaslException se) {</span>
+<span class="fc" id="L47">                log.error(&quot;SaslException {}&quot;, se.toString());</span>
+<span class="fc" id="L48">                break;</span>
+<span class="fc" id="L49">            }</span>
         }
 
-<span class="nc bnc" id="L52" title="All 2 branches missed.">        if (saslServer.isComplete()) {</span>
-<span class="nc" id="L53">            log.debug(&quot;channelRead0: Sasl handshake successful, uninstalling handler&quot;);</span>
-<span class="nc" id="L54">            ctx.pipeline().remove(this);</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (saslServer.isComplete()) {</span>
+<span class="fc" id="L53">            log.debug(&quot;channelRead0: Sasl handshake successful, uninstalling handler&quot;);</span>
+<span class="fc" id="L54">            ctx.pipeline().remove(this);</span>
         }
-<span class="nc" id="L56">    }</span>
+<span class="fc" id="L56">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

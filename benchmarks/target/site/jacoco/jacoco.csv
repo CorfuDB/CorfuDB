@@ -8,7 +8,7 @@ benchmarks/runtime,org.corfudb.runtime.view.stream,StreamAddressSpace,268,0,24,0
 benchmarks/runtime,org.corfudb.runtime.view.stream,StreamSpliterator,40,0,2,0,13,0,6,0,5,0
 benchmarks/runtime,org.corfudb.runtime.view.stream,IStreamView.SearchDirection,78,0,0,0,7,0,6,0,6,0
 benchmarks/runtime,org.corfudb.runtime.view.stream,BackpointerStreamView,254,0,38,0,68,0,25,0,6,0
-benchmarks/runtime,org.corfudb.runtime.view.stream,AddressMapStreamView,582,0,70,0,117,0,50,0,15,0
+benchmarks/runtime,org.corfudb.runtime.view.stream,AddressMapStreamView,583,0,72,0,116,0,51,0,15,0
 benchmarks/runtime,org.corfudb.runtime.view.stream,AbstractQueuedStreamView,1469,0,154,0,284,0,107,0,30,0
 benchmarks/runtime,org.corfudb.runtime.view.stream,AbstractStreamContext,81,0,4,0,22,0,12,0,10,0
 benchmarks/runtime,org.corfudb.runtime.view.stream,IStreamView,36,0,0,0,7,0,7,0,7,0
@@ -52,7 +52,7 @@ benchmarks/runtime,org.corfudb.runtime.exceptions,OutrankedException,51,0,2,0,11
 benchmarks/runtime,org.corfudb.runtime.exceptions,LayoutModificationException,4,0,0,0,2,0,1,0,1,0
 benchmarks/runtime,org.corfudb.runtime.exceptions,NoRollbackException,54,0,0,0,12,0,3,0,3,0
 benchmarks/runtime,org.corfudb.runtime.exceptions,NoBootstrapException,4,0,0,0,2,0,1,0,1,0
-benchmarks/runtime,org.corfudb.runtime.exceptions,TrimmedException,39,0,0,0,12,0,7,0,7,0
+benchmarks/runtime,org.corfudb.runtime.exceptions,TrimmedException,47,0,0,0,12,0,7,0,7,0
 benchmarks/runtime,org.corfudb.runtime.exceptions,OverwriteException,9,0,0,0,4,0,2,0,2,0
 benchmarks/runtime,org.corfudb.runtime.exceptions,OverwriteCause,103,0,4,0,14,0,8,0,6,0
 benchmarks/runtime,org.corfudb.runtime.exceptions,AppendException,3,0,0,0,1,0,1,0,1,0
@@ -124,7 +124,7 @@ benchmarks/runtime,org.corfudb.runtime.view,Layout.LayoutStripe,89,0,16,0,5,0,14
 benchmarks/runtime,org.corfudb.runtime.view,SequencerView,611,0,70,0,49,0,55,0,20,0
 benchmarks/runtime,org.corfudb.runtime.view,QuorumFuturesFactory.CompositeFuture,377,0,46,0,87,0,32,0,9,0
 benchmarks/runtime,org.corfudb.runtime.view,ReadOptions,184,0,22,0,6,0,26,0,15,0
-benchmarks/runtime,org.corfudb.runtime.view,AddressSpaceView,1222,0,94,0,250,0,107,0,60,0
+benchmarks/runtime,org.corfudb.runtime.view,AddressSpaceView,1211,0,90,0,248,0,105,0,60,0
 benchmarks/runtime,org.corfudb.runtime.view,Address,33,0,6,0,7,0,10,0,7,0
 benchmarks/runtime,org.corfudb.runtime.view,Layout.LayoutSegment,243,0,30,0,18,0,32,0,17,0
 benchmarks/runtime,org.corfudb.runtime.view,ClusterStatusReport.ClusterStatusReliability,48,0,0,0,4,0,4,0,4,0
@@ -132,12 +132,12 @@ benchmarks/runtime,org.corfudb.runtime.view,StreamsView,269,0,17,0,61,0,20,0,10,
 benchmarks/runtime,org.corfudb.runtime.view,CacheOption,38,0,0,0,3,0,4,0,4,0
 benchmarks/runtime,org.corfudb.runtime.view,ClusterStatusReport.NodeStatus,58,0,0,0,5,0,4,0,4,0
 benchmarks/runtime,org.corfudb.runtime.view,AbstractView,214,0,20,0,58,0,17,0,7,0
-benchmarks/runtime,org.corfudb.runtime.view,LayoutDeserializer,39,0,2,0,7,0,3,0,2,0
+benchmarks/runtime,org.corfudb.runtime.view,LayoutDeserializer,36,3,2,0,6,1,2,1,1,1
 benchmarks/runtime,org.corfudb.runtime.view,StreamOptions.StreamOptionsBuilder,54,0,4,0,1,0,7,0,5,0
 benchmarks/runtime,org.corfudb.runtime.view,ObjectsView,315,0,24,0,80,0,24,0,12,0
 benchmarks/runtime,org.corfudb.runtime.view,QuorumFuturesFactory,46,0,0,0,5,0,5,0,5,0
 benchmarks/runtime,org.corfudb.runtime.view,ClusterStatusReport.ConnectivityStatus,46,0,0,0,7,0,5,0,5,0
-benchmarks/runtime,org.corfudb.runtime.view,Layout,814,0,108,0,105,0,97,0,43,0
+benchmarks/runtime,org.corfudb.runtime.view,Layout,799,15,108,0,101,4,96,1,42,1
 benchmarks/runtime,org.corfudb.runtime.view,Layout.ReplicationMode.new Layout.ReplicationMode() {...},71,0,6,0,14,0,10,0,7,0
 benchmarks/runtime,org.corfudb.runtime.view,Layout.ReplicationMode.new Layout.ReplicationMode() {...},120,0,12,0,27,0,13,0,7,0
 benchmarks/runtime,org.corfudb.runtime.view,RuntimeLayout,340,0,34,0,40,0,37,0,20,0
@@ -161,66 +161,66 @@ benchmarks/runtime,org.corfudb.util.concurrent,SingletonResource,53,0,6,0,17,0,7
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,IMetadata.LogUnitMetadataType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,KnownAddressResponse,95,0,14,0,8,0,15,0,8,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,NettyCorfuMessageEncoder,50,0,4,0,14,0,5,0,3,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,InboundMsgFilterHandler,92,0,6,0,23,0,7,0,4,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,ICorfuPayload,1067,0,102,0,209,0,74,0,23,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuPayloadMsg,35,0,0,0,12,0,5,0,5,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,ICorfuPayload,800,267,75,27,136,73,61,13,16,7
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuPayloadMsg,3,32,0,0,1,11,1,4,1,4
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,IMetadata.DataRank,137,0,16,0,11,0,17,0,9,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,WriteRequest,41,0,0,0,12,0,7,0,7,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,NodeState.NodeStateBuilder,50,0,0,0,1,0,6,0,6,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,NodeState.NodeStateBuilder,22,28,0,0,0,1,1,5,1,5
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,StreamsAddressRequest,170,0,22,0,22,0,22,0,11,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,PriorityLevel,55,0,0,0,6,0,5,0,5,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,PriorityLevel,5,50,0,0,0,6,1,4,1,4
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,DetectorMsg,210,0,30,0,14,0,28,0,13,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,LayoutPrepareResponse,170,0,22,0,16,0,22,0,11,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,HandshakeResponse,156,0,22,0,11,0,22,0,11,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,StreamsAddressResponse,132,0,14,0,14,0,15,0,8,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,LayoutBootstrapRequest,100,0,14,0,8,0,16,0,9,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,HandshakeState,32,0,0,0,9,0,4,0,4,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType,1238,0,8,0,94,0,14,0,10,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,NodeState,215,0,32,0,20,0,29,0,13,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType,38,1200,4,4,7,87,6,8,2,8
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,NodeState,165,50,32,0,9,11,25,4,9,4
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ClusterState.ClusterStateBuilder,85,0,6,0,1,0,11,0,8,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,VersionInfo,74,0,6,0,18,0,11,0,8,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ITypedEnum,6,0,0,0,2,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,LayoutPrepareRequest,142,0,10,0,11,0,16,0,11,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,MsgHandlingFilter,388,0,44,0,53,0,54,0,32,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ExceptionMsg.DeserializationFailedException,4,0,0,0,2,0,1,0,1,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,WriteRequest.WriteRequestBuilder,26,0,0,0,1,0,4,0,4,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,SequencerMetrics.SequencerStatus,48,0,0,0,4,0,4,0,4,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,SequencerMetrics.SequencerStatus,0,48,0,0,0,4,0,4,0,4
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,Token,143,0,14,0,14,0,18,0,11,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ReadRequest,37,0,0,0,10,0,5,0,5,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ClusterState,203,0,18,0,43,0,25,0,16,0
@@ -240,24 +240,24 @@ benchmarks/runtime,org.corfudb.protocols.wireprotocol,HandshakeMsg,156,0,22,0,11
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ReadResponse,115,0,14,0,13,0,18,0,11,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,LayoutProposeRequest,198,0,18,0,14,0,22,0,13,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,NettyCorfuMessageDecoder,22,0,2,0,7,0,5,0,4,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ExceptionMsg.SerializationFailedException,21,0,0,0,4,0,2,0,2,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,IMetadata,216,0,12,0,48,0,31,0,25,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,IToken,2,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},3,0,0,0,1,0,1,0,1,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsgType.new TypeToken() {...},0,3,0,0,0,1,0,1,0,1
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,ExceptionMsg,44,0,0,0,16,0,4,0,4,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,KnownAddressRequest,148,0,22,0,11,0,20,0,9,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsg,484,0,48,0,52,0,49,0,25,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,CorfuMsg,356,128,46,2,18,34,43,6,19,6
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,StreamAddressRange,139,0,16,0,4,0,15,0,7,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,NodeState.HeartbeatTimestamp,141,0,12,0,12,0,14,0,8,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol,SequencerMetrics,114,0,14,0,13,0,16,0,9,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,NodeState.HeartbeatTimestamp,104,37,12,0,4,8,11,3,5,3
+benchmarks/runtime,org.corfudb.protocols.wireprotocol,SequencerMetrics,76,38,14,0,2,11,12,4,5,4
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,LogData,601,0,70,0,140,0,57,0,22,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,LayoutMsg,90,0,0,0,21,0,8,0,8,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol,DataType,105,0,0,0,13,0,7,0,7,0
@@ -310,18 +310,18 @@ benchmarks/runtime,org.corfudb.runtime,CorfuRuntime,1362,0,108,0,258,0,113,0,59,
 benchmarks/runtime,org.corfudb.runtime,ViewsGarbageCollector,143,0,2,0,36,0,8,0,7,0
 benchmarks/runtime,org.corfudb.runtime,CorfuRuntime.CorfuRuntimeParameters,2197,0,276,0,63,0,290,0,152,0
 benchmarks/runtime,org.corfudb.runtime,RebootUtil,201,0,32,0,44,0,23,0,7,0
-benchmarks/runtime,org.corfudb.runtime,CheckpointWriter,592,0,16,0,105,0,31,0,23,0
+benchmarks/runtime,org.corfudb.runtime,CheckpointWriter,540,0,12,0,96,0,29,0,23,0
 benchmarks/runtime,org.corfudb.runtime,CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder,1160,0,108,0,1,0,114,0,59,0
 benchmarks/runtime,org.corfudb.runtime,NodeRouterPool,56,0,2,0,13,0,9,0,8,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,FailureDetectorMetrics.FailureDetectorAction,48,0,0,0,2,0,4,0,4,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,FailureDetectorMetrics,130,0,4,0,22,0,7,0,5,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,FailureDetectorMetrics.FailureDetectorMetricsBuilder,110,0,0,0,1,0,11,0,11,0
 benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,FailureDetectorMetrics.ConnectivityGraph,22,0,0,0,6,0,3,0,3,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity.NodeConnectivityType,48,0,0,0,4,0,4,0,4,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity.NodeConnectivityType,0,48,0,0,0,4,0,4,0,4
 benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeRank,161,0,18,0,18,0,21,0,12,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity,462,0,48,0,61,0,49,0,25,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity.NodeConnectivityBuilder,62,0,0,0,1,0,7,0,7,0
-benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity.ConnectionStatus,44,0,2,0,4,0,6,0,5,0
+benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity,321,141,41,7,27,34,38,11,16,9
+benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity.NodeConnectivityBuilder,27,35,0,0,0,1,1,6,1,6
+benchmarks/runtime,org.corfudb.protocols.wireprotocol.failuredetector,NodeConnectivity.ConnectionStatus,15,29,2,0,1,3,4,2,3,2
 benchmarks/runtime,org.corfudb.util,ReflectionUtils,301,0,10,0,73,0,21,0,16,0
 benchmarks/runtime,org.corfudb.util,UuidUtils,54,0,4,0,12,0,5,0,3,0
 benchmarks/runtime,org.corfudb.util,CFUtils,183,0,18,0,47,0,23,0,14,0
@@ -345,7 +345,7 @@ benchmarks/runtime,org.corfudb.util,LockUtils,3,0,0,0,2,0,1,0,1,0
 benchmarks/runtime,org.corfudb.util,Sleep.new Sleep() {...},10,0,0,0,2,0,2,0,2,0
 benchmarks/runtime,org.corfudb.util,Sleep.new Sleep() {...},10,0,0,0,2,0,2,0,2,0
 benchmarks/runtime,org.corfudb.util,Version,87,0,14,0,18,0,11,0,4,0
-benchmarks/runtime,org.corfudb.util,MetricsUtils,501,0,50,0,126,0,47,0,22,0
+benchmarks/runtime,org.corfudb.util,MetricsUtils,501,0,50,0,127,0,47,0,22,0
 benchmarks/runtime,org.corfudb.util,ImmuableListSetWrapper,89,0,0,0,22,0,19,0,19,0
 benchmarks/runtime,org.corfudb.util,LambdaUtils,635,0,0,0,76,0,50,0,50,0
 benchmarks/runtime,org.corfudb.util,JsonUtils,31,0,0,0,8,0,4,0,4,0
@@ -359,103 +359,3 @@ benchmarks/runtime,org.corfudb.runtime.view.replication,NeverHoleFillPolicy,39,0
 benchmarks/runtime,org.corfudb.runtime.view.replication,QuorumReplicationProtocol,700,0,58,0,135,0,44,0,15,0
 benchmarks/runtime,org.corfudb.runtime.view.replication,AlwaysHoleFillPolicy,18,0,2,0,5,0,3,0,2,0
 benchmarks/runtime,org.corfudb.comm,ChannelImplementation,139,0,12,0,14,0,14,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.actions,RestoreRedundancyMergeSegments,73,0,4,0,18,0,6,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.actions,StateTransfer,400,0,20,0,88,0,18,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph.new Object() {...},26,0,0,0,1,0,1,0,1,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph,471,0,41,0,112,0,41,0,20,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph.ClusterGraphBuilder,50,0,0,0,1,0,6,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management.failuredetector,ClusterGraph.ClusterGraphHelper,21,0,0,0,9,0,2,0,2,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,RemoveNodeWorkflow,29,0,0,0,9,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,ForceRemoveWorkflow.ForceRemoveNode,111,0,4,0,17,0,5,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,RemoveNodeWorkflow.RemoveNode,25,0,0,0,6,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow.AddNodeToLayout,41,0,0,0,7,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow,38,0,0,0,9,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow.BootstrapNode,18,0,0,0,4,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,AddNodeWorkflow.RestoreRedundancy,88,0,4,0,18,0,5,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,RestoreRedundancyMergeSegmentsWorkflow,28,0,0,0,9,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,HealNodeWorkflow,28,0,0,0,6,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,ForceRemoveWorkflow,29,0,0,0,9,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator.workflows,HealNodeWorkflow.HealNodeToLayout,36,0,0,0,7,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure,LayoutServer,742,0,60,0,164,0,54,0,24,0
-benchmarks/infrastructure,org.corfudb.infrastructure,CorfuServer,342,0,26,0,96,0,24,0,11,0
-benchmarks/infrastructure,org.corfudb.infrastructure,DataStore.NullValue,28,0,0,0,2,0,4,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure,SequencerServer,1366,0,104,0,234,0,83,0,30,0
-benchmarks/infrastructure,org.corfudb.infrastructure,SequencerServerCache.new CacheWriter() {...},68,0,4,0,11,0,5,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure,BatchProcessor.new Object() {...},47,0,0,0,1,0,1,0,1,0
-benchmarks/infrastructure,org.corfudb.infrastructure,LogUnitServer,859,0,30,0,170,0,55,0,40,0
-benchmarks/infrastructure,org.corfudb.infrastructure,SequencerServerCache.ConflictTxStream,98,0,16,0,6,0,13,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure,BatchWriterOperation.Type,108,0,0,0,10,0,4,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ResourceQuota,82,0,4,0,15,0,11,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure,AbstractServer.ServerState,48,0,0,0,2,0,4,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure,SequencerServerCache,132,0,4,0,41,0,15,0,13,0
-benchmarks/infrastructure,org.corfudb.infrastructure,RemoteMonitoringService.DetectorTask,54,0,2,0,5,0,6,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ServerContext,984,0,64,0,228,0,86,0,54,0
-benchmarks/infrastructure,org.corfudb.infrastructure,CorfuServerNode,313,0,6,0,75,0,19,0,16,0
-benchmarks/infrastructure,org.corfudb.infrastructure,Phase2Data,132,0,22,0,5,0,20,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure,LogUnitServer.LogUnitServerConfig,74,0,0,0,14,0,8,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure,SequencerServer.Config.ConfigBuilder,46,0,2,0,1,0,6,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ServerThreadFactory.ExceptionHandler,29,0,0,0,6,0,2,0,2,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ManagementAgent,268,0,24,0,77,0,23,0,11,0
-benchmarks/infrastructure,org.corfudb.infrastructure,LogUnitServerCache,98,0,4,0,25,0,12,0,10,0
-benchmarks/infrastructure,org.corfudb.infrastructure,DataStore,257,0,20,0,57,0,28,0,18,0
-benchmarks/infrastructure,org.corfudb.infrastructure,BatchWriterOperation,218,0,38,0,7,0,30,0,11,0
-benchmarks/infrastructure,org.corfudb.infrastructure,RemoteMonitoringService,1073,0,66,0,298,0,71,0,38,0
-benchmarks/infrastructure,org.corfudb.infrastructure,DataStore.new CacheWriter() {...},144,0,2,0,25,0,4,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure,RemoteMonitoringService.SequencerNotReadyCounter,29,0,0,0,6,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure,Rank,147,0,28,0,11,0,23,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure,LogUnitServer.LogUnitServerConfig.LogUnitServerConfigBuilder,74,0,0,0,1,0,8,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure,CorfuMsgHandler,341,0,18,0,68,0,23,0,14,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ManagementServer,656,0,36,0,153,0,37,0,19,0
-benchmarks/infrastructure,org.corfudb.infrastructure,AbstractServer,82,0,10,0,22,0,13,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure,CorfuServerNode.new ChannelInitializer() {...},273,0,12,0,51,0,10,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure,LocalMonitoringService,139,0,10,0,40,0,15,0,10,0
-benchmarks/infrastructure,org.corfudb.infrastructure,BaseServer,190,0,6,0,44,0,15,0,12,0
-benchmarks/infrastructure,org.corfudb.infrastructure,SequencerServer.Config,45,0,2,0,11,0,7,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure,TxResolutionResponse,226,0,32,0,13,0,30,0,14,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ServerThreadFactory,47,0,0,0,12,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure,NettyServerRouter,216,0,12,0,47,0,19,0,13,0
-benchmarks/infrastructure,org.corfudb.infrastructure,BatchProcessor,440,0,40,0,111,0,30,0,7,0
-benchmarks/infrastructure,org.corfudb.infrastructure,IDataStore.KvRecord,34,0,0,0,5,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure,RecoveryHandler,57,0,6,0,12,0,6,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure,ServerHandshakeHandler,308,0,28,0,85,0,23,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,MultiReadWriteLock.LockReference,115,0,16,0,6,0,17,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,MultiReadWriteLock.LockMetadata,113,0,12,0,4,0,15,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,AddressMetaData,12,0,0,0,5,0,1,0,1,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,SegmentHandle,477,0,70,0,26,0,54,0,19,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogWithRankedAddressSpace,58,0,12,0,16,0,7,0,1,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogDataStore,169,0,8,0,31,0,13,0,9,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,LogMetadata,243,0,18,0,54,0,23,0,14,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,InMemoryStreamLog,372,0,38,0,74,0,37,0,18,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogFiles.Checksum,39,0,2,0,8,0,4,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLog,36,0,10,0,11,0,7,0,2,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogDataStore.StreamLogDataStoreBuilder,26,0,0,0,1,0,4,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogFiles,2677,0,206,0,576,0,162,0,59,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogCompaction,136,0,8,0,28,0,8,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,MultiReadWriteLock,276,0,26,0,61,0,24,0,11,0
-benchmarks/infrastructure,org.corfudb.infrastructure.log,StreamLogFiles.new SimpleFileVisitor() {...},21,0,0,0,5,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,NetworkStretcher,109,0,6,0,20,0,18,0,15,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateAggregator,125,0,16,0,23,0,12,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,PollReport,182,0,14,0,23,0,23,0,16,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,CompleteGraphAdvisor,142,0,16,0,42,0,14,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateContext.ClusterStateContextBuilder,38,0,0,0,1,0,5,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateCollector,194,0,12,0,49,0,16,0,10,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ReconfigurationEventHandler,139,0,2,0,38,0,9,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,PollReport.PollReportBuilder,90,0,4,0,1,0,10,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,FailureDetector,384,0,12,0,106,0,21,0,15,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateContext.HeartbeatCounter,16,0,0,0,4,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateAggregator.ClusterStateAggregatorBuilder,50,0,0,0,1,0,6,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateContext,63,0,8,0,8,0,10,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterType,38,0,0,0,3,0,4,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,NetworkStretcher.NetworkStretcherBuilder,114,0,10,0,1,0,13,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterStateCollector.ClusterStateCollectorBuilder,50,0,0,0,1,0,6,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterAdvisorFactory.new Object() {...},19,0,0,0,1,0,1,0,1,0
-benchmarks/infrastructure,org.corfudb.infrastructure.management,ClusterAdvisorFactory,24,0,3,0,6,0,4,0,2,0
-benchmarks/infrastructure,org.corfudb.infrastructure.utils,Persistence,56,0,8,0,6,0,6,0,2,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator,Orchestrator,478,0,23,0,95,0,22,0,8,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator,ActionStatus,58,0,0,0,5,0,4,0,4,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator,Action,61,0,2,0,17,0,6,0,5,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator,IWorkflow,11,0,0,0,2,0,2,0,2,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator,Orchestrator.new ThreadFactory() {...},76,0,0,0,14,0,3,0,3,0
-benchmarks/infrastructure,org.corfudb.infrastructure.orchestrator,Orchestrator.new Object() {...},47,0,0,0,1,0,1,0,1,0
-benchmarks/infrastructure,org.corfudb.infrastructure.paxos,PaxosDataStore,83,0,2,0,9,0,7,0,6,0
-benchmarks/infrastructure,org.corfudb.infrastructure.paxos,PaxosDataStore.PaxosDataStoreBuilder,26,0,0,0,1,0,4,0,4,0

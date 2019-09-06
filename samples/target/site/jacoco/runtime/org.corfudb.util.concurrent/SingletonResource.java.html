@@ -34,7 +34,7 @@ public class SingletonResource&lt;T&gt; {
      * @return A new {@link SingletonResource}.
      */
     public static &lt;R&gt; SingletonResource&lt;R&gt; withInitial(@Nonnull Supplier&lt;R&gt; generator) {
-<span class="nc" id="L37">        return new SingletonResource&lt;&gt;(generator);</span>
+<span class="fc" id="L37">        return new SingletonResource&lt;&gt;(generator);</span>
     }
 
     /**
@@ -42,10 +42,10 @@ public class SingletonResource&lt;T&gt; {
      *
      * @param generator A method to be called when a new {@link T} is needed.
      */
-<span class="nc" id="L45">    private SingletonResource(Supplier&lt;T&gt; generator) {</span>
-<span class="nc" id="L46">        this.generator = generator;</span>
+<span class="fc" id="L45">    private SingletonResource(Supplier&lt;T&gt; generator) {</span>
+<span class="fc" id="L46">        this.generator = generator;</span>
 
-<span class="nc" id="L48">    }</span>
+<span class="fc" id="L48">    }</span>
 
     /**
      * Get the resource, potentially generating it by calling the {@code generator} if necessary.
@@ -53,17 +53,17 @@ public class SingletonResource&lt;T&gt; {
      * @return The resource provided by this {@link SingletonResource}.
      */
     public T get() {
-<span class="nc" id="L56">        T temp = resource;</span>
-<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (temp == null) {</span>
-<span class="nc" id="L58">            synchronized (this) {</span>
-<span class="nc" id="L59">                temp = resource;</span>
-<span class="nc bnc" id="L60" title="All 2 branches missed.">                if (temp == null) {</span>
-<span class="nc" id="L61">                    temp = generator.get();</span>
-<span class="nc" id="L62">                    resource = temp;</span>
+<span class="fc" id="L56">        T temp = resource;</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        if (temp == null) {</span>
+<span class="fc" id="L58">            synchronized (this) {</span>
+<span class="fc" id="L59">                temp = resource;</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">                if (temp == null) {</span>
+<span class="fc" id="L61">                    temp = generator.get();</span>
+<span class="fc" id="L62">                    resource = temp;</span>
                 }
-<span class="nc" id="L64">            }</span>
+<span class="fc" id="L64">            }</span>
         }
-<span class="nc" id="L66">        return temp;</span>
+<span class="fc" id="L66">        return temp;</span>
     }
 
     /**
@@ -83,11 +83,11 @@ public class SingletonResource&lt;T&gt; {
      *                actions.
      */
     public synchronized void cleanup(@Nonnull Consumer&lt;T&gt; cleaner) {
-<span class="nc bnc" id="L86" title="All 2 branches missed.">        if (resource != null) {</span>
-<span class="nc" id="L87">            cleaner.accept(resource);</span>
-<span class="nc" id="L88">            resource = null;</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">        if (resource != null) {</span>
+<span class="fc" id="L87">            cleaner.accept(resource);</span>
+<span class="fc" id="L88">            resource = null;</span>
         }
-<span class="nc" id="L90">    }</span>
+<span class="fc" id="L90">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

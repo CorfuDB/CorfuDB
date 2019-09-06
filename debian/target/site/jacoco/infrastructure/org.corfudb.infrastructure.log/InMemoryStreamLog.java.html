@@ -23,7 +23,7 @@ import org.corfudb.runtime.view.Address;
  * This should only be used for testing.
  * Created by maithem on 7/21/16.
  */
-<span class="nc" id="L26">@Slf4j</span>
+<span class="fc" id="L26">@Slf4j</span>
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
     private Map&lt;Long, LogData&gt; logCache;
@@ -34,53 +34,53 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     /**
      * Returns an object that stores a stream log in memory.
      */
-<span class="nc" id="L37">    public InMemoryStreamLog() {</span>
-<span class="nc" id="L38">        logCache = new ConcurrentHashMap&lt;&gt;();</span>
-<span class="nc" id="L39">        trimmed = ConcurrentHashMap.newKeySet();</span>
-<span class="nc" id="L40">        startingAddress = 0;</span>
-<span class="nc" id="L41">        logMetadata = new LogMetadata();</span>
-<span class="nc" id="L42">    }</span>
+<span class="fc" id="L37">    public InMemoryStreamLog() {</span>
+<span class="fc" id="L38">        logCache = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L39">        trimmed = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L40">        startingAddress = 0;</span>
+<span class="fc" id="L41">        logMetadata = new LogMetadata();</span>
+<span class="fc" id="L42">    }</span>
 
     @Override
     public synchronized void append(List&lt;LogData&gt; entries) {
-<span class="nc bnc" id="L46" title="All 2 branches missed.">        for (LogData entry : entries) {</span>
-<span class="nc bnc" id="L47" title="All 4 branches missed.">            if (isTrimmed(entry.getGlobalAddress()) || logCache.containsKey(entry.getGlobalAddress())) {</span>
+<span class="fc bfc" id="L46" title="All 2 branches covered.">        for (LogData entry : entries) {</span>
+<span class="pc bpc" id="L47" title="2 of 4 branches missed.">            if (isTrimmed(entry.getGlobalAddress()) || logCache.containsKey(entry.getGlobalAddress())) {</span>
 <span class="nc" id="L48">                continue;</span>
             }
 
-<span class="nc" id="L51">            logCache.put(entry.getGlobalAddress(), entry);</span>
-<span class="nc" id="L52">            logMetadata.update(entry, false);</span>
-<span class="nc" id="L53">        }</span>
-<span class="nc" id="L54">    }</span>
+<span class="fc" id="L51">            logCache.put(entry.getGlobalAddress(), entry);</span>
+<span class="fc" id="L52">            logMetadata.update(entry, false);</span>
+<span class="fc" id="L53">        }</span>
+<span class="fc" id="L54">    }</span>
 
     @Override
     public synchronized void append(long address, LogData entry) {
-<span class="nc bnc" id="L58" title="All 2 branches missed.">        if(isTrimmed(address)) {</span>
-<span class="nc" id="L59">            throw new OverwriteException(OverwriteCause.TRIM);</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if(isTrimmed(address)) {</span>
+<span class="fc" id="L59">            throw new OverwriteException(OverwriteCause.TRIM);</span>
         }
 
-<span class="nc bnc" id="L62" title="All 2 branches missed.">        if (logCache.containsKey(address)) {</span>
-<span class="nc" id="L63">            throwLogUnitExceptionsIfNecessary(address, entry);</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (logCache.containsKey(address)) {</span>
+<span class="fc" id="L63">            throwLogUnitExceptionsIfNecessary(address, entry);</span>
         }
-<span class="nc" id="L65">        logCache.put(address, entry);</span>
-<span class="nc" id="L66">        logMetadata.update(entry, false);</span>
-<span class="nc" id="L67">    }</span>
+<span class="fc" id="L65">        logCache.put(address, entry);</span>
+<span class="fc" id="L66">        logMetadata.update(entry, false);</span>
+<span class="fc" id="L67">    }</span>
 
     private boolean isTrimmed(long address) {
-<span class="nc bnc" id="L70" title="All 4 branches missed.">        return address &lt; startingAddress || trimmed.contains(address);</span>
+<span class="pc bpc" id="L70" title="1 of 4 branches missed.">        return address &lt; startingAddress || trimmed.contains(address);</span>
     }
 
     @Override
     public synchronized void prefixTrim(long address) {
-<span class="nc bnc" id="L75" title="All 2 branches missed.">        if (isTrimmed(address)) {</span>
-<span class="nc" id="L76">            log.warn(&quot;prefixTrim: Ignoring repeated trim {}&quot;, address);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (isTrimmed(address)) {</span>
+<span class="fc" id="L76">            log.warn(&quot;prefixTrim: Ignoring repeated trim {}&quot;, address);</span>
         } else {
-<span class="nc" id="L78">            startingAddress = address + 1;</span>
+<span class="fc" id="L78">            startingAddress = address + 1;</span>
 
             // Trim address space maps.
-<span class="nc" id="L81">            logMetadata.prefixTrim(address);</span>
+<span class="fc" id="L81">            logMetadata.prefixTrim(address);</span>
         }
-<span class="nc" id="L83">    }</span>
+<span class="fc" id="L83">    }</span>
 
     @Override
     public synchronized TailsResponse getTails(List&lt;UUID&gt; streams) {
@@ -93,38 +93,38 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public synchronized long getLogTail() {
-<span class="nc" id="L96">        return logMetadata.getGlobalTail();</span>
+<span class="fc" id="L96">        return logMetadata.getGlobalTail();</span>
     }
 
     @Override
     public synchronized TailsResponse getAllTails() {
-<span class="nc" id="L101">        Map&lt;UUID, Long&gt; tails = new HashMap&lt;&gt;(logMetadata.getStreamTails().size());</span>
-<span class="nc bnc" id="L102" title="All 2 branches missed.">        for (Map.Entry&lt;UUID, Long&gt; entry : logMetadata.getStreamTails().entrySet()) {</span>
-<span class="nc" id="L103">            tails.put(entry.getKey(), entry.getValue());</span>
-<span class="nc" id="L104">        }</span>
-<span class="nc" id="L105">        return new TailsResponse(logMetadata.getGlobalTail(), tails);</span>
+<span class="fc" id="L101">        Map&lt;UUID, Long&gt; tails = new HashMap&lt;&gt;(logMetadata.getStreamTails().size());</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">        for (Map.Entry&lt;UUID, Long&gt; entry : logMetadata.getStreamTails().entrySet()) {</span>
+<span class="fc" id="L103">            tails.put(entry.getKey(), entry.getValue());</span>
+<span class="fc" id="L104">        }</span>
+<span class="fc" id="L105">        return new TailsResponse(logMetadata.getGlobalTail(), tails);</span>
     }
 
     @Override
     public synchronized StreamsAddressResponse getStreamsAddressSpace() {
-<span class="nc" id="L110">        return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());</span>
+<span class="fc" id="L110">        return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());</span>
     }
 
     @Override
     public long getTrimMark() {
-<span class="nc" id="L115">        return startingAddress;</span>
+<span class="fc" id="L115">        return startingAddress;</span>
     }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
-<span class="nc bnc" id="L119" title="All 2 branches missed.">        if (entry.getRank() == null) {</span>
-<span class="nc" id="L120">            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);</span>
-<span class="nc" id="L121">            log.trace(&quot;throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}&quot;, address, overwriteCause);</span>
-<span class="nc" id="L122">            throw new OverwriteException(overwriteCause);</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">        if (entry.getRank() == null) {</span>
+<span class="fc" id="L120">            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);</span>
+<span class="fc" id="L121">            log.trace(&quot;throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}&quot;, address, overwriteCause);</span>
+<span class="fc" id="L122">            throw new OverwriteException(overwriteCause);</span>
         } else {
             // the method below might throw DataOutrankedException or ValueAdoptedException
-<span class="nc" id="L125">            assertAppendPermittedUnsafe(address, entry);</span>
+<span class="fc" id="L125">            assertAppendPermittedUnsafe(address, entry);</span>
         }
-<span class="nc" id="L127">    }</span>
+<span class="fc" id="L127">    }</span>
 
     /**
      * Returns the known addresses in this Log Unit in the specified consecutive
@@ -137,28 +137,28 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public Set&lt;Long&gt; getKnownAddressesInRange(long rangeStart, long rangeEnd) {
 
-<span class="nc" id="L140">        Set&lt;Long&gt; result = new HashSet&lt;&gt;();</span>
-<span class="nc bnc" id="L141" title="All 2 branches missed.">        for (long address = rangeStart; address &lt;= rangeEnd; address++) {</span>
-<span class="nc bnc" id="L142" title="All 2 branches missed.">            if (logCache.containsKey(address)) {</span>
+<span class="fc" id="L140">        Set&lt;Long&gt; result = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        for (long address = rangeStart; address &lt;= rangeEnd; address++) {</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">            if (logCache.containsKey(address)) {</span>
 <span class="nc" id="L143">                result.add(address);</span>
             }
         }
-<span class="nc" id="L146">        return result;</span>
+<span class="fc" id="L146">        return result;</span>
     }
 
     @Override
     public LogData read(long address) {
-<span class="nc bnc" id="L151" title="All 2 branches missed.">        if (isTrimmed(address)) {</span>
-<span class="nc" id="L152">            return LogData.getTrimmed(address);</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">        if (isTrimmed(address)) {</span>
+<span class="fc" id="L152">            return LogData.getTrimmed(address);</span>
         }
 
-<span class="nc" id="L155">        return logCache.get(address);</span>
+<span class="fc" id="L155">        return logCache.get(address);</span>
     }
 
     @Override
     public void sync(boolean force){
         //no-op
-<span class="nc" id="L161">    }</span>
+<span class="fc" id="L161">    }</span>
 
     @Override
     public void close() {
@@ -168,32 +168,32 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public synchronized void compact() {
         // Prefix Trim
-<span class="nc bnc" id="L171" title="All 2 branches missed.">        for (long address : logCache.keySet()) {</span>
-<span class="nc bnc" id="L172" title="All 2 branches missed.">            if (address &lt; startingAddress) {</span>
-<span class="nc" id="L173">                logCache.remove(address);</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">        for (long address : logCache.keySet()) {</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">            if (address &lt; startingAddress) {</span>
+<span class="fc" id="L173">                logCache.remove(address);</span>
             }
-<span class="nc" id="L175">        }</span>
+<span class="fc" id="L175">        }</span>
 
         // Sparse trim
-<span class="nc bnc" id="L178" title="All 2 branches missed.">        for (long address : trimmed) {</span>
+<span class="pc bpc" id="L178" title="1 of 2 branches missed.">        for (long address : trimmed) {</span>
 <span class="nc" id="L179">            logCache.remove(address);</span>
 <span class="nc" id="L180">        }</span>
 
-<span class="nc bnc" id="L182" title="All 2 branches missed.">        for (long address : trimmed) {</span>
+<span class="pc bpc" id="L182" title="1 of 2 branches missed.">        for (long address : trimmed) {</span>
 <span class="nc bnc" id="L183" title="All 2 branches missed.">            if (address &lt; startingAddress) {</span>
 <span class="nc" id="L184">                trimmed.remove(address);</span>
             }
 <span class="nc" id="L186">        }</span>
-<span class="nc" id="L187">    }</span>
+<span class="fc" id="L187">    }</span>
 
     @Override
     public void reset() {
-<span class="nc" id="L191">        startingAddress = 0;</span>
-<span class="nc" id="L192">        logMetadata = new LogMetadata();</span>
+<span class="fc" id="L191">        startingAddress = 0;</span>
+<span class="fc" id="L192">        logMetadata = new LogMetadata();</span>
         // Clear the trimmed addresses record.
-<span class="nc" id="L194">        trimmed.clear();</span>
+<span class="fc" id="L194">        trimmed.clear();</span>
         // Clearing all data from the cache.
-<span class="nc" id="L196">        logCache.clear();</span>
-<span class="nc" id="L197">    }</span>
+<span class="fc" id="L196">        logCache.clear();</span>
+<span class="fc" id="L197">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

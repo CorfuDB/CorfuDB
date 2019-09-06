@@ -51,6 +51,7 @@ org/corfudb/runtime/collections/SMRMapTest$3.class
 org/corfudb/runtime/checkpoint/CheckpointTrimTest$4.class
 org/corfudb/integration/StreamAddressDiscoveryIT$2.class
 org/corfudb/runtime/clients/NettyCommTest$NettyServerData.class
+org/corfudb/common/metrics/servers/PrometheusMetricsServerTest.class
 org/corfudb/runtime/object/CompileProxyTest$5.class
 org/corfudb/integration/ServerRestartIT$1.class
 org/corfudb/runtime/concurrent/MultipleNonOverlappingTest$NonOverlappingWriter.class
@@ -180,7 +181,6 @@ org/corfudb/runtime/view/SequencerViewTest.class
 org/corfudb/runtime/checkpoint/CheckpointTrimTest$7.class
 org/corfudb/runtime/view/AbstractViewTest$TestServer.class
 org/corfudb/integration/cluster/Harness/ShutdownAction.class
-org/corfudb/runtime/view/LayoutViewTest$2.class
 org/corfudb/runtime/view/ObjectsViewTest$5.class
 org/corfudb/runtime/collections/PutIfAbsentMapTest$PutIfAbsentMap.class
 org/corfudb/runtime/view/replication/QuorumReplicationProtocolTest.class
@@ -263,7 +263,6 @@ org/corfudb/infrastructure/LayoutBuilderTest.class
 org/corfudb/runtime/object/transactions/UndoTest$5.class
 org/corfudb/runtime/object/transactions/StreamTest.class
 org/corfudb/test/TestUtils.class
-org/corfudb/runtime/view/LayoutViewTest$3.class
 org/corfudb/runtime/object/transactions/UndoTest.class
 org/corfudb/runtime/view/ObjectsViewTest.class
 org/corfudb/runtime/object/transactions/SnapshotTransactionContextTest$2.class
@@ -291,7 +290,6 @@ org/corfudb/runtime/view/StateTransferTest.class
 org/corfudb/infrastructure/AbstractServerAssertions.class
 org/corfudb/integration/WorkflowIT.class
 org/corfudb/runtime/clients/NettyCommTest$NettyServerDataConstructor.class
-org/corfudb/runtime/view/LayoutViewTest$1.class
 org/corfudb/infrastructure/AbstractServerTest.class
 org/corfudb/runtime/checkpoint/CheckpointTest$2.class
 org/corfudb/runtime/collections/SMRMultiLogunitTest$1.class

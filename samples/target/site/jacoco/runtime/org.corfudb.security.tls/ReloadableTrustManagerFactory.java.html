@@ -27,9 +27,9 @@ public class ReloadableTrustManagerFactory extends SimpleTrustManagerFactory {
      * @throws SSLException
      *          Thrown when there's an issue with loading the trust store.
      */
-<span class="nc" id="L30">    public ReloadableTrustManagerFactory(String trustStorePath, String trustPasswordPath) throws SSLException {</span>
-<span class="nc" id="L31">        trustManager = new ReloadableTrustManager(trustStorePath, trustPasswordPath);</span>
-<span class="nc" id="L32">    }</span>
+<span class="fc" id="L30">    public ReloadableTrustManagerFactory(String trustStorePath, String trustPasswordPath) throws SSLException {</span>
+<span class="fc" id="L31">        trustManager = new ReloadableTrustManager(trustStorePath, trustPasswordPath);</span>
+<span class="fc" id="L32">    }</span>
 
     @Override
     protected void engineInit(KeyStore keyStore) throws KeyStoreException {
@@ -43,7 +43,7 @@ public class ReloadableTrustManagerFactory extends SimpleTrustManagerFactory {
 
     @Override
     protected TrustManager[] engineGetTrustManagers() {
-<span class="nc" id="L46">        return new TrustManager[] { trustManager };</span>
+<span class="fc" id="L46">        return new TrustManager[] { trustManager };</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

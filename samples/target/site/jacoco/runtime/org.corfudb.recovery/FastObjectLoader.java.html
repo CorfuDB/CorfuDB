@@ -74,7 +74,7 @@ import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
  * Created by rmichoud on 6/14/17.
  */
 
-<span class="nc" id="L77">@Slf4j</span>
+<span class="fc" id="L77">@Slf4j</span>
 @Accessors(chain = true)
 public class FastObjectLoader {
 
@@ -87,7 +87,7 @@ public class FastObjectLoader {
 
     private final CorfuRuntime runtime;
 
-<span class="nc" id="L90">    @Setter</span>
+<span class="fc" id="L90">    @Setter</span>
 <span class="nc" id="L91">    @Getter</span>
     Class defaultObjectsType = SMRMap.class;
 
@@ -95,7 +95,7 @@ public class FastObjectLoader {
 <span class="nc" id="L95">    @Getter</span>
     private boolean loadInCache;
 
-<span class="nc" id="L98">    @Setter</span>
+<span class="fc" id="L98">    @Setter</span>
 <span class="nc" id="L99">    @Getter</span>
     int numberOfPendingFutures = DEFAULT_NUMBER_OF_PENDING_FUTURES;
 
@@ -104,36 +104,36 @@ public class FastObjectLoader {
      * related to building checkpoints and reading addresspace
      * segmenents
      */
-<span class="nc" id="L107">    @Getter</span>
+<span class="pc" id="L107">    @Getter</span>
 <span class="nc" id="L108">    @Setter</span>
     int numOfWorkers = DEFAULT_NUMBER_OF_WORKERS;
 
-<span class="nc" id="L111">    @Getter</span>
+<span class="pc" id="L111">    @Getter</span>
     private long logHead = Address.NON_EXIST;
 
-<span class="nc" id="L114">    @Getter</span>
+<span class="pc" id="L114">    @Getter</span>
     private long logTail = Address.NON_EXIST;
 
-<span class="nc" id="L117">    @Setter</span>
+<span class="fc" id="L117">    @Setter</span>
 <span class="nc" id="L118">    @Getter</span>
     private long batchReadSize = DEFAULT_BATCH_FOR_FAST_LOADER;
 
-<span class="nc" id="L121">    @Setter</span>
+<span class="pc" id="L121">    @Setter</span>
 <span class="nc" id="L122">    @Getter</span>
     private int timeoutInMinutesForLoading = DEFAULT_TIMEOUT_MINUTES_FAST_LOADING;
 
-<span class="nc" id="L125">    @Setter</span>
+<span class="fc" id="L125">    @Setter</span>
 <span class="nc" id="L126">    @Getter</span>
     private boolean logHasNoCheckPoint = false;
 
-<span class="nc" id="L129">    private boolean whiteList = false;</span>
-<span class="nc" id="L130">    private final List&lt;UUID&gt; streamsToLoad = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L129">    private boolean whiteList = false;</span>
+<span class="fc" id="L130">    private final List&lt;UUID&gt; streamsToLoad = new ArrayList&lt;&gt;();</span>
 
     @VisibleForTesting
-<span class="nc" id="L133">    void setLogHead(long head) { this.logHead = head; }</span>
+<span class="fc" id="L133">    void setLogHead(long head) { this.logHead = head; }</span>
 
     @VisibleForTesting
-<span class="nc" id="L136">    void setLogTail(long tail) { this.logTail = tail; }</span>
+<span class="fc" id="L136">    void setLogTail(long tail) { this.logTail = tail; }</span>
 
     // A future to track the last submitted read request
     volatile private Future lastReadRequest;
@@ -146,36 +146,36 @@ public class FastObjectLoader {
      * @param streamsToLoad
      */
     public FastObjectLoader addStreamsToLoad(List&lt;String&gt; streamsToLoad) {
-<span class="nc bnc" id="L149" title="All 2 branches missed.">        if (streamsToIgnore.size() != 0) {</span>
-<span class="nc" id="L150">            throw new IllegalStateException(&quot;Cannot add a whitelist when there are already streams to ignore&quot;);</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">        if (streamsToIgnore.size() != 0) {</span>
+<span class="fc" id="L150">            throw new IllegalStateException(&quot;Cannot add a whitelist when there are already streams to ignore&quot;);</span>
         }
 
-<span class="nc" id="L153">        whiteList = true;</span>
+<span class="fc" id="L153">        whiteList = true;</span>
 
-<span class="nc" id="L155">        streamsToLoad.forEach(streamName -&gt; {</span>
-<span class="nc" id="L156">            this.streamsToLoad.add(CorfuRuntime.getStreamID(streamName));</span>
+<span class="fc" id="L155">        streamsToLoad.forEach(streamName -&gt; {</span>
+<span class="fc" id="L156">            this.streamsToLoad.add(CorfuRuntime.getStreamID(streamName));</span>
             // Generate the streamsCheckpointId (we need to allow them as well)
-<span class="nc" id="L158">            this.streamsToLoad.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));</span>
-<span class="nc" id="L159">        });</span>
+<span class="fc" id="L158">            this.streamsToLoad.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));</span>
+<span class="fc" id="L159">        });</span>
 
-<span class="nc" id="L161">        return this;</span>
+<span class="fc" id="L161">        return this;</span>
     }
 
     /**
      * We can add streams to be ignored during the
      * reconstruction of the state (e.g. raw streams)
      */
-<span class="nc" id="L168">    @Getter</span>
+<span class="pc" id="L168">    @Getter</span>
     private Set&lt;UUID&gt; streamsToIgnore = new HashSet&lt;&gt;();
 
     /**
      * We can register streams with non-default type
      */
-<span class="nc" id="L174">    private final Map&lt;UUID, ObjectBuilder&gt; customTypeStreams = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L174">    private final Map&lt;UUID, ObjectBuilder&gt; customTypeStreams = new HashMap&lt;&gt;();</span>
 
     public void addCustomTypeStream(UUID streamId, ObjectBuilder ob) {
-<span class="nc" id="L177">        customTypeStreams.put(streamId, ob);</span>
-<span class="nc" id="L178">    }</span>
+<span class="fc" id="L177">        customTypeStreams.put(streamId, ob);</span>
+<span class="fc" id="L178">    }</span>
 
     /**
      * Add an indexer to a stream (that backs a CorfuTable)
@@ -184,18 +184,18 @@ public class FastObjectLoader {
      * @param indexRegistry Index Registry.
      */
     public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
-<span class="nc" id="L187">        UUID streamId = CorfuRuntime.getStreamID(streamName);</span>
-<span class="nc" id="L188">        ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)</span>
-<span class="nc" id="L189">                .setArguments(indexRegistry).setStreamID(streamId);</span>
-<span class="nc" id="L190">        addCustomTypeStream(streamId, ob);</span>
-<span class="nc" id="L191">    }</span>
+<span class="fc" id="L187">        UUID streamId = CorfuRuntime.getStreamID(streamName);</span>
+<span class="fc" id="L188">        ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)</span>
+<span class="fc" id="L189">                .setArguments(indexRegistry).setStreamID(streamId);</span>
+<span class="fc" id="L190">        addCustomTypeStream(streamId, ob);</span>
+<span class="fc" id="L191">    }</span>
 
     private Class getStreamType(UUID streamId) {
-<span class="nc bnc" id="L194" title="All 2 branches missed.">        if (customTypeStreams.containsKey(streamId)) {</span>
-<span class="nc" id="L195">            return customTypeStreams.get(streamId).getType();</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">        if (customTypeStreams.containsKey(streamId)) {</span>
+<span class="fc" id="L195">            return customTypeStreams.get(streamId).getType();</span>
         }
 
-<span class="nc" id="L198">        return defaultObjectsType;</span>
+<span class="fc" id="L198">        return defaultObjectsType;</span>
     }
 
     private long addressProcessed;
@@ -205,30 +205,30 @@ public class FastObjectLoader {
 
     private final Map&lt;UUID, StreamMetaData&gt; streamsMetaData;
 
-<span class="nc" id="L208">    @Setter</span>
+<span class="fc" id="L208">    @Setter</span>
 <span class="nc" id="L209">    @Getter</span>
     private int numberOfAttempt = NUMBER_OF_ATTEMPT;
 
-<span class="nc" id="L212">    private int retryIteration = 0;</span>
+<span class="fc" id="L212">    private int retryIteration = 0;</span>
     private long nextRead;
 
-<span class="nc" id="L215">    public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {</span>
-<span class="nc" id="L216">        this.runtime = corfuRuntime;</span>
-<span class="nc bnc" id="L217" title="All 2 branches missed.">        loadInCache = !corfuRuntime.getParameters().isCacheDisabled();</span>
-<span class="nc" id="L218">        streamsMetaData = new HashMap&lt;&gt;();</span>
-<span class="nc" id="L219">    }</span>
+<span class="fc" id="L215">    public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {</span>
+<span class="fc" id="L216">        this.runtime = corfuRuntime;</span>
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        loadInCache = !corfuRuntime.getParameters().isCacheDisabled();</span>
+<span class="fc" id="L218">        streamsMetaData = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L219">    }</span>
 
     public void addStreamToIgnore(String streamName) {
         // In a whitelist mode, we cannot add streams to the blacklist
-<span class="nc bnc" id="L223" title="All 2 branches missed.">        if (whiteList) {</span>
-<span class="nc" id="L224">            throw new IllegalStateException(&quot;Cannot add a stream to the blacklist (streamsToIgnore)&quot; +</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (whiteList) {</span>
+<span class="fc" id="L224">            throw new IllegalStateException(&quot;Cannot add a stream to the blacklist (streamsToIgnore)&quot; +</span>
                     &quot;in whitelist mode.&quot;);
         }
 
-<span class="nc" id="L228">        streamsToIgnore.add(CorfuRuntime.getStreamID(streamName));</span>
+<span class="fc" id="L228">        streamsToIgnore.add(CorfuRuntime.getStreamID(streamName));</span>
         // Ignore also checkpoint of this stream
-<span class="nc" id="L230">        streamsToIgnore.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));</span>
-<span class="nc" id="L231">    }</span>
+<span class="fc" id="L230">        streamsToIgnore.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));</span>
+<span class="fc" id="L231">    }</span>
 
     /**
      * Necromancer Utilities
@@ -242,34 +242,34 @@ public class FastObjectLoader {
         // Note that the queue implementation requires the corePoolSize to
         // be equal to maximumPoolSize, so this should be fine for a single threaded
         // executor
-<span class="nc" id="L245">        necromancer = new ThreadPoolExecutor(1, 1,</span>
+<span class="fc" id="L245">        necromancer = new ThreadPoolExecutor(1, 1,</span>
                 0L, TimeUnit.MILLISECONDS,
                 new BoundedQueue&lt;&gt;(numberOfPendingFutures),
                 new ThreadFactoryBuilder()
-<span class="nc" id="L249">                        .setNameFormat(&quot;FastObjectLoaderReaderThread-%d&quot;).build());</span>
-<span class="nc" id="L250">        lastReadRequest = null;</span>
-<span class="nc" id="L251">    }</span>
+<span class="fc" id="L249">                        .setNameFormat(&quot;FastObjectLoaderReaderThread-%d&quot;).build());</span>
+<span class="fc" id="L250">        lastReadRequest = null;</span>
+<span class="fc" id="L251">    }</span>
 
     private void invokeNecromancer(Map&lt;Long, ILogData&gt; logDataMap, BiConsumer&lt;Long, ILogData&gt; resurrectionSpell) {
-<span class="nc" id="L254">        lastReadRequest = necromancer.submit(() -&gt;</span>
+<span class="fc" id="L254">        lastReadRequest = necromancer.submit(() -&gt;</span>
         {
-<span class="nc" id="L256">            logDataMap.forEach((address, logData) -&gt; {</span>
-<span class="nc" id="L257">                resurrectionSpell.accept(address, logData);</span>
-<span class="nc" id="L258">            });</span>
-<span class="nc" id="L259">        });</span>
-<span class="nc" id="L260">    }</span>
+<span class="fc" id="L256">            logDataMap.forEach((address, logData) -&gt; {</span>
+<span class="fc" id="L257">                resurrectionSpell.accept(address, logData);</span>
+<span class="fc" id="L258">            });</span>
+<span class="fc" id="L259">        });</span>
+<span class="fc" id="L260">    }</span>
 
     private void killNecromancer() {
-<span class="nc" id="L263">        necromancer.shutdown();</span>
+<span class="fc" id="L263">        necromancer.shutdown();</span>
         try {
-<span class="nc" id="L265">            necromancer.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);</span>
+<span class="fc" id="L265">            necromancer.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);</span>
 <span class="nc" id="L266">        } catch (InterruptedException e) {</span>
 <span class="nc" id="L267">            Thread.currentThread().interrupt();</span>
 <span class="nc" id="L268">            String msg = &quot;Necromancer is taking too long to load the maps. Gave up.&quot;;</span>
 <span class="nc" id="L269">            throw new FastObjectLoaderException(msg);</span>
-<span class="nc" id="L270">        }</span>
+<span class="fc" id="L270">        }</span>
 
-<span class="nc bnc" id="L272" title="All 2 branches missed.">        if (lastReadRequest == null) {</span>
+<span class="pc bpc" id="L272" title="1 of 2 branches missed.">        if (lastReadRequest == null) {</span>
 <span class="nc" id="L273">            log.info(&quot;killNecromancer: no read requests have been processed.&quot;);</span>
 <span class="nc" id="L274">            return;</span>
         }
@@ -282,24 +282,24 @@ public class FastObjectLoader {
         //    been submitted
         // Because of #1, #2 and #3 , if awaitTermination doesn't fail, then lastReadRequest
         // will be the last request submitted
-<span class="nc" id="L285">        CFUtils.getUninterruptibly(lastReadRequest);</span>
-<span class="nc" id="L286">    }</span>
+<span class="fc" id="L285">        CFUtils.getUninterruptibly(lastReadRequest);</span>
+<span class="fc" id="L286">    }</span>
 
     /**
      * These two functions are called if no parameter were supplied
      * by the user.
      */
     private void findAndSetLogHead() {
-<span class="nc" id="L293">         logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();</span>
-<span class="nc" id="L294">    }</span>
+<span class="fc" id="L293">         logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();</span>
+<span class="fc" id="L294">    }</span>
 
     private void findAndSetLogTail() {
-<span class="nc" id="L297">        logTail = runtime.getAddressSpaceView().getLogTail();</span>
-<span class="nc" id="L298">    }</span>
+<span class="fc" id="L297">        logTail = runtime.getAddressSpaceView().getLogTail();</span>
+<span class="fc" id="L298">    }</span>
 
     private void resetAddressProcessed() {
-<span class="nc" id="L301">        addressProcessed = logHead - 1;</span>
-<span class="nc" id="L302">    }</span>
+<span class="fc" id="L301">        addressProcessed = logHead - 1;</span>
+<span class="fc" id="L302">    }</span>
 
     /**
      * It is a valid state to have entries that are checkpointed but the log was not fully
@@ -314,8 +314,8 @@ public class FastObjectLoader {
      * @return if the entry is already part of the checkpoint we started from.
      */
     private boolean entryAlreadyContainedInCheckpoint(UUID streamId, SMREntry entry) {
-<span class="nc bnc" id="L317" title="All 2 branches missed.">        return streamsMetaData.containsKey(streamId) &amp;&amp; entry.getGlobalAddress() &lt;</span>
-<span class="nc bnc" id="L318" title="All 2 branches missed.">                streamsMetaData.get(streamId).getHeadAddress();</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">        return streamsMetaData.containsKey(streamId) &amp;&amp; entry.getGlobalAddress() &lt;</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">                streamsMetaData.get(streamId).getHeadAddress();</span>
     }
 
     /**
@@ -334,32 +334,32 @@ public class FastObjectLoader {
         // 1.
         // In white list mode, ignore everything that is not in the list (the list contains the streams
         // passed by the client + derived checkpoint streams).
-<span class="nc bnc" id="L337" title="All 4 branches missed.">        if (whiteList &amp;&amp; !streamsToLoad.contains(streamId)) {</span>
-<span class="nc" id="L338">            return false;</span>
+<span class="fc bfc" id="L337" title="All 4 branches covered.">        if (whiteList &amp;&amp; !streamsToLoad.contains(streamId)) {</span>
+<span class="fc" id="L338">            return false;</span>
         }
 
         // 2.
         // We ignore the transaction stream ID because it is a raw stream
         // We don't want to create a Map for it.
-<span class="nc bnc" id="L344" title="All 4 branches missed.">        if (streamId == runtime.getObjectsView().TRANSACTION_STREAM_ID || streamsToIgnore.contains(streamId)) {</span>
+<span class="pc bpc" id="L344" title="2 of 4 branches missed.">        if (streamId == runtime.getObjectsView().TRANSACTION_STREAM_ID || streamsToIgnore.contains(streamId)) {</span>
 <span class="nc" id="L345">            return false;</span>
         }
 
         // 3.
         // If the entry was already processed with the previous checkpoint.
-<span class="nc bnc" id="L350" title="All 4 branches missed.">        if (!isCheckpointEntry &amp;&amp; entryAlreadyContainedInCheckpoint(streamId, entry)) {</span>
-<span class="nc" id="L351">            return false;</span>
+<span class="fc bfc" id="L350" title="All 4 branches covered.">        if (!isCheckpointEntry &amp;&amp; entryAlreadyContainedInCheckpoint(streamId, entry)) {</span>
+<span class="fc" id="L351">            return false;</span>
         }
 
-<span class="nc" id="L354">        return true;</span>
+<span class="fc" id="L354">        return true;</span>
     }
 
     private boolean shouldStreamBeProcessed(UUID streamId) {
-<span class="nc bnc" id="L358" title="All 2 branches missed.">        if (whiteList) {</span>
-<span class="nc" id="L359">            return streamsToLoad.contains(streamId);</span>
+<span class="fc bfc" id="L358" title="All 2 branches covered.">        if (whiteList) {</span>
+<span class="fc" id="L359">            return streamsToLoad.contains(streamId);</span>
         }
 
-<span class="nc bnc" id="L362" title="All 2 branches missed.">        return !streamsToIgnore.contains(streamId);</span>
+<span class="fc bfc" id="L362" title="All 2 branches covered.">        return !streamsToIgnore.contains(streamId);</span>
     }
 
     /**
@@ -373,13 +373,13 @@ public class FastObjectLoader {
      * @return
      */
     private boolean shouldLogDataBeProcessed(ILogData logData) {
-<span class="nc" id="L376">        boolean shouldProcess = false;</span>
-<span class="nc bnc" id="L377" title="All 2 branches missed.">        for (UUID id : logData.getStreams()) {</span>
-<span class="nc bnc" id="L378" title="All 2 branches missed.">            if (shouldStreamBeProcessed(id)){</span>
-<span class="nc" id="L379">                shouldProcess = true;</span>
+<span class="fc" id="L376">        boolean shouldProcess = false;</span>
+<span class="fc bfc" id="L377" title="All 2 branches covered.">        for (UUID id : logData.getStreams()) {</span>
+<span class="fc bfc" id="L378" title="All 2 branches covered.">            if (shouldStreamBeProcessed(id)){</span>
+<span class="fc" id="L379">                shouldProcess = true;</span>
             }
-<span class="nc" id="L381">        }</span>
-<span class="nc" id="L382">        return shouldProcess;</span>
+<span class="fc" id="L381">        }</span>
+<span class="fc" id="L382">        return shouldProcess;</span>
     }
 
 
@@ -393,67 +393,67 @@ public class FastObjectLoader {
      */
     private void applySmrEntryToStream(UUID streamId, SMREntry entry,
                                        long globalAddress, boolean isCheckPointEntry) {
-<span class="nc bnc" id="L396" title="All 2 branches missed.">        if (shouldEntryBeApplied(streamId, entry, isCheckPointEntry)) {</span>
+<span class="fc bfc" id="L396" title="All 2 branches covered.">        if (shouldEntryBeApplied(streamId, entry, isCheckPointEntry)) {</span>
 
             // Get the serializer type from the entry
-<span class="nc" id="L399">            ISerializer serializer = Serializers.getSerializer(entry.getSerializerType().getType());</span>
+<span class="fc" id="L399">            ISerializer serializer = Serializers.getSerializer(entry.getSerializerType().getType());</span>
 
             // Get the type of the object we want to recreate
-<span class="nc" id="L402">            Class objectType = getStreamType(streamId);</span>
+<span class="fc" id="L402">            Class objectType = getStreamType(streamId);</span>
 
             // Create an Object only for non-checkpoints
 
             // If it is a special type, create it with the object builder
-<span class="nc bnc" id="L407" title="All 2 branches missed.">            if (customTypeStreams.containsKey(streamId)) {</span>
-<span class="nc" id="L408">                createObjectIfNotExist(customTypeStreams.get(streamId), serializer);</span>
+<span class="fc bfc" id="L407" title="All 2 branches covered.">            if (customTypeStreams.containsKey(streamId)) {</span>
+<span class="fc" id="L408">                createObjectIfNotExist(customTypeStreams.get(streamId), serializer);</span>
             }
             else {
-<span class="nc" id="L411">                createObjectIfNotExist(runtime, streamId, serializer, objectType);</span>
+<span class="fc" id="L411">                createObjectIfNotExist(runtime, streamId, serializer, objectType);</span>
             }
-<span class="nc" id="L413">            CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);</span>
-<span class="nc" id="L414">            cp.getUnderlyingObject().applyUpdateToStreamUnsafe(entry, globalAddress);</span>
+<span class="fc" id="L413">            CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);</span>
+<span class="fc" id="L414">            cp.getUnderlyingObject().applyUpdateToStreamUnsafe(entry, globalAddress);</span>
         }
-<span class="nc" id="L416">    }</span>
+<span class="fc" id="L416">    }</span>
 
     private void applySmrEntryToStream(UUID streamId, SMREntry entry, long globalAddress) {
-<span class="nc" id="L419">        applySmrEntryToStream(streamId, entry, globalAddress, false);</span>
+<span class="fc" id="L419">        applySmrEntryToStream(streamId, entry, globalAddress, false);</span>
 
-<span class="nc" id="L421">    }</span>
+<span class="fc" id="L421">    }</span>
 
 
     private void updateCorfuObjectWithSmrEntry(ILogData logData, LogEntry logEntry, long globalAddress) {
-<span class="nc" id="L425">        UUID streamId = logData.getStreams().iterator().next();</span>
-<span class="nc" id="L426">        applySmrEntryToStream(streamId, (SMREntry) logEntry, globalAddress);</span>
-<span class="nc" id="L427">    }</span>
+<span class="fc" id="L425">        UUID streamId = logData.getStreams().iterator().next();</span>
+<span class="fc" id="L426">        applySmrEntryToStream(streamId, (SMREntry) logEntry, globalAddress);</span>
+<span class="fc" id="L427">    }</span>
 
     private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, long globalAddress) {
-<span class="nc" id="L430">        MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;</span>
-<span class="nc" id="L431">        multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -&gt; {</span>
-<span class="nc" id="L432">            multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -&gt; {</span>
-<span class="nc" id="L433">                applySmrEntryToStream(streamId, smrEntry, globalAddress);</span>
-<span class="nc" id="L434">            });</span>
-<span class="nc" id="L435">        });</span>
-<span class="nc" id="L436">    }</span>
+<span class="fc" id="L430">        MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;</span>
+<span class="fc" id="L431">        multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -&gt; {</span>
+<span class="fc" id="L432">            multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -&gt; {</span>
+<span class="fc" id="L433">                applySmrEntryToStream(streamId, smrEntry, globalAddress);</span>
+<span class="fc" id="L434">            });</span>
+<span class="fc" id="L435">        });</span>
+<span class="fc" id="L436">    }</span>
 
     private void updateCorfuObjectWithCheckPointEntry(ILogData logData, LogEntry logEntry) {
-<span class="nc" id="L439">        CheckpointEntry checkPointEntry = (CheckpointEntry) logEntry;</span>
+<span class="fc" id="L439">        CheckpointEntry checkPointEntry = (CheckpointEntry) logEntry;</span>
         // Just one stream, always
-<span class="nc" id="L441">        UUID streamId = checkPointEntry.getStreamId();</span>
-<span class="nc" id="L442">        UUID checkPointId = checkPointEntry.getCheckpointId();</span>
+<span class="fc" id="L441">        UUID streamId = checkPointEntry.getStreamId();</span>
+<span class="fc" id="L442">        UUID checkPointId = checkPointEntry.getCheckpointId();</span>
 
         // We need to apply the start address for the version of the object
-<span class="nc" id="L445">        long startAddress = streamsMetaData.get(streamId)</span>
-<span class="nc" id="L446">                .getCheckPoint(checkPointId)</span>
-<span class="nc" id="L447">                .getStartAddress();</span>
+<span class="fc" id="L445">        long startAddress = streamsMetaData.get(streamId)</span>
+<span class="fc" id="L446">                .getCheckPoint(checkPointId)</span>
+<span class="fc" id="L447">                .getStartAddress();</span>
 
         // We don't know in advance if there will be smrEntries
-<span class="nc bnc" id="L450" title="All 2 branches missed.">        if (checkPointEntry.getSmrEntries() != null) {</span>
-<span class="nc" id="L451">            checkPointEntry.getSmrEntries().getSMRUpdates(streamId).forEach((smrEntry) -&gt; {</span>
-<span class="nc" id="L452">                applySmrEntryToStream(checkPointEntry.getStreamId(), smrEntry,</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">        if (checkPointEntry.getSmrEntries() != null) {</span>
+<span class="fc" id="L451">            checkPointEntry.getSmrEntries().getSMRUpdates(streamId).forEach((smrEntry) -&gt; {</span>
+<span class="fc" id="L452">                applySmrEntryToStream(checkPointEntry.getStreamId(), smrEntry,</span>
                         startAddress, true);
-<span class="nc" id="L454">            });</span>
+<span class="fc" id="L454">            });</span>
         }
-<span class="nc" id="L456">    }</span>
+<span class="fc" id="L456">    }</span>
 
     /**
      * Extract log entries from logData and update the Corfu Objects
@@ -463,31 +463,31 @@ public class FastObjectLoader {
     private void updateCorfuObject(ILogData logData) {
         LogEntry logEntry;
         try {
-<span class="nc" id="L466">            logEntry = deserializeLogData(runtime, logData);</span>
+<span class="fc" id="L466">            logEntry = deserializeLogData(runtime, logData);</span>
 <span class="nc" id="L467">        } catch (InterruptedException ie) {</span>
 <span class="nc" id="L468">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
 <span class="nc" id="L469">        } catch (Exception e) {</span>
 <span class="nc" id="L470">            log.error(&quot;Cannot deserialize log entry&quot; + logData.getGlobalAddress(), e);</span>
 <span class="nc" id="L471">            return;</span>
-<span class="nc" id="L472">        }</span>
+<span class="fc" id="L472">        }</span>
 
-<span class="nc" id="L474">        long globalAddress = logData.getGlobalAddress();</span>
+<span class="fc" id="L474">        long globalAddress = logData.getGlobalAddress();</span>
 
-<span class="nc bnc" id="L476" title="All 4 branches missed.">        switch (logEntry.getType()) {</span>
+<span class="pc bpc" id="L476" title="1 of 4 branches missed.">        switch (logEntry.getType()) {</span>
             case SMR:
-<span class="nc" id="L478">                updateCorfuObjectWithSmrEntry(logData, logEntry, globalAddress);</span>
-<span class="nc" id="L479">                break;</span>
+<span class="fc" id="L478">                updateCorfuObjectWithSmrEntry(logData, logEntry, globalAddress);</span>
+<span class="fc" id="L479">                break;</span>
             case MULTIOBJSMR:
-<span class="nc" id="L481">                updateCorfuObjectWithMultiObjSmrEntry(logEntry, globalAddress);</span>
-<span class="nc" id="L482">                break;</span>
+<span class="fc" id="L481">                updateCorfuObjectWithMultiObjSmrEntry(logEntry, globalAddress);</span>
+<span class="fc" id="L482">                break;</span>
             case CHECKPOINT:
-<span class="nc" id="L484">                updateCorfuObjectWithCheckPointEntry(logData, logEntry);</span>
-<span class="nc" id="L485">                break;</span>
+<span class="fc" id="L484">                updateCorfuObjectWithCheckPointEntry(logData, logEntry);</span>
+<span class="fc" id="L485">                break;</span>
             default:
 <span class="nc" id="L487">                log.warn(&quot;updateCorfuObject[address = {}]: Unknown data type&quot;);</span>
 
         }
-<span class="nc" id="L490">    }</span>
+<span class="fc" id="L490">    }</span>
 
 
     /**
@@ -498,16 +498,16 @@ public class FastObjectLoader {
      *
      */
     private void initializeHeadAndTails() {
-<span class="nc bnc" id="L501" title="All 2 branches missed.">        if (logHead == Address.NON_EXIST) {</span>
-<span class="nc" id="L502">            findAndSetLogHead();</span>
+<span class="fc bfc" id="L501" title="All 2 branches covered.">        if (logHead == Address.NON_EXIST) {</span>
+<span class="fc" id="L502">            findAndSetLogHead();</span>
         }
 
-<span class="nc bnc" id="L505" title="All 2 branches missed.">        if (logTail == Address.NON_EXIST) {</span>
-<span class="nc" id="L506">            findAndSetLogTail();</span>
+<span class="fc bfc" id="L505" title="All 2 branches covered.">        if (logTail == Address.NON_EXIST) {</span>
+<span class="fc" id="L506">            findAndSetLogTail();</span>
         }
 
-<span class="nc" id="L509">        resetAddressProcessed();</span>
-<span class="nc" id="L510">    }</span>
+<span class="fc" id="L509">        resetAddressProcessed();</span>
+<span class="fc" id="L510">    }</span>
 
     /**
      * Clean up all client caches and reset counters then continue loading process from the trim mark
@@ -530,10 +530,10 @@ public class FastObjectLoader {
      */
     private void handleRetry() {
 
-<span class="nc" id="L533">        retryIteration++;</span>
-<span class="nc bnc" id="L534" title="All 2 branches missed.">        if (retryIteration &gt; numberOfAttempt) {</span>
-<span class="nc" id="L535">            log.error(&quot;processLogData[]: retried {} number of times and failed&quot;, retryIteration);</span>
-<span class="nc" id="L536">            throw new RuntimeException(&quot;FastObjectLoader failed after too many retry (&quot; + retryIteration + &quot;)&quot;);</span>
+<span class="fc" id="L533">        retryIteration++;</span>
+<span class="pc bpc" id="L534" title="1 of 2 branches missed.">        if (retryIteration &gt; numberOfAttempt) {</span>
+<span class="fc" id="L535">            log.error(&quot;processLogData[]: retried {} number of times and failed&quot;, retryIteration);</span>
+<span class="fc" id="L536">            throw new RuntimeException(&quot;FastObjectLoader failed after too many retry (&quot; + retryIteration + &quot;)&quot;);</span>
         }
 
 <span class="nc" id="L539">        cleanUpForRetry();</span>
@@ -546,26 +546,26 @@ public class FastObjectLoader {
      * @param logData
      */
     private void processLogData(long address, ILogData logData) {
-<span class="nc bnc" id="L549" title="All 6 branches missed.">        switch (logData.getType()) {</span>
+<span class="pc bpc" id="L549" title="3 of 6 branches missed.">        switch (logData.getType()) {</span>
             case DATA:
                 // Checkpoint should have been processed first
-<span class="nc bnc" id="L552" title="All 4 branches missed.">                if (!isCheckPointEntry(logData) &amp;&amp; shouldLogDataBeProcessed(logData)) {</span>
-<span class="nc" id="L553">                    updateCorfuObject(logData);</span>
+<span class="fc bfc" id="L552" title="All 4 branches covered.">                if (!isCheckPointEntry(logData) &amp;&amp; shouldLogDataBeProcessed(logData)) {</span>
+<span class="fc" id="L553">                    updateCorfuObject(logData);</span>
                 }
                 break;
             case HOLE:
-<span class="nc" id="L557">                break;</span>
+<span class="fc" id="L557">                break;</span>
             case TRIMMED:
 <span class="nc" id="L559">                break;</span>
             case EMPTY:
 <span class="nc" id="L561">                log.warn(&quot;applyForEachAddress[address={}] is empty&quot;);</span>
 <span class="nc" id="L562">                break;</span>
             case RANK_ONLY:
-<span class="nc" id="L564">                break;</span>
+<span class="fc" id="L564">                break;</span>
             default:
                 break;
         }
-<span class="nc" id="L568">    }</span>
+<span class="fc" id="L568">    }</span>
 
     /**
      * When we encounter a start checkpoint, we need to create the new entry in the Stream
@@ -578,15 +578,15 @@ public class FastObjectLoader {
     private void handleStartCheckPoint(long address, ILogData logData, UUID streamId,
                                        UUID checkPointId, StreamMetaData streamMeta) {
         try {
-<span class="nc" id="L581">            CheckpointEntry logEntry = (CheckpointEntry) deserializeLogData(runtime, logData);</span>
-<span class="nc" id="L582">            long snapshotAddress = getSnapShotAddressOfCheckPoint(logEntry);</span>
-<span class="nc" id="L583">            long startAddress = getStartAddressOfCheckPoint(logData);</span>
+<span class="fc" id="L581">            CheckpointEntry logEntry = (CheckpointEntry) deserializeLogData(runtime, logData);</span>
+<span class="fc" id="L582">            long snapshotAddress = getSnapShotAddressOfCheckPoint(logEntry);</span>
+<span class="fc" id="L583">            long startAddress = getStartAddressOfCheckPoint(logData);</span>
 
-<span class="nc" id="L585">            streamMeta.addCheckPoint(new CheckPoint(checkPointId)</span>
-<span class="nc" id="L586">                    .addAddress(address)</span>
-<span class="nc" id="L587">                    .setSnapshotAddress(snapshotAddress)</span>
-<span class="nc" id="L588">                    .setStartAddress(startAddress)</span>
-<span class="nc" id="L589">                    .setStarted(true));</span>
+<span class="fc" id="L585">            streamMeta.addCheckPoint(new CheckPoint(checkPointId)</span>
+<span class="fc" id="L586">                    .addAddress(address)</span>
+<span class="fc" id="L587">                    .setSnapshotAddress(snapshotAddress)</span>
+<span class="fc" id="L588">                    .setStartAddress(startAddress)</span>
+<span class="fc" id="L589">                    .setStarted(true));</span>
 
 <span class="nc" id="L591">        } catch (InterruptedException ie) {</span>
 <span class="nc" id="L592">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
@@ -594,8 +594,8 @@ public class FastObjectLoader {
 <span class="nc" id="L594">            log.error(&quot;findCheckpointsInLogAddress[{}]: &quot;</span>
 <span class="nc" id="L595">                    + &quot;Couldn't get the snapshotAddress&quot;, address, e);</span>
 <span class="nc" id="L596">            throw new IllegalStateException(&quot;Couldn't get the snapshotAddress at address &quot; + address);</span>
-<span class="nc" id="L597">        }</span>
-<span class="nc" id="L598">    }</span>
+<span class="fc" id="L597">        }</span>
+<span class="fc" id="L598">    }</span>
 
     /**
      * Find if there is a checkpoint in the current logAddress
@@ -609,29 +609,29 @@ public class FastObjectLoader {
      * @param logData
      */
     private void findCheckPointsInLogAddress(long address, ILogData logData) {
-<span class="nc bnc" id="L612" title="All 2 branches missed.">        if (logData.hasCheckpointMetadata() &amp;&amp;</span>
-<span class="nc bnc" id="L613" title="All 2 branches missed.">                shouldLogDataBeProcessed(logData)) {</span>
+<span class="fc bfc" id="L612" title="All 2 branches covered.">        if (logData.hasCheckpointMetadata() &amp;&amp;</span>
+<span class="fc bfc" id="L613" title="All 2 branches covered.">                shouldLogDataBeProcessed(logData)) {</span>
             // Only one stream per checkpoint
-<span class="nc" id="L615">            UUID streamId = logData.getCheckpointedStreamId();</span>
+<span class="fc" id="L615">            UUID streamId = logData.getCheckpointedStreamId();</span>
             StreamMetaData streamMeta;
-<span class="nc" id="L617">            streamMeta = streamsMetaData.computeIfAbsent(streamId, (id) -&gt; new StreamMetaData(id));</span>
-<span class="nc" id="L618">            UUID checkPointId = logData.getCheckpointId();</span>
+<span class="fc" id="L617">            streamMeta = streamsMetaData.computeIfAbsent(streamId, (id) -&gt; new StreamMetaData(id));</span>
+<span class="fc" id="L618">            UUID checkPointId = logData.getCheckpointId();</span>
 
-<span class="nc bnc" id="L620" title="All 4 branches missed.">            switch (logData.getCheckpointType()) {</span>
+<span class="pc bpc" id="L620" title="1 of 4 branches missed.">            switch (logData.getCheckpointType()) {</span>
                 case START:
-<span class="nc" id="L622">                    handleStartCheckPoint(address, logData, streamId, checkPointId, streamMeta);</span>
+<span class="fc" id="L622">                    handleStartCheckPoint(address, logData, streamId, checkPointId, streamMeta);</span>
 
-<span class="nc" id="L624">                    break;</span>
+<span class="fc" id="L624">                    break;</span>
                 case CONTINUATION:
-<span class="nc bnc" id="L626" title="All 2 branches missed.">                    if (streamMeta.checkPointExists(checkPointId)) {</span>
-<span class="nc" id="L627">                        streamMeta.getCheckPoint(checkPointId).addAddress(address);</span>
+<span class="pc bpc" id="L626" title="1 of 2 branches missed.">                    if (streamMeta.checkPointExists(checkPointId)) {</span>
+<span class="fc" id="L627">                        streamMeta.getCheckPoint(checkPointId).addAddress(address);</span>
                     }
 
                     break;
                 case END:
-<span class="nc bnc" id="L632" title="All 2 branches missed.">                    if (streamMeta.checkPointExists(checkPointId)) {</span>
-<span class="nc" id="L633">                        streamMeta.getCheckPoint(checkPointId).setEnded(true).addAddress(address);</span>
-<span class="nc" id="L634">                        streamMeta.updateLatestCheckpointIfLater(checkPointId);</span>
+<span class="pc bpc" id="L632" title="1 of 2 branches missed.">                    if (streamMeta.checkPointExists(checkPointId)) {</span>
+<span class="fc" id="L633">                        streamMeta.getCheckPoint(checkPointId).setEnded(true).addAddress(address);</span>
+<span class="fc" id="L634">                        streamMeta.updateLatestCheckpointIfLater(checkPointId);</span>
                     }
                     break;
                 default:
@@ -639,7 +639,7 @@ public class FastObjectLoader {
                     break;
             }
         }
-<span class="nc" id="L642">    }</span>
+<span class="fc" id="L642">    }</span>
 
 
     /**
@@ -650,42 +650,42 @@ public class FastObjectLoader {
      *
      */
     private void resurrectCheckpoints() {
-<span class="nc" id="L653">        ExecutorService executorService = Executors.newFixedThreadPool(numOfWorkers, new ThreadFactoryBuilder()</span>
-<span class="nc" id="L654">                .setNameFormat(&quot;FastObjectLoaderResurrectCheckpointsThread-%d&quot;).build());</span>
-<span class="nc" id="L655">        CompletableFuture[] cfs = new CompletableFuture[streamsMetaData.size()];</span>
-<span class="nc" id="L656">        int i = 0;</span>
+<span class="fc" id="L653">        ExecutorService executorService = Executors.newFixedThreadPool(numOfWorkers, new ThreadFactoryBuilder()</span>
+<span class="fc" id="L654">                .setNameFormat(&quot;FastObjectLoaderResurrectCheckpointsThread-%d&quot;).build());</span>
+<span class="fc" id="L655">        CompletableFuture[] cfs = new CompletableFuture[streamsMetaData.size()];</span>
+<span class="fc" id="L656">        int i = 0;</span>
         try {
-<span class="nc bnc" id="L658" title="All 2 branches missed.">            for (Map.Entry&lt;UUID, StreamMetaData&gt; entry : streamsMetaData.entrySet()) {</span>
-<span class="nc" id="L659">                cfs[i++] = CompletableFuture.runAsync(() -&gt; {</span>
-<span class="nc" id="L660">                    CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();</span>
+<span class="fc bfc" id="L658" title="All 2 branches covered.">            for (Map.Entry&lt;UUID, StreamMetaData&gt; entry : streamsMetaData.entrySet()) {</span>
+<span class="fc" id="L659">                cfs[i++] = CompletableFuture.runAsync(() -&gt; {</span>
+<span class="fc" id="L660">                    CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();</span>
 
                     try {
-<span class="nc bnc" id="L663" title="All 2 branches missed.">                        if (checkPoint == null) {</span>
+<span class="pc bpc" id="L663" title="1 of 2 branches missed.">                        if (checkPoint == null) {</span>
 <span class="nc" id="L664">                            log.info(&quot;resurrectCheckpoints[{}]: Truncated checkpoint for this stream&quot;,</span>
 <span class="nc" id="L665">                                    Utils.toReadableId(entry.getKey()));</span>
 <span class="nc" id="L666">                            return;</span>
                         }
 
                         // For now one by one read and apply
-<span class="nc bnc" id="L670" title="All 2 branches missed.">                        for (long address : checkPoint.getAddresses()) {</span>
-<span class="nc" id="L671">                            updateCorfuObject(getLogData(runtime, loadInCache, address));</span>
-<span class="nc" id="L672">                        }</span>
+<span class="fc bfc" id="L670" title="All 2 branches covered.">                        for (long address : checkPoint.getAddresses()) {</span>
+<span class="fc" id="L671">                            updateCorfuObject(getLogData(runtime, loadInCache, address));</span>
+<span class="fc" id="L672">                        }</span>
 <span class="nc" id="L673">                    } catch (Throwable t) {</span>
 <span class="nc" id="L674">                        log.error(&quot;resurrectCheckpoints[{}]: error on addresses {}&quot;, checkPoint.getCheckPointId(),</span>
 <span class="nc" id="L675">                                checkPoint.getAddresses(), t);</span>
 <span class="nc" id="L676">                        throw t;</span>
-<span class="nc" id="L677">                    } }, executorService);</span>
-<span class="nc" id="L678">            }</span>
+<span class="fc" id="L677">                    } }, executorService);</span>
+<span class="fc" id="L678">            }</span>
 
-<span class="nc" id="L680">            executorService.shutdown();</span>
+<span class="fc" id="L680">            executorService.shutdown();</span>
             // Since we call shutdown after pushing all tests into the executors its sufficient to rely
             // awaitTermination to make sure that all checkpoints have been loaded
-<span class="nc" id="L683">            executorService.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);</span>
+<span class="fc" id="L683">            executorService.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);</span>
 
             // Waiting on all tasks to complete is not enough, therefore we need to make sure that
             // all submitted tasks have completed successfully
-<span class="nc bnc" id="L687" title="All 2 branches missed.">            for (CompletableFuture future : cfs) {</span>
-<span class="nc bnc" id="L688" title="All 6 branches missed.">                if (!future.isDone() || future.isCancelled() || future.isCompletedExceptionally()) {</span>
+<span class="fc bfc" id="L687" title="All 2 branches covered.">            for (CompletableFuture future : cfs) {</span>
+<span class="pc bpc" id="L688" title="3 of 6 branches missed.">                if (!future.isDone() || future.isCancelled() || future.isCompletedExceptionally()) {</span>
 <span class="nc" id="L689">                    throw new FastObjectLoaderException(&quot;Failed to load checkpoints&quot;);</span>
                 }
             }
@@ -694,31 +694,31 @@ public class FastObjectLoader {
 <span class="nc" id="L694">            Thread.currentThread().interrupt();</span>
 <span class="nc" id="L695">            throw new FastObjectLoaderException(&quot;Failed to resurrectCheckpoints&quot;);</span>
         } finally {
-<span class="nc" id="L697">            executorService.shutdownNow();</span>
-<span class="nc" id="L698">        }</span>
-<span class="nc" id="L699">    }</span>
+<span class="pc" id="L697">            executorService.shutdownNow();</span>
+<span class="pc" id="L698">        }</span>
+<span class="fc" id="L699">    }</span>
 
     /**
      * This method will use the checkpoints and the entries
      * after checkpoints to resurrect the SMRMaps
      */
     private void recoverRuntime() {
-<span class="nc" id="L706">        log.info(&quot;recoverRuntime: Resurrecting the runtime&quot;);</span>
+<span class="fc" id="L706">        log.info(&quot;recoverRuntime: Resurrecting the runtime&quot;);</span>
 
         // If the user is sure that he has no checkpoint,
         // we can just do the last step. Risky, but the flag is
         // explicit enough.
-<span class="nc bnc" id="L711" title="All 2 branches missed.">        if (logHasNoCheckPoint) {</span>
-<span class="nc" id="L712">            applyForEachAddress(this::processLogData);</span>
+<span class="fc bfc" id="L711" title="All 2 branches covered.">        if (logHasNoCheckPoint) {</span>
+<span class="fc" id="L712">            applyForEachAddress(this::processLogData);</span>
         } else {
-<span class="nc" id="L714">            applyForEachAddress(this::findCheckPointsInLogAddress);</span>
-<span class="nc" id="L715">            resurrectCheckpoints();</span>
+<span class="fc" id="L714">            applyForEachAddress(this::findCheckPointsInLogAddress);</span>
+<span class="fc" id="L715">            resurrectCheckpoints();</span>
 
-<span class="nc" id="L717">            resetAddressProcessed();</span>
-<span class="nc" id="L718">            applyForEachAddress(this::processLogData);</span>
+<span class="fc" id="L717">            resetAddressProcessed();</span>
+<span class="fc" id="L718">            applyForEachAddress(this::processLogData);</span>
         }
 
-<span class="nc" id="L721">    }</span>
+<span class="fc" id="L721">    }</span>
 
     /**
      * Entry point to load the SMRMaps in memory.
@@ -726,14 +726,14 @@ public class FastObjectLoader {
      * When this function returns, the maps are fully loaded.
      */
     public void loadMaps() {
-<span class="nc" id="L729">        log.info(&quot;loadMaps: Starting to resurrect maps&quot;);</span>
-<span class="nc" id="L730">        initializeHeadAndTails();</span>
-<span class="nc" id="L731">        recoverRuntime();</span>
+<span class="fc" id="L729">        log.info(&quot;loadMaps: Starting to resurrect maps&quot;);</span>
+<span class="fc" id="L730">        initializeHeadAndTails();</span>
+<span class="fc" id="L731">        recoverRuntime();</span>
 
-<span class="nc" id="L733">        log.info(&quot;loadMaps[startAddress: {}, stopAddress (included): {}, addressProcessed: {}]&quot;,</span>
-<span class="nc" id="L734">                logHead, logTail, addressProcessed);</span>
-<span class="nc" id="L735">        log.info(&quot;loadMaps: Loading successful, Corfu maps are alive!&quot;);</span>
-<span class="nc" id="L736">    }</span>
+<span class="fc" id="L733">        log.info(&quot;loadMaps[startAddress: {}, stopAddress (included): {}, addressProcessed: {}]&quot;,</span>
+<span class="fc" id="L734">                logHead, logTail, addressProcessed);</span>
+<span class="fc" id="L735">        log.info(&quot;loadMaps: Loading successful, Corfu maps are alive!&quot;);</span>
+<span class="fc" id="L736">    }</span>
 
 
     /**
@@ -742,93 +742,93 @@ public class FastObjectLoader {
      */
     private void applyForEachAddress(BiConsumer&lt;Long, ILogData&gt; logDataProcessor) {
 
-<span class="nc" id="L745">        summonNecromancer();</span>
-<span class="nc" id="L746">        nextRead = logHead;</span>
-<span class="nc bnc" id="L747" title="All 2 branches missed.">        while (nextRead &lt;= logTail) {</span>
+<span class="fc" id="L745">        summonNecromancer();</span>
+<span class="fc" id="L746">        nextRead = logHead;</span>
+<span class="fc bfc" id="L747" title="All 2 branches covered.">        while (nextRead &lt;= logTail) {</span>
             try {
-<span class="nc" id="L749">                final long lower = nextRead;</span>
-<span class="nc" id="L750">                final long upper = Math.min(lower + batchReadSize - 1, logTail);</span>
-<span class="nc" id="L751">                nextRead = upper + 1;</span>
+<span class="fc" id="L749">                final long lower = nextRead;</span>
+<span class="fc" id="L750">                final long upper = Math.min(lower + batchReadSize - 1, logTail);</span>
+<span class="fc" id="L751">                nextRead = upper + 1;</span>
 
                 // Don't cache the read results on server for fast loader
-<span class="nc" id="L754">                ContiguousSet&lt;Long&gt; addresses = ContiguousSet.create(</span>
-<span class="nc" id="L755">                        Range.closed(lower, upper), DiscreteDomain.longs());</span>
+<span class="fc" id="L754">                ContiguousSet&lt;Long&gt; addresses = ContiguousSet.create(</span>
+<span class="fc" id="L755">                        Range.closed(lower, upper), DiscreteDomain.longs());</span>
 
-<span class="nc" id="L757">                Map&lt;Long, ILogData&gt; range = runtime.getAddressSpaceView().read(addresses,</span>
+<span class="fc" id="L757">                Map&lt;Long, ILogData&gt; range = runtime.getAddressSpaceView().read(addresses,</span>
                         RecoveryUtils.fastLoaderReadOptions);
 
                 // Sanity
-<span class="nc bnc" id="L761" title="All 2 branches missed.">                for (Map.Entry&lt;Long, ILogData&gt; entry : range.entrySet()) {</span>
-<span class="nc" id="L762">                    long address = entry.getKey();</span>
-<span class="nc" id="L763">                    ILogData logData = entry.getValue();</span>
-<span class="nc bnc" id="L764" title="All 2 branches missed.">                    if (address != addressProcessed + 1) {</span>
+<span class="fc bfc" id="L761" title="All 2 branches covered.">                for (Map.Entry&lt;Long, ILogData&gt; entry : range.entrySet()) {</span>
+<span class="fc" id="L762">                    long address = entry.getKey();</span>
+<span class="fc" id="L763">                    ILogData logData = entry.getValue();</span>
+<span class="pc bpc" id="L764" title="1 of 2 branches missed.">                    if (address != addressProcessed + 1) {</span>
 <span class="nc" id="L765">                        throw new IllegalStateException(&quot;We missed an entry. It can lead to correctness issues.&quot;);</span>
                     }
-<span class="nc" id="L767">                    addressProcessed++;</span>
+<span class="fc" id="L767">                    addressProcessed++;</span>
 
-<span class="nc bnc" id="L769" title="All 2 branches missed.">                    if (logData.getType() == DataType.TRIMMED) {</span>
+<span class="pc bpc" id="L769" title="1 of 2 branches missed.">                    if (logData.getType() == DataType.TRIMMED) {</span>
 <span class="nc" id="L770">                        throw new IllegalStateException(&quot;Unexpected TRIMMED data&quot;);</span>
                     }
 
-<span class="nc bnc" id="L773" title="All 2 branches missed.">                    if (address % STATUS_UPDATE_PACE == 0) {</span>
-<span class="nc" id="L774">                        log.info(&quot;applyForEachAddress: read up to {}&quot;, address);</span>
+<span class="fc bfc" id="L773" title="All 2 branches covered.">                    if (address % STATUS_UPDATE_PACE == 0) {</span>
+<span class="fc" id="L774">                        log.info(&quot;applyForEachAddress: read up to {}&quot;, address);</span>
                     }
-<span class="nc" id="L776">                }</span>
+<span class="fc" id="L776">                }</span>
 
-<span class="nc" id="L778">                invokeNecromancer(range, logDataProcessor);</span>
+<span class="fc" id="L778">                invokeNecromancer(range, logDataProcessor);</span>
 
-<span class="nc" id="L780">            } catch (TrimmedException ex) {</span>
-<span class="nc" id="L781">                log.warn(&quot;Error loading data&quot;, ex);</span>
+<span class="fc" id="L780">            } catch (TrimmedException ex) {</span>
+<span class="fc" id="L781">                log.warn(&quot;Error loading data&quot;, ex);</span>
 <span class="nc" id="L782">                handleRetry();</span>
-<span class="nc" id="L783">            }</span>
+<span class="pc" id="L783">            }</span>
         }
-<span class="nc" id="L785">        killNecromancer();</span>
-<span class="nc" id="L786">    }</span>
+<span class="fc" id="L785">        killNecromancer();</span>
+<span class="fc" id="L786">    }</span>
 
-<span class="nc bnc" id="L788" title="All 34 branches missed.">    @Data</span>
+<span class="pc bnc" id="L788" title="All 34 branches missed.">    @Data</span>
     private class CheckPoint {
-<span class="nc" id="L790">        final UUID checkPointId;</span>
-<span class="nc" id="L791">        long snapshotAddress;</span>
-<span class="nc" id="L792">        long startAddress;</span>
+<span class="fc" id="L790">        final UUID checkPointId;</span>
+<span class="fc" id="L791">        long snapshotAddress;</span>
+<span class="fc" id="L792">        long startAddress;</span>
 <span class="nc" id="L793">        boolean ended = false;</span>
 <span class="nc" id="L794">        boolean started = false;</span>
-<span class="nc" id="L795">        List&lt;Long&gt; addresses = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L795">        List&lt;Long&gt; addresses = new ArrayList&lt;&gt;();</span>
 
         public CheckPoint addAddress(long address) {
-<span class="nc" id="L798">            addresses.add(address);</span>
-<span class="nc" id="L799">            return this;</span>
+<span class="fc" id="L798">            addresses.add(address);</span>
+<span class="fc" id="L799">            return this;</span>
         }
     }
 
-<span class="nc bnc" id="L803" title="All 30 branches missed.">    @Data</span>
+<span class="pc bnc" id="L803" title="All 30 branches missed.">    @Data</span>
     private class StreamMetaData {
 <span class="nc" id="L805">        final UUID streamId;</span>
-<span class="nc" id="L806">        CheckPoint latestCheckPoint;</span>
+<span class="fc" id="L806">        CheckPoint latestCheckPoint;</span>
 <span class="nc" id="L807">        Map&lt;UUID, CheckPoint&gt; checkPoints = new HashMap&lt;&gt;();</span>
 
         public Long getHeadAddress() {
-<span class="nc bnc" id="L810" title="All 2 branches missed.">            return latestCheckPoint != null ? latestCheckPoint.snapshotAddress : Address.NEVER_READ;</span>
+<span class="pc bpc" id="L810" title="1 of 2 branches missed.">            return latestCheckPoint != null ? latestCheckPoint.snapshotAddress : Address.NEVER_READ;</span>
         }
 
         public void addCheckPoint(CheckPoint cp) {
-<span class="nc" id="L814">            checkPoints.put(cp.getCheckPointId(), cp);</span>
-<span class="nc" id="L815">        }</span>
+<span class="fc" id="L814">            checkPoints.put(cp.getCheckPointId(), cp);</span>
+<span class="fc" id="L815">        }</span>
 
         public CheckPoint getCheckPoint(UUID checkPointId) {
-<span class="nc" id="L818">            return checkPoints.get(checkPointId);</span>
+<span class="fc" id="L818">            return checkPoints.get(checkPointId);</span>
         }
 
         public boolean checkPointExists(UUID checkPointId) {
-<span class="nc" id="L822">            return checkPoints.containsKey(checkPointId);</span>
+<span class="fc" id="L822">            return checkPoints.containsKey(checkPointId);</span>
         }
 
         public void updateLatestCheckpointIfLater(UUID checkPointId) {
-<span class="nc" id="L826">            CheckPoint contender = getCheckPoint(checkPointId);</span>
-<span class="nc bnc" id="L827" title="All 2 branches missed.">            if (latestCheckPoint == null ||</span>
-<span class="nc bnc" id="L828" title="All 2 branches missed.">                    contender.getSnapshotAddress() &gt; latestCheckPoint.getSnapshotAddress()) {</span>
-<span class="nc" id="L829">                        latestCheckPoint = contender;</span>
+<span class="fc" id="L826">            CheckPoint contender = getCheckPoint(checkPointId);</span>
+<span class="fc bfc" id="L827" title="All 2 branches covered.">            if (latestCheckPoint == null ||</span>
+<span class="pc bpc" id="L828" title="1 of 2 branches missed.">                    contender.getSnapshotAddress() &gt; latestCheckPoint.getSnapshotAddress()) {</span>
+<span class="fc" id="L829">                        latestCheckPoint = contender;</span>
             }
-<span class="nc" id="L831">        }</span>
+<span class="fc" id="L831">        }</span>
     }
 
     /**
@@ -837,17 +837,17 @@ public class FastObjectLoader {
      */
     public class BoundedQueue&lt;E&gt; extends ArrayBlockingQueue&lt;E&gt; {
 
-<span class="nc" id="L840">        public BoundedQueue(int size) {</span>
+<span class="fc" id="L840">        public BoundedQueue(int size) {</span>
             // This queue will be used to processes a consecutive range
             // of elements: FIFO order is needed. Thus, fair=true
-<span class="nc" id="L843">            super(size, true);</span>
-<span class="nc" id="L844">        }</span>
+<span class="fc" id="L843">            super(size, true);</span>
+<span class="fc" id="L844">        }</span>
 
         @Override
         public boolean offer(E e) {
             try {
-<span class="nc" id="L849">                put(e);</span>
-<span class="nc" id="L850">                return true;</span>
+<span class="fc" id="L849">                put(e);</span>
+<span class="fc" id="L850">                return true;</span>
 <span class="nc" id="L851">            } catch(InterruptedException ie) {</span>
 <span class="nc" id="L852">                Thread.currentThread().interrupt();</span>
             }

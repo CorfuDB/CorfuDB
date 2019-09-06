@@ -112,33 +112,33 @@ public interface StreamLog {
      * @return (OverwriteCause) Cause of the overwrite
      */
     default OverwriteCause getOverwriteCauseForAddress(long address, LogData entry) {
-<span class="nc" id="L115">        LogData currentEntry = read(address);</span>
-<span class="nc" id="L116">        OverwriteCause cause = OverwriteCause.DIFF_DATA;</span>
+<span class="fc" id="L115">        LogData currentEntry = read(address);</span>
+<span class="fc" id="L116">        OverwriteCause cause = OverwriteCause.DIFF_DATA;</span>
 
-<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (currentEntry != null) {</span>
-<span class="nc bnc" id="L119" title="All 2 branches missed.">            if (currentEntry.isHole()) {</span>
-<span class="nc" id="L120">                cause = OverwriteCause.HOLE;</span>
-<span class="nc bnc" id="L121" title="All 4 branches missed.">            } else if (entry.getData() != null &amp;&amp; currentEntry.getData() != null &amp;&amp;</span>
-<span class="nc bnc" id="L122" title="All 2 branches missed.">                    currentEntry.getData().length == entry.getData().length) {</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">        if (currentEntry != null) {</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">            if (currentEntry.isHole()) {</span>
+<span class="fc" id="L120">                cause = OverwriteCause.HOLE;</span>
+<span class="pc bpc" id="L121" title="1 of 4 branches missed.">            } else if (entry.getData() != null &amp;&amp; currentEntry.getData() != null &amp;&amp;</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">                    currentEntry.getData().length == entry.getData().length) {</span>
                 // If the entry is already present and it is not a hole, the write
                 // might have been propagated by a fast reader from part of the chain.
                 // Compare based on data length. Based on this info client will do an actual
                 // verification on the data
-<span class="nc" id="L127">                cause = OverwriteCause.SAME_DATA;</span>
+<span class="fc" id="L127">                cause = OverwriteCause.SAME_DATA;</span>
             }
         } else {
             // No actual entry is found in this address, there is no apparent cause
             // for the overwrite exception
 <span class="nc" id="L132">            cause = OverwriteCause.NONE;</span>
         }
-<span class="nc" id="L134">        return cause;</span>
+<span class="fc" id="L134">        return cause;</span>
     }
 
     /**
      * Query if the StreamLog has enough quota to accept writes
      */
     default boolean quotaExceeded() {
-<span class="nc" id="L141">        return false;</span>
+<span class="fc" id="L141">        return false;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

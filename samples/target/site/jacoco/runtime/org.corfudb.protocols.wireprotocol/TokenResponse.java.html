@@ -15,12 +15,12 @@ import lombok.Getter;
 /**
  * Created by mwei on 8/8/16.
  */
-<span class="nc bnc" id="L18" title="All 48 branches missed.">@Data</span>
-<span class="nc" id="L19">@AllArgsConstructor</span>
+<span class="pc bpc" id="L18" title="34 of 48 branches missed.">@Data</span>
+<span class="fc" id="L19">@AllArgsConstructor</span>
 public class TokenResponse implements ICorfuPayload&lt;TokenResponse&gt;, IToken {
 
-<span class="nc" id="L22">    public static byte[] NO_CONFLICT_KEY = new byte[]{ 0 };</span>
-<span class="nc" id="L23">    public static UUID NO_CONFLICT_STREAM = new UUID(0, 0);</span>
+<span class="fc" id="L22">    public static byte[] NO_CONFLICT_KEY = new byte[]{ 0 };</span>
+<span class="fc" id="L23">    public static UUID NO_CONFLICT_STREAM = new UUID(0, 0);</span>
 
     /**
      * Constructor for TokenResponse.
@@ -28,29 +28,29 @@ public class TokenResponse implements ICorfuPayload&lt;TokenResponse&gt;, IToken
      * @param token token value
      * @param backpointerMap  map of backpointers for all requested streams
      */
-<span class="nc" id="L31">    public TokenResponse(Token token, Map&lt;UUID, Long&gt; backpointerMap) {</span>
-<span class="nc" id="L32">        this.respType = TokenType.NORMAL;</span>
-<span class="nc" id="L33">        this.conflictKey = NO_CONFLICT_KEY;</span>
-<span class="nc" id="L34">        this.conflictStream = NO_CONFLICT_STREAM;</span>
-<span class="nc" id="L35">        this.token = token;</span>
-<span class="nc" id="L36">        this.backpointerMap = backpointerMap;</span>
-<span class="nc" id="L37">        this.streamTails = Collections.emptyMap();</span>
-<span class="nc" id="L38">    }</span>
+<span class="fc" id="L31">    public TokenResponse(Token token, Map&lt;UUID, Long&gt; backpointerMap) {</span>
+<span class="fc" id="L32">        this.respType = TokenType.NORMAL;</span>
+<span class="fc" id="L33">        this.conflictKey = NO_CONFLICT_KEY;</span>
+<span class="fc" id="L34">        this.conflictStream = NO_CONFLICT_STREAM;</span>
+<span class="fc" id="L35">        this.token = token;</span>
+<span class="fc" id="L36">        this.backpointerMap = backpointerMap;</span>
+<span class="fc" id="L37">        this.streamTails = Collections.emptyMap();</span>
+<span class="fc" id="L38">    }</span>
 
     /** the cause/type of response. */
-<span class="nc" id="L41">    final TokenType respType;</span>
+<span class="fc" id="L41">    final TokenType respType;</span>
 
     // In case of a conflict, signal to the client which key was responsible for the conflict.
-<span class="nc" id="L44">    final byte[] conflictKey;</span>
+<span class="fc" id="L44">    final byte[] conflictKey;</span>
 
     // In case of a conflict, signal to the client which stream was responsible for the conflict.
-<span class="nc" id="L47">    final UUID conflictStream;</span>
+<span class="fc" id="L47">    final UUID conflictStream;</span>
 
     /** The current token or global log tail in the case of stream tails query */
-<span class="nc" id="L50">    final Token token;</span>
+<span class="fc" id="L50">    final Token token;</span>
 
     /** The backpointer map, if available. */
-<span class="nc" id="L53">    final Map&lt;UUID, Long&gt; backpointerMap;</span>
+<span class="fc" id="L53">    final Map&lt;UUID, Long&gt; backpointerMap;</span>
 
     @Getter(AccessLevel.NONE)
     final Map&lt;UUID, Long&gt; streamTails;
@@ -60,45 +60,45 @@ public class TokenResponse implements ICorfuPayload&lt;TokenResponse&gt;, IToken
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L63">    public TokenResponse(ByteBuf buf) {</span>
-<span class="nc" id="L64">        respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];</span>
-<span class="nc" id="L65">        conflictKey = ICorfuPayload.fromBuffer(buf, byte[].class);</span>
-<span class="nc" id="L66">        conflictStream = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
-<span class="nc" id="L67">        Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L68">        Long sequence = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L69">        token = new Token(epoch, sequence);</span>
-<span class="nc" id="L70">        backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);</span>
-<span class="nc" id="L71">        streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);</span>
-<span class="nc" id="L72">    }</span>
+<span class="fc" id="L63">    public TokenResponse(ByteBuf buf) {</span>
+<span class="fc" id="L64">        respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];</span>
+<span class="fc" id="L65">        conflictKey = ICorfuPayload.fromBuffer(buf, byte[].class);</span>
+<span class="fc" id="L66">        conflictStream = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
+<span class="fc" id="L67">        Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L68">        Long sequence = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L69">        token = new Token(epoch, sequence);</span>
+<span class="fc" id="L70">        backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);</span>
+<span class="fc" id="L71">        streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);</span>
+<span class="fc" id="L72">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L76">        ICorfuPayload.serialize(buf, respType);</span>
-<span class="nc" id="L77">        ICorfuPayload.serialize(buf, conflictKey);</span>
-<span class="nc" id="L78">        ICorfuPayload.serialize(buf, conflictStream);</span>
-<span class="nc" id="L79">        ICorfuPayload.serialize(buf, token.getEpoch());</span>
-<span class="nc" id="L80">        ICorfuPayload.serialize(buf, this.getSequence());</span>
-<span class="nc" id="L81">        ICorfuPayload.serialize(buf, backpointerMap);</span>
-<span class="nc" id="L82">        ICorfuPayload.serialize(buf, streamTails);</span>
-<span class="nc" id="L83">    }</span>
+<span class="fc" id="L76">        ICorfuPayload.serialize(buf, respType);</span>
+<span class="fc" id="L77">        ICorfuPayload.serialize(buf, conflictKey);</span>
+<span class="fc" id="L78">        ICorfuPayload.serialize(buf, conflictStream);</span>
+<span class="fc" id="L79">        ICorfuPayload.serialize(buf, token.getEpoch());</span>
+<span class="fc" id="L80">        ICorfuPayload.serialize(buf, this.getSequence());</span>
+<span class="fc" id="L81">        ICorfuPayload.serialize(buf, backpointerMap);</span>
+<span class="fc" id="L82">        ICorfuPayload.serialize(buf, streamTails);</span>
+<span class="fc" id="L83">    }</span>
 
     @Override
     public long getSequence() {
-<span class="nc" id="L87">        return token.getSequence();</span>
+<span class="fc" id="L87">        return token.getSequence();</span>
     }
 
     @Override
     public long getEpoch() {
-<span class="nc" id="L92">        return token.getEpoch();</span>
+<span class="fc" id="L92">        return token.getEpoch();</span>
     }
 
     public Long getStreamTail(UUID streamId) {
-<span class="nc" id="L96">        return streamTails.get(streamId);</span>
+<span class="fc" id="L96">        return streamTails.get(streamId);</span>
     }
 
     @VisibleForTesting
     public int getStreamTailsCount() {
-<span class="nc" id="L101">        return streamTails.size();</span>
+<span class="fc" id="L101">        return streamTails.size();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -12,27 +12,27 @@ import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 
-<span class="nc" id="L15">@Slf4j</span>
+<span class="fc" id="L15">@Slf4j</span>
 public class HealNode extends WorkflowRequest {
 
-<span class="nc bnc" id="L18" title="All 4 branches missed.">    public HealNode(@NonNull String endpointToHeal, @NonNull CorfuRuntime runtime,</span>
-<span class="nc bnc" id="L19" title="All 2 branches missed.">                    int retry, @NonNull Duration timeout,</span>
-<span class="nc bnc" id="L20" title="All 2 branches missed.">                    @NonNull Duration pollPeriod) {</span>
-<span class="nc" id="L21">        this.nodeForWorkflow = endpointToHeal;</span>
-<span class="nc" id="L22">        this.runtime = runtime;</span>
-<span class="nc" id="L23">        this.retry = retry;</span>
-<span class="nc" id="L24">        this.timeout = timeout;</span>
-<span class="nc" id="L25">        this.pollPeriod = pollPeriod;</span>
-<span class="nc" id="L26">    }</span>
+<span class="pc bpc" id="L18" title="2 of 4 branches missed.">    public HealNode(@NonNull String endpointToHeal, @NonNull CorfuRuntime runtime,</span>
+<span class="pc bpc" id="L19" title="1 of 2 branches missed.">                    int retry, @NonNull Duration timeout,</span>
+<span class="pc bpc" id="L20" title="1 of 2 branches missed.">                    @NonNull Duration pollPeriod) {</span>
+<span class="fc" id="L21">        this.nodeForWorkflow = endpointToHeal;</span>
+<span class="fc" id="L22">        this.runtime = runtime;</span>
+<span class="fc" id="L23">        this.retry = retry;</span>
+<span class="fc" id="L24">        this.timeout = timeout;</span>
+<span class="fc" id="L25">        this.pollPeriod = pollPeriod;</span>
+<span class="fc" id="L26">    }</span>
 
     @Override
-<span class="nc bnc" id="L29" title="All 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
-<span class="nc" id="L30">        CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,</span>
+<span class="pc bpc" id="L29" title="1 of 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
+<span class="fc" id="L30">        CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,</span>
                 true, true, true, 0);
-<span class="nc" id="L32">        log.info(&quot;sendRequest: requested to heal {} on orchestrator {}:{}&quot;,</span>
-<span class="nc" id="L33">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
-<span class="nc" id="L34">                managementClient.getRouter().getPort());</span>
-<span class="nc" id="L35">        return resp.getWorkflowId();</span>
+<span class="fc" id="L32">        log.info(&quot;sendRequest: requested to heal {} on orchestrator {}:{}&quot;,</span>
+<span class="fc" id="L33">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
+<span class="fc" id="L34">                managementClient.getRouter().getPort());</span>
+<span class="fc" id="L35">        return resp.getWorkflowId();</span>
     }
 
     @Override

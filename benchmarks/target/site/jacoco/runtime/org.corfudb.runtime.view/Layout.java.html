@@ -44,15 +44,15 @@ public class Layout {
     /**
      * Sorting layouts according to epochs in descending order
      */
-<span class="nc" id="L47">    public static final Comparator&lt;Layout&gt; LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();</span>
+<span class="fc" id="L47">    public static final Comparator&lt;Layout&gt; LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();</span>
 
     /**
      * A Gson parser.
      */
 <span class="nc" id="L52">    @Getter</span>
-<span class="nc" id="L53">    static final Gson parser = new GsonBuilder()</span>
-<span class="nc" id="L54">            .registerTypeAdapter(Layout.class, new LayoutDeserializer())</span>
-<span class="nc" id="L55">            .create();</span>
+<span class="fc" id="L53">    static final Gson parser = new GsonBuilder()</span>
+<span class="fc" id="L54">            .registerTypeAdapter(Layout.class, new LayoutDeserializer())</span>
+<span class="fc" id="L55">            .create();</span>
     /**
      * A list of layout servers in the layout.
      */

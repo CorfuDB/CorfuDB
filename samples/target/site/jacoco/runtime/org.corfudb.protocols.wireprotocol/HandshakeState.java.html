@@ -18,10 +18,10 @@ public class HandshakeState {
     /**
      * Keeps state of the handshake, initiated between client and server.
      */
-<span class="nc" id="L21">    public HandshakeState() {</span>
-<span class="nc" id="L22">        this.handshakeFailed = new AtomicBoolean(false);</span>
-<span class="nc" id="L23">        this.handshakeComplete = new AtomicBoolean(false);</span>
-<span class="nc" id="L24">    }</span>
+<span class="fc" id="L21">    public HandshakeState() {</span>
+<span class="fc" id="L22">        this.handshakeFailed = new AtomicBoolean(false);</span>
+<span class="fc" id="L23">        this.handshakeComplete = new AtomicBoolean(false);</span>
+<span class="fc" id="L24">    }</span>
 
     /**
      * Set Handshake State
@@ -29,9 +29,9 @@ public class HandshakeState {
      * @param complete indicates if handshake completed between client/server, i.e., did not timeout.
      */
     public void set(boolean failed, boolean complete){
-<span class="nc" id="L32">        this.handshakeFailed.set(failed);</span>
-<span class="nc" id="L33">        this.handshakeComplete.set(complete);</span>
-<span class="nc" id="L34">    }</span>
+<span class="fc" id="L32">        this.handshakeFailed.set(failed);</span>
+<span class="fc" id="L33">        this.handshakeComplete.set(complete);</span>
+<span class="fc" id="L34">    }</span>
 
     /**
      * Get Handshake Failure State
@@ -39,7 +39,7 @@ public class HandshakeState {
      *         false, otherwise.
      */
     public boolean failed() {
-<span class="nc" id="L42">        return this.handshakeFailed.get();</span>
+<span class="fc" id="L42">        return this.handshakeFailed.get();</span>
     }
 
     /**
@@ -48,7 +48,7 @@ public class HandshakeState {
      *         false, if handshake never concluded.
      */
     public boolean completed() {
-<span class="nc" id="L51">        return this.handshakeComplete.get();</span>
+<span class="fc" id="L51">        return this.handshakeComplete.get();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

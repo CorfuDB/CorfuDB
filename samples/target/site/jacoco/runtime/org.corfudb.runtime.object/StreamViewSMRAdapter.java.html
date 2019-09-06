@@ -43,27 +43,27 @@ public class StreamViewSMRAdapter implements ISMRStream {
     final CorfuRuntime runtime;
 
     public StreamViewSMRAdapter(CorfuRuntime runtime,
-<span class="nc" id="L46">                                IStreamView streamView) {</span>
-<span class="nc" id="L47">        this.runtime = runtime;</span>
-<span class="nc" id="L48">        this.streamView = streamView;</span>
-<span class="nc" id="L49">    }</span>
+<span class="fc" id="L46">                                IStreamView streamView) {</span>
+<span class="fc" id="L47">        this.runtime = runtime;</span>
+<span class="fc" id="L48">        this.streamView = streamView;</span>
+<span class="fc" id="L49">    }</span>
 
     private List&lt;SMREntry&gt; dataAndCheckpointMapper(ILogData logData) {
-<span class="nc bnc" id="L52" title="All 2 branches missed.">        if (logData.hasCheckpointMetadata()) {</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (logData.hasCheckpointMetadata()) {</span>
             // This is a CHECKPOINT record.  Extract the SMREntries, if any.
-<span class="nc" id="L54">            CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);</span>
-<span class="nc bnc" id="L55" title="All 2 branches missed.">            if (cp.getSmrEntries() != null</span>
-<span class="nc bnc" id="L56" title="All 2 branches missed.">                    &amp;&amp; cp.getSmrEntries().getUpdates().size() &gt; 0) {</span>
-<span class="nc" id="L57">                cp.getSmrEntries().getUpdates().forEach(e -&gt; {</span>
-<span class="nc" id="L58">                    e.setRuntime(runtime);</span>
-<span class="nc" id="L59">                    e.setGlobalAddress(logData.getGlobalAddress());</span>
-<span class="nc" id="L60">                });</span>
-<span class="nc" id="L61">                return cp.getSmrEntries().getUpdates();</span>
+<span class="fc" id="L54">            CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">            if (cp.getSmrEntries() != null</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">                    &amp;&amp; cp.getSmrEntries().getUpdates().size() &gt; 0) {</span>
+<span class="fc" id="L57">                cp.getSmrEntries().getUpdates().forEach(e -&gt; {</span>
+<span class="fc" id="L58">                    e.setRuntime(runtime);</span>
+<span class="fc" id="L59">                    e.setGlobalAddress(logData.getGlobalAddress());</span>
+<span class="fc" id="L60">                });</span>
+<span class="fc" id="L61">                return cp.getSmrEntries().getUpdates();</span>
             } else {
-<span class="nc" id="L63">                return (List&lt;SMREntry&gt;) Collections.EMPTY_LIST;</span>
+<span class="fc" id="L63">                return (List&lt;SMREntry&gt;) Collections.EMPTY_LIST;</span>
             }
         } else {
-<span class="nc" id="L66">            return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());</span>
+<span class="fc" id="L66">            return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());</span>
         }
     }
 
@@ -95,14 +95,14 @@ public class StreamViewSMRAdapter implements ISMRStream {
      * @return Returns the list of SMREntries positioned at the current global log.
      */
     public List&lt;SMREntry&gt; current() {
-<span class="nc" id="L98">        ILogData data = streamView.current();</span>
-<span class="nc bnc" id="L99" title="All 2 branches missed.">        if (data == null</span>
-<span class="nc bnc" id="L100" title="All 2 branches missed.">                || data.getType() != DataType.DATA</span>
-<span class="nc bnc" id="L101" title="All 2 branches missed.">                || !(data.getPayload(runtime) instanceof ISMRConsumable)) {</span>
-<span class="nc" id="L102">            return Collections.emptyList();</span>
+<span class="fc" id="L98">        ILogData data = streamView.current();</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (data == null</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">                || data.getType() != DataType.DATA</span>
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">                || !(data.getPayload(runtime) instanceof ISMRConsumable)) {</span>
+<span class="fc" id="L102">            return Collections.emptyList();</span>
         }
 
-<span class="nc" id="L105">        return ((ISMRConsumable) data.getPayload(runtime)).getSMRUpdates(streamView.getId());</span>
+<span class="fc" id="L105">        return ((ISMRConsumable) data.getPayload(runtime)).getSMRUpdates(streamView.getId());</span>
     }
 
     /**
@@ -112,31 +112,31 @@ public class StreamViewSMRAdapter implements ISMRStream {
      *     stream.
      */
     public List&lt;SMREntry&gt; previous() {
-<span class="nc" id="L115">        ILogData data = streamView.previous();</span>
-<span class="nc bnc" id="L116" title="All 4 branches missed.">        while (Address.isAddress(streamView.getCurrentGlobalPosition())</span>
+<span class="fc" id="L115">        ILogData data = streamView.previous();</span>
+<span class="pc bpc" id="L116" title="1 of 4 branches missed.">        while (Address.isAddress(streamView.getCurrentGlobalPosition())</span>
                 &amp;&amp; data != null) {
-<span class="nc bnc" id="L118" title="All 2 branches missed.">            if (data.getType() == DataType.DATA</span>
-<span class="nc bnc" id="L119" title="All 2 branches missed.">                    &amp;&amp; data.getPayload(runtime) instanceof ISMRConsumable) {</span>
-<span class="nc" id="L120">                return ((ISMRConsumable) data.getPayload(runtime))</span>
-<span class="nc" id="L121">                        .getSMRUpdates(streamView.getId());</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">            if (data.getType() == DataType.DATA</span>
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">                    &amp;&amp; data.getPayload(runtime) instanceof ISMRConsumable) {</span>
+<span class="fc" id="L120">                return ((ISMRConsumable) data.getPayload(runtime))</span>
+<span class="fc" id="L121">                        .getSMRUpdates(streamView.getId());</span>
             }
 <span class="nc" id="L123">            data = streamView.previous();</span>
         }
 
-<span class="nc" id="L126">        return Collections.emptyList();</span>
+<span class="fc" id="L126">        return Collections.emptyList();</span>
     }
 
     public long pos() {
-<span class="nc" id="L130">        return streamView.getCurrentGlobalPosition();</span>
+<span class="fc" id="L130">        return streamView.getCurrentGlobalPosition();</span>
     }
 
     public void reset() {
-<span class="nc" id="L134">        streamView.reset();</span>
-<span class="nc" id="L135">    }</span>
+<span class="fc" id="L134">        streamView.reset();</span>
+<span class="fc" id="L135">    }</span>
 
     public void seek(long globalAddress) {
-<span class="nc" id="L138">        streamView.seek(globalAddress);</span>
-<span class="nc" id="L139">    }</span>
+<span class="fc" id="L138">        streamView.seek(globalAddress);</span>
+<span class="fc" id="L139">    }</span>
 
     @Override
     public Stream&lt;SMREntry&gt; stream() {
@@ -145,12 +145,12 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     @Override
     public Stream&lt;SMREntry&gt; streamUpTo(long maxGlobal) {
-<span class="nc" id="L148">        return streamView.streamUpTo(maxGlobal)</span>
-<span class="nc bnc" id="L149" title="All 2 branches missed.">                .filter(m -&gt; m.getType() == DataType.DATA)</span>
-<span class="nc bnc" id="L150" title="All 2 branches missed.">                .filter(m -&gt; m.getPayload(runtime) instanceof ISMRConsumable</span>
-<span class="nc bnc" id="L151" title="All 2 branches missed.">                        || m.hasCheckpointMetadata())</span>
-<span class="nc" id="L152">                .map(this::dataAndCheckpointMapper)</span>
-<span class="nc" id="L153">                .flatMap(List::stream);</span>
+<span class="fc" id="L148">        return streamView.streamUpTo(maxGlobal)</span>
+<span class="pc bpc" id="L149" title="1 of 2 branches missed.">                .filter(m -&gt; m.getType() == DataType.DATA)</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">                .filter(m -&gt; m.getPayload(runtime) instanceof ISMRConsumable</span>
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">                        || m.hasCheckpointMetadata())</span>
+<span class="fc" id="L152">                .map(this::dataAndCheckpointMapper)</span>
+<span class="fc" id="L153">                .flatMap(List::stream);</span>
     }
 
     /**
@@ -175,7 +175,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public long append(SMREntry entry,
                        Function&lt;TokenResponse, Boolean&gt; acquisitionCallback,
                        Function&lt;TokenResponse, Boolean&gt; deacquisitionCallback) {
-<span class="nc" id="L178">        return streamView.append(entry, acquisitionCallback, deacquisitionCallback);</span>
+<span class="fc" id="L178">        return streamView.append(entry, acquisitionCallback, deacquisitionCallback);</span>
     }
 
     /**
@@ -183,7 +183,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      */
     @Override
     public UUID getID() {
-<span class="nc" id="L186">        return streamView.getId();</span>
+<span class="fc" id="L186">        return streamView.getId();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

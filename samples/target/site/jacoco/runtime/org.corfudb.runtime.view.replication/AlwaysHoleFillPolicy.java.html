@@ -10,7 +10,7 @@ import org.corfudb.runtime.exceptions.HoleFillRequiredException;
  *
  * &lt;p&gt;Created by mwei on 4/6/17.
  */
-<span class="nc" id="L13">public class AlwaysHoleFillPolicy implements IHoleFillPolicy {</span>
+<span class="fc" id="L13">public class AlwaysHoleFillPolicy implements IHoleFillPolicy {</span>
 
     /**
      * {@inheritDoc}
@@ -19,11 +19,11 @@ import org.corfudb.runtime.exceptions.HoleFillRequiredException;
     @Override
     public ILogData peekUntilHoleFillRequired(long address,
                Function&lt;Long, ILogData&gt; peekFunction) throws HoleFillRequiredException {
-<span class="nc" id="L22">        ILogData data = peekFunction.apply(address);</span>
-<span class="nc bnc" id="L23" title="All 2 branches missed.">        if (data == null) {</span>
-<span class="nc" id="L24">            throw new HoleFillRequiredException(&quot;No data at address&quot;);</span>
+<span class="fc" id="L22">        ILogData data = peekFunction.apply(address);</span>
+<span class="fc bfc" id="L23" title="All 2 branches covered.">        if (data == null) {</span>
+<span class="fc" id="L24">            throw new HoleFillRequiredException(&quot;No data at address&quot;);</span>
         }
-<span class="nc" id="L26">        return data;</span>
+<span class="fc" id="L26">        return data;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -19,16 +19,16 @@ import java.util.function.Function;
  * Created by mwei on 9/15/15.
  */
 public final class CFUtils {
-<span class="nc" id="L22">    private static final ScheduledExecutorService SCHEDULER =</span>
-<span class="nc" id="L23">            Executors.newScheduledThreadPool(</span>
+<span class="fc" id="L22">    private static final ScheduledExecutorService SCHEDULER =</span>
+<span class="fc" id="L23">            Executors.newScheduledThreadPool(</span>
                     1,
                     new ThreadFactoryBuilder()
-<span class="nc" id="L26">                            .setDaemon(true)</span>
-<span class="nc" id="L27">                            .setNameFormat(&quot;failAfter-%d&quot;)</span>
-<span class="nc" id="L28">                            .build());</span>
+<span class="fc" id="L26">                            .setDaemon(true)</span>
+<span class="fc" id="L27">                            .setNameFormat(&quot;failAfter-%d&quot;)</span>
+<span class="fc" id="L28">                            .build());</span>
 
     /** A static timeout exception that we complete futures exceptionally with. */
-<span class="nc" id="L31">    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();</span>
+<span class="fc" id="L31">    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();</span>
 
 <span class="nc" id="L33">    private CFUtils() {</span>
         // Prevent initializing a utility class
@@ -46,23 +46,23 @@ public final class CFUtils {
                                                       Class&lt;D&gt; throwableD)
             throws A, B, C, D {
             try {
-<span class="nc" id="L49">                return future.get();</span>
-<span class="nc" id="L50">            } catch (InterruptedException e) {</span>
-<span class="nc" id="L51">                throw new UnrecoverableCorfuInterruptedError(&quot;Interrupted while completing future&quot;, e);</span>
-<span class="nc" id="L52">            } catch (ExecutionException ee) {</span>
-<span class="nc bnc" id="L53" title="All 2 branches missed.">                if (throwableA.isInstance(ee.getCause())) {</span>
-<span class="nc" id="L54">                    throw (A) ee.getCause();</span>
+<span class="fc" id="L49">                return future.get();</span>
+<span class="fc" id="L50">            } catch (InterruptedException e) {</span>
+<span class="fc" id="L51">                throw new UnrecoverableCorfuInterruptedError(&quot;Interrupted while completing future&quot;, e);</span>
+<span class="fc" id="L52">            } catch (ExecutionException ee) {</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">                if (throwableA.isInstance(ee.getCause())) {</span>
+<span class="fc" id="L54">                    throw (A) ee.getCause();</span>
                 }
-<span class="nc bnc" id="L56" title="All 2 branches missed.">                if (throwableB.isInstance(ee.getCause())) {</span>
-<span class="nc" id="L57">                    throw (B) ee.getCause();</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">                if (throwableB.isInstance(ee.getCause())) {</span>
+<span class="fc" id="L57">                    throw (B) ee.getCause();</span>
                 }
-<span class="nc bnc" id="L59" title="All 2 branches missed.">                if (throwableC.isInstance(ee.getCause())) {</span>
-<span class="nc" id="L60">                    throw (C) ee.getCause();</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">                if (throwableC.isInstance(ee.getCause())) {</span>
+<span class="fc" id="L60">                    throw (C) ee.getCause();</span>
                 }
-<span class="nc bnc" id="L62" title="All 2 branches missed.">                if (throwableD.isInstance(ee.getCause())) {</span>
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">                if (throwableD.isInstance(ee.getCause())) {</span>
 <span class="nc" id="L63">                    throw (D) ee.getCause();</span>
                 }
-<span class="nc" id="L65">                throw new RuntimeException(ee.getCause());</span>
+<span class="fc" id="L65">                throw new RuntimeException(ee.getCause());</span>
             }
     }
 
@@ -74,7 +74,7 @@ public final class CFUtils {
                                                       Class&lt;B&gt; throwableB,
                                                       Class&lt;C&gt; throwableC)
             throws A, B, C {
-<span class="nc" id="L77">        return getUninterruptibly(future, throwableA, throwableB, throwableC,</span>
+<span class="fc" id="L77">        return getUninterruptibly(future, throwableA, throwableB, throwableC,</span>
                 RuntimeException.class);
     }
 
@@ -84,19 +84,19 @@ public final class CFUtils {
                                                       Class&lt;A&gt; throwableA,
                                                       Class&lt;B&gt; throwableB)
             throws A, B {
-<span class="nc" id="L87">        return getUninterruptibly(future, throwableA, throwableB, RuntimeException.class,</span>
+<span class="fc" id="L87">        return getUninterruptibly(future, throwableA, throwableB, RuntimeException.class,</span>
                 RuntimeException.class);
     }
 
     public static &lt;T, A extends Throwable&gt; T getUninterruptibly(Future&lt;T&gt; future,
                                                                 Class&lt;A&gt; throwableA)
             throws A {
-<span class="nc" id="L94">        return getUninterruptibly(future, throwableA, RuntimeException.class,</span>
+<span class="fc" id="L94">        return getUninterruptibly(future, throwableA, RuntimeException.class,</span>
                 RuntimeException.class, RuntimeException.class);
     }
 
     public static &lt;T&gt; T getUninterruptibly(Future&lt;T&gt; future) {
-<span class="nc" id="L99">        return getUninterruptibly(future, RuntimeException.class, RuntimeException.class,</span>
+<span class="fc" id="L99">        return getUninterruptibly(future, RuntimeException.class, RuntimeException.class,</span>
                 RuntimeException.class, RuntimeException.class);
     }
 
@@ -109,10 +109,10 @@ public final class CFUtils {
      * @return A completable future that will time out.
      */
     public static &lt;T&gt; CompletableFuture&lt;T&gt; failAfter(Duration duration) {
-<span class="nc" id="L112">        final CompletableFuture&lt;T&gt; promise = new CompletableFuture&lt;&gt;();</span>
-<span class="nc" id="L113">        SCHEDULER.schedule(() -&gt; promise.completeExceptionally(TIMEOUT_EXCEPTION),</span>
-<span class="nc" id="L114">                                        duration.toMillis(), TimeUnit.MILLISECONDS);</span>
-<span class="nc" id="L115">        return promise;</span>
+<span class="fc" id="L112">        final CompletableFuture&lt;T&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L113">        SCHEDULER.schedule(() -&gt; promise.completeExceptionally(TIMEOUT_EXCEPTION),</span>
+<span class="fc" id="L114">                                        duration.toMillis(), TimeUnit.MILLISECONDS);</span>
+<span class="fc" id="L115">        return promise;</span>
     }
 
     /**
@@ -136,13 +136,13 @@ public final class CFUtils {
      *                 within duration, otherwise completes exceptionally with TimeoutException.
      */
     public static &lt;T&gt; CompletableFuture&lt;T&gt; within(CompletableFuture&lt;T&gt; future, Duration duration) {
-<span class="nc" id="L139">        final CompletableFuture&lt;T&gt; timeout = failAfter(duration);</span>
-<span class="nc" id="L140">        return future.applyToEither(timeout, Function.identity());</span>
+<span class="fc" id="L139">        final CompletableFuture&lt;T&gt; timeout = failAfter(duration);</span>
+<span class="fc" id="L140">        return future.applyToEither(timeout, Function.identity());</span>
     }
 
     public static &lt;T&gt; CompletableFuture&lt;Void&gt; allOf(Collection&lt;CompletableFuture&lt;T&gt;&gt; futures) {
-<span class="nc" id="L144">        CompletableFuture&lt;T&gt;[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);</span>
-<span class="nc" id="L145">        return CompletableFuture.allOf(futuresArr);</span>
+<span class="fc" id="L144">        CompletableFuture&lt;T&gt;[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);</span>
+<span class="fc" id="L145">        return CompletableFuture.allOf(futuresArr);</span>
     }
 
     /**
@@ -155,21 +155,21 @@ public final class CFUtils {
      */
     public static &lt;A extends Throwable&gt; void unwrap(Throwable throwable, Class&lt;A&gt; throwableA) throws A {
 
-<span class="nc" id="L158">        Throwable unwrapThrowable = throwable;</span>
-<span class="nc bnc" id="L159" title="All 4 branches missed.">        if (throwable instanceof ExecutionException || throwable instanceof CompletionException) {</span>
-<span class="nc" id="L160">            unwrapThrowable = throwable.getCause();</span>
+<span class="fc" id="L158">        Throwable unwrapThrowable = throwable;</span>
+<span class="pc bpc" id="L159" title="2 of 4 branches missed.">        if (throwable instanceof ExecutionException || throwable instanceof CompletionException) {</span>
+<span class="fc" id="L160">            unwrapThrowable = throwable.getCause();</span>
         }
 
-<span class="nc bnc" id="L163" title="All 2 branches missed.">        if (throwableA.isInstance(unwrapThrowable)) {</span>
-<span class="nc" id="L164">            throw (A) unwrapThrowable;</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        if (throwableA.isInstance(unwrapThrowable)) {</span>
+<span class="fc" id="L164">            throw (A) unwrapThrowable;</span>
         }
-<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (unwrapThrowable instanceof RuntimeException) {</span>
+<span class="pc bpc" id="L166" title="1 of 2 branches missed.">        if (unwrapThrowable instanceof RuntimeException) {</span>
 <span class="nc" id="L167">            throw (RuntimeException) unwrapThrowable;</span>
         }
-<span class="nc bnc" id="L169" title="All 2 branches missed.">        if (unwrapThrowable instanceof Error) {</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">        if (unwrapThrowable instanceof Error) {</span>
 <span class="nc" id="L170">            throw (Error) unwrapThrowable;</span>
         }
-<span class="nc" id="L172">        throw new RuntimeException(unwrapThrowable);</span>
+<span class="fc" id="L172">        throw new RuntimeException(unwrapThrowable);</span>
     }
 
     /**

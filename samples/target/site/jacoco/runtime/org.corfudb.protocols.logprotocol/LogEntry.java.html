@@ -22,30 +22,30 @@ import org.corfudb.util.serializer.ICorfuSerializable;
  * Created by mwei on 1/8/16.
  */
 <span class="nc" id="L24">@ToString(exclude = {&quot;runtime&quot;})</span>
-<span class="nc" id="L25">@NoArgsConstructor</span>
+<span class="fc" id="L25">@NoArgsConstructor</span>
 public class LogEntry implements ICorfuSerializable {
 
-<span class="nc" id="L28">    static final Map&lt;Byte, LogEntryType&gt; typeMap =</span>
-<span class="nc" id="L29">            Arrays.stream(LogEntryType.values())</span>
-<span class="nc" id="L30">                    .collect(Collectors.toMap(LogEntryType::asByte, Function.identity()));</span>
+<span class="fc" id="L28">    static final Map&lt;Byte, LogEntryType&gt; typeMap =</span>
+<span class="fc" id="L29">            Arrays.stream(LogEntryType.values())</span>
+<span class="fc" id="L30">                    .collect(Collectors.toMap(LogEntryType::asByte, Function.identity()));</span>
 
     /**
      * The runtime to use.
      */
-<span class="nc" id="L35">    @Setter</span>
+<span class="fc" id="L35">    @Setter</span>
     protected CorfuRuntime runtime;
 
     /**
      * The type of log entry.
      */
-<span class="nc" id="L41">    @Getter</span>
+<span class="fc" id="L41">    @Getter</span>
     LogEntryType type;
 
     /**
      * The global address of this log entry.
      */
-<span class="nc" id="L47">    @Getter</span>
-<span class="nc" id="L48">    @Setter</span>
+<span class="fc" id="L47">    @Getter</span>
+<span class="fc" id="L48">    @Setter</span>
     long globalAddress = Address.NON_ADDRESS;
 
     /**
@@ -53,9 +53,9 @@ public class LogEntry implements ICorfuSerializable {
      *
      * @param type The type of log entry to instantiate.
      */
-<span class="nc" id="L56">    public LogEntry(LogEntryType type) {</span>
-<span class="nc" id="L57">        this.type = type;</span>
-<span class="nc" id="L58">    }</span>
+<span class="fc" id="L56">    public LogEntry(LogEntryType type) {</span>
+<span class="fc" id="L57">        this.type = type;</span>
+<span class="fc" id="L58">    }</span>
 
     /**
      * The base LogEntry format is very simple. The first byte represents the type
@@ -66,12 +66,12 @@ public class LogEntry implements ICorfuSerializable {
      */
     public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt) {
         try {
-<span class="nc" id="L69">            LogEntryType let = typeMap.get(b.readByte());</span>
-<span class="nc" id="L70">            LogEntry l = let.entryType.newInstance();</span>
-<span class="nc" id="L71">            l.type = let;</span>
-<span class="nc" id="L72">            l.runtime = rt;</span>
-<span class="nc" id="L73">            l.deserializeBuffer(b, rt);</span>
-<span class="nc" id="L74">            return l;</span>
+<span class="fc" id="L69">            LogEntryType let = typeMap.get(b.readByte());</span>
+<span class="fc" id="L70">            LogEntry l = let.entryType.newInstance();</span>
+<span class="fc" id="L71">            l.type = let;</span>
+<span class="fc" id="L72">            l.runtime = rt;</span>
+<span class="fc" id="L73">            l.deserializeBuffer(b, rt);</span>
+<span class="fc" id="L74">            return l;</span>
 <span class="nc" id="L75">        } catch (InstantiationException | IllegalAccessException ie) {</span>
 <span class="nc" id="L76">            throw new RuntimeException(&quot;Error deserializing entry&quot;, ie);</span>
         }
@@ -85,7 +85,7 @@ public class LogEntry implements ICorfuSerializable {
      */
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         // In the base case, we don't do anything.
-<span class="nc" id="L88">    }</span>
+<span class="fc" id="L88">    }</span>
 
     /**
      * Serialize the given LogEntry into a given byte buffer.
@@ -94,8 +94,8 @@ public class LogEntry implements ICorfuSerializable {
      */
     @Override
     public void serialize(ByteBuf b) {
-<span class="nc" id="L97">        b.writeByte(type.asByte());</span>
-<span class="nc" id="L98">    }</span>
+<span class="fc" id="L97">        b.writeByte(type.asByte());</span>
+<span class="fc" id="L98">    }</span>
 
     /**
      * Returns whether the entry changes the contents of the stream.
@@ -108,20 +108,20 @@ public class LogEntry implements ICorfuSerializable {
 <span class="nc" id="L108">        return true;</span>
     }
 
-<span class="nc" id="L111">    @RequiredArgsConstructor</span>
+<span class="pc" id="L111">    @RequiredArgsConstructor</span>
     public enum LogEntryType {
         // Base Messages
-<span class="nc" id="L114">        NOP(0, LogEntry.class),</span>
-<span class="nc" id="L115">        SMR(1, SMREntry.class),</span>
-<span class="nc" id="L116">        MULTIOBJSMR(7, MultiObjectSMREntry.class),</span>
-<span class="nc" id="L117">        MULTISMR(8, MultiSMREntry.class),</span>
-<span class="nc" id="L118">        CHECKPOINT(10, CheckpointEntry.class);</span>
+<span class="fc" id="L114">        NOP(0, LogEntry.class),</span>
+<span class="fc" id="L115">        SMR(1, SMREntry.class),</span>
+<span class="fc" id="L116">        MULTIOBJSMR(7, MultiObjectSMREntry.class),</span>
+<span class="fc" id="L117">        MULTISMR(8, MultiSMREntry.class),</span>
+<span class="fc" id="L118">        CHECKPOINT(10, CheckpointEntry.class);</span>
 
         public final int type;
         public final Class&lt;? extends LogEntry&gt; entryType;
 
         public byte asByte() {
-<span class="nc" id="L124">            return (byte) type;</span>
+<span class="fc" id="L124">            return (byte) type;</span>
         }
     }
 }

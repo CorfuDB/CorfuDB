@@ -10,22 +10,22 @@ import lombok.Data;
  * Created by mdhawan on 10/24/16.
  */
 <span class="nc bnc" id="L12" title="All 10 branches missed.">@Data</span>
-<span class="nc" id="L13">@AllArgsConstructor</span>
+<span class="fc" id="L13">@AllArgsConstructor</span>
 public class LayoutPrepareRequest implements ICorfuPayload&lt;LayoutPrepareRequest&gt; {
     // Marks the boundary of a layout update.
-<span class="nc" id="L16">    private long epoch;</span>
+<span class="fc" id="L16">    private long epoch;</span>
     // Number that denotes a round started by a proposer (within an epoch).
-<span class="nc" id="L18">    private long rank;</span>
+<span class="fc" id="L18">    private long rank;</span>
 
-<span class="nc" id="L20">    public LayoutPrepareRequest(ByteBuf buf) {</span>
-<span class="nc" id="L21">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L22">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L20">    public LayoutPrepareRequest(ByteBuf buf) {</span>
+<span class="fc" id="L21">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L22">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L23">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L27">        ICorfuPayload.serialize(buf, epoch);</span>
-<span class="nc" id="L28">        ICorfuPayload.serialize(buf, rank);</span>
-<span class="nc" id="L29">    }</span>
+<span class="fc" id="L27">        ICorfuPayload.serialize(buf, epoch);</span>
+<span class="fc" id="L28">        ICorfuPayload.serialize(buf, rank);</span>
+<span class="fc" id="L29">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

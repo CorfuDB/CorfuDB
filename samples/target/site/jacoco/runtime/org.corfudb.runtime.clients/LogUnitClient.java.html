@@ -44,28 +44,28 @@ import org.corfudb.util.serializer.Serializers;
 public class LogUnitClient extends AbstractClient {
 
     public LogUnitClient(IClientRouter router, long epoch) {
-<span class="nc" id="L47">        super(router, epoch);</span>
-<span class="nc" id="L48">    }</span>
+<span class="fc" id="L47">        super(router, epoch);</span>
+<span class="fc" id="L48">    }</span>
 
     public String getHost() {
-<span class="nc" id="L51">        return getRouter().getHost();</span>
+<span class="fc" id="L51">        return getRouter().getHost();</span>
     }
 
     public Integer getPort() {
-<span class="nc" id="L55">        return getRouter().getPort();</span>
+<span class="fc" id="L55">        return getRouter().getPort();</span>
     }
 
-<span class="nc" id="L58">    @Getter</span>
-<span class="nc" id="L59">    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
+<span class="fc" id="L58">    @Getter</span>
+<span class="fc" id="L59">    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
 
     private Timer.Context getTimerContext(String opName) {
-<span class="nc" id="L62">        final String timerName = String.format(&quot;%s%s:%s-%s&quot;,</span>
-<span class="nc" id="L63">                CorfuComponent.LOG_UNIT_CLIENT.toString(),</span>
-<span class="nc" id="L64">                getHost(),</span>
-<span class="nc" id="L65">                getPort().toString(),</span>
+<span class="fc" id="L62">        final String timerName = String.format(&quot;%s%s:%s-%s&quot;,</span>
+<span class="fc" id="L63">                CorfuComponent.LOG_UNIT_CLIENT.toString(),</span>
+<span class="fc" id="L64">                getHost(),</span>
+<span class="fc" id="L65">                getPort().toString(),</span>
                 opName);
-<span class="nc" id="L67">        Timer t = getMetricRegistry().timer(timerName);</span>
-<span class="nc" id="L68">        return t.time();</span>
+<span class="fc" id="L67">        Timer t = getMetricRegistry().timer(timerName);</span>
+<span class="fc" id="L68">        return t.time();</span>
     }
 
     /**
@@ -81,17 +81,17 @@ public class LogUnitClient extends AbstractClient {
                                             IMetadata.DataRank rank,
                                             Object writeObject,
                                             Map&lt;UUID, Long&gt; backpointerMap) {
-<span class="nc" id="L84">        Timer.Context context = getTimerContext(&quot;writeObject&quot;);</span>
-<span class="nc" id="L85">        ByteBuf payload = Unpooled.buffer();</span>
-<span class="nc" id="L86">        Serializers.CORFU.serialize(writeObject, payload);</span>
-<span class="nc" id="L87">        WriteRequest wr = new WriteRequest(DataType.DATA, payload);</span>
-<span class="nc" id="L88">        wr.setRank(rank);</span>
-<span class="nc" id="L89">        wr.setBackpointerMap(backpointerMap);</span>
-<span class="nc" id="L90">        wr.setGlobalAddress(address);</span>
-<span class="nc" id="L91">        CompletableFuture&lt;Boolean&gt; cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));</span>
-<span class="nc" id="L92">        return cf.thenApply(x -&gt; {</span>
-<span class="nc" id="L93">            context.stop();</span>
-<span class="nc" id="L94">            return x;</span>
+<span class="fc" id="L84">        Timer.Context context = getTimerContext(&quot;writeObject&quot;);</span>
+<span class="fc" id="L85">        ByteBuf payload = Unpooled.buffer();</span>
+<span class="fc" id="L86">        Serializers.CORFU.serialize(writeObject, payload);</span>
+<span class="fc" id="L87">        WriteRequest wr = new WriteRequest(DataType.DATA, payload);</span>
+<span class="fc" id="L88">        wr.setRank(rank);</span>
+<span class="fc" id="L89">        wr.setBackpointerMap(backpointerMap);</span>
+<span class="fc" id="L90">        wr.setGlobalAddress(address);</span>
+<span class="fc" id="L91">        CompletableFuture&lt;Boolean&gt; cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));</span>
+<span class="fc" id="L92">        return cf.thenApply(x -&gt; {</span>
+<span class="fc" id="L93">            context.stop();</span>
+<span class="fc" id="L94">            return x;</span>
         });
     }
 
@@ -102,7 +102,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture&lt;Boolean&gt; write(ILogData payload) {
-<span class="nc" id="L105">        return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));</span>
+<span class="fc" id="L105">        return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));</span>
     }
 
     /**
@@ -112,21 +112,21 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture&lt;Boolean&gt; writeRange(List&lt;LogData&gt; range) {
-<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (range.isEmpty()) {</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">        if (range.isEmpty()) {</span>
 <span class="nc" id="L116">            throw new IllegalArgumentException(&quot;Can't write an empty range&quot;);</span>
         }
 
-<span class="nc" id="L119">        long base = range.get(0).getGlobalAddress();</span>
-<span class="nc bnc" id="L120" title="All 2 branches missed.">        for (int x = 0; x &lt; range.size(); x++) {</span>
-<span class="nc" id="L121">            LogData curr = range.get(x);</span>
-<span class="nc bnc" id="L122" title="All 2 branches missed.">            if (!curr.getGlobalAddress().equals(base + x)) {</span>
-<span class="nc" id="L123">                throw new IllegalArgumentException(&quot;Entries not in sequential order!&quot;);</span>
-<span class="nc bnc" id="L124" title="All 2 branches missed.">            } else if (curr.isEmpty()) {</span>
+<span class="fc" id="L119">        long base = range.get(0).getGlobalAddress();</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        for (int x = 0; x &lt; range.size(); x++) {</span>
+<span class="fc" id="L121">            LogData curr = range.get(x);</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">            if (!curr.getGlobalAddress().equals(base + x)) {</span>
+<span class="fc" id="L123">                throw new IllegalArgumentException(&quot;Entries not in sequential order!&quot;);</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">            } else if (curr.isEmpty()) {</span>
 <span class="nc" id="L125">                throw new IllegalArgumentException(&quot;Can't write empty entries!&quot;);</span>
             }
         }
 
-<span class="nc" id="L129">        return sendMessageWithFuture(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(range)));</span>
+<span class="fc" id="L129">        return sendMessageWithFuture(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(range)));</span>
     }
 
     /**
@@ -137,7 +137,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture&lt;ReadResponse&gt; read(long address) {
-<span class="nc" id="L140">        return read(address, true);</span>
+<span class="fc" id="L140">        return read(address, true);</span>
     }
 
     /**
@@ -148,13 +148,13 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture&lt;ReadResponse&gt; read(long address, boolean cacheable) {
-<span class="nc" id="L151">        Timer.Context context = getTimerContext(&quot;read&quot;);</span>
-<span class="nc" id="L152">        CompletableFuture&lt;ReadResponse&gt; cf = sendMessageWithFuture(</span>
-<span class="nc" id="L153">                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, cacheable)));</span>
+<span class="fc" id="L151">        Timer.Context context = getTimerContext(&quot;read&quot;);</span>
+<span class="fc" id="L152">        CompletableFuture&lt;ReadResponse&gt; cf = sendMessageWithFuture(</span>
+<span class="fc" id="L153">                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, cacheable)));</span>
 
-<span class="nc" id="L155">        return cf.thenApply(x -&gt; {</span>
-<span class="nc" id="L156">            context.stop();</span>
-<span class="nc" id="L157">            return x;</span>
+<span class="fc" id="L155">        return cf.thenApply(x -&gt; {</span>
+<span class="fc" id="L156">            context.stop();</span>
+<span class="fc" id="L157">            return x;</span>
         });
     }
 
@@ -167,7 +167,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture&lt;ReadResponse&gt; readAll(List&lt;Long&gt; addresses) {
-<span class="nc" id="L170">       return readAll(addresses, false);</span>
+<span class="fc" id="L170">       return readAll(addresses, false);</span>
     }
 
     /**
@@ -178,12 +178,12 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture&lt;ReadResponse&gt; readAll(List&lt;Long&gt; addresses, boolean cacheable) {
-<span class="nc" id="L181">        Timer.Context context = getTimerContext(&quot;readAll&quot;);</span>
-<span class="nc" id="L182">        CompletableFuture&lt;ReadResponse&gt; cf = sendMessageWithFuture(</span>
-<span class="nc" id="L183">                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, cacheable)));</span>
-<span class="nc" id="L184">        return cf.thenApply(x -&gt; {</span>
-<span class="nc" id="L185">            context.stop();</span>
-<span class="nc" id="L186">            return x;</span>
+<span class="fc" id="L181">        Timer.Context context = getTimerContext(&quot;readAll&quot;);</span>
+<span class="fc" id="L182">        CompletableFuture&lt;ReadResponse&gt; cf = sendMessageWithFuture(</span>
+<span class="fc" id="L183">                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, cacheable)));</span>
+<span class="fc" id="L184">        return cf.thenApply(x -&gt; {</span>
+<span class="fc" id="L185">            context.stop();</span>
+<span class="fc" id="L186">            return x;</span>
         });
     }
 
@@ -194,7 +194,7 @@ public class LogUnitClient extends AbstractClient {
      * received.
      */
     public CompletableFuture&lt;TailsResponse&gt; getLogTail() {
-<span class="nc" id="L197">        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(new TailsRequest(TailsRequest.LOG_TAIL)));</span>
+<span class="fc" id="L197">        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(new TailsRequest(TailsRequest.LOG_TAIL)));</span>
     }
 
     /**
@@ -204,7 +204,7 @@ public class LogUnitClient extends AbstractClient {
      * received.
      */
     public CompletableFuture&lt;TailsResponse&gt; getAllTails() {
-<span class="nc" id="L207">        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(TailsRequest.ALL_STREAMS_TAIL));</span>
+<span class="fc" id="L207">        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(TailsRequest.ALL_STREAMS_TAIL));</span>
     }
 
     /**
@@ -213,7 +213,7 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the address space map for all streams.
      */
     public CompletableFuture&lt;StreamsAddressResponse&gt; getLogAddressSpace() {
-<span class="nc" id="L216">        return sendMessageWithFuture(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST.msg());</span>
+<span class="fc" id="L216">        return sendMessageWithFuture(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST.msg());</span>
     }
 
     /**
@@ -222,7 +222,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture for the starting address
      */
     public CompletableFuture&lt;Long&gt; getTrimMark() {
-<span class="nc" id="L225">        return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());</span>
+<span class="fc" id="L225">        return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());</span>
     }
 
     /**
@@ -234,8 +234,8 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture&lt;KnownAddressResponse&gt; requestKnownAddresses(long startRange,
                                                                          long endRange) {
-<span class="nc" id="L237">        return sendMessageWithFuture(CorfuMsgType.KNOWN_ADDRESS_REQUEST</span>
-<span class="nc" id="L238">                .payloadMsg(new KnownAddressRequest(startRange, endRange)));</span>
+<span class="fc" id="L237">        return sendMessageWithFuture(CorfuMsgType.KNOWN_ADDRESS_REQUEST</span>
+<span class="fc" id="L238">                .payloadMsg(new KnownAddressRequest(startRange, endRange)));</span>
     }
 
     /**
@@ -245,22 +245,22 @@ public class LogUnitClient extends AbstractClient {
      * @return an empty completableFuture
      */
     public CompletableFuture&lt;Void&gt; prefixTrim(Token address) {
-<span class="nc" id="L248">        return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM</span>
-<span class="nc" id="L249">                .payloadMsg(new TrimRequest(address)));</span>
+<span class="fc" id="L248">        return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM</span>
+<span class="fc" id="L249">                .payloadMsg(new TrimRequest(address)));</span>
     }
 
     /**
      * Send a compact request that will delete the trimmed parts of the log.
      */
     public CompletableFuture&lt;Void&gt; compact() {
-<span class="nc" id="L256">        return sendMessageWithFuture(CorfuMsgType.COMPACT_REQUEST.msg());</span>
+<span class="fc" id="L256">        return sendMessageWithFuture(CorfuMsgType.COMPACT_REQUEST.msg());</span>
     }
 
     /**
      * Send a flush cache request that will flush the logunit cache.
      */
     public CompletableFuture&lt;Void&gt; flushCache() {
-<span class="nc" id="L263">        return sendMessageWithFuture(CorfuMsgType.FLUSH_CACHE.msg());</span>
+<span class="fc" id="L263">        return sendMessageWithFuture(CorfuMsgType.FLUSH_CACHE.msg());</span>
     }
 
 
@@ -271,7 +271,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture&lt;Boolean&gt; resetLogUnit(long epoch) {
-<span class="nc" id="L274">        return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.payloadMsg(epoch));</span>
+<span class="fc" id="L274">        return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.payloadMsg(epoch));</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

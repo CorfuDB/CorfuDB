@@ -37,8 +37,8 @@ import org.corfudb.util.CFUtils;
 public class ManagementClient extends AbstractClient {
 
     public ManagementClient(IClientRouter router, long epoch) {
-<span class="nc" id="L40">        super(router, epoch);</span>
-<span class="nc" id="L41">    }</span>
+<span class="fc" id="L40">        super(router, epoch);</span>
+<span class="fc" id="L41">    }</span>
 
     /**
      * Bootstraps a management server.
@@ -48,7 +48,7 @@ public class ManagementClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture&lt;Boolean&gt; bootstrapManagement(Layout l) {
-<span class="nc" id="L51">        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l));</span>
+<span class="fc" id="L51">        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l));</span>
     }
 
     /**
@@ -58,8 +58,8 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture&lt;Boolean&gt; handleFailure(long detectorEpoch, Set&lt;String&gt; failedNodes) {
-<span class="nc" id="L61">        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED</span>
-<span class="nc" id="L62">                .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));</span>
+<span class="fc" id="L61">        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED</span>
+<span class="fc" id="L62">                .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));</span>
     }
 
     /**
@@ -69,12 +69,12 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture&lt;Boolean&gt; handleHealing(long detectorEpoch, Set&lt;String&gt; healedNodes) {
-<span class="nc" id="L72">        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_HEALING_DETECTED</span>
-<span class="nc" id="L73">                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));</span>
+<span class="pc" id="L72">        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_HEALING_DETECTED</span>
+<span class="fc" id="L73">                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));</span>
     }
 
     public CompletableFuture&lt;NodeState&gt; sendNodeStateRequest() {
-<span class="nc" id="L77">        return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());</span>
+<span class="fc" id="L77">        return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());</span>
     }
 
     public CompletableFuture&lt;FailureDetectorMetrics&gt; sendFailureDetectorMetricsRequest() {
@@ -97,11 +97,11 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public CreateWorkflowResponse addNodeRequest(@Nonnull String endpoint) throws TimeoutException {
-<span class="nc" id="L100">        OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));</span>
-<span class="nc" id="L101">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
+<span class="fc" id="L100">        OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));</span>
+<span class="fc" id="L101">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
                 .ORCHESTRATOR_REQUEST
-<span class="nc" id="L103">                .payloadMsg(req));</span>
-<span class="nc" id="L104">        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
+<span class="fc" id="L103">                .payloadMsg(req));</span>
+<span class="fc" id="L104">        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
     }
 
     /**
@@ -120,16 +120,16 @@ public class ManagementClient extends AbstractClient {
                                                   boolean isSequencerServer,
                                                   boolean isLogUnitServer,
                                                   int stripeIndex) throws TimeoutException {
-<span class="nc" id="L123">        OrchestratorMsg req = new OrchestratorMsg(</span>
+<span class="fc" id="L123">        OrchestratorMsg req = new OrchestratorMsg(</span>
                 new HealNodeRequest(endpoint,
                         isLayoutServer,
                         isSequencerServer,
                         isLogUnitServer,
                         stripeIndex));
-<span class="nc" id="L129">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
+<span class="fc" id="L129">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
                 .ORCHESTRATOR_REQUEST
-<span class="nc" id="L131">                .payloadMsg(req));</span>
-<span class="nc" id="L132">        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
+<span class="fc" id="L131">                .payloadMsg(req));</span>
+<span class="fc" id="L132">        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
     }
 
     /**
@@ -140,11 +140,11 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public CreateWorkflowResponse mergeSegments(@Nonnull String endpoint) throws TimeoutException {
-<span class="nc" id="L143">        OrchestratorMsg req = new OrchestratorMsg(new RestoreRedundancyMergeSegmentsRequest(endpoint));</span>
-<span class="nc" id="L144">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
+<span class="fc" id="L143">        OrchestratorMsg req = new OrchestratorMsg(new RestoreRedundancyMergeSegmentsRequest(endpoint));</span>
+<span class="fc" id="L144">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
                 .ORCHESTRATOR_REQUEST
-<span class="nc" id="L146">                .payloadMsg(req));</span>
-<span class="nc" id="L147">        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
+<span class="fc" id="L146">                .payloadMsg(req));</span>
+<span class="fc" id="L147">        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
     }
 
     /**
@@ -154,11 +154,11 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public QueryResponse queryRequest(@Nonnull UUID workflowId) throws TimeoutException {
-<span class="nc" id="L157">        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));</span>
-<span class="nc" id="L158">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
+<span class="fc" id="L157">        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));</span>
+<span class="fc" id="L158">        CompletableFuture&lt;OrchestratorResponse&gt; resp = sendMessageWithFuture(CorfuMsgType</span>
                 .ORCHESTRATOR_REQUEST
-<span class="nc" id="L160">                .payloadMsg(req));</span>
-<span class="nc" id="L161">        return (QueryResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
+<span class="fc" id="L160">                .payloadMsg(req));</span>
+<span class="fc" id="L161">        return (QueryResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();</span>
     }
 
     /**

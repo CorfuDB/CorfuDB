@@ -15,16 +15,16 @@ import lombok.Data;
 <span class="nc" id="L15">@AllArgsConstructor</span>
 public class KnownAddressResponse implements ICorfuPayload&lt;KnownAddressResponse&gt; {
 
-<span class="nc" id="L18">    private final Set&lt;Long&gt; knownAddresses;</span>
+<span class="fc" id="L18">    private final Set&lt;Long&gt; knownAddresses;</span>
 
     /**
      * Deserialization Constructor from Bytebuf to KnownAddressRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L25">    public KnownAddressResponse(ByteBuf buf) {</span>
-<span class="nc" id="L26">        knownAddresses = ICorfuPayload.setFromBuffer(buf, Long.class);</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L25">    public KnownAddressResponse(ByteBuf buf) {</span>
+<span class="fc" id="L26">        knownAddresses = ICorfuPayload.setFromBuffer(buf, Long.class);</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {

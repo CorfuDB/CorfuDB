@@ -23,14 +23,14 @@ public class StreamsAddressRequest implements ICorfuPayload&lt;StreamsAddressReq
     public static final byte ALL_STREAMS = 1; /*To request all streams*/
 
     /** The type of request, one of the above. */
-<span class="nc" id="L26">    final byte reqType;</span>
+<span class="fc" id="L26">    final byte reqType;</span>
 
-<span class="nc" id="L28">    private final List&lt;StreamAddressRange&gt; streamsRanges;</span>
+<span class="fc" id="L28">    private final List&lt;StreamAddressRange&gt; streamsRanges;</span>
 
-<span class="nc bnc" id="L30" title="All 2 branches missed.">    public StreamsAddressRequest(@NonNull List&lt;StreamAddressRange&gt; streamsRanges) {</span>
-<span class="nc" id="L31">        reqType = STREAMS;</span>
-<span class="nc" id="L32">        this.streamsRanges = streamsRanges;</span>
-<span class="nc" id="L33">    }</span>
+<span class="pc bpc" id="L30" title="1 of 2 branches missed.">    public StreamsAddressRequest(@NonNull List&lt;StreamAddressRange&gt; streamsRanges) {</span>
+<span class="fc" id="L31">        reqType = STREAMS;</span>
+<span class="fc" id="L32">        this.streamsRanges = streamsRanges;</span>
+<span class="fc" id="L33">    }</span>
 
 <span class="nc" id="L35">    public StreamsAddressRequest(Byte reqType) {</span>
 <span class="nc" id="L36">        this.reqType = reqType;</span>
@@ -42,21 +42,21 @@ public class StreamsAddressRequest implements ICorfuPayload&lt;StreamsAddressReq
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L45">    public StreamsAddressRequest(ByteBuf buf) {</span>
-<span class="nc" id="L46">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
-<span class="nc bnc" id="L47" title="All 2 branches missed.">        if (reqType != ALL_STREAMS) {</span>
-<span class="nc" id="L48">            streamsRanges = ICorfuPayload.listFromBuffer(buf, StreamAddressRange.class);</span>
+<span class="fc" id="L45">    public StreamsAddressRequest(ByteBuf buf) {</span>
+<span class="fc" id="L46">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        if (reqType != ALL_STREAMS) {</span>
+<span class="fc" id="L48">            streamsRanges = ICorfuPayload.listFromBuffer(buf, StreamAddressRange.class);</span>
         } else {
 <span class="nc" id="L50">            streamsRanges = Collections.EMPTY_LIST;</span>
         }
-<span class="nc" id="L52">    }</span>
+<span class="fc" id="L52">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L56">        ICorfuPayload.serialize(buf, reqType);</span>
-<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (reqType != ALL_STREAMS) {</span>
-<span class="nc" id="L58">            ICorfuPayload.serialize(buf, streamsRanges);</span>
+<span class="fc" id="L56">        ICorfuPayload.serialize(buf, reqType);</span>
+<span class="pc bpc" id="L57" title="1 of 2 branches missed.">        if (reqType != ALL_STREAMS) {</span>
+<span class="fc" id="L58">            ICorfuPayload.serialize(buf, streamsRanges);</span>
         }
-<span class="nc" id="L60">    }</span>
+<span class="fc" id="L60">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

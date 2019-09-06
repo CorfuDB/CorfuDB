@@ -19,6 +19,7 @@ import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.MetricsUtils;
 import org.junit.Before;
 import org.junit.Test;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
@@ -82,6 +83,7 @@ public class SequencerServerTest extends AbstractServerTest {
 
     @Test
     public void checkTokenPositionWorks() {
+        MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ, new TokenRequest(1L, Collections.emptyList())));
             Token thisToken = getLastPayloadMessageAs(TokenResponse.class).getToken();

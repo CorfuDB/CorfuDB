@@ -36,16 +36,6 @@ public class TransactionalObject$CORFUSMR extends TransactionalObject implements
   }
 
   @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
-  }
-
-  @Override
-  public boolean equals(Object arg0) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
-  }
-
-  @Override
   @TransactionalMethod
   @Accessor
   public boolean isInTransaction() {
@@ -53,8 +43,8 @@ public class TransactionalObject$CORFUSMR extends TransactionalObject implements
     });}
 
   @Override
-  public int hashCode() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
   }
 
   @Override
@@ -65,11 +55,21 @@ public class TransactionalObject$CORFUSMR extends TransactionalObject implements
     });}
 
   @Override
+  public boolean equals(Object arg0) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
+  }
+
+  @Override
   @TransactionalMethod
   @Accessor
   public void throwRuntimeException() {
     proxy_CORFUSMR.TXExecute(() -> {super.throwRuntimeException();
     return null; });}
+
+  @Override
+  public int hashCode() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
+  }
 
   public Map<String, ICorfuSMRUpcallTarget<TransactionalObject>> getCorfuSMRUpcallMap() {
     return upcallMap_CORFUSMR;

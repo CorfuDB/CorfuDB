@@ -13,11 +13,11 @@ import lombok.NoArgsConstructor;
 /**
  * Created by mwei on 7/27/16.
  */
-<span class="nc" id="L16">@NoArgsConstructor</span>
+<span class="fc" id="L16">@NoArgsConstructor</span>
 @SuppressWarnings({&quot;checkstyle:abbreviationaswordinname&quot;, &quot;checkstyle:membername&quot;})
 public class JSONPayloadMsg&lt;T&gt; extends CorfuMsg {
 
-<span class="nc" id="L20">    static final Gson parser = new GsonBuilder().create();</span>
+<span class="fc" id="L20">    static final Gson parser = new GsonBuilder().create();</span>
 
     /**
      * The payload.
@@ -29,10 +29,10 @@ public class JSONPayloadMsg&lt;T&gt; extends CorfuMsg {
      */
     private String dataString;
 
-<span class="nc" id="L32">    public JSONPayloadMsg(T payload, CorfuMsgType type) {</span>
-<span class="nc" id="L33">        this.msgType = type;</span>
-<span class="nc" id="L34">        this.payload = payload;</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L32">    public JSONPayloadMsg(T payload, CorfuMsgType type) {</span>
+<span class="fc" id="L33">        this.msgType = type;</span>
+<span class="fc" id="L34">        this.payload = payload;</span>
+<span class="fc" id="L35">    }</span>
 
     /**
      * Serialize the message into the given bytebuffer.
@@ -41,11 +41,11 @@ public class JSONPayloadMsg&lt;T&gt; extends CorfuMsg {
      */
     @Override
     public void serialize(ByteBuf buffer) {
-<span class="nc" id="L44">        super.serialize(buffer);</span>
-<span class="nc" id="L45">        byte[] b = parser.toJson(payload).getBytes();</span>
-<span class="nc" id="L46">        buffer.writeInt(b.length);</span>
-<span class="nc" id="L47">        buffer.writeBytes(b);</span>
-<span class="nc" id="L48">    }</span>
+<span class="fc" id="L44">        super.serialize(buffer);</span>
+<span class="fc" id="L45">        byte[] b = parser.toJson(payload).getBytes();</span>
+<span class="fc" id="L46">        buffer.writeInt(b.length);</span>
+<span class="fc" id="L47">        buffer.writeBytes(b);</span>
+<span class="fc" id="L48">    }</span>
 
     /**
      * Parse the rest of the message from the buffer. Classes that extend CorfuMsg
@@ -55,12 +55,12 @@ public class JSONPayloadMsg&lt;T&gt; extends CorfuMsg {
      */
     @Override
     public void fromBuffer(ByteBuf buffer) {
-<span class="nc" id="L58">        super.fromBuffer(buffer);</span>
-<span class="nc" id="L59">        int length = buffer.readInt();</span>
-<span class="nc" id="L60">        byte[] byteArray = new byte[length];</span>
-<span class="nc" id="L61">        buffer.readBytes(byteArray, 0, length);</span>
-<span class="nc" id="L62">        dataString = new String(byteArray, StandardCharsets.UTF_8);</span>
-<span class="nc" id="L63">    }</span>
+<span class="fc" id="L58">        super.fromBuffer(buffer);</span>
+<span class="fc" id="L59">        int length = buffer.readInt();</span>
+<span class="fc" id="L60">        byte[] byteArray = new byte[length];</span>
+<span class="fc" id="L61">        buffer.readBytes(byteArray, 0, length);</span>
+<span class="fc" id="L62">        dataString = new String(byteArray, StandardCharsets.UTF_8);</span>
+<span class="fc" id="L63">    }</span>
 
     /**
      * Get the payload. Uses some type reflection voodoo in order to get the type to the JSON
@@ -71,8 +71,8 @@ public class JSONPayloadMsg&lt;T&gt; extends CorfuMsg {
      */
     @SuppressWarnings(&quot;unchecked&quot;)
     public T getPayload() {
-<span class="nc" id="L74">        return parser.fromJson(dataString,</span>
-<span class="nc" id="L75">                ((ParameterizedType)msgType.messageType.getType()).getActualTypeArguments()[0]);</span>
+<span class="fc" id="L74">        return parser.fromJson(dataString,</span>
+<span class="fc" id="L75">                ((ParameterizedType)msgType.messageType.getType()).getActualTypeArguments()[0]);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

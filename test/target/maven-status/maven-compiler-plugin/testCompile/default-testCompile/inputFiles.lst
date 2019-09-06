@@ -126,6 +126,7 @@
 /Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/runtime/view/ViewsGarbageCollectorTest.java
 /Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/infrastructure/ServerContextBuilder.java
 /Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/runtime/object/transactions/TXConflictScenariosTest.java
+/Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/common/metrics/servers/PrometheusMetricsServerTest.java
 /Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/runtime/concurrent/StreamSeekAtomicityTest.java
 /Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/runtime/clients/ManagementHandlerTest.java
 /Users/lidong/vmware_proj/CorfuDB/test/src/test/java/org/corfudb/runtime/object/transactions/TransactionAbortedTest.java

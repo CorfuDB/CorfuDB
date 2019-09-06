@@ -10,29 +10,29 @@ import org.corfudb.runtime.view.Layout;
  * Created by mdhawan on 10/24/16.
  */
 <span class="nc bnc" id="L12" title="All 18 branches missed.">@Data</span>
-<span class="nc" id="L13">@AllArgsConstructor</span>
+<span class="fc" id="L13">@AllArgsConstructor</span>
 public class LayoutProposeRequest implements ICorfuPayload&lt;LayoutProposeRequest&gt; {
     // Marks the boundary of a layout update.
-<span class="nc" id="L16">    private long epoch;</span>
+<span class="fc" id="L16">    private long epoch;</span>
     // Number that denotes a round started by a proposer (within an epoch).
-<span class="nc" id="L18">    private long rank;</span>
+<span class="fc" id="L18">    private long rank;</span>
     // Value proposed
-<span class="nc" id="L20">    private Layout layout;</span>
+<span class="fc" id="L20">    private Layout layout;</span>
 
     /**
      * Constructor for layout request in second phase of Paxos.
      */
-<span class="nc" id="L25">    public LayoutProposeRequest(ByteBuf buf) {</span>
-<span class="nc" id="L26">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L27">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L28">        layout = ICorfuPayload.fromBuffer(buf, Layout.class);</span>
-<span class="nc" id="L29">    }</span>
+<span class="fc" id="L25">    public LayoutProposeRequest(ByteBuf buf) {</span>
+<span class="fc" id="L26">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L27">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L28">        layout = ICorfuPayload.fromBuffer(buf, Layout.class);</span>
+<span class="fc" id="L29">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L33">        ICorfuPayload.serialize(buf, epoch);</span>
-<span class="nc" id="L34">        ICorfuPayload.serialize(buf, rank);</span>
-<span class="nc" id="L35">        ICorfuPayload.serialize(buf, layout);</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L33">        ICorfuPayload.serialize(buf, epoch);</span>
+<span class="fc" id="L34">        ICorfuPayload.serialize(buf, rank);</span>
+<span class="fc" id="L35">        ICorfuPayload.serialize(buf, layout);</span>
+<span class="fc" id="L36">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -23,8 +23,8 @@ import org.corfudb.runtime.view.Layout;
 public class LayoutClient extends AbstractClient {
 
     public LayoutClient(IClientRouter router, long epoch) {
-<span class="nc" id="L26">        super(router, epoch);</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L26">        super(router, epoch);</span>
+<span class="fc" id="L27">    }</span>
 
     /**
      * Retrieves the layout from the endpoint, asynchronously.
@@ -32,7 +32,7 @@ public class LayoutClient extends AbstractClient {
      * @return A future which will be completed with the current layout.
      */
     public CompletableFuture&lt;Layout&gt; getLayout() {
-<span class="nc" id="L35">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(getEpoch()));</span>
+<span class="fc" id="L35">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(getEpoch()));</span>
     }
 
     /**
@@ -43,8 +43,8 @@ public class LayoutClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture&lt;Boolean&gt; bootstrapLayout(Layout l) {
-<span class="nc" id="L46">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_BOOTSTRAP</span>
-<span class="nc" id="L47">                .payloadMsg(new LayoutBootstrapRequest(l)));</span>
+<span class="fc" id="L46">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_BOOTSTRAP</span>
+<span class="fc" id="L47">                .payloadMsg(new LayoutBootstrapRequest(l)));</span>
     }
 
     /**
@@ -57,8 +57,8 @@ public class LayoutClient extends AbstractClient {
      * with OutrankedException.
      */
     public CompletableFuture&lt;LayoutPrepareResponse&gt; prepare(long epoch, long rank) {
-<span class="nc" id="L60">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_PREPARE</span>
-<span class="nc" id="L61">                .payloadMsg(new LayoutPrepareRequest(epoch, rank)));</span>
+<span class="fc" id="L60">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_PREPARE</span>
+<span class="fc" id="L61">                .payloadMsg(new LayoutPrepareRequest(epoch, rank)));</span>
     }
 
     /**
@@ -73,8 +73,8 @@ public class LayoutClient extends AbstractClient {
      * with OutrankedException.
      */
     public CompletableFuture&lt;Boolean&gt; propose(long epoch, long rank, Layout layout) {
-<span class="nc" id="L76">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_PROPOSE</span>
-<span class="nc" id="L77">                .payloadMsg(new LayoutProposeRequest(epoch, rank, layout)));</span>
+<span class="fc" id="L76">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_PROPOSE</span>
+<span class="fc" id="L77">                .payloadMsg(new LayoutProposeRequest(epoch, rank, layout)));</span>
 
     }
 
@@ -86,8 +86,8 @@ public class LayoutClient extends AbstractClient {
      * @return True, if the commit was successful.
      */
     public CompletableFuture&lt;Boolean&gt; committed(long epoch, Layout layout) {
-<span class="nc" id="L89">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_COMMITTED</span>
-<span class="nc" id="L90">                .payloadMsg(new LayoutCommittedRequest(epoch, layout)));</span>
+<span class="fc" id="L89">        return sendMessageWithFuture(CorfuMsgType.LAYOUT_COMMITTED</span>
+<span class="fc" id="L90">                .payloadMsg(new LayoutCommittedRequest(epoch, layout)));</span>
     }
 
     /**

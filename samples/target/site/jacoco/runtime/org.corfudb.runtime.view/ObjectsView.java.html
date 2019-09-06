@@ -34,28 +34,28 @@ import java.util.concurrent.ConcurrentHashMap;
  * A view of the objects inside a Corfu instance.
  * Created by mwei on 1/7/16.
  */
-<span class="nc" id="L37">@Slf4j</span>
+<span class="fc" id="L37">@Slf4j</span>
 public class ObjectsView extends AbstractView {
 
-<span class="nc" id="L40">    private static final String TXN_COMMIT_TIMER_NAME =</span>
-<span class="nc" id="L41">            CorfuComponent.OBJECT.toString() + &quot;txn-commit-duration&quot;;</span>
+<span class="fc" id="L40">    private static final String TXN_COMMIT_TIMER_NAME =</span>
+<span class="fc" id="L41">            CorfuComponent.OBJECT.toString() + &quot;txn-commit-duration&quot;;</span>
     /**
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
      */
-<span class="nc" id="L46">    public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID(&quot;Transaction_Stream&quot;);</span>
+<span class="fc" id="L46">    public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID(&quot;Transaction_Stream&quot;);</span>
 
-<span class="nc" id="L48">    @Getter</span>
-<span class="nc" id="L49">    @Setter</span>
+<span class="fc" id="L48">    @Getter</span>
+<span class="fc" id="L49">    @Setter</span>
     boolean transactionLogging = false;
 
 
-<span class="nc" id="L53">    @Getter</span>
+<span class="fc" id="L53">    @Getter</span>
     Map&lt;ObjectID, Object&gt; objectCache = new ConcurrentHashMap&lt;&gt;();
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
-<span class="nc" id="L57">        super(runtime);</span>
-<span class="nc" id="L58">    }</span>
+<span class="fc" id="L57">        super(runtime);</span>
+<span class="fc" id="L58">    }</span>
 
     /**
      * Return an object builder which builds a new object.
@@ -63,7 +63,7 @@ public class ObjectsView extends AbstractView {
      * @return An object builder to open an object with.
      */
     public ObjectBuilder&lt;?&gt; build() {
-<span class="nc" id="L66">        return new ObjectBuilder(runtime);</span>
+<span class="fc" id="L66">        return new ObjectBuilder(runtime);</span>
     }
 
     /**
@@ -74,19 +74,19 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
     public void TXBegin() {
-<span class="nc" id="L77">        TransactionType type = TransactionType.OPTIMISTIC;</span>
+<span class="fc" id="L77">        TransactionType type = TransactionType.OPTIMISTIC;</span>
 
         /* If it is a nested transaction, inherit type of parent */
-<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (TransactionalContext.isInTransaction()) {</span>
-<span class="nc" id="L81">            type = TransactionalContext.getCurrentContext().getTransaction().getType();</span>
-<span class="nc" id="L82">            log.trace(&quot;Inheriting parent's transaction type {}&quot;, type);</span>
+<span class="fc bfc" id="L80" title="All 2 branches covered.">        if (TransactionalContext.isInTransaction()) {</span>
+<span class="fc" id="L81">            type = TransactionalContext.getCurrentContext().getTransaction().getType();</span>
+<span class="fc" id="L82">            log.trace(&quot;Inheriting parent's transaction type {}&quot;, type);</span>
         }
 
-<span class="nc" id="L85">        TXBuild()</span>
-<span class="nc" id="L86">                .type(type)</span>
-<span class="nc" id="L87">                .build()</span>
-<span class="nc" id="L88">                .begin();</span>
-<span class="nc" id="L89">    }</span>
+<span class="fc" id="L85">        TXBuild()</span>
+<span class="fc" id="L86">                .type(type)</span>
+<span class="fc" id="L87">                .build()</span>
+<span class="fc" id="L88">                .begin();</span>
+<span class="fc" id="L89">    }</span>
 
     /**
      * Builds a new transaction using the transaction
@@ -96,9 +96,9 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
     public TransactionBuilder TXBuild() {
-<span class="nc" id="L99">        TransactionBuilder builder = Transaction.builder();</span>
-<span class="nc" id="L100">        builder.runtime(runtime);</span>
-<span class="nc" id="L101">        return builder;</span>
+<span class="fc" id="L99">        TransactionBuilder builder = Transaction.builder();</span>
+<span class="fc" id="L100">        builder.runtime(runtime);</span>
+<span class="fc" id="L101">        return builder;</span>
     }
 
     /**
@@ -108,18 +108,18 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
     public void TXAbort() {
-<span class="nc" id="L111">        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
-<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (context == null) {</span>
-<span class="nc" id="L113">            log.warn(&quot;Attempted to abort a transaction, but no transaction active!&quot;);</span>
+<span class="fc" id="L111">        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
+<span class="fc bfc" id="L112" title="All 2 branches covered.">        if (context == null) {</span>
+<span class="fc" id="L113">            log.warn(&quot;Attempted to abort a transaction, but no transaction active!&quot;);</span>
         } else {
-<span class="nc" id="L115">            TxResolutionInfo txInfo = new TxResolutionInfo(</span>
-<span class="nc" id="L116">                    context.getTransactionID(), context.getSnapshotTimestamp());</span>
-<span class="nc" id="L117">            context.abortTransaction(new TransactionAbortedException(</span>
+<span class="fc" id="L115">            TxResolutionInfo txInfo = new TxResolutionInfo(</span>
+<span class="fc" id="L116">                    context.getTransactionID(), context.getSnapshotTimestamp());</span>
+<span class="fc" id="L117">            context.abortTransaction(new TransactionAbortedException(</span>
                     txInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,
-<span class="nc" id="L119">                    Address.NON_ADDRESS, AbortCause.USER, context));</span>
-<span class="nc" id="L120">            TransactionalContext.removeContext();</span>
+<span class="fc" id="L119">                    Address.NON_ADDRESS, AbortCause.USER, context));</span>
+<span class="fc" id="L120">            TransactionalContext.removeContext();</span>
         }
-<span class="nc" id="L122">    }</span>
+<span class="fc" id="L122">    }</span>
 
     /**
      * Query whether a transaction is currently running.
@@ -129,7 +129,7 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
     public boolean TXActive() {
-<span class="nc" id="L132">        return TransactionalContext.isInTransaction();</span>
+<span class="fc" id="L132">        return TransactionalContext.isInTransaction();</span>
     }
 
     /**
@@ -140,30 +140,30 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({&quot;checkstyle:methodname&quot;, &quot;checkstyle:abbreviation&quot;})
     public long TXEnd() throws TransactionAbortedException {
-<span class="nc" id="L143">        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
-<span class="nc bnc" id="L144" title="All 2 branches missed.">        if (context == null) {</span>
-<span class="nc" id="L145">            log.warn(&quot;Attempted to end a transaction, but no transaction active!&quot;);</span>
-<span class="nc" id="L146">            return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;</span>
+<span class="fc" id="L143">        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">        if (context == null) {</span>
+<span class="fc" id="L145">            log.warn(&quot;Attempted to end a transaction, but no transaction active!&quot;);</span>
+<span class="fc" id="L146">            return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;</span>
         }
 
         // Continue with ending the transaction if the context is not null
-<span class="nc" id="L150">        long totalTime = System.currentTimeMillis() - context.getStartTime();</span>
-<span class="nc" id="L151">        log.trace(&quot;TXEnd[{}] time={} ms&quot;, context, totalTime);</span>
+<span class="fc" id="L150">        long totalTime = System.currentTimeMillis() - context.getStartTime();</span>
+<span class="fc" id="L151">        log.trace(&quot;TXEnd[{}] time={} ms&quot;, context, totalTime);</span>
 
         // If exist, stop the timer for timing the beginning of transaction to start of commit.
-<span class="nc bnc" id="L154" title="All 2 branches missed.">        if (context.getTxOpDurationContext() != null) {</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">        if (context.getTxOpDurationContext() != null) {</span>
 <span class="nc" id="L155">            context.getTxOpDurationContext().stop();</span>
         }
 
         // Create a timer to measure the transaction commit duration
-<span class="nc" id="L159">        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);</span>
-<span class="nc" id="L160">        try (Timer.Context txCommitDuration =</span>
-<span class="nc" id="L161">                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){</span>
-<span class="nc" id="L162">            return TransactionalContext.getCurrentContext().commitTransaction();</span>
-<span class="nc bnc" id="L163" title="All 8 branches missed.">        } catch (TransactionAbortedException e) {</span>
-<span class="nc" id="L164">            log.warn(&quot;TXEnd[{}] Aborted Exception {}&quot;, context, e);</span>
-<span class="nc" id="L165">            TransactionalContext.getCurrentContext().abortTransaction(e);</span>
-<span class="nc" id="L166">            throw e;</span>
+<span class="fc" id="L159">        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);</span>
+<span class="fc" id="L160">        try (Timer.Context txCommitDuration =</span>
+<span class="fc" id="L161">                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){</span>
+<span class="fc" id="L162">            return TransactionalContext.getCurrentContext().commitTransaction();</span>
+<span class="pc bpc" id="L163" title="6 of 8 branches missed.">        } catch (TransactionAbortedException e) {</span>
+<span class="fc" id="L164">            log.warn(&quot;TXEnd[{}] Aborted Exception {}&quot;, context, e);</span>
+<span class="fc" id="L165">            TransactionalContext.getCurrentContext().abortTransaction(e);</span>
+<span class="fc" id="L166">            throw e;</span>
 <span class="nc" id="L167">        } catch (NetworkException | WriteSizeException | QuotaExceededException e) {</span>
 
             Token snapshotTimestamp;
@@ -192,17 +192,17 @@ public class ObjectsView extends AbstractView {
 <span class="nc" id="L192">            context.abortTransaction(tae);</span>
 <span class="nc" id="L193">            throw tae;</span>
 
-<span class="nc" id="L195">        } catch (Exception e) {</span>
-<span class="nc" id="L196">            log.error(&quot;TXEnd[{}]: Unexpected exception&quot;, context, e);</span>
-<span class="nc" id="L197">            TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),</span>
+<span class="fc" id="L195">        } catch (Exception e) {</span>
+<span class="fc" id="L196">            log.error(&quot;TXEnd[{}]: Unexpected exception&quot;, context, e);</span>
+<span class="fc" id="L197">            TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),</span>
                     Token.UNINITIALIZED);
-<span class="nc" id="L199">            TransactionAbortedException tae = new TransactionAbortedException(</span>
+<span class="fc" id="L199">            TransactionAbortedException tae = new TransactionAbortedException(</span>
                     txInfo, AbortCause.UNDEFINED, e, context);
-<span class="nc" id="L201">            context.abortTransaction(tae);</span>
-<span class="nc" id="L202">            throw new UnrecoverableCorfuError(&quot;Unexpected exception during commit&quot;, e);</span>
+<span class="fc" id="L201">            context.abortTransaction(tae);</span>
+<span class="fc" id="L202">            throw new UnrecoverableCorfuError(&quot;Unexpected exception during commit&quot;, e);</span>
         } finally {
-<span class="nc" id="L204">            TransactionalContext.removeContext();</span>
-<span class="nc" id="L205">        }</span>
+<span class="fc" id="L204">            TransactionalContext.removeContext();</span>
+<span class="fc" id="L205">        }</span>
     }
 
     /**
@@ -216,11 +216,11 @@ public class ObjectsView extends AbstractView {
 <span class="nc" id="L216">        }</span>
 <span class="nc" id="L217">    }</span>
 
-<span class="nc bnc" id="L219" title="All 22 branches missed.">    @Data</span>
+<span class="pc bpc" id="L219" title="13 of 22 branches missed.">    @Data</span>
     @SuppressWarnings({&quot;checkstyle:abbreviation&quot;})
     public static class ObjectID&lt;T&gt; {
-<span class="nc" id="L222">        final UUID streamID;</span>
-<span class="nc" id="L223">        final Class&lt;T&gt; type;</span>
+<span class="fc" id="L222">        final UUID streamID;</span>
+<span class="fc" id="L223">        final Class&lt;T&gt; type;</span>
 
         public String toString() {
 <span class="nc" id="L226">            return &quot;[&quot; + streamID + &quot;, &quot; + type.getSimpleName() + &quot;]&quot;;</span>

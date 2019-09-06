@@ -22,17 +22,17 @@ abstract class AbstractClient implements IClient {
 <span class="nc" id="L22">    @Setter</span>
     private IClientRouter router;
 
-<span class="nc" id="L25">    @Setter</span>
+<span class="pc" id="L25">    @Setter</span>
     private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
 
-<span class="nc" id="L28">    AbstractClient(IClientRouter router, long epoch) {</span>
-<span class="nc" id="L29">        this.router = router;</span>
-<span class="nc" id="L30">        this.epoch = epoch;</span>
-<span class="nc" id="L31">    }</span>
+<span class="fc" id="L28">    AbstractClient(IClientRouter router, long epoch) {</span>
+<span class="fc" id="L29">        this.router = router;</span>
+<span class="fc" id="L30">        this.epoch = epoch;</span>
+<span class="fc" id="L31">    }</span>
 
     &lt;T&gt; CompletableFuture&lt;T&gt; sendMessageWithFuture(CorfuMsg msg) {
-<span class="nc" id="L34">        return router.sendMessageAndGetCompletable(msg.setEpoch(epoch)</span>
-<span class="nc" id="L35">                .setPriorityLevel(priorityLevel));</span>
+<span class="pc" id="L34">        return router.sendMessageAndGetCompletable(msg.setEpoch(epoch)</span>
+<span class="fc" id="L35">                .setPriorityLevel(priorityLevel));</span>
     }
 
     public void sendMessage(CorfuMsg msg) {

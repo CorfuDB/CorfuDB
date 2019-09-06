@@ -28,7 +28,7 @@ import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfigurat
  *
  * &lt;p&gt;Created by zlokhandwala on 1/15/18.
  */
-<span class="nc" id="L31">@Slf4j</span>
+<span class="fc" id="L31">@Slf4j</span>
 public class ManagementAgent {
 
     private final ServerContext serverContext;
@@ -38,12 +38,12 @@ public class ManagementAgent {
      * Interval in checking presence of management layout to start management agent tasks.
      */
 <span class="nc" id="L40">    @Getter</span>
-<span class="nc" id="L41">    private static final Duration CHECK_BOOTSTRAP_INTERVAL = Duration.ofSeconds(1);</span>
+<span class="fc" id="L41">    private static final Duration CHECK_BOOTSTRAP_INTERVAL = Duration.ofSeconds(1);</span>
 
     /**
      * Interval in retrying layout recovery when management server started.
      */
-<span class="nc" id="L46">    private static final Duration RECOVERY_RETRY_INTERVAL = Duration.ofSeconds(1);</span>
+<span class="fc" id="L46">    private static final Duration RECOVERY_RETRY_INTERVAL = Duration.ofSeconds(1);</span>
 
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
@@ -51,14 +51,14 @@ public class ManagementAgent {
 <span class="nc" id="L51">    @Getter</span>
     private final Thread initializationTaskThread;
 
-<span class="nc" id="L54">    private boolean recovered = false;</span>
+<span class="fc" id="L54">    private boolean recovered = false;</span>
 
     private final SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource;
 
-<span class="nc" id="L58">    private volatile boolean shutdown = false;</span>
+<span class="fc" id="L58">    private volatile boolean shutdown = false;</span>
 
     //  Locally collected server metrics polling interval.
-<span class="nc" id="L61">    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);</span>
+<span class="fc" id="L61">    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);</span>
 
     /**
      * MonitoringService to poll local server metrics:
@@ -72,12 +72,12 @@ public class ManagementAgent {
      * In milliseconds.
      */
 <span class="nc" id="L74">    @Getter</span>
-<span class="nc" id="L75">    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofSeconds(1);</span>
+<span class="fc" id="L75">    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofSeconds(1);</span>
 
     /**
      * MonitoringService to detect faults and generate a cluster connectivity graph.
      */
-<span class="nc" id="L80">    @Getter</span>
+<span class="fc" id="L80">    @Getter</span>
     private final RemoteMonitoringService remoteMonitoringService;
 
     /**
@@ -87,18 +87,18 @@ public class ManagementAgent {
      * @param runtimeSingletonResource Singleton resource to fetch runtime.
      * @param serverContext            Server Context.
      */
-<span class="nc bnc" id="L90" title="All 2 branches missed.">    ManagementAgent(@NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource,</span>
-<span class="nc bnc" id="L91" title="All 2 branches missed.">                    @NonNull ServerContext serverContext,</span>
-<span class="nc bnc" id="L92" title="All 2 branches missed.">                    @NonNull ClusterStateContext clusterContext,</span>
-<span class="nc bnc" id="L93" title="All 2 branches missed.">                    @NonNull FailureDetector failureDetector,</span>
-<span class="nc" id="L94">                    Layout managementLayout) {</span>
-<span class="nc" id="L95">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
-<span class="nc" id="L96">        this.serverContext = serverContext;</span>
-<span class="nc" id="L97">        this.localMonitoringService = new LocalMonitoringService(serverContext, runtimeSingletonResource);</span>
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">    ManagementAgent(@NonNull SingletonResource&lt;CorfuRuntime&gt; runtimeSingletonResource,</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">                    @NonNull ServerContext serverContext,</span>
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">                    @NonNull ClusterStateContext clusterContext,</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">                    @NonNull FailureDetector failureDetector,</span>
+<span class="fc" id="L94">                    Layout managementLayout) {</span>
+<span class="fc" id="L95">        this.runtimeSingletonResource = runtimeSingletonResource;</span>
+<span class="fc" id="L96">        this.serverContext = serverContext;</span>
+<span class="fc" id="L97">        this.localMonitoringService = new LocalMonitoringService(serverContext, runtimeSingletonResource);</span>
 
         // If no state was preserved, there is no layout to recover.
-<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (managementLayout == null) {</span>
-<span class="nc" id="L101">            recovered = true;</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">        if (managementLayout == null) {</span>
+<span class="fc" id="L101">            recovered = true;</span>
         }
 
         // The management server needs to check both the Layout Server's persisted layout as well
@@ -108,15 +108,15 @@ public class ManagementAgent {
         // would completely rely on recovering from the management server's persisted layout.
         // Else in every other case, the layout server is active and will contain the latest layout
         // (In case of trailing layout server, the management server's persisted layout helps.)
-<span class="nc" id="L111">        serverContext.installSingleNodeLayoutIfAbsent();</span>
-<span class="nc" id="L112">        serverContext.saveManagementLayout(serverContext.getCurrentLayout());</span>
-<span class="nc" id="L113">        serverContext.saveManagementLayout(managementLayout);</span>
+<span class="fc" id="L111">        serverContext.installSingleNodeLayoutIfAbsent();</span>
+<span class="fc" id="L112">        serverContext.saveManagementLayout(serverContext.getCurrentLayout());</span>
+<span class="fc" id="L113">        serverContext.saveManagementLayout(managementLayout);</span>
 
-<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (!recovered) {</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">        if (!recovered) {</span>
 <span class="nc" id="L116">            log.info(&quot;Attempting to recover. Layout before shutdown: {}&quot;, managementLayout);</span>
         }
 
-<span class="nc" id="L119">        this.remoteMonitoringService = new RemoteMonitoringService(</span>
+<span class="fc" id="L119">        this.remoteMonitoringService = new RemoteMonitoringService(</span>
                 serverContext,
                 runtimeSingletonResource,
                 clusterContext,
@@ -127,14 +127,14 @@ public class ManagementAgent {
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
         // One these tasks finish successfully, they initiate the detection tasks.
-<span class="nc" id="L130">        this.initializationTaskThread = new Thread(this::initializationTask, &quot;initializationTaskThread&quot;);</span>
-<span class="nc" id="L131">        this.initializationTaskThread.setUncaughtExceptionHandler(</span>
+<span class="fc" id="L130">        this.initializationTaskThread = new Thread(this::initializationTask, &quot;initializationTaskThread&quot;);</span>
+<span class="fc" id="L131">        this.initializationTaskThread.setUncaughtExceptionHandler(</span>
                 (thread, throwable) -&gt; {
-<span class="nc" id="L133">                    log.error(&quot;Error in initialization task: {}&quot;, throwable);</span>
+<span class="fc" id="L133">                    log.error(&quot;Error in initialization task: {}&quot;, throwable);</span>
 <span class="nc" id="L134">                    shutdown();</span>
 <span class="nc" id="L135">                });</span>
-<span class="nc" id="L136">        this.initializationTaskThread.start();</span>
-<span class="nc" id="L137">    }</span>
+<span class="fc" id="L136">        this.initializationTaskThread.start();</span>
+<span class="fc" id="L137">    }</span>
 
     /**
      * Initialization task.
@@ -143,24 +143,24 @@ public class ManagementAgent {
      * Initiates the monitoring services which performs failure detection and healing detection tasks.
      */
     private void initializationTask() {
-<span class="nc" id="L146">        log.info(&quot;Start initialization task&quot;);</span>
+<span class="fc" id="L146">        log.info(&quot;Start initialization task&quot;);</span>
 
         // Wait for management server to be bootstrapped.
         try {
-<span class="nc bnc" id="L150" title="All 4 branches missed.">            while (!shutdown &amp;&amp; serverContext.getManagementLayout() == null) {</span>
-<span class="nc" id="L151">                log.warn(&quot;initializationTask: Management Server waiting to be bootstrapped&quot;);</span>
-<span class="nc" id="L152">                TimeUnit.MILLISECONDS.sleep(CHECK_BOOTSTRAP_INTERVAL.toMillis());</span>
+<span class="fc bfc" id="L150" title="All 4 branches covered.">            while (!shutdown &amp;&amp; serverContext.getManagementLayout() == null) {</span>
+<span class="fc" id="L151">                log.warn(&quot;initializationTask: Management Server waiting to be bootstrapped&quot;);</span>
+<span class="fc" id="L152">                TimeUnit.MILLISECONDS.sleep(CHECK_BOOTSTRAP_INTERVAL.toMillis());</span>
             }
-<span class="nc" id="L154">        } catch (InterruptedException e) {</span>
+<span class="fc" id="L154">        } catch (InterruptedException e) {</span>
             // Due to shutdown, which interrupts this thread
-<span class="nc" id="L156">            log.debug(&quot;initializationTask: Initialization task interrupted without &quot; +</span>
+<span class="fc" id="L156">            log.debug(&quot;initializationTask: Initialization task interrupted without &quot; +</span>
                     &quot;management server bootstrapped&quot;);
-<span class="nc" id="L158">            return;</span>
-<span class="nc" id="L159">        }</span>
+<span class="fc" id="L158">            return;</span>
+<span class="fc" id="L159">        }</span>
 
         // Retry layout recovery if need until success.
-<span class="nc" id="L162">        long recoveryAttempts = 0;</span>
-<span class="nc bnc" id="L163" title="All 4 branches missed.">        while (!shutdown &amp;&amp; !recovered) {</span>
+<span class="fc" id="L162">        long recoveryAttempts = 0;</span>
+<span class="pc bpc" id="L163" title="1 of 4 branches missed.">        while (!shutdown &amp;&amp; !recovered) {</span>
             try {
 <span class="nc" id="L165">                boolean recoveredSuccesfully = runRecoveryReconfiguration(</span>
 <span class="nc" id="L166">                        serverContext.copyManagementLayout(), getCorfuRuntime()</span>
@@ -189,11 +189,11 @@ public class ManagementAgent {
         }
 
         // Start monitoring services that deals with failure and healing detection.
-<span class="nc bnc" id="L192" title="All 2 branches missed.">        if (!shutdown) {</span>
-<span class="nc" id="L193">            localMonitoringService.start(METRICS_POLL_INTERVAL);</span>
-<span class="nc" id="L194">            remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">        if (!shutdown) {</span>
+<span class="fc" id="L193">            localMonitoringService.start(METRICS_POLL_INTERVAL);</span>
+<span class="fc" id="L194">            remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);</span>
         }
-<span class="nc" id="L196">    }</span>
+<span class="fc" id="L196">    }</span>
 
     /**
      * Returns a connected instance of the CorfuRuntime.
@@ -201,7 +201,7 @@ public class ManagementAgent {
      * @return A connected instance of runtime.
      */
     public CorfuRuntime getCorfuRuntime() {
-<span class="nc" id="L204">        return runtimeSingletonResource.get();</span>
+<span class="fc" id="L204">        return runtimeSingletonResource.get();</span>
     }
 
     /**
@@ -209,21 +209,21 @@ public class ManagementAgent {
      */
     public void shutdown() {
         // Shutting the fault detector.
-<span class="nc" id="L212">        shutdown = true;</span>
+<span class="fc" id="L212">        shutdown = true;</span>
 
         try {
-<span class="nc" id="L215">            initializationTaskThread.interrupt();</span>
-<span class="nc" id="L216">            initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());</span>
-<span class="nc" id="L217">        } catch (InterruptedException ie) {</span>
-<span class="nc" id="L218">            log.error(&quot;initializationTask interrupted : {}&quot;, ie);</span>
-<span class="nc" id="L219">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
-<span class="nc" id="L220">        }</span>
+<span class="fc" id="L215">            initializationTaskThread.interrupt();</span>
+<span class="fc" id="L216">            initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());</span>
+<span class="fc" id="L217">        } catch (InterruptedException ie) {</span>
+<span class="fc" id="L218">            log.error(&quot;initializationTask interrupted : {}&quot;, ie);</span>
+<span class="fc" id="L219">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
+<span class="fc" id="L220">        }</span>
 
-<span class="nc" id="L222">        remoteMonitoringService.shutdown();</span>
-<span class="nc" id="L223">        localMonitoringService.shutdown();</span>
+<span class="fc" id="L222">        remoteMonitoringService.shutdown();</span>
+<span class="fc" id="L223">        localMonitoringService.shutdown();</span>
 
-<span class="nc" id="L225">        log.info(&quot;Management Agent shutting down.&quot;);</span>
-<span class="nc" id="L226">    }</span>
+<span class="fc" id="L225">        log.info(&quot;Management Agent shutting down.&quot;);</span>
+<span class="fc" id="L226">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

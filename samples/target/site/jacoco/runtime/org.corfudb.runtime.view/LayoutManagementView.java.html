@@ -30,25 +30,25 @@ import org.corfudb.util.CFUtils;
  * &lt;p&gt;
  * &lt;p&gt;Created by zlokhandwala on 11/1/17.&lt;/p&gt;
  */
-<span class="nc" id="L33">@Slf4j</span>
+<span class="fc" id="L33">@Slf4j</span>
 public class LayoutManagementView extends AbstractView {
 
-<span class="nc bnc" id="L36" title="All 2 branches missed.">    public LayoutManagementView(@NonNull CorfuRuntime runtime) {</span>
-<span class="nc" id="L37">        super(runtime);</span>
-<span class="nc" id="L38">    }</span>
+<span class="pc bpc" id="L36" title="1 of 2 branches missed.">    public LayoutManagementView(@NonNull CorfuRuntime runtime) {</span>
+<span class="fc" id="L37">        super(runtime);</span>
+<span class="fc" id="L38">    }</span>
 
-<span class="nc" id="L40">    private volatile long prepareRank = 1L;</span>
+<span class="fc" id="L40">    private volatile long prepareRank = 1L;</span>
 
-<span class="nc" id="L42">    private final ReentrantLock recoverSequencerLock = new ReentrantLock();</span>
+<span class="fc" id="L42">    private final ReentrantLock recoverSequencerLock = new ReentrantLock();</span>
 
     /**
      * Future which is reset every time a new task to bootstrap the sequencer is launched.
      * This is to avoid multiple bootstrap requests.
      */
-<span class="nc" id="L48">    private final AtomicReference&lt;CompletableFuture&lt;Boolean&gt;&gt; sequencerRecoveryFuture</span>
-<span class="nc" id="L49">            = new AtomicReference&lt;&gt;(CompletableFuture.completedFuture(true));</span>
+<span class="fc" id="L48">    private final AtomicReference&lt;CompletableFuture&lt;Boolean&gt;&gt; sequencerRecoveryFuture</span>
+<span class="fc" id="L49">            = new AtomicReference&lt;&gt;(CompletableFuture.completedFuture(true));</span>
 
-<span class="nc" id="L51">    private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;</span>
+<span class="fc" id="L51">    private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;</span>
 
     /**
      * On restart, if MANAGEMENT_LAYOUT exists in the local datastore.
@@ -85,13 +85,13 @@ public class LayoutManagementView extends AbstractView {
             throws OutrankedException, LayoutModificationException {
 
         // Generates a new layout by removing the failed nodes from the existing layout
-<span class="nc" id="L88">        Layout newLayout = failureHandlerPolicy</span>
-<span class="nc" id="L89">                .generateLayout(currentLayout,</span>
+<span class="fc" id="L88">        Layout newLayout = failureHandlerPolicy</span>
+<span class="fc" id="L89">                .generateLayout(currentLayout,</span>
                         runtime,
                         failedServers,
-<span class="nc" id="L92">                        Collections.emptySet());</span>
-<span class="nc" id="L93">        runLayoutReconfiguration(currentLayout, newLayout, false);</span>
-<span class="nc" id="L94">    }</span>
+<span class="fc" id="L92">                        Collections.emptySet());</span>
+<span class="fc" id="L93">        runLayoutReconfiguration(currentLayout, newLayout, false);</span>
+<span class="fc" id="L94">    }</span>
 
     /**
      * Bootstraps the new node with the current layout.
@@ -106,12 +106,12 @@ public class LayoutManagementView extends AbstractView {
     public CompletableFuture&lt;Boolean&gt; bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
-<span class="nc" id="L109">        Layout layout = new Layout(runtime.getLayoutView().getLayout());</span>
-<span class="nc" id="L110">        return runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout)</span>
-<span class="nc" id="L111">                .thenCompose(result -&gt; runtime.getManagementView().bootstrapManagementServer(endpoint, layout))</span>
-<span class="nc" id="L112">                .thenApply(result -&gt; {</span>
-<span class="nc" id="L113">                    log.info(&quot;bootstrapNewNode: New node {} bootstrapped.&quot;, endpoint);</span>
-<span class="nc" id="L114">                    return true;</span>
+<span class="fc" id="L109">        Layout layout = new Layout(runtime.getLayoutView().getLayout());</span>
+<span class="fc" id="L110">        return runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout)</span>
+<span class="fc" id="L111">                .thenCompose(result -&gt; runtime.getManagementView().bootstrapManagementServer(endpoint, layout))</span>
+<span class="fc" id="L112">                .thenApply(result -&gt; {</span>
+<span class="fc" id="L113">                    log.info(&quot;bootstrapNewNode: New node {} bootstrapped.&quot;, endpoint);</span>
+<span class="fc" id="L114">                    return true;</span>
                 });
     }
 
@@ -136,37 +136,37 @@ public class LayoutManagementView extends AbstractView {
                         int logUnitStripeIndex)
             throws OutrankedException {
         Layout newLayout;
-<span class="nc bnc" id="L139" title="All 2 branches missed.">        if (!currentLayout.getAllServers().contains(endpoint)) {</span>
+<span class="pc bpc" id="L139" title="1 of 2 branches missed.">        if (!currentLayout.getAllServers().contains(endpoint)) {</span>
 
-<span class="nc" id="L141">            sealEpoch(currentLayout);</span>
+<span class="fc" id="L141">            sealEpoch(currentLayout);</span>
 
-<span class="nc" id="L143">            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);</span>
-<span class="nc bnc" id="L144" title="All 2 branches missed.">            if (isLayoutServer) {</span>
-<span class="nc" id="L145">                layoutBuilder.addLayoutServer(endpoint);</span>
+<span class="fc" id="L143">            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">            if (isLayoutServer) {</span>
+<span class="fc" id="L145">                layoutBuilder.addLayoutServer(endpoint);</span>
             }
-<span class="nc bnc" id="L147" title="All 2 branches missed.">            if (isSequencerServer) {</span>
-<span class="nc" id="L148">                layoutBuilder.addSequencerServer(endpoint);</span>
+<span class="pc bpc" id="L147" title="1 of 2 branches missed.">            if (isSequencerServer) {</span>
+<span class="fc" id="L148">                layoutBuilder.addSequencerServer(endpoint);</span>
             }
-<span class="nc bnc" id="L150" title="All 2 branches missed.">            if (isLogUnitServer) {</span>
-<span class="nc" id="L151">                layoutBuilder.addLogunitServer(logUnitStripeIndex,</span>
-<span class="nc" id="L152">                        getLogTail(currentLayout, runtime),</span>
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">            if (isLogUnitServer) {</span>
+<span class="fc" id="L151">                layoutBuilder.addLogunitServer(logUnitStripeIndex,</span>
+<span class="fc" id="L152">                        getLogTail(currentLayout, runtime),</span>
                         endpoint);
             }
-<span class="nc bnc" id="L155" title="All 2 branches missed.">            if (isUnresponsiveServer) {</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">            if (isUnresponsiveServer) {</span>
 <span class="nc" id="L156">                layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));</span>
             }
-<span class="nc" id="L158">            newLayout = layoutBuilder.build();</span>
+<span class="fc" id="L158">            newLayout = layoutBuilder.build();</span>
 
-<span class="nc" id="L160">            attemptConsensus(newLayout);</span>
-<span class="nc" id="L161">        } else {</span>
+<span class="fc" id="L160">            attemptConsensus(newLayout);</span>
+<span class="fc" id="L161">        } else {</span>
 <span class="nc" id="L162">            log.info(&quot;Node {} already exists in the layout, skipping.&quot;, endpoint);</span>
 <span class="nc" id="L163">            newLayout = currentLayout;</span>
         }
 
         // Add node is successful even if reconfigure sequencer fails.
         // TODO: Optimize this by retrying or submitting a workflow to retry.
-<span class="nc" id="L168">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
-<span class="nc" id="L169">    }</span>
+<span class="fc" id="L168">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
+<span class="fc" id="L169">    }</span>
 
     /**
      * Heals an existing node in the layout.
@@ -182,34 +182,34 @@ public class LayoutManagementView extends AbstractView {
         // It is important to note that the node to be healed is a part of the unresponsive
         // servers list and is NOT a part of any of the segments. Else, resets can be triggered
         // while the node is a part of the chain causing correctness issues.
-<span class="nc bnc" id="L185" title="All 2 branches missed.">        if (currentLayout.getUnresponsiveServers().contains(endpoint)) {</span>
-<span class="nc" id="L186">            sealEpoch(currentLayout);</span>
+<span class="pc bpc" id="L185" title="1 of 2 branches missed.">        if (currentLayout.getUnresponsiveServers().contains(endpoint)) {</span>
+<span class="fc" id="L186">            sealEpoch(currentLayout);</span>
 
             // Seal the node to be healed.
-<span class="nc" id="L189">            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)</span>
-<span class="nc" id="L190">                    .getBaseClient(endpoint).sealRemoteServer(currentLayout.getEpoch()));</span>
+<span class="fc" id="L189">            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)</span>
+<span class="fc" id="L190">                    .getBaseClient(endpoint).sealRemoteServer(currentLayout.getEpoch()));</span>
 
             // Reset the node to be healed.
-<span class="nc" id="L193">            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)</span>
-<span class="nc" id="L194">                    .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));</span>
+<span class="fc" id="L193">            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)</span>
+<span class="fc" id="L194">                    .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));</span>
 
-<span class="nc" id="L196">            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);</span>
-<span class="nc" id="L197">            layoutBuilder.addLogunitServer(0,</span>
-<span class="nc" id="L198">                    getLogTail(currentLayout, runtime),</span>
+<span class="fc" id="L196">            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);</span>
+<span class="fc" id="L197">            layoutBuilder.addLogunitServer(0,</span>
+<span class="fc" id="L198">                    getLogTail(currentLayout, runtime),</span>
                     endpoint);
-<span class="nc" id="L200">            layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));</span>
-<span class="nc" id="L201">            newLayout = layoutBuilder.build();</span>
+<span class="fc" id="L200">            layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));</span>
+<span class="fc" id="L201">            newLayout = layoutBuilder.build();</span>
 
-<span class="nc" id="L203">            attemptConsensus(newLayout);</span>
-<span class="nc" id="L204">        } else {</span>
+<span class="fc" id="L203">            attemptConsensus(newLayout);</span>
+<span class="fc" id="L204">        } else {</span>
 <span class="nc" id="L205">            log.info(&quot;Node {} already exists in the layout, skipping.&quot;, endpoint);</span>
 <span class="nc" id="L206">            newLayout = currentLayout;</span>
         }
 
         // Heal node is successful even if reconfigure sequencer fails.
         // TODO: Optimize this by retrying or submitting a workflow to retry.
-<span class="nc" id="L211">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
-<span class="nc" id="L212">    }</span>
+<span class="fc" id="L211">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
+<span class="fc" id="L212">    }</span>
 
     /**
      * Attempts to merge the last 2 segments.
@@ -220,23 +220,23 @@ public class LayoutManagementView extends AbstractView {
     public void mergeSegments(Layout currentLayout) throws OutrankedException {
 
         Layout newLayout;
-<span class="nc bnc" id="L223" title="All 2 branches missed.">        if (currentLayout.getSegments().size() &gt; 1) {</span>
+<span class="pc bpc" id="L223" title="1 of 2 branches missed.">        if (currentLayout.getSegments().size() &gt; 1) {</span>
 
-<span class="nc" id="L225">            log.info(&quot;mergeSegments: layout is {}&quot;, currentLayout);</span>
+<span class="fc" id="L225">            log.info(&quot;mergeSegments: layout is {}&quot;, currentLayout);</span>
 
-<span class="nc" id="L227">            sealEpoch(currentLayout);</span>
+<span class="fc" id="L227">            sealEpoch(currentLayout);</span>
 
-<span class="nc" id="L229">            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);</span>
-<span class="nc" id="L230">            newLayout = layoutBuilder</span>
-<span class="nc" id="L231">                    .mergePreviousSegment(1)</span>
-<span class="nc" id="L232">                    .build();</span>
-<span class="nc" id="L233">            attemptConsensus(newLayout);</span>
-<span class="nc" id="L234">        } else {</span>
+<span class="fc" id="L229">            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);</span>
+<span class="fc" id="L230">            newLayout = layoutBuilder</span>
+<span class="fc" id="L231">                    .mergePreviousSegment(1)</span>
+<span class="fc" id="L232">                    .build();</span>
+<span class="fc" id="L233">            attemptConsensus(newLayout);</span>
+<span class="fc" id="L234">        } else {</span>
 <span class="nc" id="L235">            log.info(&quot;mergeSegments: skipping, no segments to merge {}&quot;, currentLayout);</span>
 <span class="nc" id="L236">            newLayout = currentLayout;</span>
         }
-<span class="nc" id="L238">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
-<span class="nc" id="L239">    }</span>
+<span class="fc" id="L238">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
+<span class="fc" id="L239">    }</span>
 
     /**
      * Add the log unit to the segment to increase redundancy. This is preceded by state transfer.
@@ -252,22 +252,22 @@ public class LayoutManagementView extends AbstractView {
     public void addLogUnitReplica(@Nonnull Layout currentLayout,
                                   @Nonnull String endpoint,
                                   int stripeIndex) throws OutrankedException {
-<span class="nc" id="L255">        boolean isTaskDone = currentLayout.getSegments().stream()</span>
-<span class="nc" id="L256">                .map(layoutSegment -&gt; layoutSegment.getStripes().get(stripeIndex))</span>
-<span class="nc" id="L257">                .allMatch(layoutStripe -&gt; layoutStripe.getLogServers().contains(endpoint));</span>
+<span class="fc" id="L255">        boolean isTaskDone = currentLayout.getSegments().stream()</span>
+<span class="fc" id="L256">                .map(layoutSegment -&gt; layoutSegment.getStripes().get(stripeIndex))</span>
+<span class="fc" id="L257">                .allMatch(layoutStripe -&gt; layoutStripe.getLogServers().contains(endpoint));</span>
 
-<span class="nc bnc" id="L259" title="All 2 branches missed.">        if (!isTaskDone) {</span>
-<span class="nc" id="L260">            LayoutBuilder builder = new LayoutBuilder(currentLayout);</span>
-<span class="nc bnc" id="L261" title="All 2 branches missed.">            for (int i = 0; i &lt; currentLayout.getSegments().size(); i++) {</span>
-<span class="nc" id="L262">                builder.addLogunitServerToSegment(endpoint, i, stripeIndex);</span>
+<span class="pc bpc" id="L259" title="1 of 2 branches missed.">        if (!isTaskDone) {</span>
+<span class="fc" id="L260">            LayoutBuilder builder = new LayoutBuilder(currentLayout);</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">            for (int i = 0; i &lt; currentLayout.getSegments().size(); i++) {</span>
+<span class="fc" id="L262">                builder.addLogunitServerToSegment(endpoint, i, stripeIndex);</span>
             }
-<span class="nc" id="L264">            Layout newLayout = builder.setEpoch(currentLayout.getEpoch() + 1).build();</span>
-<span class="nc" id="L265">            runLayoutReconfiguration(currentLayout, newLayout, false);</span>
-<span class="nc" id="L266">        } else {</span>
+<span class="fc" id="L264">            Layout newLayout = builder.setEpoch(currentLayout.getEpoch() + 1).build();</span>
+<span class="fc" id="L265">            runLayoutReconfiguration(currentLayout, newLayout, false);</span>
+<span class="fc" id="L266">        } else {</span>
 <span class="nc" id="L267">            log.info(&quot;addLogUnitReplica: Ignoring task because {} present in all segments in {}&quot;,</span>
                     endpoint, currentLayout);
         }
-<span class="nc" id="L270">    }</span>
+<span class="fc" id="L270">    }</span>
 
     /**
      * Best effort attempt to removes a node from the layout.
@@ -279,29 +279,29 @@ public class LayoutManagementView extends AbstractView {
                            @Nonnull String endpoint) throws OutrankedException {
 
         Layout newLayout;
-<span class="nc bnc" id="L282" title="All 2 branches missed.">        if (currentLayout.getAllServers().contains(endpoint)) {</span>
-<span class="nc" id="L283">            LayoutBuilder builder = new LayoutBuilder(currentLayout);</span>
-<span class="nc" id="L284">            newLayout = builder.removeLayoutServer(endpoint)</span>
-<span class="nc" id="L285">                    .removeSequencerServer(endpoint)</span>
-<span class="nc" id="L286">                    .assignResponsiveSequencerAsPrimary(Collections.emptySet())</span>
-<span class="nc" id="L287">                    .removeLogunitServer(endpoint)</span>
-<span class="nc" id="L288">                    .removeUnresponsiveServer(endpoint)</span>
-<span class="nc" id="L289">                    .setEpoch(currentLayout.getEpoch() + 1)</span>
-<span class="nc" id="L290">                    .build();</span>
+<span class="pc bpc" id="L282" title="1 of 2 branches missed.">        if (currentLayout.getAllServers().contains(endpoint)) {</span>
+<span class="fc" id="L283">            LayoutBuilder builder = new LayoutBuilder(currentLayout);</span>
+<span class="fc" id="L284">            newLayout = builder.removeLayoutServer(endpoint)</span>
+<span class="fc" id="L285">                    .removeSequencerServer(endpoint)</span>
+<span class="fc" id="L286">                    .assignResponsiveSequencerAsPrimary(Collections.emptySet())</span>
+<span class="fc" id="L287">                    .removeLogunitServer(endpoint)</span>
+<span class="fc" id="L288">                    .removeUnresponsiveServer(endpoint)</span>
+<span class="fc" id="L289">                    .setEpoch(currentLayout.getEpoch() + 1)</span>
+<span class="fc" id="L290">                    .build();</span>
 
             // Seal after constructing the layout, so that the system
             // isn't blocked if the builder throws an exception
-<span class="nc" id="L294">            sealEpoch(currentLayout);</span>
+<span class="fc" id="L294">            sealEpoch(currentLayout);</span>
 
-<span class="nc" id="L296">            attemptConsensus(newLayout);</span>
-<span class="nc" id="L297">        } else {</span>
+<span class="fc" id="L296">            attemptConsensus(newLayout);</span>
+<span class="fc" id="L297">        } else {</span>
 <span class="nc" id="L298">            newLayout = currentLayout;</span>
 <span class="nc" id="L299">            log.info(&quot;removeNode: Ignoring remove node on {} because it doesn't exist in {}&quot;,</span>
                     endpoint, currentLayout);
         }
 
-<span class="nc" id="L303">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
-<span class="nc" id="L304">    }</span>
+<span class="fc" id="L303">        reconfigureSequencerServers(currentLayout, newLayout, false);</span>
+<span class="fc" id="L304">    }</span>
 
     /**
      * Attempts to force commit a new layout to the cluster.
@@ -340,17 +340,17 @@ public class LayoutManagementView extends AbstractView {
             throws OutrankedException {
 
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
-<span class="nc" id="L343">        sealEpoch(currentLayout);</span>
+<span class="fc" id="L343">        sealEpoch(currentLayout);</span>
 
-<span class="nc" id="L345">        attemptConsensus(newLayout);</span>
+<span class="fc" id="L345">        attemptConsensus(newLayout);</span>
 
         //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
         //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
         //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
         // Reconfigure servers if required
         // Primary sequencer would be in a not-ready state if its in recovery mode.
-<span class="nc" id="L352">        reconfigureSequencerServers(currentLayout, newLayout, forceSequencerRecovery);</span>
-<span class="nc" id="L353">    }</span>
+<span class="fc" id="L352">        reconfigureSequencerServers(currentLayout, newLayout, forceSequencerRecovery);</span>
+<span class="fc" id="L353">    }</span>
 
     /**
      * Seals the epoch.
@@ -358,9 +358,9 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Layout to be sealed
      */
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
-<span class="nc" id="L361">        layout.nextEpoch();</span>
-<span class="nc" id="L362">        runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();</span>
-<span class="nc" id="L363">    }</span>
+<span class="fc" id="L361">        layout.nextEpoch();</span>
+<span class="fc" id="L362">        runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();</span>
+<span class="fc" id="L363">    }</span>
 
     /**
      * Attempt consensus.
@@ -372,27 +372,27 @@ public class LayoutManagementView extends AbstractView {
             throws OutrankedException {
         // Attempts to update all the layout servers with the modified layout.
         try {
-<span class="nc" id="L375">            runtime.getLayoutView().updateLayout(layout, prepareRank);</span>
-<span class="nc" id="L376">            prepareRank = 1L;</span>
-<span class="nc" id="L377">        } catch (OutrankedException oe) {</span>
+<span class="fc" id="L375">            runtime.getLayoutView().updateLayout(layout, prepareRank);</span>
+<span class="fc" id="L376">            prepareRank = 1L;</span>
+<span class="fc" id="L377">        } catch (OutrankedException oe) {</span>
             // Update rank since outranked.
-<span class="nc" id="L379">            log.error(&quot;Conflict in updating layout by attemptConsensus: {}&quot;, oe);</span>
+<span class="fc" id="L379">            log.error(&quot;Conflict in updating layout by attemptConsensus: {}&quot;, oe);</span>
             // Update rank to be able to outrank other competition and complete paxos.
-<span class="nc" id="L381">            prepareRank = oe.getNewRank() + 1;</span>
-<span class="nc" id="L382">            throw oe;</span>
-<span class="nc" id="L383">        }</span>
+<span class="fc" id="L381">            prepareRank = oe.getNewRank() + 1;</span>
+<span class="fc" id="L382">            throw oe;</span>
+<span class="fc" id="L383">        }</span>
 
         // Check if our proposed layout got selected and committed.
-<span class="nc bnc" id="L386" title="All 2 branches missed.">        for (int x = 0; x &lt; runtime.getParameters().getInvalidateRetry(); x++) {</span>
-<span class="nc" id="L387">            runtime.invalidateLayout();</span>
-<span class="nc bnc" id="L388" title="All 2 branches missed.">            if (runtime.getLayoutView().getLayout().equals(layout)) {</span>
-<span class="nc" id="L389">                log.info(&quot;New Layout Committed = {}&quot;, layout);</span>
-<span class="nc" id="L390">                return;</span>
+<span class="pc bpc" id="L386" title="1 of 2 branches missed.">        for (int x = 0; x &lt; runtime.getParameters().getInvalidateRetry(); x++) {</span>
+<span class="fc" id="L387">            runtime.invalidateLayout();</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">            if (runtime.getLayoutView().getLayout().equals(layout)) {</span>
+<span class="fc" id="L389">                log.info(&quot;New Layout Committed = {}&quot;, layout);</span>
+<span class="fc" id="L390">                return;</span>
             } else {
-<span class="nc" id="L392">                log.warn(&quot;Runtime recovered with a different layout = {}&quot;,</span>
-<span class="nc" id="L393">                        runtime.getLayoutView().getLayout());</span>
+<span class="fc" id="L392">                log.warn(&quot;Runtime recovered with a different layout = {}&quot;,</span>
+<span class="fc" id="L393">                        runtime.getLayoutView().getLayout());</span>
             }
-<span class="nc" id="L395">            log.warn(&quot;attemptConsensus: Checking if {} has been accepted, retry {}&quot;, layout, x);</span>
+<span class="fc" id="L395">            log.warn(&quot;attemptConsensus: Checking if {} has been accepted, retry {}&quot;, layout, x);</span>
         }
 <span class="nc" id="L397">    }</span>
 
@@ -409,57 +409,57 @@ public class LayoutManagementView extends AbstractView {
     public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
                                             boolean forceReconfigure) {
 
-<span class="nc" id="L412">        boolean acquiredLocked = recoverSequencerLock.tryLock();</span>
-<span class="nc bnc" id="L413" title="All 2 branches missed.">        if (acquiredLocked) {</span>
+<span class="fc" id="L412">        boolean acquiredLocked = recoverSequencerLock.tryLock();</span>
+<span class="fc bfc" id="L413" title="All 2 branches covered.">        if (acquiredLocked) {</span>
             try {
 
                 // Avoids stale bootstrap requests from being processed.
-<span class="nc bnc" id="L417" title="All 2 branches missed.">                if (newLayout.getEpoch() &lt;= lastKnownSequencerEpoch) {</span>
-<span class="nc" id="L418">                    log.warn(&quot;reconfigureSequencerServers: Sequencer bootstrap failed. &quot;</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">                if (newLayout.getEpoch() &lt;= lastKnownSequencerEpoch) {</span>
+<span class="fc" id="L418">                    log.warn(&quot;reconfigureSequencerServers: Sequencer bootstrap failed. &quot;</span>
                             + &quot;Already bootstrapped.&quot;);
-<span class="nc" id="L420">                    return;</span>
+<span class="fc" id="L420">                    return;</span>
                 }
 
-<span class="nc" id="L423">                long maxTokenRequested = -1L;</span>
-<span class="nc" id="L424">                Map&lt;UUID, StreamAddressSpace&gt; streamsAddressSpace = Collections.emptyMap();</span>
-<span class="nc" id="L425">                boolean bootstrapWithoutTailsUpdate = true;</span>
+<span class="fc" id="L423">                long maxTokenRequested = -1L;</span>
+<span class="fc" id="L424">                Map&lt;UUID, StreamAddressSpace&gt; streamsAddressSpace = Collections.emptyMap();</span>
+<span class="fc" id="L425">                boolean bootstrapWithoutTailsUpdate = true;</span>
 
                 // Reconfigure Primary Sequencer if required
-<span class="nc bnc" id="L428" title="All 2 branches missed.">                if (forceReconfigure</span>
-<span class="nc" id="L429">                        || !originalLayout.getPrimarySequencer()</span>
-<span class="nc bnc" id="L430" title="All 2 branches missed.">                        .equals(newLayout.getPrimarySequencer())) {</span>
+<span class="fc bfc" id="L428" title="All 2 branches covered.">                if (forceReconfigure</span>
+<span class="fc" id="L429">                        || !originalLayout.getPrimarySequencer()</span>
+<span class="fc bfc" id="L430" title="All 2 branches covered.">                        .equals(newLayout.getPrimarySequencer())) {</span>
 
-<span class="nc" id="L432">                    StreamsAddressResponse streamsAddressesResponse = runtime.getAddressSpaceView()</span>
-<span class="nc" id="L433">                            .getLogAddressSpace();</span>
+<span class="fc" id="L432">                    StreamsAddressResponse streamsAddressesResponse = runtime.getAddressSpaceView()</span>
+<span class="fc" id="L433">                            .getLogAddressSpace();</span>
 
-<span class="nc" id="L435">                    maxTokenRequested = streamsAddressesResponse.getLogTail();</span>
-<span class="nc" id="L436">                    streamsAddressSpace = streamsAddressesResponse.getAddressMap();</span>
+<span class="fc" id="L435">                    maxTokenRequested = streamsAddressesResponse.getLogTail();</span>
+<span class="fc" id="L436">                    streamsAddressSpace = streamsAddressesResponse.getAddressMap();</span>
 
                     // Incrementing the maxTokenRequested value for sequencer reset.
-<span class="nc" id="L439">                    maxTokenRequested++;</span>
-<span class="nc" id="L440">                    bootstrapWithoutTailsUpdate = false;</span>
+<span class="fc" id="L439">                    maxTokenRequested++;</span>
+<span class="fc" id="L440">                    bootstrapWithoutTailsUpdate = false;</span>
                 }
 
                 // Configuring the new sequencer.
-<span class="nc" id="L444">                boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(</span>
-<span class="nc" id="L445">                        runtime.getLayoutView().getRuntimeLayout(newLayout)</span>
-<span class="nc" id="L446">                                .getPrimarySequencerClient()</span>
-<span class="nc" id="L447">                                .bootstrap(maxTokenRequested, streamsAddressSpace, newLayout.getEpoch(),</span>
+<span class="fc" id="L444">                boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(</span>
+<span class="fc" id="L445">                        runtime.getLayoutView().getRuntimeLayout(newLayout)</span>
+<span class="fc" id="L446">                                .getPrimarySequencerClient()</span>
+<span class="fc" id="L447">                                .bootstrap(maxTokenRequested, streamsAddressSpace, newLayout.getEpoch(),</span>
                                         bootstrapWithoutTailsUpdate));
-<span class="nc" id="L449">                lastKnownSequencerEpoch = newLayout.getEpoch();</span>
-<span class="nc bnc" id="L450" title="All 2 branches missed.">                if (sequencerBootstrapResult) {</span>
-<span class="nc" id="L451">                    log.info(&quot;reconfigureSequencerServers: Sequencer bootstrap successful.&quot;);</span>
+<span class="fc" id="L449">                lastKnownSequencerEpoch = newLayout.getEpoch();</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">                if (sequencerBootstrapResult) {</span>
+<span class="fc" id="L451">                    log.info(&quot;reconfigureSequencerServers: Sequencer bootstrap successful.&quot;);</span>
                 } else {
-<span class="nc" id="L453">                    log.warn(&quot;reconfigureSequencerServers: Sequencer bootstrap failed. &quot;</span>
+<span class="fc" id="L453">                    log.warn(&quot;reconfigureSequencerServers: Sequencer bootstrap failed. &quot;</span>
                             + &quot;Already bootstrapped.&quot;);
                 }
             } finally {
-<span class="nc" id="L457">                recoverSequencerLock.unlock();</span>
-<span class="nc" id="L458">            }</span>
+<span class="fc" id="L457">                recoverSequencerLock.unlock();</span>
+<span class="fc" id="L458">            }</span>
         } else {
-<span class="nc" id="L460">            log.info(&quot;reconfigureSequencerServers: Sequencer reconfiguration already in progress.&quot;);</span>
+<span class="fc" id="L460">            log.info(&quot;reconfigureSequencerServers: Sequencer reconfiguration already in progress.&quot;);</span>
         }
-<span class="nc" id="L462">    }</span>
+<span class="fc" id="L462">    }</span>
 
     /**
      * Triggers a new task to bootstrap the sequencer for the specified layout. If there is already
@@ -469,22 +469,22 @@ public class LayoutManagementView extends AbstractView {
      * @return Future which completes when the task completes successfully or with a failure.
      */
     public CompletableFuture&lt;Boolean&gt; asyncSequencerBootstrap(
-<span class="nc bnc" id="L472" title="All 4 branches missed.">            @NonNull Layout layout, @NonNull ExecutorService service) {</span>
+<span class="pc bpc" id="L472" title="2 of 4 branches missed.">            @NonNull Layout layout, @NonNull ExecutorService service) {</span>
 
-<span class="nc" id="L474">        return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -&gt; {</span>
-<span class="nc bnc" id="L475" title="All 2 branches missed.">            if (!sequencerRecovery.isDone()) {</span>
-<span class="nc" id="L476">                log.info(&quot;triggerSequencerBootstrap: a bootstrap task is already in progress.&quot;);</span>
-<span class="nc" id="L477">                return sequencerRecovery;</span>
+<span class="fc" id="L474">        return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -&gt; {</span>
+<span class="fc bfc" id="L475" title="All 2 branches covered.">            if (!sequencerRecovery.isDone()) {</span>
+<span class="fc" id="L476">                log.info(&quot;triggerSequencerBootstrap: a bootstrap task is already in progress.&quot;);</span>
+<span class="fc" id="L477">                return sequencerRecovery;</span>
             }
 
-<span class="nc" id="L480">            return CompletableFuture.supplyAsync(() -&gt; {</span>
-<span class="nc" id="L481">                log.info(&quot;triggerSequencerBootstrap: a bootstrap task is triggered.&quot;);</span>
+<span class="fc" id="L480">            return CompletableFuture.supplyAsync(() -&gt; {</span>
+<span class="fc" id="L481">                log.info(&quot;triggerSequencerBootstrap: a bootstrap task is triggered.&quot;);</span>
                 try {
-<span class="nc" id="L483">                    reconfigureSequencerServers(layout, layout, true);</span>
-<span class="nc" id="L484">                } catch (Exception e) {</span>
-<span class="nc" id="L485">                    log.error(&quot;triggerSequencerBootstrap: Failed with Exception: &quot;, e);</span>
-<span class="nc" id="L486">                }</span>
-<span class="nc" id="L487">                return true;</span>
+<span class="fc" id="L483">                    reconfigureSequencerServers(layout, layout, true);</span>
+<span class="fc" id="L484">                } catch (Exception e) {</span>
+<span class="fc" id="L485">                    log.error(&quot;triggerSequencerBootstrap: Failed with Exception: &quot;, e);</span>
+<span class="fc" id="L486">                }</span>
+<span class="fc" id="L487">                return true;</span>
             }, service);
         });
     }

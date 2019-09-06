@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
@@ -59,7 +60,6 @@ public class SequencerFlood {
             rts[x] = new CorfuRuntime(cmdArgs.endpoint).connect();
         }
         log.info("Connected {} runtimes...", numRuntimes);
-        System.out.printf("Connected %d runtimes...\n", numRuntimes);
 
         ExecutorService service = Executors.newFixedThreadPool(numThreads);
         LongAdder requestsCompleted = new LongAdder();
@@ -102,13 +102,6 @@ public class SequencerFlood {
                             histogram.getValueAtPercentile (50) / 1000.0,
                             histogram.getValueAtPercentile (95) / 1000.0,
                             histogram.getValueAtPercentile (99) / 1000.0);
-                    System.out.printf("Throughput %f req/sec   Latency{ total{%f}ms  mean{%f}ms fiftyPercent{%f}ms NintyFivePercent{%f}ms NintyNinePercent{%f}ms\n",
-                            throughput,
-                            histogram.getTotalCount () / 1000.0,
-                            histogram.getMean () / 1000.0,
-                            histogram.getValueAtPercentile (50) / 1000.0,
-                            histogram.getValueAtPercentile (95) / 1000.0,
-                            histogram.getValueAtPercentile (99) / 1000.0);
 
                     Sleep.sleepUninterruptibly (Duration.ofMillis (1000 * 3));
                     prevTs = currTs;
@@ -116,7 +109,6 @@ public class SequencerFlood {
                 } catch (Exception e) {
                     // ignore exception
                     log.warn ("statusReporter: encountered exception", e);
-                    System.out.println("statusReporter: encountered exception" + e);
                 }
             }
         });

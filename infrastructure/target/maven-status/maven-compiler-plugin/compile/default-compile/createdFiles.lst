@@ -1,4 +1,3 @@
-org/corfudb/infrastructure/DataStore.class
 org/corfudb/infrastructure/orchestrator/workflows/HealNodeWorkflow.class
 org/corfudb/infrastructure/orchestrator/workflows/AddNodeWorkflow$BootstrapNode.class
 org/corfudb/infrastructure/log/AddressMetaData.class
@@ -6,9 +5,11 @@ org/corfudb/infrastructure/orchestrator/Orchestrator.class
 org/corfudb/infrastructure/SequencerServerCache$ConflictTxStream.class
 org/corfudb/infrastructure/orchestrator/workflows/AddNodeWorkflow$RestoreRedundancy.class
 org/corfudb/infrastructure/orchestrator/Orchestrator$2.class
+org/corfudb/infrastructure/datastore/DataStore.class
 org/corfudb/infrastructure/orchestrator/workflows/ForceRemoveWorkflow$ForceRemoveNode.class
 org/corfudb/infrastructure/LogUnitServerCache.class
 org/corfudb/infrastructure/log/StreamLogFiles$Checksum.class
+org/corfudb/infrastructure/datastore/KvDataStore.class
 org/corfudb/infrastructure/CorfuServerNode$1.class
 org/corfudb/infrastructure/ServerThreadFactory.class
 org/corfudb/infrastructure/SequencerServer$Config.class
@@ -17,6 +18,7 @@ org/corfudb/infrastructure/SequencerServer$Config$ConfigBuilder.class
 org/corfudb/infrastructure/ServerHandler.class
 org/corfudb/infrastructure/log/StreamLogCompaction.class
 org/corfudb/infrastructure/AbstractServer.class
+org/corfudb/infrastructure/datastore/DataStore$1.class
 org/corfudb/infrastructure/orchestrator/workflows/RemoveNodeWorkflow$RemoveNode.class
 org/corfudb/infrastructure/MonitoringService.class
 org/corfudb/infrastructure/orchestrator/Action.class
@@ -25,6 +27,7 @@ org/corfudb/infrastructure/paxos/PaxosDataStore.class
 org/corfudb/infrastructure/management/ClusterStateAggregator$ClusterStateAggregatorBuilder.class
 org/corfudb/infrastructure/ServerContext.class
 org/corfudb/infrastructure/RemoteMonitoringService.class
+org/corfudb/infrastructure/datastore/KvDataStore$KvRecord.class
 org/corfudb/infrastructure/log/StreamLog.class
 org/corfudb/infrastructure/management/ClusterStateContext.class
 org/corfudb/infrastructure/ManagementAgent.class
@@ -38,7 +41,6 @@ org/corfudb/infrastructure/IServerRouter.class
 org/corfudb/infrastructure/management/CompleteGraphAdvisor.class
 org/corfudb/infrastructure/management/ReconfigurationEventHandler.class
 org/corfudb/infrastructure/CorfuMsgHandler$Handler.class
-org/corfudb/infrastructure/DataStore$NullValue.class
 org/corfudb/infrastructure/orchestrator/workflows/HealNodeWorkflow$HealNodeToLayout.class
 org/corfudb/infrastructure/management/IDetector.class
 org/corfudb/infrastructure/orchestrator/workflows/AddNodeWorkflow$1.class
@@ -47,9 +49,7 @@ org/corfudb/infrastructure/orchestrator/actions/StateTransfer.class
 org/corfudb/infrastructure/RemoteMonitoringService$SequencerNotReadyCounter.class
 org/corfudb/infrastructure/CorfuServer.class
 org/corfudb/infrastructure/ManagementServer.class
-org/corfudb/infrastructure/DataStore$1.class
 org/corfudb/infrastructure/orchestrator/workflows/RestoreRedundancyMergeSegmentsWorkflow.class
-org/corfudb/infrastructure/IDataStore.class
 org/corfudb/infrastructure/LayoutServer.class
 org/corfudb/infrastructure/BatchProcessor.class
 org/corfudb/infrastructure/log/StreamLogDataStore.class
@@ -92,9 +92,9 @@ org/corfudb/infrastructure/log/MultiReadWriteLock$LockReference.class
 org/corfudb/infrastructure/management/ClusterType.class
 org/corfudb/infrastructure/log/StreamLogFiles.class
 org/corfudb/infrastructure/management/ClusterAdvisorFactory$1.class
-org/corfudb/infrastructure/IDataStore$KvRecord.class
 org/corfudb/infrastructure/ResourceQuota.class
 org/corfudb/infrastructure/management/PollReport$PollReportBuilder.class
+org/corfudb/infrastructure/datastore/DataStore$NullValue.class
 org/corfudb/infrastructure/AbstractServer$ServerState.class
 org/corfudb/infrastructure/orchestrator/Orchestrator$1.class
 org/corfudb/infrastructure/management/ClusterAdvisor.class

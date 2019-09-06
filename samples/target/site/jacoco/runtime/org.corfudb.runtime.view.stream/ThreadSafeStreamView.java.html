@@ -23,13 +23,13 @@ public class ThreadSafeStreamView implements IStreamView {
 
     public ThreadSafeStreamView(final CorfuRuntime runtime,
                                  final UUID streamId,
-<span class="nc" id="L26">                                 @Nonnull final StreamOptions options) {</span>
-<span class="nc bnc" id="L27" title="All 2 branches missed.">        if (runtime.getParameters().isFollowBackpointersEnabled()) {</span>
-<span class="nc" id="L28">            stream = new BackpointerStreamView(runtime, streamId, options);</span>
+<span class="fc" id="L26">                                 @Nonnull final StreamOptions options) {</span>
+<span class="fc bfc" id="L27" title="All 2 branches covered.">        if (runtime.getParameters().isFollowBackpointersEnabled()) {</span>
+<span class="fc" id="L28">            stream = new BackpointerStreamView(runtime, streamId, options);</span>
         } else {
-<span class="nc" id="L30">            stream = new AddressMapStreamView(runtime, streamId, options);</span>
+<span class="fc" id="L30">            stream = new AddressMapStreamView(runtime, streamId, options);</span>
         }
-<span class="nc" id="L32">    }</span>
+<span class="fc" id="L32">    }</span>
 
     public ThreadSafeStreamView(final CorfuRuntime runtime,
 <span class="nc" id="L35">                                 final UUID streamId) {</span>
@@ -47,8 +47,8 @@ public class ThreadSafeStreamView implements IStreamView {
 
     @Override
     public synchronized void reset() {
-<span class="nc" id="L50">        stream.reset();</span>
-<span class="nc" id="L51">    }</span>
+<span class="fc" id="L50">        stream.reset();</span>
+<span class="fc" id="L51">    }</span>
 
     @Override
     public synchronized void gc(long trimMark) {
@@ -57,54 +57,54 @@ public class ThreadSafeStreamView implements IStreamView {
 
     @Override
     public synchronized void seek(long globalAddress) {
-<span class="nc" id="L60">        stream.seek(globalAddress);</span>
-<span class="nc" id="L61">    }</span>
+<span class="fc" id="L60">        stream.seek(globalAddress);</span>
+<span class="fc" id="L61">    }</span>
 
     @Override
     public synchronized long find(long globalAddress, SearchDirection direction) {
-<span class="nc" id="L65">        return stream.find(globalAddress, direction);</span>
+<span class="fc" id="L65">        return stream.find(globalAddress, direction);</span>
     }
 
     @Override
     public synchronized long append(Object object,
                 Function&lt;TokenResponse, Boolean&gt; acquisitionCallback,
                 Function&lt;TokenResponse, Boolean&gt; deacquisitionCallback) {
-<span class="nc" id="L72">        return stream.append(object, acquisitionCallback, deacquisitionCallback);</span>
+<span class="fc" id="L72">        return stream.append(object, acquisitionCallback, deacquisitionCallback);</span>
     }
 
     @Override
     public synchronized ILogData next() {
-<span class="nc" id="L77">        return stream.next();</span>
+<span class="fc" id="L77">        return stream.next();</span>
     }
 
     @Override
     public synchronized ILogData previous() {
-<span class="nc" id="L82">        return stream.previous();</span>
+<span class="fc" id="L82">        return stream.previous();</span>
     }
 
     @Override
     public synchronized ILogData current() {
-<span class="nc" id="L87">        return stream.current();</span>
+<span class="fc" id="L87">        return stream.current();</span>
     }
 
     @Override
     public synchronized ILogData nextUpTo(long maxGlobal) {
-<span class="nc" id="L92">        return stream.nextUpTo(maxGlobal);</span>
+<span class="fc" id="L92">        return stream.nextUpTo(maxGlobal);</span>
     }
 
     @Override
     public synchronized List&lt;ILogData&gt; remainingUpTo(long maxGlobal) {
-<span class="nc" id="L97">        return stream.remainingUpTo(maxGlobal);</span>
+<span class="fc" id="L97">        return stream.remainingUpTo(maxGlobal);</span>
     }
 
     @Override
     public synchronized boolean hasNext() {
-<span class="nc" id="L102">        return stream.hasNext();</span>
+<span class="fc" id="L102">        return stream.hasNext();</span>
     }
 
     @Override
     public synchronized long getCurrentGlobalPosition() {
-<span class="nc" id="L107">        return stream.getCurrentGlobalPosition();</span>
+<span class="fc" id="L107">        return stream.getCurrentGlobalPosition();</span>
     }
 
     @Override
@@ -114,7 +114,7 @@ public class ThreadSafeStreamView implements IStreamView {
 
     @VisibleForTesting
     IStreamView getUnderlyingStream() {
-<span class="nc" id="L117">        return stream;</span>
+<span class="fc" id="L117">        return stream;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

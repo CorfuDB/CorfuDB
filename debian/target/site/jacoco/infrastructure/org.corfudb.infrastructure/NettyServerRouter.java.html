@@ -24,7 +24,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
  * the
  * Created by mwei on 12/1/15.
  */
-<span class="nc" id="L27">@Slf4j</span>
+<span class="fc" id="L27">@Slf4j</span>
 @ChannelHandler.Sharable
 public class NettyServerRouter extends ChannelInboundHandlerAdapter implements IServerRouter {
 
@@ -36,7 +36,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
-<span class="nc" id="L39">    @Getter</span>
+<span class="fc" id="L39">    @Getter</span>
 <span class="nc" id="L40">    @Setter</span>
     volatile long serverEpoch;
 
@@ -48,14 +48,14 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
      * @param servers   A list of {@link AbstractServer}s this router will route
      *                  messages for.
      */
-<span class="nc" id="L51">    public NettyServerRouter(List&lt;AbstractServer&gt; servers) {</span>
+<span class="fc" id="L51">    public NettyServerRouter(List&lt;AbstractServer&gt; servers) {</span>
         // Initialize the router epoch from the persisted server epoch
-<span class="nc" id="L53">        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();</span>
-<span class="nc" id="L54">        this.servers = ImmutableList.copyOf(servers);</span>
-<span class="nc" id="L55">        handlerMap = new EnumMap&lt;&gt;(CorfuMsgType.class);</span>
-<span class="nc" id="L56">        servers.forEach(server -&gt; server.getHandler().getHandledTypes()</span>
-<span class="nc" id="L57">            .forEach(x -&gt; handlerMap.put(x, server)));</span>
-<span class="nc" id="L58">    }</span>
+<span class="fc" id="L53">        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();</span>
+<span class="fc" id="L54">        this.servers = ImmutableList.copyOf(servers);</span>
+<span class="fc" id="L55">        handlerMap = new EnumMap&lt;&gt;(CorfuMsgType.class);</span>
+<span class="fc" id="L56">        servers.forEach(server -&gt; server.getHandler().getHandledTypes()</span>
+<span class="fc" id="L57">            .forEach(x -&gt; handlerMap.put(x, server)));</span>
+<span class="fc" id="L58">    }</span>
 
     /**
      * {@inheritDoc}
@@ -85,10 +85,10 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
      * @param outMsg Outgoing message.
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-<span class="nc" id="L88">        outMsg.copyBaseFields(inMsg);</span>
-<span class="nc" id="L89">        ctx.writeAndFlush(outMsg, ctx.voidPromise());</span>
-<span class="nc" id="L90">        log.trace(&quot;Sent response: {}&quot;, outMsg);</span>
-<span class="nc" id="L91">    }</span>
+<span class="fc" id="L88">        outMsg.copyBaseFields(inMsg);</span>
+<span class="fc" id="L89">        ctx.writeAndFlush(outMsg, ctx.voidPromise());</span>
+<span class="fc" id="L90">        log.trace(&quot;Sent response: {}&quot;, outMsg);</span>
+<span class="fc" id="L91">    }</span>
 
     /**
      * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
@@ -100,15 +100,15 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
      * @return True, if the epoch is correct, but false otherwise.
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
-<span class="nc" id="L103">        long serverEpoch = getServerEpoch();</span>
-<span class="nc bnc" id="L104" title="All 4 branches missed.">        if (!msg.getMsgType().ignoreEpoch &amp;&amp; msg.getEpoch() != serverEpoch) {</span>
+<span class="fc" id="L103">        long serverEpoch = getServerEpoch();</span>
+<span class="pc bpc" id="L104" title="3 of 4 branches missed.">        if (!msg.getMsgType().ignoreEpoch &amp;&amp; msg.getEpoch() != serverEpoch) {</span>
 <span class="nc" id="L105">            sendResponse(ctx, msg, new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.WRONG_EPOCH,</span>
 <span class="nc" id="L106">                    serverEpoch));</span>
 <span class="nc" id="L107">            log.trace(&quot;Incoming message with wrong epoch, got {}, expected {}, message was: {}&quot;,</span>
 <span class="nc" id="L108">                    msg.getEpoch(), serverEpoch, msg);</span>
 <span class="nc" id="L109">            return false;</span>
         }
-<span class="nc" id="L111">        return true;</span>
+<span class="fc" id="L111">        return true;</span>
     }
 
     /**
@@ -122,42 +122,42 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         try {
             // The incoming message should have been transformed to a CorfuMsg earlier in the
             // pipeline.
-<span class="nc" id="L125">            CorfuMsg m = ((CorfuMsg) msg);</span>
+<span class="fc" id="L125">            CorfuMsg m = ((CorfuMsg) msg);</span>
             // We get the handler for this message from the map
-<span class="nc" id="L127">            AbstractServer handler = handlerMap.get(m.getMsgType());</span>
-<span class="nc bnc" id="L128" title="All 2 branches missed.">            if (handler == null) {</span>
+<span class="fc" id="L127">            AbstractServer handler = handlerMap.get(m.getMsgType());</span>
+<span class="pc bpc" id="L128" title="1 of 2 branches missed.">            if (handler == null) {</span>
                 // The message was unregistered, we are dropping it.
 <span class="nc" id="L130">                log.warn(&quot;Received unregistered message {}, dropping&quot;, m);</span>
             } else {
-<span class="nc bnc" id="L132" title="All 2 branches missed.">                if (validateEpoch(m, ctx)) {</span>
+<span class="pc bpc" id="L132" title="1 of 2 branches missed.">                if (validateEpoch(m, ctx)) {</span>
                     // Route the message to the handler.
-<span class="nc bnc" id="L134" title="All 2 branches missed.">                    if (log.isTraceEnabled()) {</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">                    if (log.isTraceEnabled()) {</span>
 <span class="nc" id="L135">                        log.trace(&quot;Message routed to {}: {}&quot;, handler.getClass().getSimpleName(), msg);</span>
                     }
 
-<span class="nc" id="L138">                    handler.getExecutor(m.getMsgType()).submit(() -&gt; {</span>
+<span class="fc" id="L138">                    handler.getExecutor(m.getMsgType()).submit(() -&gt; {</span>
                         try {
-<span class="nc" id="L140">                            handler.handleMessage(m, ctx, this);</span>
+<span class="fc" id="L140">                            handler.handleMessage(m, ctx, this);</span>
 <span class="nc" id="L141">                        } catch (Throwable t) {</span>
 <span class="nc bnc" id="L142" title="All 2 branches missed.">                            log.error(&quot;channelRead: Handling {} failed due to {}:{}&quot;,</span>
 <span class="nc" id="L143">                                    m != null ? m.getMsgType() : &quot;UNKNOWN&quot;,</span>
 <span class="nc" id="L144">                                    t.getClass().getSimpleName(),</span>
 <span class="nc" id="L145">                                    t.getMessage(),</span>
                                     t);
-<span class="nc" id="L147">                        }</span>
-<span class="nc" id="L148">                    });</span>
+<span class="fc" id="L147">                        }</span>
+<span class="fc" id="L148">                    });</span>
                 }
             }
 <span class="nc" id="L151">        } catch (Exception e) {</span>
 <span class="nc" id="L152">            log.error(&quot;Exception during read!&quot;, e);</span>
-<span class="nc" id="L153">        }</span>
-<span class="nc" id="L154">    }</span>
+<span class="fc" id="L153">        }</span>
+<span class="fc" id="L154">    }</span>
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-<span class="nc" id="L158">        log.error(&quot;Error in handling inbound message, {}&quot;, cause);</span>
-<span class="nc" id="L159">        ctx.close();</span>
-<span class="nc" id="L160">    }</span>
+<span class="fc" id="L158">        log.error(&quot;Error in handling inbound message, {}&quot;, cause);</span>
+<span class="fc" id="L159">        ctx.close();</span>
+<span class="fc" id="L160">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

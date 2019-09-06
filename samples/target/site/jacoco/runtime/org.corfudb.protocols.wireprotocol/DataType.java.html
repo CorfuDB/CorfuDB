@@ -13,31 +13,31 @@ import lombok.Getter;
 /**
  * Created by mwei on 8/16/16.
  */
-<span class="nc" id="L16">@AllArgsConstructor</span>
+<span class="pc" id="L16">@AllArgsConstructor</span>
 public enum DataType implements ICorfuPayload&lt;DataType&gt; {
-<span class="nc" id="L18">    DATA(0, true),</span>
-<span class="nc" id="L19">    EMPTY(1, true),</span>
-<span class="nc" id="L20">    HOLE(2, true),</span>
-<span class="nc" id="L21">    TRIMMED(3, true),</span>
-<span class="nc" id="L22">    RANK_ONLY(4, true);</span>
+<span class="fc" id="L18">    DATA(0, true),</span>
+<span class="fc" id="L19">    EMPTY(1, true),</span>
+<span class="fc" id="L20">    HOLE(2, true),</span>
+<span class="fc" id="L21">    TRIMMED(3, true),</span>
+<span class="fc" id="L22">    RANK_ONLY(4, true);</span>
 
     final int val;
 
-<span class="nc" id="L26">    @Getter</span>
+<span class="fc" id="L26">    @Getter</span>
     private boolean metadataAware;
 
     byte asByte() {
-<span class="nc" id="L30">        return (byte) val;</span>
+<span class="fc" id="L30">        return (byte) val;</span>
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L35">        buf.writeByte(asByte());</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L35">        buf.writeByte(asByte());</span>
+<span class="fc" id="L36">    }</span>
 
-<span class="nc" id="L38">    public static final Map&lt;Byte, DataType&gt; typeMap =</span>
-<span class="nc" id="L39">            Arrays.stream(DataType.values())</span>
-<span class="nc" id="L40">                    .collect(Collectors.toMap(DataType::asByte, Function.identity()));</span>
+<span class="fc" id="L38">    public static final Map&lt;Byte, DataType&gt; typeMap =</span>
+<span class="fc" id="L39">            Arrays.stream(DataType.values())</span>
+<span class="fc" id="L40">                    .collect(Collectors.toMap(DataType::asByte, Function.identity()));</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

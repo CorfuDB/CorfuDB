@@ -17,10 +17,10 @@ public class UnrecoverableCorfuInterruptedError extends UnrecoverableCorfuError 
      * @param cause     The root cause of the exception.
      */
     public UnrecoverableCorfuInterruptedError(@Nonnull InterruptedException cause) {
-<span class="nc" id="L20">        super(cause);</span>
+<span class="fc" id="L20">        super(cause);</span>
         // Restore the interrupted status.
-<span class="nc" id="L22">        Thread.currentThread().interrupt();</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L22">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L23">    }</span>
 
     /** Construct a new {@link UnrecoverableCorfuInterruptedError} with a given message
      * and root cause and re-enable the interrupt flag.
@@ -30,9 +30,9 @@ public class UnrecoverableCorfuInterruptedError extends UnrecoverableCorfuError 
      */
     public UnrecoverableCorfuInterruptedError( @Nonnull String message,
                                                @Nonnull InterruptedException cause) {
-<span class="nc" id="L33">        super(message, cause);</span>
+<span class="fc" id="L33">        super(message, cause);</span>
         // Restore the interrupted status.
-<span class="nc" id="L35">        Thread.currentThread().interrupt();</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L35">        Thread.currentThread().interrupt();</span>
+<span class="fc" id="L36">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

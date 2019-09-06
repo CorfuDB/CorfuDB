@@ -12,15 +12,15 @@ public class CorfuSerializer implements ISerializer {
     private final byte type;
 
     /* The magic that denotes this is a corfu payload */
-<span class="nc" id="L15">    final byte corfuPayloadMagic = 0x42;</span>
+<span class="fc" id="L15">    final byte corfuPayloadMagic = 0x42;</span>
 
-<span class="nc" id="L17">    public CorfuSerializer(byte type) {</span>
-<span class="nc" id="L18">        this.type = type;</span>
-<span class="nc" id="L19">    }</span>
+<span class="fc" id="L17">    public CorfuSerializer(byte type) {</span>
+<span class="fc" id="L18">        this.type = type;</span>
+<span class="fc" id="L19">    }</span>
 
     @Override
     public byte getType() {
-<span class="nc" id="L23">        return type;</span>
+<span class="fc" id="L23">        return type;</span>
     }
 
     /**
@@ -31,12 +31,12 @@ public class CorfuSerializer implements ISerializer {
      */
     @Override
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-<span class="nc bnc" id="L34" title="All 2 branches missed.">        if (b.readByte() != corfuPayloadMagic) {</span>
-<span class="nc" id="L35">            byte[] bytes = new byte[b.readableBytes()];</span>
-<span class="nc" id="L36">            b.readBytes(bytes);</span>
-<span class="nc" id="L37">            return bytes;</span>
+<span class="fc bfc" id="L34" title="All 2 branches covered.">        if (b.readByte() != corfuPayloadMagic) {</span>
+<span class="fc" id="L35">            byte[] bytes = new byte[b.readableBytes()];</span>
+<span class="fc" id="L36">            b.readBytes(bytes);</span>
+<span class="fc" id="L37">            return bytes;</span>
         }
-<span class="nc" id="L39">        return LogEntry.deserialize(b, rt);</span>
+<span class="fc" id="L39">        return LogEntry.deserialize(b, rt);</span>
     }
 
     /**
@@ -47,19 +47,19 @@ public class CorfuSerializer implements ISerializer {
      */
     @Override
     public void serialize(Object o, ByteBuf b) {
-<span class="nc bnc" id="L50" title="All 2 branches missed.">        if (o instanceof ICorfuSerializable) {</span>
-<span class="nc" id="L51">            b.writeByte(corfuPayloadMagic);</span>
-<span class="nc" id="L52">            ICorfuSerializable c = (ICorfuSerializable) o;</span>
-<span class="nc" id="L53">            c.serialize(b);</span>
-<span class="nc bnc" id="L54" title="All 2 branches missed.">        } else if (o instanceof byte[]) {</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        if (o instanceof ICorfuSerializable) {</span>
+<span class="fc" id="L51">            b.writeByte(corfuPayloadMagic);</span>
+<span class="fc" id="L52">            ICorfuSerializable c = (ICorfuSerializable) o;</span>
+<span class="fc" id="L53">            c.serialize(b);</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        } else if (o instanceof byte[]) {</span>
             // Reserve byte for an empty magic byte
-<span class="nc" id="L56">            b.writeByte(0);</span>
-<span class="nc" id="L57">            byte[] bytes = (byte[]) o;</span>
-<span class="nc" id="L58">            b.writeBytes(bytes);</span>
-<span class="nc" id="L59">        } else {</span>
+<span class="fc" id="L56">            b.writeByte(0);</span>
+<span class="fc" id="L57">            byte[] bytes = (byte[]) o;</span>
+<span class="fc" id="L58">            b.writeBytes(bytes);</span>
+<span class="fc" id="L59">        } else {</span>
 <span class="nc" id="L60">            throw new RuntimeException(&quot;Attempting to serialize unsupported type &quot;</span>
 <span class="nc" id="L61">                    + o.getClass().getName() + &quot;.&quot;);</span>
         }
-<span class="nc" id="L63">    }</span>
+<span class="fc" id="L63">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

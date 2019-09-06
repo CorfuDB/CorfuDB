@@ -17,66 +17,66 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 
 @Getter
-<span class="nc bnc" id="L20" title="All 2 branches missed.">@AllArgsConstructor</span>
-<span class="nc bnc" id="L21" title="All 4 branches missed.">@Builder</span>
+<span class="pc bpc" id="L20" title="1 of 2 branches missed.">@AllArgsConstructor</span>
+<span class="pc bfc" id="L21" title="All 4 branches covered.">@Builder</span>
 public class Transaction {
 
     /**
      * The runtime for the context.
      */
     @NonNull
-<span class="nc" id="L28">    final CorfuRuntime runtime;</span>
+<span class="fc" id="L28">    final CorfuRuntime runtime;</span>
 
     /**
      * The type of context to build.
      */
     @Default
-<span class="nc" id="L34">    final TransactionType type = TransactionType.OPTIMISTIC;;</span>
+<span class="fc" id="L34">    final TransactionType type = TransactionType.OPTIMISTIC;;</span>
 
     /**
      * For snapshot transactions, the address the
      * snapshot will start at.
      */
     @Default
-<span class="nc" id="L41">    final Token snapshot = Token.UNINITIALIZED;;</span>
+<span class="fc" id="L41">    final Token snapshot = Token.UNINITIALIZED;;</span>
 
     /**
      * Start the transaction with the parameters given
      * to the builder.
      */
     public void begin() {
-<span class="nc" id="L48">        verify();</span>
-<span class="nc" id="L49">        TransactionalContext.newContext(type.get.apply(this));</span>
-<span class="nc" id="L50">    }</span>
+<span class="fc" id="L48">        verify();</span>
+<span class="fc" id="L49">        TransactionalContext.newContext(type.get.apply(this));</span>
+<span class="fc" id="L50">    }</span>
 
     public boolean isLoggingEnabled() {
-<span class="nc" id="L53">        return runtime.getObjectsView().isTransactionLogging();</span>
+<span class="fc" id="L53">        return runtime.getObjectsView().isTransactionLogging();</span>
     }
 
     /**
      * Verifies that this transaction has a valid snapshot and context.
      */
     private void verify() {
-<span class="nc" id="L60">        final AbstractTransactionalContext parentCtx = TransactionalContext.getCurrentContext();</span>
-<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (parentCtx != null) {</span>
+<span class="fc" id="L60">        final AbstractTransactionalContext parentCtx = TransactionalContext.getCurrentContext();</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">        if (parentCtx != null) {</span>
             // In a nested transaction, the runtime should be the same as the parent's
-<span class="nc bnc" id="L63" title="All 2 branches missed.">            if (parentCtx.getTransaction().getRuntime() != this.runtime) {</span>
-<span class="nc" id="L64">                throw new IllegalStateException(</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">            if (parentCtx.getTransaction().getRuntime() != this.runtime) {</span>
+<span class="fc" id="L64">                throw new IllegalStateException(</span>
                         &quot;Attempting to nest transactions from different clients!&quot;);
             }
 
             // In a nested transaction, the transaction type should be the same as the parent's
-<span class="nc bnc" id="L69" title="All 2 branches missed.">            if (type != parentCtx.getTransaction().getType()) {</span>
-<span class="nc" id="L70">                String msg = String.format(&quot;Attempting to nest transactions with a &quot; +</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">            if (type != parentCtx.getTransaction().getType()) {</span>
+<span class="fc" id="L70">                String msg = String.format(&quot;Attempting to nest transactions with a &quot; +</span>
                                 &quot;different transaction type, parent type=%s, nested type=%s&quot;,
-<span class="nc" id="L72">                        parentCtx.getTransaction().getType(), this.getType());</span>
-<span class="nc" id="L73">                throw new IllegalArgumentException(msg);</span>
+<span class="fc" id="L72">                        parentCtx.getTransaction().getType(), this.getType());</span>
+<span class="fc" id="L73">                throw new IllegalArgumentException(msg);</span>
             }
 
             // In a nested transaction, the first read timestamp needs to come from the root.
-<span class="nc" id="L77">            Token parentTimestamp = parentCtx.getSnapshotTimestamp();</span>
-<span class="nc bnc" id="L78" title="All 2 branches missed.">            if (!this.snapshot.equals(Token.UNINITIALIZED)</span>
-<span class="nc bnc" id="L79" title="All 2 branches missed.">                    &amp;&amp; !this.snapshot.equals(parentTimestamp)) {</span>
+<span class="fc" id="L77">            Token parentTimestamp = parentCtx.getSnapshotTimestamp();</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">            if (!this.snapshot.equals(Token.UNINITIALIZED)</span>
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">                    &amp;&amp; !this.snapshot.equals(parentTimestamp)) {</span>
 <span class="nc" id="L80">                String msg = String.format(&quot;Attempting to nest transactions with&quot; +</span>
                                 &quot; different timestamps, parent ts=%s, user defined ts=%s&quot;,
 <span class="nc" id="L82">                        parentCtx.getSnapshotTimestamp(), this.snapshot);</span>
@@ -93,6 +93,6 @@ public class Transaction {
         //                throw new IllegalArgumentException(msg);
         //            }
         //        }
-<span class="nc" id="L96">    }</span>
+<span class="fc" id="L96">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

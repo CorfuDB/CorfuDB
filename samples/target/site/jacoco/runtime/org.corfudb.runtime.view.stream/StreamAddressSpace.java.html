@@ -23,7 +23,7 @@ import java.util.TreeSet;
   *
  * Created by annym on 03/06/2019
  */
-<span class="nc" id="L26">@Slf4j</span>
+<span class="fc" id="L26">@Slf4j</span>
 public class StreamAddressSpace {
 
     private static final int NO_ADDRESSES = 0;
@@ -36,13 +36,13 @@ public class StreamAddressSpace {
     // Holds the complete map of addresses for this stream.
     private final Roaring64NavigableMap addressMap;
 
-<span class="nc" id="L39">    public StreamAddressSpace(long trimMark, Roaring64NavigableMap addressMap) {</span>
-<span class="nc" id="L40">        this.trimMark = trimMark;</span>
-<span class="nc" id="L41">        this.addressMap = addressMap;</span>
-<span class="nc" id="L42">    }</span>
+<span class="fc" id="L39">    public StreamAddressSpace(long trimMark, Roaring64NavigableMap addressMap) {</span>
+<span class="fc" id="L40">        this.trimMark = trimMark;</span>
+<span class="fc" id="L41">        this.addressMap = addressMap;</span>
+<span class="fc" id="L42">    }</span>
 
     public Roaring64NavigableMap getAddressMap() {
-<span class="nc" id="L45">        return addressMap;</span>
+<span class="fc" id="L45">        return addressMap;</span>
     }
 
     /**
@@ -51,14 +51,14 @@ public class StreamAddressSpace {
      * @param maxGlobal maximum address (inclusive upper bound)
      */
     public NavigableSet&lt;Long&gt; copyAddressesToSet(final Long maxGlobal) {
-<span class="nc" id="L54">        NavigableSet&lt;Long&gt; queue = new TreeSet&lt;&gt;();</span>
-<span class="nc" id="L55">        this.addressMap.forEach(address -&gt; {</span>
-<span class="nc bnc" id="L56" title="All 2 branches missed.">            if (address &lt;= maxGlobal){</span>
-<span class="nc" id="L57">                queue.add(address);</span>
+<span class="fc" id="L54">        NavigableSet&lt;Long&gt; queue = new TreeSet&lt;&gt;();</span>
+<span class="fc" id="L55">        this.addressMap.forEach(address -&gt; {</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">            if (address &lt;= maxGlobal){</span>
+<span class="fc" id="L57">                queue.add(address);</span>
             }
-<span class="nc" id="L59">        });</span>
+<span class="fc" id="L59">        });</span>
 
-<span class="nc" id="L61">        return queue;</span>
+<span class="fc" id="L61">        return queue;</span>
     }
 
     /**
@@ -77,12 +77,12 @@ public class StreamAddressSpace {
      */
     public Long getTail() {
         // If no address is present for this stream, the tail is given by the trim mark (last trimmed address)
-<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (addressMap.getLongCardinality() == NO_ADDRESSES) {</span>
+<span class="pc bpc" id="L80" title="1 of 2 branches missed.">        if (addressMap.getLongCardinality() == NO_ADDRESSES) {</span>
 <span class="nc" id="L81">            return trimMark;</span>
         }
 
         // The stream tail is the max address present in the stream's address map
-<span class="nc" id="L85">        return addressMap.getReverseLongIterator().next();</span>
+<span class="fc" id="L85">        return addressMap.getReverseLongIterator().next();</span>
     }
 
     /**
@@ -91,22 +91,22 @@ public class StreamAddressSpace {
      * @param address address to add.
      */
     public void addAddress(long address) {
-<span class="nc" id="L94">        addressMap.addLong(address);</span>
-<span class="nc" id="L95">    }</span>
+<span class="fc" id="L94">        addressMap.addLong(address);</span>
+<span class="fc" id="L95">    }</span>
 
     /**
      * Remove addresses from the stream's address map
      * and set the new trim mark (to the greatest of all addresses to remove).
      */
     public void removeAddresses(List&lt;Long&gt; addresses) {
-<span class="nc" id="L102">        addresses.stream().forEach(addressMap::removeLong);</span>
+<span class="fc" id="L102">        addresses.stream().forEach(addressMap::removeLong);</span>
 
         // Recover allocated but unused memory
-<span class="nc" id="L105">        addressMap.trim();</span>
-<span class="nc" id="L106">        trimMark = Collections.max(addresses);</span>
+<span class="fc" id="L105">        addressMap.trim();</span>
+<span class="fc" id="L106">        trimMark = Collections.max(addresses);</span>
 
-<span class="nc" id="L108">        log.trace(&quot;removeAddresses: new trim mark set to {}&quot;, trimMark);</span>
-<span class="nc" id="L109">    }</span>
+<span class="fc" id="L108">        log.trace(&quot;removeAddresses: new trim mark set to {}&quot;, trimMark);</span>
+<span class="fc" id="L109">    }</span>
 
     /**
      * Trim all addresses lower or equal to trimMark and set new trim mark.
@@ -114,7 +114,7 @@ public class StreamAddressSpace {
      * @param trimMark upper limit of addresses to trim
      */
     public void trim(Long trimMark) {
-<span class="nc bnc" id="L117" title="All 2 branches missed.">        if (!Address.isAddress(trimMark)) {</span>
+<span class="pc bpc" id="L117" title="1 of 2 branches missed.">        if (!Address.isAddress(trimMark)) {</span>
             // If not valid address return and do not attempt to trim.
 <span class="nc" id="L119">            return;</span>
         }
@@ -122,25 +122,25 @@ public class StreamAddressSpace {
         // Note: if a negative value is passed to this API the cardinality
         // of the bitmap is returned, which would be incorrect as we would
         // be removing all addresses upon an invalid trim mark.
-<span class="nc" id="L125">        long numAddressesToTrim = addressMap.rankLong(trimMark);</span>
+<span class="fc" id="L125">        long numAddressesToTrim = addressMap.rankLong(trimMark);</span>
 
-<span class="nc bnc" id="L127" title="All 2 branches missed.">        if (numAddressesToTrim &lt;= NO_ADDRESSES) {</span>
-<span class="nc" id="L128">            return;</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">        if (numAddressesToTrim &lt;= NO_ADDRESSES) {</span>
+<span class="fc" id="L128">            return;</span>
         }
 
-<span class="nc" id="L131">        List&lt;Long&gt; addressesToTrim = new ArrayList&lt;&gt;();</span>
-<span class="nc" id="L132">        LongIterator it = addressMap.getLongIterator();</span>
-<span class="nc bnc" id="L133" title="All 2 branches missed.">        for (int i = 0; i &lt; numAddressesToTrim; i++) {</span>
-<span class="nc" id="L134">            addressesToTrim.add(it.next());</span>
+<span class="fc" id="L131">        List&lt;Long&gt; addressesToTrim = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L132">        LongIterator it = addressMap.getLongIterator();</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        for (int i = 0; i &lt; numAddressesToTrim; i++) {</span>
+<span class="fc" id="L134">            addressesToTrim.add(it.next());</span>
         }
 
-<span class="nc" id="L137">        log.trace(&quot;trim: Remove {} addresses for trim mark {}&quot;, addressesToTrim.size(), trimMark);</span>
+<span class="fc" id="L137">        log.trace(&quot;trim: Remove {} addresses for trim mark {}&quot;, addressesToTrim.size(), trimMark);</span>
 
         // Remove and set trim mark
-<span class="nc bnc" id="L140" title="All 2 branches missed.">        if (!addressesToTrim.isEmpty()) {</span>
-<span class="nc" id="L141">            removeAddresses(addressesToTrim);</span>
+<span class="pc bpc" id="L140" title="1 of 2 branches missed.">        if (!addressesToTrim.isEmpty()) {</span>
+<span class="fc" id="L141">            removeAddresses(addressesToTrim);</span>
         }
-<span class="nc" id="L143">    }</span>
+<span class="fc" id="L143">    }</span>
 
     /**
      * Get addresses in range (end, start], where start &gt; end.
@@ -148,21 +148,21 @@ public class StreamAddressSpace {
      * @return Bitmap with addresses in this range.
      */
     public Roaring64NavigableMap getAddressesInRange(StreamAddressRange range) {
-<span class="nc" id="L151">        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();</span>
-<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (range.getStart() &gt; range.getEnd()) {</span>
-<span class="nc" id="L153">            addressMap.forEach(address -&gt; {</span>
+<span class="fc" id="L151">        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();</span>
+<span class="pc bpc" id="L152" title="1 of 2 branches missed.">        if (range.getStart() &gt; range.getEnd()) {</span>
+<span class="fc" id="L153">            addressMap.forEach(address -&gt; {</span>
                 // Because our search is referenced to the stream's tail =&gt; (end &lt; start]
-<span class="nc bnc" id="L155" title="All 4 branches missed.">                if (address &gt; range.getEnd() &amp;&amp; address &lt;= range.getStart()) {</span>
-<span class="nc" id="L156">                    addressesInRange.add(address);</span>
+<span class="fc bfc" id="L155" title="All 4 branches covered.">                if (address &gt; range.getEnd() &amp;&amp; address &lt;= range.getStart()) {</span>
+<span class="fc" id="L156">                    addressesInRange.add(address);</span>
                 }
-<span class="nc" id="L158">            });</span>
+<span class="fc" id="L158">            });</span>
         }
 
-<span class="nc" id="L161">        log.trace(&quot;getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.&quot;,</span>
-<span class="nc" id="L162">                Utils.toReadableId(range.getStreamID()), range.getEnd(),</span>
-<span class="nc" id="L163">                range.getStart(), addressesInRange.getLongCardinality());</span>
+<span class="fc" id="L161">        log.trace(&quot;getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.&quot;,</span>
+<span class="fc" id="L162">                Utils.toReadableId(range.getStreamID()), range.getEnd(),</span>
+<span class="fc" id="L163">                range.getStart(), addressesInRange.getLongCardinality());</span>
 
-<span class="nc" id="L165">        return addressesInRange;</span>
+<span class="fc" id="L165">        return addressesInRange;</span>
     }
 
     public void setTrimMark(long trimMark) {
@@ -170,23 +170,23 @@ public class StreamAddressSpace {
 <span class="nc" id="L170">    }</span>
 
     public long getTrimMark() {
-<span class="nc" id="L173">       return trimMark;</span>
+<span class="fc" id="L173">       return trimMark;</span>
     }
     
     public long getLowestAddress() {
-<span class="nc bnc" id="L177" title="All 2 branches missed.">        if (addressMap.isEmpty()) {</span>
+<span class="pc bpc" id="L177" title="1 of 2 branches missed.">        if (addressMap.isEmpty()) {</span>
 <span class="nc" id="L178">            return Address.NON_EXIST;</span>
         }
 
-<span class="nc" id="L181">        return addressMap.iterator().next();</span>
+<span class="fc" id="L181">        return addressMap.iterator().next();</span>
     }
 
     public long getHighestAddress() {
-<span class="nc bnc" id="L185" title="All 2 branches missed.">        if (addressMap.isEmpty()) {</span>
+<span class="pc bpc" id="L185" title="1 of 2 branches missed.">        if (addressMap.isEmpty()) {</span>
 <span class="nc" id="L186">            return Address.NON_EXIST;</span>
         }
 
-<span class="nc" id="L189">        return addressMap.getReverseLongIterator().next();</span>
+<span class="fc" id="L189">        return addressMap.getReverseLongIterator().next();</span>
     }
 
     @Override

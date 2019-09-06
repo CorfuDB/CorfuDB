@@ -17,10 +17,10 @@ import org.corfudb.util.NodeLocator;
  *
  * &lt;p&gt;Created by zlokhandwala on 2/20/18.
  */
-<span class="nc" id="L20">@Slf4j</span>
+<span class="fc" id="L20">@Slf4j</span>
 public class NodeRouterPool {
 
-<span class="nc" id="L23">    @Getter(AccessLevel.PROTECTED)</span>
+<span class="fc" id="L23">    @Getter(AccessLevel.PROTECTED)</span>
     private final Map&lt;NodeLocator, IClientRouter&gt; nodeRouters = new ConcurrentHashMap&lt;&gt;();
 
     /**
@@ -32,9 +32,9 @@ public class NodeRouterPool {
 <span class="nc" id="L32">    @Setter</span>
     private Function&lt;String, IClientRouter&gt; createRouterFunction;
 
-<span class="nc" id="L35">    NodeRouterPool(Function&lt;String, IClientRouter&gt; createRouterFunction) {</span>
-<span class="nc" id="L36">        this.createRouterFunction = createRouterFunction;</span>
-<span class="nc" id="L37">    }</span>
+<span class="fc" id="L35">    NodeRouterPool(Function&lt;String, IClientRouter&gt; createRouterFunction) {</span>
+<span class="fc" id="L36">        this.createRouterFunction = createRouterFunction;</span>
+<span class="fc" id="L37">    }</span>
 
     /**
      * Fetches a router from the pool if already present. Else creates a new router using the
@@ -44,17 +44,17 @@ public class NodeRouterPool {
      * @return IClientRouter.
      */
     public IClientRouter getRouter(NodeLocator endpoint) {
-<span class="nc" id="L47">        return nodeRouters.computeIfAbsent(endpoint,</span>
-<span class="nc" id="L48">                s -&gt; createRouterFunction.apply(s.toEndpointUrl()));</span>
+<span class="fc" id="L47">        return nodeRouters.computeIfAbsent(endpoint,</span>
+<span class="fc" id="L48">                s -&gt; createRouterFunction.apply(s.toEndpointUrl()));</span>
     }
 
     /**
      * Shutdown all the routers in the pool.
      */
     public void shutdown() {
-<span class="nc bnc" id="L55" title="All 2 branches missed.">        for (IClientRouter r : nodeRouters.values()) {</span>
-<span class="nc" id="L56">            r.stop();</span>
-<span class="nc" id="L57">        }</span>
-<span class="nc" id="L58">    }</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">        for (IClientRouter r : nodeRouters.values()) {</span>
+<span class="fc" id="L56">            r.stop();</span>
+<span class="fc" id="L57">        }</span>
+<span class="fc" id="L58">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

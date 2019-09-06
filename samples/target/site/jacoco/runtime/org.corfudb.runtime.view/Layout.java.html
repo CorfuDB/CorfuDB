@@ -38,46 +38,46 @@ import java.util.stream.Collectors;
  * This class represents the layout of a Corfu instance.
  * Created by mwei on 12/8/15.
  */
-<span class="nc bnc" id="L41" title="All 48 branches missed.">@Data</span>
+<span class="pc bpc" id="L41" title="23 of 48 branches missed.">@Data</span>
 public class Layout {
 
     /**
      * Sorting layouts according to epochs in descending order
      */
-<span class="nc" id="L47">    public static final Comparator&lt;Layout&gt; LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();</span>
+<span class="fc" id="L47">    public static final Comparator&lt;Layout&gt; LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();</span>
 
     /**
      * A Gson parser.
      */
 <span class="nc" id="L52">    @Getter</span>
-<span class="nc" id="L53">    static final Gson parser = new GsonBuilder()</span>
-<span class="nc" id="L54">            .registerTypeAdapter(Layout.class, new LayoutDeserializer())</span>
-<span class="nc" id="L55">            .create();</span>
+<span class="fc" id="L53">    static final Gson parser = new GsonBuilder()</span>
+<span class="fc" id="L54">            .registerTypeAdapter(Layout.class, new LayoutDeserializer())</span>
+<span class="fc" id="L55">            .create();</span>
     /**
      * A list of layout servers in the layout.
      */
-<span class="nc" id="L59">    @Getter</span>
+<span class="fc" id="L59">    @Getter</span>
     List&lt;String&gt; layoutServers;
     /**
      * A list of sequencers in the layout.
      */
-<span class="nc" id="L64">    @Getter</span>
+<span class="fc" id="L64">    @Getter</span>
     List&lt;String&gt; sequencers;
     /**
      * A list of the segments in the layout.
      */
-<span class="nc" id="L69">    @Getter</span>
+<span class="fc" id="L69">    @Getter</span>
     List&lt;LayoutSegment&gt; segments;
     /**
      * A list of unresponsive nodes in the layout.
      */
-<span class="nc" id="L74">    @Getter</span>
+<span class="fc" id="L74">    @Getter</span>
     List&lt;String&gt; unresponsiveServers;
     /**
      * The epoch of this layout.
      */
-<span class="nc" id="L79">    @Getter</span>
-<span class="nc" id="L80">    @Setter</span>
+<span class="fc" id="L79">    @Getter</span>
+<span class="fc" id="L80">    @Setter</span>
     long epoch;
 
     /**
@@ -90,46 +90,46 @@ public class Layout {
      *  Should remain consistent for the lifetime of the layout. May be
      *  {@code null} in a legacy layout.
      */
-<span class="nc" id="L93">    @Getter</span>
+<span class="fc" id="L93">    @Getter</span>
     UUID clusterId;
 
     /**
      * Defensive constructor since we can create a Layout from a JSON file.
      * JSON deserialize is forced through this constructor.
      */
-<span class="nc bnc" id="L100" title="All 4 branches missed.">    public Layout(@NonNull List&lt;String&gt; layoutServers, @NonNull List&lt;String&gt; sequencers,</span>
-<span class="nc bnc" id="L101" title="All 4 branches missed.">                  @NonNull List&lt;LayoutSegment&gt; segments, @NonNull List&lt;String&gt; unresponsiveServers,</span>
-<span class="nc" id="L102">                  long epoch, @Nullable UUID clusterId) {</span>
+<span class="pc bpc" id="L100" title="1 of 4 branches missed.">    public Layout(@NonNull List&lt;String&gt; layoutServers, @NonNull List&lt;String&gt; sequencers,</span>
+<span class="pc bpc" id="L101" title="2 of 4 branches missed.">                  @NonNull List&lt;LayoutSegment&gt; segments, @NonNull List&lt;String&gt; unresponsiveServers,</span>
+<span class="fc" id="L102">                  long epoch, @Nullable UUID clusterId) {</span>
 
-<span class="nc" id="L104">        this.layoutServers = layoutServers;</span>
-<span class="nc" id="L105">        this.sequencers = sequencers;</span>
-<span class="nc" id="L106">        this.segments = segments;</span>
-<span class="nc" id="L107">        this.unresponsiveServers = unresponsiveServers;</span>
-<span class="nc" id="L108">        this.epoch = epoch;</span>
-<span class="nc" id="L109">        this.clusterId = clusterId;</span>
+<span class="fc" id="L104">        this.layoutServers = layoutServers;</span>
+<span class="fc" id="L105">        this.sequencers = sequencers;</span>
+<span class="fc" id="L106">        this.segments = segments;</span>
+<span class="fc" id="L107">        this.unresponsiveServers = unresponsiveServers;</span>
+<span class="fc" id="L108">        this.epoch = epoch;</span>
+<span class="fc" id="L109">        this.clusterId = clusterId;</span>
 
         /* Assert that we constructed a valid Layout */
-<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (this.layoutServers.size() == 0) {</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">        if (this.layoutServers.size() == 0) {</span>
 <span class="nc" id="L113">            throw new IllegalArgumentException(&quot;Empty list of LayoutServers&quot;);</span>
         }
-<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (this.sequencers.size() == 0) {</span>
-<span class="nc" id="L116">            throw new IllegalArgumentException(&quot;Empty list of Sequencers&quot;);</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        if (this.sequencers.size() == 0) {</span>
+<span class="fc" id="L116">            throw new IllegalArgumentException(&quot;Empty list of Sequencers&quot;);</span>
         }
-<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (this.segments.size() == 0) {</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">        if (this.segments.size() == 0) {</span>
 <span class="nc" id="L119">            throw new IllegalArgumentException(&quot;Empty list of segments&quot;);</span>
         }
-<span class="nc bnc" id="L121" title="All 2 branches missed.">        for (Layout.LayoutSegment segment : segments) {</span>
-<span class="nc" id="L122">            requireNonNull(segment.stripes);</span>
-<span class="nc bnc" id="L123" title="All 2 branches missed.">            if (segment.stripes.size() == 0) {</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">        for (Layout.LayoutSegment segment : segments) {</span>
+<span class="fc" id="L122">            requireNonNull(segment.stripes);</span>
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">            if (segment.stripes.size() == 0) {</span>
 <span class="nc" id="L124">                throw new IllegalArgumentException(&quot;One segment has an empty list of stripes&quot;);</span>
             }
-<span class="nc" id="L126">        }</span>
-<span class="nc" id="L127">    }</span>
+<span class="fc" id="L126">        }</span>
+<span class="fc" id="L127">    }</span>
 
     public Layout(List&lt;String&gt; layoutServers, List&lt;String&gt; sequencers, List&lt;LayoutSegment&gt; segments,
                   long epoch, UUID clusterId) {
-<span class="nc" id="L131">        this(layoutServers, sequencers, segments, new ArrayList&lt;String&gt;(), epoch, clusterId);</span>
-<span class="nc" id="L132">    }</span>
+<span class="fc" id="L131">        this(layoutServers, sequencers, segments, new ArrayList&lt;String&gt;(), epoch, clusterId);</span>
+<span class="fc" id="L132">    }</span>
 
     /**
      * Get a layout from a JSON string.
@@ -137,7 +137,7 @@ public class Layout {
     @SuppressWarnings({&quot;checkstyle:abbreviation&quot;})
     public static Layout fromJSONString(String json) {
         /* Empty Json file creates an null Layout */
-<span class="nc" id="L140">        return requireNonNull(parser.fromJson(json, Layout.class));</span>
+<span class="fc" id="L140">        return requireNonNull(parser.fromJson(json, Layout.class));</span>
     }
 
     /**
@@ -146,17 +146,17 @@ public class Layout {
      * @return a set of segments that contain the endpoint
      */
     public List&lt;LayoutSegment&gt; getSegmentsForEndpoint(@Nonnull String endpoint) {
-<span class="nc" id="L149">        List&lt;LayoutSegment&gt; res = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L149">        List&lt;LayoutSegment&gt; res = new ArrayList&lt;&gt;();</span>
 
-<span class="nc bnc" id="L151" title="All 2 branches missed.">        for (LayoutSegment segment : getSegments()) {</span>
-<span class="nc bnc" id="L152" title="All 2 branches missed.">            for (LayoutStripe stripe : segment.getStripes()) {</span>
-<span class="nc bnc" id="L153" title="All 2 branches missed.">                if (stripe.getLogServers().contains(endpoint)) {</span>
-<span class="nc" id="L154">                    res.add(segment);</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">        for (LayoutSegment segment : getSegments()) {</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">            for (LayoutStripe stripe : segment.getStripes()) {</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">                if (stripe.getLogServers().contains(endpoint)) {</span>
+<span class="fc" id="L154">                    res.add(segment);</span>
                 }
-<span class="nc" id="L156">            }</span>
-<span class="nc" id="L157">        }</span>
+<span class="fc" id="L156">            }</span>
+<span class="fc" id="L157">        }</span>
 
-<span class="nc" id="L159">        return res;</span>
+<span class="fc" id="L159">        return res;</span>
     }
 
     /**
@@ -165,14 +165,14 @@ public class Layout {
      * @return A set containing all servers in the layout.
      */
     public Set&lt;String&gt; getAllActiveServers() {
-<span class="nc" id="L168">        Set&lt;String&gt; activeServers = new HashSet&lt;&gt;();</span>
-<span class="nc" id="L169">        activeServers.addAll(layoutServers);</span>
-<span class="nc" id="L170">        activeServers.addAll(sequencers);</span>
-<span class="nc" id="L171">        segments.forEach(x -&gt;</span>
-<span class="nc" id="L172">                x.getStripes().forEach(y -&gt;</span>
-<span class="nc" id="L173">                        activeServers.addAll(y.getLogServers())));</span>
-<span class="nc" id="L174">        activeServers.removeAll(unresponsiveServers);</span>
-<span class="nc" id="L175">        return activeServers;</span>
+<span class="fc" id="L168">        Set&lt;String&gt; activeServers = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L169">        activeServers.addAll(layoutServers);</span>
+<span class="fc" id="L170">        activeServers.addAll(sequencers);</span>
+<span class="fc" id="L171">        segments.forEach(x -&gt;</span>
+<span class="fc" id="L172">                x.getStripes().forEach(y -&gt;</span>
+<span class="fc" id="L173">                        activeServers.addAll(y.getLogServers())));</span>
+<span class="fc" id="L174">        activeServers.removeAll(unresponsiveServers);</span>
+<span class="fc" id="L175">        return activeServers;</span>
     }
 
     /**
@@ -181,10 +181,10 @@ public class Layout {
      * @return A set of all servers in the layout.
      */
     public Set&lt;String&gt; getAllServers() {
-<span class="nc" id="L184">        Set&lt;String&gt; allServers = new HashSet&lt;&gt;();</span>
-<span class="nc" id="L185">        allServers.addAll(getAllActiveServers());</span>
-<span class="nc" id="L186">        allServers.addAll(unresponsiveServers);</span>
-<span class="nc" id="L187">        return allServers;</span>
+<span class="fc" id="L184">        Set&lt;String&gt; allServers = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L185">        allServers.addAll(getAllActiveServers());</span>
+<span class="fc" id="L186">        allServers.addAll(unresponsiveServers);</span>
+<span class="fc" id="L187">        return allServers;</span>
     }
 
     /**
@@ -193,7 +193,7 @@ public class Layout {
      * @return The primary sequencer.
      */
     public String getPrimarySequencer() {
-<span class="nc" id="L196">        return sequencers.get(0);</span>
+<span class="fc" id="L196">        return sequencers.get(0);</span>
     }
 
     /**
@@ -242,9 +242,9 @@ public class Layout {
      *                      address.
      */
     public @Nonnull List&lt;LayoutSegment&gt; getPrefixSegments(long globalAddress) {
-<span class="nc" id="L245">        return segments.stream()</span>
-<span class="nc bnc" id="L246" title="All 2 branches missed.">                .filter(p -&gt; p.getEnd() &lt;= globalAddress)</span>
-<span class="nc" id="L247">                .collect(Collectors.toList());</span>
+<span class="fc" id="L245">        return segments.stream()</span>
+<span class="pc bpc" id="L246" title="1 of 2 branches missed.">                .filter(p -&gt; p.getEnd() &lt;= globalAddress)</span>
+<span class="fc" id="L247">                .collect(Collectors.toList());</span>
     }
 
     /**
@@ -253,8 +253,8 @@ public class Layout {
      * @param globalAddress The global address.
      */
     public LayoutStripe getStripe(long globalAddress) {
-<span class="nc" id="L256">        LayoutSegment ls = getSegment(globalAddress);</span>
-<span class="nc" id="L257">        return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));</span>
+<span class="fc" id="L256">        LayoutSegment ls = getSegment(globalAddress);</span>
+<span class="fc" id="L257">        return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));</span>
     }
 
     /**
@@ -263,11 +263,11 @@ public class Layout {
      * @param globalAddress The global address.
      */
     public LayoutSegment getSegment(long globalAddress) {
-<span class="nc bnc" id="L266" title="All 2 branches missed.">        for (LayoutSegment ls : segments) {</span>
-<span class="nc bnc" id="L267" title="All 6 branches missed.">            if (ls.start &lt;= globalAddress &amp;&amp; (ls.end &gt; globalAddress || ls.end == -1)) {</span>
-<span class="nc" id="L268">                return ls;</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">        for (LayoutSegment ls : segments) {</span>
+<span class="pc bpc" id="L267" title="1 of 6 branches missed.">            if (ls.start &lt;= globalAddress &amp;&amp; (ls.end &gt; globalAddress || ls.end == -1)) {</span>
+<span class="fc" id="L268">                return ls;</span>
             }
-<span class="nc" id="L270">        }</span>
+<span class="fc" id="L270">        }</span>
 <span class="nc" id="L271">        throw new RuntimeException(&quot;Unmapped address &quot; + Long.toString(globalAddress) + &quot;!&quot;);</span>
     }
 
@@ -276,7 +276,7 @@ public class Layout {
      * @return Returns the segment at index 0.
      */
     public LayoutSegment getFirstSegment() {
-<span class="nc" id="L279">        return this.getSegments().get(0);</span>
+<span class="fc" id="L279">        return this.getSegments().get(0);</span>
     }
 
     /**
@@ -284,7 +284,7 @@ public class Layout {
      * @return the latest segment.
      */
     public LayoutSegment getLatestSegment() {
-<span class="nc" id="L287">        return this.getSegments().get(this.getSegments().size() - 1);</span>
+<span class="fc" id="L287">        return this.getSegments().get(this.getSegments().size() - 1);</span>
     }
 
     /**
@@ -296,8 +296,8 @@ public class Layout {
 
         // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
         // Returning the last node in the first stripe for determinism.
-<span class="nc" id="L299">        List&lt;String&gt; firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();</span>
-<span class="nc" id="L300">        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);</span>
+<span class="fc" id="L299">        List&lt;String&gt; firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();</span>
+<span class="fc" id="L300">        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);</span>
     }
 
     /**
@@ -307,7 +307,7 @@ public class Layout {
      * @return The length (number of servers) of that segment, or 0 if empty.
      */
     public int getSegmentLength(long address) {
-<span class="nc" id="L310">        return getStripe(address).getLogServers().size();</span>
+<span class="fc" id="L310">        return getStripe(address).getLogServers().size();</span>
     }
 
     /**
@@ -317,11 +317,11 @@ public class Layout {
      * @return The replication mode of the segment, or null if empty.
      */
     public ReplicationMode getReplicationMode(long address) {
-<span class="nc bnc" id="L320" title="All 2 branches missed.">        for (LayoutSegment ls : segments) {</span>
-<span class="nc bnc" id="L321" title="All 6 branches missed.">            if (ls.start &lt;= address &amp;&amp; (ls.end &gt; address || ls.end == -1)) {</span>
-<span class="nc" id="L322">                return ls.getReplicationMode();</span>
+<span class="pc bpc" id="L320" title="1 of 2 branches missed.">        for (LayoutSegment ls : segments) {</span>
+<span class="pc bpc" id="L321" title="1 of 6 branches missed.">            if (ls.start &lt;= address &amp;&amp; (ls.end &gt; address || ls.end == -1)) {</span>
+<span class="fc" id="L322">                return ls.getReplicationMode();</span>
             }
-<span class="nc" id="L324">        }</span>
+<span class="fc" id="L324">        }</span>
 <span class="nc" id="L325">        return null;</span>
     }
 
@@ -330,7 +330,7 @@ public class Layout {
      */
     @SuppressWarnings({&quot;checkstyle:abbreviation&quot;})
     public String asJSONString() {
-<span class="nc" id="L333">        return parser.toJson(this);</span>
+<span class="fc" id="L333">        return parser.toJson(this);</span>
     }
 
     /**
@@ -339,111 +339,111 @@ public class Layout {
      *
      * @param layout layout to copy
      */
-<span class="nc" id="L342">    public Layout(@Nonnull Layout layout) {</span>
-<span class="nc" id="L343">        Layout layoutCopy = parser.fromJson(layout.asJSONString(), Layout.class);</span>
-<span class="nc" id="L344">        this.layoutServers = layoutCopy.getLayoutServers();</span>
-<span class="nc" id="L345">        this.sequencers = layoutCopy.getSequencers();</span>
-<span class="nc" id="L346">        this.segments = layoutCopy.getSegments();</span>
-<span class="nc" id="L347">        this.unresponsiveServers = layoutCopy.getUnresponsiveServers();</span>
-<span class="nc" id="L348">        this.epoch = layoutCopy.getEpoch();</span>
-<span class="nc" id="L349">        this.clusterId = layoutCopy.clusterId;</span>
-<span class="nc" id="L350">    }</span>
+<span class="fc" id="L342">    public Layout(@Nonnull Layout layout) {</span>
+<span class="fc" id="L343">        Layout layoutCopy = parser.fromJson(layout.asJSONString(), Layout.class);</span>
+<span class="fc" id="L344">        this.layoutServers = layoutCopy.getLayoutServers();</span>
+<span class="fc" id="L345">        this.sequencers = layoutCopy.getSequencers();</span>
+<span class="fc" id="L346">        this.segments = layoutCopy.getSegments();</span>
+<span class="fc" id="L347">        this.unresponsiveServers = layoutCopy.getUnresponsiveServers();</span>
+<span class="fc" id="L348">        this.epoch = layoutCopy.getEpoch();</span>
+<span class="fc" id="L349">        this.clusterId = layoutCopy.clusterId;</span>
+<span class="fc" id="L350">    }</span>
 
     public void nextEpoch() {
-<span class="nc" id="L353">        epoch += 1;</span>
-<span class="nc" id="L354">    }</span>
+<span class="fc" id="L353">        epoch += 1;</span>
+<span class="fc" id="L354">    }</span>
 
     public ImmutableList&lt;String&gt; getActiveLayoutServers() {
-<span class="nc" id="L357">        return layoutServers.stream()</span>
+<span class="fc" id="L357">        return layoutServers.stream()</span>
                 // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
-<span class="nc bnc" id="L359" title="All 2 branches missed.">                .filter(s -&gt; !unresponsiveServers.contains(s))</span>
-<span class="nc" id="L360">                .collect(ImmutableList.toImmutableList());</span>
+<span class="fc bfc" id="L359" title="All 2 branches covered.">                .filter(s -&gt; !unresponsiveServers.contains(s))</span>
+<span class="fc" id="L360">                .collect(ImmutableList.toImmutableList());</span>
     }
 
-<span class="nc" id="L363">    public enum ReplicationMode {</span>
-<span class="nc" id="L364">        CHAIN_REPLICATION {</span>
+<span class="pc" id="L363">    public enum ReplicationMode {</span>
+<span class="fc" id="L364">        CHAIN_REPLICATION {</span>
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt;
                                                     completableFutureMap)
                     throws QuorumUnreachableException {
-<span class="nc" id="L370">                SealServersHelper.waitForChainSegmentSeal(layoutSegment, completableFutureMap);</span>
-<span class="nc" id="L371">            }</span>
+<span class="fc" id="L370">                SealServersHelper.waitForChainSegmentSeal(layoutSegment, completableFutureMap);</span>
+<span class="fc" id="L371">            }</span>
 
             @Override
             public int getMinReplicationFactor(Layout layout, LayoutStripe stripe) {
-<span class="nc" id="L375">                return 1;</span>
+<span class="fc" id="L375">                return 1;</span>
             }
 
             @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-<span class="nc" id="L380">                return new ThreadSafeStreamView(r, streamId, options);</span>
+<span class="fc" id="L380">                return new ThreadSafeStreamView(r, streamId, options);</span>
             }
 
             @Override
             public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-<span class="nc bnc" id="L385" title="All 2 branches missed.">                if (r.getParameters().isFollowBackpointersEnabled()) {</span>
+<span class="pc bpc" id="L385" title="1 of 2 branches missed.">                if (r.getParameters().isFollowBackpointersEnabled()) {</span>
 <span class="nc" id="L386">                    return new BackpointerStreamView(r, streamId, options);</span>
                 } else {
-<span class="nc" id="L388">                    return new AddressMapStreamView(r, streamId, options);</span>
+<span class="fc" id="L388">                    return new AddressMapStreamView(r, streamId, options);</span>
                 }
             }
 
             @Override
             public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
-<span class="nc bnc" id="L394" title="All 2 branches missed.">                if (r.getParameters().isHoleFillingDisabled()) {</span>
+<span class="pc bpc" id="L394" title="1 of 2 branches missed.">                if (r.getParameters().isHoleFillingDisabled()) {</span>
 <span class="nc" id="L395">                    return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));</span>
                 } else {
-<span class="nc" id="L397">                    return new ChainReplicationProtocol(</span>
-<span class="nc" id="L398">                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),</span>
-<span class="nc" id="L399">                                    r.getParameters().getHoleFillRetryThreshold()));</span>
+<span class="fc" id="L397">                    return new ChainReplicationProtocol(</span>
+<span class="fc" id="L398">                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),</span>
+<span class="fc" id="L399">                                    r.getParameters().getHoleFillRetryThreshold()));</span>
                 }
             }
 
             @Override
             public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
                                                             Set&lt;String&gt; responsiveNodes) {
-<span class="nc bnc" id="L406" title="All 2 branches missed.">                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())</span>
+<span class="pc bpc" id="L406" title="1 of 2 branches missed.">                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())</span>
                         ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
             }
         },
-<span class="nc" id="L410">        QUORUM_REPLICATION {</span>
+<span class="fc" id="L410">        QUORUM_REPLICATION {</span>
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt;
                                                     completableFutureMap)
                     throws QuorumUnreachableException {
                 //TODO: Take care of log unit servers which were not sealed.
-<span class="nc" id="L417">                SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);</span>
-<span class="nc" id="L418">            }</span>
+<span class="fc" id="L417">                SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);</span>
+<span class="fc" id="L418">            }</span>
 
             @Override
             public int getMinReplicationFactor(Layout layout, LayoutStripe stripe) {
-<span class="nc" id="L422">                return (stripe.getLogServers().size() / 2) + 1;</span>
+<span class="fc" id="L422">                return (stripe.getLogServers().size() / 2) + 1;</span>
             }
 
             @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-<span class="nc" id="L427">                return new ThreadSafeStreamView(r, streamId, options);</span>
+<span class="fc" id="L427">                return new ThreadSafeStreamView(r, streamId, options);</span>
             }
 
             @Override
             public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-<span class="nc bnc" id="L432" title="All 2 branches missed.">                if (r.getParameters().isFollowBackpointersEnabled()) {</span>
+<span class="pc bpc" id="L432" title="1 of 2 branches missed.">                if (r.getParameters().isFollowBackpointersEnabled()) {</span>
 <span class="nc" id="L433">                    return new BackpointerStreamView(r, streamId, options);</span>
                 } else {
-<span class="nc" id="L435">                    return new AddressMapStreamView(r, streamId, options);</span>
+<span class="fc" id="L435">                    return new AddressMapStreamView(r, streamId, options);</span>
                 }
             }
 
             @Override
             public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
-<span class="nc bnc" id="L441" title="All 2 branches missed.">                if (r.getParameters().isHoleFillingDisabled()) {</span>
+<span class="pc bpc" id="L441" title="1 of 2 branches missed.">                if (r.getParameters().isHoleFillingDisabled()) {</span>
 <span class="nc" id="L442">                    return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));</span>
                 } else {
-<span class="nc" id="L444">                    return new QuorumReplicationProtocol(</span>
-<span class="nc" id="L445">                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),</span>
-<span class="nc" id="L446">                                    r.getParameters().getHoleFillRetryThreshold()));</span>
+<span class="fc" id="L444">                    return new QuorumReplicationProtocol(</span>
+<span class="fc" id="L445">                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),</span>
+<span class="fc" id="L446">                                    r.getParameters().getHoleFillRetryThreshold()));</span>
                 }
             }
 
@@ -473,7 +473,7 @@ public class Layout {
 <span class="nc" id="L473">                return clusterStatus;</span>
             }
 
-<span class="nc" id="L476">        }, NO_REPLICATION {</span>
+<span class="fc" id="L476">        }, NO_REPLICATION {</span>
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt;
@@ -543,29 +543,29 @@ public class Layout {
     }
 
 
-<span class="nc bnc" id="L546" title="All 26 branches missed.">    @Data</span>
+<span class="pc bpc" id="L546" title="15 of 26 branches missed.">    @Data</span>
     @Getter
-<span class="nc" id="L548">    @Setter</span>
+<span class="pc" id="L548">    @Setter</span>
     public static class LayoutSegment {
         /**
          * The replication mode of the segment.
          */
-<span class="nc" id="L553">        ReplicationMode replicationMode;</span>
+<span class="fc" id="L553">        ReplicationMode replicationMode;</span>
 
         /**
          * The address the layout segment starts at. (included in the segment)
          */
-<span class="nc" id="L558">        long start;</span>
+<span class="fc" id="L558">        long start;</span>
 
         /**
          * The address the layout segment ends at. (excluded from the segment)
          */
-<span class="nc" id="L563">        long end;</span>
+<span class="fc" id="L563">        long end;</span>
 
         /**
          * A list of log servers for this segment.
          */
-<span class="nc" id="L568">        List&lt;LayoutStripe&gt; stripes;</span>
+<span class="fc" id="L568">        List&lt;LayoutStripe&gt; stripes;</span>
 
         /**
          * Constructor Layout Segment, contiguous partition in a Corfu Log.
@@ -578,17 +578,17 @@ public class Layout {
          * @param end  The end address for layout segment. (e.g., 100)
          * @param stripes List of stripes for layout segment.
          */
-<span class="nc bnc" id="L581" title="All 2 branches missed.">        public LayoutSegment(@NonNull ReplicationMode replicationMode, long start, long end,</span>
-<span class="nc bnc" id="L582" title="All 2 branches missed.">                             @NonNull List&lt;LayoutStripe&gt; stripes) {</span>
-<span class="nc" id="L583">            this.replicationMode = replicationMode;</span>
-<span class="nc" id="L584">            this.start = start;</span>
-<span class="nc" id="L585">            this.end = end;</span>
-<span class="nc" id="L586">            this.stripes = stripes;</span>
+<span class="pc bpc" id="L581" title="1 of 2 branches missed.">        public LayoutSegment(@NonNull ReplicationMode replicationMode, long start, long end,</span>
+<span class="pc bpc" id="L582" title="1 of 2 branches missed.">                             @NonNull List&lt;LayoutStripe&gt; stripes) {</span>
+<span class="fc" id="L583">            this.replicationMode = replicationMode;</span>
+<span class="fc" id="L584">            this.start = start;</span>
+<span class="fc" id="L585">            this.end = end;</span>
+<span class="fc" id="L586">            this.stripes = stripes;</span>
 
-<span class="nc" id="L588">        }</span>
+<span class="fc" id="L588">        }</span>
 
         public int getNumberOfStripes() {
-<span class="nc" id="L591">            return stripes.size();</span>
+<span class="fc" id="L591">            return stripes.size();</span>
         }
 
         /**
@@ -597,7 +597,7 @@ public class Layout {
          * @return Returns the stripe at index 0.
          */
         public LayoutStripe getFirstStripe() {
-<span class="nc" id="L600">            return stripes.get(0);</span>
+<span class="fc" id="L600">            return stripes.get(0);</span>
         }
 
         /**
@@ -606,20 +606,20 @@ public class Layout {
          * @return Set of log unit servers.
          */
         public Set&lt;String&gt; getAllLogServers() {
-<span class="nc" id="L609">            return this.getStripes().stream()</span>
-<span class="nc" id="L610">                    .flatMap(layoutStripe -&gt; layoutStripe.getLogServers().stream())</span>
-<span class="nc" id="L611">                    .collect(Collectors.toSet());</span>
+<span class="fc" id="L609">            return this.getStripes().stream()</span>
+<span class="fc" id="L610">                    .flatMap(layoutStripe -&gt; layoutStripe.getLogServers().stream())</span>
+<span class="fc" id="L611">                    .collect(Collectors.toSet());</span>
         }
     }
 
-<span class="nc bnc" id="L615" title="All 14 branches missed.">    @Data</span>
+<span class="pc bpc" id="L615" title="8 of 14 branches missed.">    @Data</span>
     @Getter
     public static class LayoutStripe {
-<span class="nc" id="L618">        final List&lt;String&gt; logServers;</span>
+<span class="fc" id="L618">        final List&lt;String&gt; logServers;</span>
 
-<span class="nc bnc" id="L620" title="All 2 branches missed.">        public LayoutStripe(@NonNull List&lt;String&gt; logServers) {</span>
-<span class="nc" id="L621">            this.logServers = logServers;</span>
-<span class="nc" id="L622">        }</span>
+<span class="pc bpc" id="L620" title="1 of 2 branches missed.">        public LayoutStripe(@NonNull List&lt;String&gt; logServers) {</span>
+<span class="fc" id="L621">            this.logServers = logServers;</span>
+<span class="fc" id="L622">        }</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

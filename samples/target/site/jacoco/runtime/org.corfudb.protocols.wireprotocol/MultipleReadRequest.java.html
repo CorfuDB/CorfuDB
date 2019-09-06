@@ -13,29 +13,29 @@ import java.util.List;
  * Created by maithem on 7/28/17.
  */
 @Getter
-<span class="nc" id="L16">@AllArgsConstructor</span>
+<span class="fc" id="L16">@AllArgsConstructor</span>
 public class MultipleReadRequest implements ICorfuPayload&lt;MultipleReadRequest&gt; {
 
     // List of requested addresses to read.
-<span class="nc" id="L20">    private final List&lt;Long&gt; addresses;</span>
+<span class="fc" id="L20">    private final List&lt;Long&gt; addresses;</span>
 
     // Whether the read results should be cached on server.
-<span class="nc" id="L23">    private final boolean cacheReadResult;</span>
+<span class="fc" id="L23">    private final boolean cacheReadResult;</span>
 
     /**
      * Deserialization Constructor from ByteBuf to ReadRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L30">    public MultipleReadRequest(ByteBuf buf) {</span>
-<span class="nc" id="L31">        addresses = ICorfuPayload.listFromBuffer(buf, Long.class);</span>
-<span class="nc" id="L32">        cacheReadResult = buf.readBoolean();</span>
-<span class="nc" id="L33">    }</span>
+<span class="fc" id="L30">    public MultipleReadRequest(ByteBuf buf) {</span>
+<span class="fc" id="L31">        addresses = ICorfuPayload.listFromBuffer(buf, Long.class);</span>
+<span class="fc" id="L32">        cacheReadResult = buf.readBoolean();</span>
+<span class="fc" id="L33">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L37">        ICorfuPayload.serialize(buf, addresses);</span>
-<span class="nc" id="L38">        buf.writeBoolean(cacheReadResult);</span>
-<span class="nc" id="L39">    }</span>
+<span class="fc" id="L37">        ICorfuPayload.serialize(buf, addresses);</span>
+<span class="fc" id="L38">        buf.writeBoolean(cacheReadResult);</span>
+<span class="fc" id="L39">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

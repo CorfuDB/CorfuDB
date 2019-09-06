@@ -21,22 +21,22 @@ import java.util.UUID;
 /**
  * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
  */
-<span class="nc" id="L24">@Slf4j</span>
-<span class="nc" id="L25">public class MultiCheckpointWriter&lt;T extends Map&gt; {</span>
-<span class="nc" id="L26">    @Getter</span>
+<span class="fc" id="L24">@Slf4j</span>
+<span class="fc" id="L25">public class MultiCheckpointWriter&lt;T extends Map&gt; {</span>
+<span class="pc" id="L26">    @Getter</span>
     private List&lt;ICorfuSMR&lt;T&gt;&gt; maps = new ArrayList&lt;&gt;();
 
     // Registry and Timer used for measuring append checkpoints
-<span class="nc" id="L30">    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
-<span class="nc" id="L31">    private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +</span>
+<span class="fc" id="L30">    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();</span>
+<span class="fc" id="L31">    private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +</span>
             &quot;append-several-checkpoints&quot;;
-<span class="nc" id="L33">    private final Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);</span>
+<span class="fc" id="L33">    private final Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);</span>
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings(&quot;unchecked&quot;)
     public void addMap(T map) {
-<span class="nc" id="L38">        maps.add((ICorfuSMR&lt;T&gt;) map);</span>
-<span class="nc" id="L39">    }</span>
+<span class="fc" id="L38">        maps.add((ICorfuSMR&lt;T&gt;) map);</span>
+<span class="fc" id="L39">    }</span>
 
     /** Add map(s) to the list of maps to be checkpointed by this class. */
 
@@ -54,28 +54,28 @@ import java.util.UUID;
      * @return Global log address of the first record of
      */
     public Token appendCheckpoints(CorfuRuntime rt, String author) {
-<span class="nc" id="L57">        int numRetries = rt.getParameters().getCheckpointRetries();</span>
-<span class="nc" id="L58">        int retry = 0;</span>
-<span class="nc" id="L59">        log.info(&quot;appendCheckpoints: appending checkpoints for {} maps&quot;, maps.size());</span>
+<span class="fc" id="L57">        int numRetries = rt.getParameters().getCheckpointRetries();</span>
+<span class="fc" id="L58">        int retry = 0;</span>
+<span class="fc" id="L59">        log.info(&quot;appendCheckpoints: appending checkpoints for {} maps&quot;, maps.size());</span>
 
-<span class="nc" id="L61">        Token minSnapshot = Token.UNINITIALIZED;</span>
+<span class="fc" id="L61">        Token minSnapshot = Token.UNINITIALIZED;</span>
 
-<span class="nc" id="L63">        final long cpStart = System.currentTimeMillis();</span>
-<span class="nc" id="L64">        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointsTimer)) {</span>
-<span class="nc bnc" id="L65" title="All 2 branches missed.">            for (ICorfuSMR&lt;T&gt; map : maps) {</span>
-<span class="nc" id="L66">                UUID streamId = map.getCorfuStreamID();</span>
+<span class="fc" id="L63">        final long cpStart = System.currentTimeMillis();</span>
+<span class="pc" id="L64">        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointsTimer)) {</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">            for (ICorfuSMR&lt;T&gt; map : maps) {</span>
+<span class="fc" id="L66">                UUID streamId = map.getCorfuStreamID();</span>
 
-<span class="nc" id="L68">                CheckpointWriter&lt;T&gt; cpw = new CheckpointWriter(rt, streamId, author, (T) map);</span>
-<span class="nc" id="L69">                ISerializer serializer =</span>
-<span class="nc" id="L70">                        ((CorfuCompileProxy&lt;Map&gt;) map.getCorfuSMRProxy())</span>
-<span class="nc" id="L71">                                .getSerializer();</span>
-<span class="nc" id="L72">                cpw.setSerializer(serializer);</span>
+<span class="fc" id="L68">                CheckpointWriter&lt;T&gt; cpw = new CheckpointWriter(rt, streamId, author, (T) map);</span>
+<span class="fc" id="L69">                ISerializer serializer =</span>
+<span class="fc" id="L70">                        ((CorfuCompileProxy&lt;Map&gt;) map.getCorfuSMRProxy())</span>
+<span class="fc" id="L71">                                .getSerializer();</span>
+<span class="fc" id="L72">                cpw.setSerializer(serializer);</span>
 
-<span class="nc" id="L74">                Token minCPSnapshot = Token.UNINITIALIZED;</span>
-<span class="nc bnc" id="L75" title="All 2 branches missed.">                while (retry &lt; numRetries) {</span>
+<span class="fc" id="L74">                Token minCPSnapshot = Token.UNINITIALIZED;</span>
+<span class="pc bpc" id="L75" title="1 of 2 branches missed.">                while (retry &lt; numRetries) {</span>
                     try {
-<span class="nc" id="L77">                        minCPSnapshot = cpw.appendCheckpoint();</span>
-<span class="nc" id="L78">                        break;</span>
+<span class="fc" id="L77">                        minCPSnapshot = cpw.appendCheckpoint();</span>
+<span class="fc" id="L78">                        break;</span>
 <span class="nc" id="L79">                    } catch (WrongEpochException wee) {</span>
 <span class="nc" id="L80">                        log.info(&quot;Epoch changed to {} during append checkpoint snapshot resolution. Sequencer&quot; +</span>
 <span class="nc" id="L81">                                &quot; failover can lead to potential epoch regression, retry {}/{}&quot;, wee.getCorrectEpoch(),</span>
@@ -90,26 +90,26 @@ import java.util.UUID;
 <span class="nc" id="L90">                    }</span>
                 }
 
-<span class="nc bnc" id="L93" title="All 2 branches missed.">                if (minSnapshot == Token.UNINITIALIZED) {</span>
-<span class="nc" id="L94">                    minSnapshot = minCPSnapshot;</span>
-<span class="nc bnc" id="L95" title="All 2 branches missed.">                } else if (minCPSnapshot.compareTo(minSnapshot) &lt; 0) {</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">                if (minSnapshot == Token.UNINITIALIZED) {</span>
+<span class="fc" id="L94">                    minSnapshot = minCPSnapshot;</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">                } else if (minCPSnapshot.compareTo(minSnapshot) &lt; 0) {</span>
                     // Given that the snapshot returned by appendCheckpoint is a global snapshot that shouldn't regress.
 <span class="nc" id="L97">                    String msg = String.format(&quot;Potential epoch regression. Subsequent checkpoint returned a greater&quot; +</span>
                             &quot;snapshot {} than previous {}.&quot;, minCPSnapshot, minSnapshot);
 <span class="nc" id="L99">                    throw new IllegalStateException(msg);</span>
                 }
-<span class="nc" id="L101">            }</span>
-<span class="nc bnc" id="L102" title="All 8 branches missed.">        } finally {</span>
+<span class="fc" id="L101">            }</span>
+<span class="pc bpc" id="L102" title="7 of 8 branches missed.">        } finally {</span>
             // TODO(Maithem): print cp id?
-<span class="nc" id="L104">            log.trace(&quot;appendCheckpoints: finished, author '{}' at min globalAddress {}&quot;,</span>
+<span class="pc" id="L104">            log.trace(&quot;appendCheckpoints: finished, author '{}' at min globalAddress {}&quot;,</span>
                     author, minSnapshot);
-<span class="nc" id="L106">            rt.getObjectsView().TXEnd();</span>
-<span class="nc" id="L107">        }</span>
-<span class="nc" id="L108">        final long cpStop = System.currentTimeMillis();</span>
+<span class="pc" id="L106">            rt.getObjectsView().TXEnd();</span>
+<span class="pc" id="L107">        }</span>
+<span class="fc" id="L108">        final long cpStop = System.currentTimeMillis();</span>
 
-<span class="nc" id="L110">        log.info(&quot;appendCheckpoints: took {} ms to append {} checkpoints&quot;, cpStop - cpStart,</span>
-<span class="nc" id="L111">                maps.size());</span>
-<span class="nc" id="L112">        return minSnapshot;</span>
+<span class="fc" id="L110">        log.info(&quot;appendCheckpoints: took {} ms to append {} checkpoints&quot;, cpStop - cpStart,</span>
+<span class="fc" id="L111">                maps.size());</span>
+<span class="fc" id="L112">        return minSnapshot;</span>
     }
 
 }

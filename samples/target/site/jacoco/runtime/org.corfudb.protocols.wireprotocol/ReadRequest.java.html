@@ -9,30 +9,30 @@ import lombok.Getter;
  * Created by mwei on 8/11/16.
  */
 @Getter
-<span class="nc" id="L12">@AllArgsConstructor</span>
+<span class="fc" id="L12">@AllArgsConstructor</span>
 public class ReadRequest implements ICorfuPayload&lt;ReadRequest&gt; {
 
     // Requested address to read.
-<span class="nc" id="L16">    private final long address;</span>
+<span class="fc" id="L16">    private final long address;</span>
 
     // Whether the read result should be cached on server.
-<span class="nc" id="L19">    private final boolean cacheReadResult;</span>
+<span class="fc" id="L19">    private final boolean cacheReadResult;</span>
 
     /**
      * Deserialization Constructor from ByteBuf to ReadRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L26">    public ReadRequest(ByteBuf buf) {</span>
-<span class="nc" id="L27">        address = buf.readLong();</span>
-<span class="nc" id="L28">        cacheReadResult = buf.readBoolean();</span>
-<span class="nc" id="L29">    }</span>
+<span class="fc" id="L26">    public ReadRequest(ByteBuf buf) {</span>
+<span class="fc" id="L27">        address = buf.readLong();</span>
+<span class="fc" id="L28">        cacheReadResult = buf.readBoolean();</span>
+<span class="fc" id="L29">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L33">        buf.writeLong(address);</span>
-<span class="nc" id="L34">        buf.writeBoolean(cacheReadResult);</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L33">        buf.writeLong(address);</span>
+<span class="fc" id="L34">        buf.writeBoolean(cacheReadResult);</span>
+<span class="fc" id="L35">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

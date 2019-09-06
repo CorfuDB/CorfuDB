@@ -29,26 +29,26 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
 <span class="nc" id="L29">    @Getter</span>
     public final int numBuckets;
 
-<span class="nc" id="L32">    public FGMap(int numBuckets) {</span>
-<span class="nc" id="L33">        this.numBuckets = numBuckets;</span>
-<span class="nc" id="L34">    }</span>
+<span class="fc" id="L32">    public FGMap(int numBuckets) {</span>
+<span class="fc" id="L33">        this.numBuckets = numBuckets;</span>
+<span class="fc" id="L34">    }</span>
 
-<span class="nc" id="L36">    public FGMap() {</span>
-<span class="nc" id="L37">        this.numBuckets = 10;</span>
-<span class="nc" id="L38">    }</span>
+<span class="fc" id="L36">    public FGMap() {</span>
+<span class="fc" id="L37">        this.numBuckets = 10;</span>
+<span class="fc" id="L38">    }</span>
 
     @PassThrough
     UUID getStreamID(int partition) {
-<span class="nc" id="L42">        return new UUID(getStreamID().getMostSignificantBits(),</span>
-<span class="nc" id="L43">                getStreamID().getLeastSignificantBits() + (partition + 1));</span>
+<span class="fc" id="L42">        return new UUID(getStreamID().getMostSignificantBits(),</span>
+<span class="fc" id="L43">                getStreamID().getLeastSignificantBits() + (partition + 1));</span>
     }
 
     @PassThrough
     Map&lt;K, V&gt; getPartitionMap(int partition) {
-<span class="nc" id="L48">        return getBuilder()</span>
-<span class="nc" id="L49">                .setTypeToken(new TypeToken&lt;SMRMap&lt;K,V&gt;&gt;() {})</span>
-<span class="nc" id="L50">                .setStreamID(getStreamID(partition))</span>
-<span class="nc" id="L51">                .open();</span>
+<span class="fc" id="L48">        return getBuilder()</span>
+<span class="fc" id="L49">                .setTypeToken(new TypeToken&lt;SMRMap&lt;K,V&gt;&gt;() {})</span>
+<span class="fc" id="L50">                .setStreamID(getStreamID(partition))</span>
+<span class="fc" id="L51">                .open();</span>
     }
 
     /**
@@ -63,31 +63,31 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
      */
     @PassThrough
     int getPartitionNumber(Object key) {
-<span class="nc" id="L66">        int baseMsb = key.hashCode() &gt;&gt; 16;</span>
-<span class="nc" id="L67">        int baseLsb = key.hashCode() &amp; 0xFFFF;</span>
+<span class="fc" id="L66">        int baseMsb = key.hashCode() &gt;&gt; 16;</span>
+<span class="fc" id="L67">        int baseLsb = key.hashCode() &amp; 0xFFFF;</span>
 
-<span class="nc" id="L69">        CRC16 crc16 = new CRC16();</span>
-<span class="nc" id="L70">        crc16.update((byte) (baseMsb &amp; 0xFF));</span>
-<span class="nc" id="L71">        crc16.update((byte) (baseMsb &gt;&gt; 8));</span>
-<span class="nc" id="L72">        int hashCode1 = crc16.value &amp; 0xFFFF;</span>
+<span class="fc" id="L69">        CRC16 crc16 = new CRC16();</span>
+<span class="fc" id="L70">        crc16.update((byte) (baseMsb &amp; 0xFF));</span>
+<span class="fc" id="L71">        crc16.update((byte) (baseMsb &gt;&gt; 8));</span>
+<span class="fc" id="L72">        int hashCode1 = crc16.value &amp; 0xFFFF;</span>
 
-<span class="nc" id="L74">        CRC32 crc32 = new CRC32();</span>
-<span class="nc" id="L75">        crc32.update(hashCode1 ^ baseLsb);</span>
-<span class="nc" id="L76">        int hashCode2 = (int) crc32.getValue();</span>
-<span class="nc" id="L77">        int hashCode = ((hashCode2 ^ baseMsb) &lt;&lt; 16) | (hashCode1 ^ baseLsb);</span>
-<span class="nc" id="L78">        return Math.abs(hashCode % numBuckets);</span>
+<span class="fc" id="L74">        CRC32 crc32 = new CRC32();</span>
+<span class="fc" id="L75">        crc32.update(hashCode1 ^ baseLsb);</span>
+<span class="fc" id="L76">        int hashCode2 = (int) crc32.getValue();</span>
+<span class="fc" id="L77">        int hashCode = ((hashCode2 ^ baseMsb) &lt;&lt; 16) | (hashCode1 ^ baseLsb);</span>
+<span class="fc" id="L78">        return Math.abs(hashCode % numBuckets);</span>
     }
 
     @PassThrough
     Map&lt;K, V&gt; getPartition(Object key) {
-<span class="nc" id="L83">        return getPartitionMap(getPartitionNumber(key));</span>
+<span class="fc" id="L83">        return getPartitionMap(getPartitionNumber(key));</span>
     }
 
     @PassThrough
     List&lt;Map&lt;K, V&gt;&gt; getAllPartitionMaps() {
-<span class="nc" id="L88">        return IntStream.range(0, numBuckets)</span>
-<span class="nc" id="L89">                .mapToObj(this::getPartitionMap)</span>
-<span class="nc" id="L90">                .collect(Collectors.toList());</span>
+<span class="fc" id="L88">        return IntStream.range(0, numBuckets)</span>
+<span class="fc" id="L89">                .mapToObj(this::getPartitionMap)</span>
+<span class="fc" id="L90">                .collect(Collectors.toList());</span>
     }
 
     @PassThrough
@@ -107,9 +107,9 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
     @Override
     @TransactionalMethod(readOnly = true)
     public int size() {
-<span class="nc" id="L110">        return getAllPartitionMaps().stream()</span>
-<span class="nc" id="L111">                .mapToInt(Map::size)</span>
-<span class="nc" id="L112">                .sum();</span>
+<span class="fc" id="L110">        return getAllPartitionMaps().stream()</span>
+<span class="fc" id="L111">                .mapToInt(Map::size)</span>
+<span class="fc" id="L112">                .sum();</span>
     }
 
     /**
@@ -120,8 +120,8 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
     @Override
     @TransactionalMethod(readOnly = true)
     public boolean isEmpty() {
-<span class="nc" id="L123">        return getAllPartitionMaps().stream()</span>
-<span class="nc" id="L124">                .allMatch(Map::isEmpty);</span>
+<span class="fc" id="L123">        return getAllPartitionMaps().stream()</span>
+<span class="fc" id="L124">                .allMatch(Map::isEmpty);</span>
     }
 
     /**
@@ -199,7 +199,7 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
     @Override
     @PassThrough
     public V get(Object key) {
-<span class="nc" id="L202">        return getPartition(key).get(key);</span>
+<span class="fc" id="L202">        return getPartition(key).get(key);</span>
     }
 
     /**
@@ -228,7 +228,7 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
     @Override
     @PassThrough
     public V put(K key, V value) {
-<span class="nc" id="L231">        return getPartition(key).put(key, value);</span>
+<span class="fc" id="L231">        return getPartition(key).put(key, value);</span>
     }
 
     /**
@@ -317,9 +317,9 @@ public class FGMap&lt;K, V&gt; extends AbstractCorfuWrapper&lt;FGMap&lt;K,V&gt;&
     @Override
     @TransactionalMethod(modifiedStreamsFunction = &quot;getAllStreamIDs&quot;)
     public void clear() {
-<span class="nc" id="L320">        getAllPartitionMaps()</span>
-<span class="nc" id="L321">                .forEach(Map::clear);</span>
-<span class="nc" id="L322">    }</span>
+<span class="fc" id="L320">        getAllPartitionMaps()</span>
+<span class="fc" id="L321">                .forEach(Map::clear);</span>
+<span class="fc" id="L322">    }</span>
 
     /**
      * Returns a {@link Set} view of the keys contained in this map.

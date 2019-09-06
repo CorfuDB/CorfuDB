@@ -14,16 +14,16 @@ public class VersionInfo {
 <span class="nc" id="L14">    @Getter</span>
     Map&lt;String, Object&gt; optionsMap;
 
-<span class="nc" id="L17">    @Getter</span>
-<span class="nc" id="L18">    long upTime = ManagementFactory.getRuntimeMXBean().getUptime();</span>
+<span class="pc" id="L17">    @Getter</span>
+<span class="fc" id="L18">    long upTime = ManagementFactory.getRuntimeMXBean().getUptime();</span>
 
-<span class="nc" id="L20">    @Getter</span>
-<span class="nc" id="L21">    String startupArgs = System.getProperty(&quot;sun.java.command&quot;);</span>
+<span class="pc" id="L20">    @Getter</span>
+<span class="fc" id="L21">    String startupArgs = System.getProperty(&quot;sun.java.command&quot;);</span>
 
-<span class="nc" id="L23">    @Getter</span>
-<span class="nc" id="L24">    String jvmUsed = System.getProperty(&quot;java.home&quot;) + &quot;/bin/java&quot;;</span>
+<span class="pc" id="L23">    @Getter</span>
+<span class="fc" id="L24">    String jvmUsed = System.getProperty(&quot;java.home&quot;) + &quot;/bin/java&quot;;</span>
 
-<span class="nc" id="L26">    @Getter</span>
+<span class="fc" id="L26">    @Getter</span>
     String version;
 
 <span class="nc" id="L29">    @Getter</span>
@@ -34,16 +34,16 @@ public class VersionInfo {
      * @param optionsMap    The options map used to start the server.
      * @param nodeId        The current node id.
      */
-<span class="nc" id="L37">    public VersionInfo(Map&lt;String,Object&gt; optionsMap, @Nonnull String nodeId) {</span>
-<span class="nc" id="L38">        this.optionsMap = new HashMap&lt;&gt;(optionsMap);</span>
+<span class="fc" id="L37">    public VersionInfo(Map&lt;String,Object&gt; optionsMap, @Nonnull String nodeId) {</span>
+<span class="fc" id="L38">        this.optionsMap = new HashMap&lt;&gt;(optionsMap);</span>
         // Remove any non-serializable objects
-<span class="nc" id="L40">        this.optionsMap.entrySet()</span>
-<span class="nc" id="L41">                .removeIf(e -&gt; {</span>
-<span class="nc" id="L42">                    Object v = e.getValue();</span>
-<span class="nc bnc" id="L43" title="All 6 branches missed.">                    return !(v instanceof Integer || v instanceof Long || v instanceof String);</span>
+<span class="fc" id="L40">        this.optionsMap.entrySet()</span>
+<span class="fc" id="L41">                .removeIf(e -&gt; {</span>
+<span class="fc" id="L42">                    Object v = e.getValue();</span>
+<span class="fc bfc" id="L43" title="All 6 branches covered.">                    return !(v instanceof Integer || v instanceof Long || v instanceof String);</span>
                 });
-<span class="nc" id="L45">        this.nodeId = nodeId;</span>
-<span class="nc" id="L46">        this.version = CorfuRuntime.getVersionString();</span>
-<span class="nc" id="L47">    }</span>
+<span class="fc" id="L45">        this.nodeId = nodeId;</span>
+<span class="fc" id="L46">        this.version = CorfuRuntime.getVersionString();</span>
+<span class="fc" id="L47">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

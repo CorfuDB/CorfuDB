@@ -42,8 +42,22 @@ public class CorfuCompoundObject$CORFUSMR extends CorfuCompoundObject implements
   }
 
   @Override
-  public int hashCode() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
+  @Mutator(
+      name = "set"
+  )
+  public void set(CorfuCompoundObject.Inner in, int id) {
+    proxy_CORFUSMR.logUpdate("set",false,null,in, id);
+  }
+
+  @Override
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  }
+
+  @Override
+  @Accessor
+  public CorfuCompoundObject.Inner getUser() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.getUser();},null);
   }
 
   @Override
@@ -58,22 +72,8 @@ public class CorfuCompoundObject$CORFUSMR extends CorfuCompoundObject implements
   }
 
   @Override
-  @Accessor
-  public CorfuCompoundObject.Inner getUser() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.getUser();},null);
-  }
-
-  @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
-  }
-
-  @Override
-  @Mutator(
-      name = "set"
-  )
-  public void set(CorfuCompoundObject.Inner in, int id) {
-    proxy_CORFUSMR.logUpdate("set",false,null,in, id);
+  public int hashCode() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
   }
 
   public Map<String, ICorfuSMRUpcallTarget<CorfuCompoundObject>> getCorfuSMRUpcallMap() {

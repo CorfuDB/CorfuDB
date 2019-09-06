@@ -17,114 +17,114 @@ import java.lang.reflect.Constructor;
 /**
  * Created by mwei on 8/8/16.
  */
-<span class="nc" id="L20">@RequiredArgsConstructor</span>
-<span class="nc" id="L21">@AllArgsConstructor</span>
+<span class="pc" id="L20">@RequiredArgsConstructor</span>
+<span class="fc" id="L21">@AllArgsConstructor</span>
 public enum CorfuMsgType {
     // Base Messages
-<span class="nc" id="L24">    PING(0, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L25">    PONG(1, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L26">    RESET(2, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L27">    SEAL(3, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;() {}, true),</span>
-<span class="nc" id="L28">    ACK(4, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L29">    WRONG_EPOCH(5, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;() {},  true),</span>
-<span class="nc" id="L30">    NACK(6, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L31">    VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L32">    VERSION_RESPONSE(8, new TypeToken&lt;JSONPayloadMsg&lt;VersionInfo&gt;&gt;() {}, true),</span>
-<span class="nc" id="L33">    NOT_READY(9, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L24">    PING(0, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L25">    PONG(1, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L26">    RESET(2, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L27">    SEAL(3, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;() {}, true),</span>
+<span class="fc" id="L28">    ACK(4, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L29">    WRONG_EPOCH(5, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;() {},  true),</span>
+<span class="fc" id="L30">    NACK(6, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L31">    VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L32">    VERSION_RESPONSE(8, new TypeToken&lt;JSONPayloadMsg&lt;VersionInfo&gt;&gt;() {}, true),</span>
+<span class="fc" id="L33">    NOT_READY(9, TypeToken.of(CorfuMsg.class), true),</span>
 
     // Layout Messages
-<span class="nc" id="L36">    LAYOUT_REQUEST(10, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}, true),</span>
-<span class="nc" id="L37">    LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), true),</span>
-<span class="nc" id="L38">    LAYOUT_PREPARE(12, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutPrepareRequest&gt;&gt;(){}, true),</span>
-<span class="nc" id="L39">    LAYOUT_PREPARE_REJECT(13, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutPrepareResponse&gt;&gt;(){}),</span>
-<span class="nc" id="L40">    LAYOUT_PROPOSE(14, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutProposeRequest&gt;&gt;(){}, true),</span>
-<span class="nc" id="L41">    LAYOUT_PROPOSE_REJECT(15, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutProposeResponse&gt;&gt;(){}),</span>
-<span class="nc" id="L42">    LAYOUT_COMMITTED(16, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutCommittedRequest&gt;&gt;(){}, true),</span>
-<span class="nc" id="L43">    LAYOUT_QUERY(17, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}),</span>
-<span class="nc" id="L44">    LAYOUT_BOOTSTRAP(18, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutBootstrapRequest&gt;&gt;(){}, true),</span>
-<span class="nc" id="L45">    LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L36">    LAYOUT_REQUEST(10, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}, true),</span>
+<span class="fc" id="L37">    LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), true),</span>
+<span class="fc" id="L38">    LAYOUT_PREPARE(12, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutPrepareRequest&gt;&gt;(){}, true),</span>
+<span class="fc" id="L39">    LAYOUT_PREPARE_REJECT(13, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutPrepareResponse&gt;&gt;(){}),</span>
+<span class="fc" id="L40">    LAYOUT_PROPOSE(14, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutProposeRequest&gt;&gt;(){}, true),</span>
+<span class="fc" id="L41">    LAYOUT_PROPOSE_REJECT(15, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutProposeResponse&gt;&gt;(){}),</span>
+<span class="fc" id="L42">    LAYOUT_COMMITTED(16, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutCommittedRequest&gt;&gt;(){}, true),</span>
+<span class="fc" id="L43">    LAYOUT_QUERY(17, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}),</span>
+<span class="fc" id="L44">    LAYOUT_BOOTSTRAP(18, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutBootstrapRequest&gt;&gt;(){}, true),</span>
+<span class="fc" id="L45">    LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),</span>
 
     // Sequencer Messages
-<span class="nc" id="L48">    TOKEN_REQ(20, new TypeToken&lt;CorfuPayloadMsg&lt;TokenRequest&gt;&gt;(){}),</span>
-<span class="nc" id="L49">    TOKEN_RES(21, new TypeToken&lt;CorfuPayloadMsg&lt;TokenResponse&gt;&gt;(){}),</span>
-<span class="nc" id="L50">    BOOTSTRAP_SEQUENCER(22, new TypeToken&lt;CorfuPayloadMsg&lt;SequencerRecoveryMsg&gt;&gt;(){}),</span>
-<span class="nc" id="L51">    SEQUENCER_TRIM_REQ(23, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;() {}),</span>
-<span class="nc" id="L52">    SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L53">    SEQUENCER_METRICS_RESPONSE(25, new TypeToken&lt;CorfuPayloadMsg&lt;SequencerMetrics&gt;&gt;(){}, true),</span>
-<span class="nc" id="L54">    STREAMS_ADDRESS_REQUEST(26, new TypeToken&lt;CorfuPayloadMsg&lt;StreamsAddressRequest&gt;&gt;(){}),</span>
-<span class="nc" id="L55">    STREAMS_ADDRESS_RESPONSE(27, new TypeToken&lt;CorfuPayloadMsg&lt;StreamsAddressResponse&gt;&gt;(){}),</span>
+<span class="fc" id="L48">    TOKEN_REQ(20, new TypeToken&lt;CorfuPayloadMsg&lt;TokenRequest&gt;&gt;(){}),</span>
+<span class="fc" id="L49">    TOKEN_RES(21, new TypeToken&lt;CorfuPayloadMsg&lt;TokenResponse&gt;&gt;(){}),</span>
+<span class="fc" id="L50">    BOOTSTRAP_SEQUENCER(22, new TypeToken&lt;CorfuPayloadMsg&lt;SequencerRecoveryMsg&gt;&gt;(){}),</span>
+<span class="fc" id="L51">    SEQUENCER_TRIM_REQ(23, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;() {}),</span>
+<span class="fc" id="L52">    SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L53">    SEQUENCER_METRICS_RESPONSE(25, new TypeToken&lt;CorfuPayloadMsg&lt;SequencerMetrics&gt;&gt;(){}, true),</span>
+<span class="fc" id="L54">    STREAMS_ADDRESS_REQUEST(26, new TypeToken&lt;CorfuPayloadMsg&lt;StreamsAddressRequest&gt;&gt;(){}),</span>
+<span class="fc" id="L55">    STREAMS_ADDRESS_RESPONSE(27, new TypeToken&lt;CorfuPayloadMsg&lt;StreamsAddressResponse&gt;&gt;(){}),</span>
 
     // Logging Unit Messages
-<span class="nc" id="L58">    WRITE(30, new TypeToken&lt;CorfuPayloadMsg&lt;WriteRequest&gt;&gt;() {}),</span>
-<span class="nc" id="L59">    READ_REQUEST(31, new TypeToken&lt;CorfuPayloadMsg&lt;ReadRequest&gt;&gt;() {}),</span>
-<span class="nc" id="L60">    READ_RESPONSE(32, new TypeToken&lt;CorfuPayloadMsg&lt;ReadResponse&gt;&gt;() {}),</span>
-<span class="nc" id="L61">    MULTIPLE_READ_REQUEST(35, new TypeToken&lt;CorfuPayloadMsg&lt;MultipleReadRequest&gt;&gt;() {}),</span>
-<span class="nc" id="L62">    PREFIX_TRIM(38, new TypeToken&lt;CorfuPayloadMsg&lt;TrimRequest&gt;&gt;() {}),</span>
-<span class="nc" id="L63">    TAIL_REQUEST(41, new TypeToken&lt;CorfuPayloadMsg&lt;TailsRequest&gt;&gt;(){}),</span>
-<span class="nc" id="L64">    TAIL_RESPONSE(42, new TypeToken&lt;CorfuPayloadMsg&lt;TailsResponse&gt;&gt;(){}),</span>
-<span class="nc" id="L65">    COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L66">    FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L67">    TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L68">    TRIM_MARK_RESPONSE(46, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}),</span>
-<span class="nc" id="L69">    RESET_LOGUNIT(47, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}, true),</span>
-<span class="nc" id="L70">    LOG_ADDRESS_SPACE_REQUEST(48, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L71">    LOG_ADDRESS_SPACE_RESPONSE(49, new TypeToken&lt;CorfuPayloadMsg&lt;StreamsAddressResponse&gt;&gt;(){}),</span>
+<span class="fc" id="L58">    WRITE(30, new TypeToken&lt;CorfuPayloadMsg&lt;WriteRequest&gt;&gt;() {}),</span>
+<span class="fc" id="L59">    READ_REQUEST(31, new TypeToken&lt;CorfuPayloadMsg&lt;ReadRequest&gt;&gt;() {}),</span>
+<span class="fc" id="L60">    READ_RESPONSE(32, new TypeToken&lt;CorfuPayloadMsg&lt;ReadResponse&gt;&gt;() {}),</span>
+<span class="fc" id="L61">    MULTIPLE_READ_REQUEST(35, new TypeToken&lt;CorfuPayloadMsg&lt;MultipleReadRequest&gt;&gt;() {}),</span>
+<span class="fc" id="L62">    PREFIX_TRIM(38, new TypeToken&lt;CorfuPayloadMsg&lt;TrimRequest&gt;&gt;() {}),</span>
+<span class="fc" id="L63">    TAIL_REQUEST(41, new TypeToken&lt;CorfuPayloadMsg&lt;TailsRequest&gt;&gt;(){}),</span>
+<span class="fc" id="L64">    TAIL_RESPONSE(42, new TypeToken&lt;CorfuPayloadMsg&lt;TailsResponse&gt;&gt;(){}),</span>
+<span class="fc" id="L65">    COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L66">    FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L67">    TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L68">    TRIM_MARK_RESPONSE(46, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}),</span>
+<span class="fc" id="L69">    RESET_LOGUNIT(47, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}, true),</span>
+<span class="fc" id="L70">    LOG_ADDRESS_SPACE_REQUEST(48, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L71">    LOG_ADDRESS_SPACE_RESPONSE(49, new TypeToken&lt;CorfuPayloadMsg&lt;StreamsAddressResponse&gt;&gt;(){}),</span>
 
-<span class="nc" id="L73">    WRITE_OK(50, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L74">    ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L75">    ERROR_OVERWRITE(52, new TypeToken&lt;CorfuPayloadMsg&lt;Integer&gt;&gt;(){}, true),</span>
-<span class="nc" id="L76">    ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L77">    ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L78">    ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L79">    RANGE_WRITE(56, new TypeToken&lt;CorfuPayloadMsg&lt;RangeWriteMsg&gt;&gt;(){}),</span>
-<span class="nc" id="L80">    ERROR_DATA_CORRUPTION(57, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}),</span>
-<span class="nc" id="L81">    ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L82">    ERROR_VALUE_ADOPTED(59,new TypeToken&lt;CorfuPayloadMsg&lt;ReadResponse&gt;&gt;() {}),</span>
+<span class="fc" id="L73">    WRITE_OK(50, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L74">    ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L75">    ERROR_OVERWRITE(52, new TypeToken&lt;CorfuPayloadMsg&lt;Integer&gt;&gt;(){}, true),</span>
+<span class="fc" id="L76">    ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L77">    ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L78">    ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L79">    RANGE_WRITE(56, new TypeToken&lt;CorfuPayloadMsg&lt;RangeWriteMsg&gt;&gt;(){}),</span>
+<span class="fc" id="L80">    ERROR_DATA_CORRUPTION(57, new TypeToken&lt;CorfuPayloadMsg&lt;Long&gt;&gt;(){}),</span>
+<span class="fc" id="L81">    ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L82">    ERROR_VALUE_ADOPTED(59,new TypeToken&lt;CorfuPayloadMsg&lt;ReadResponse&gt;&gt;() {}),</span>
 
     // EXTRA CODES
-<span class="nc" id="L85">    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L86">    LAYOUT_PREPARE_ACK(61, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutPrepareResponse&gt;&gt;(){}, true),</span>
-<span class="nc" id="L87">    RESTART(62, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L88">    KEEP_ALIVE(63, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L85">    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L86">    LAYOUT_PREPARE_ACK(61, new TypeToken&lt;CorfuPayloadMsg&lt;LayoutPrepareResponse&gt;&gt;(){}, true),</span>
+<span class="fc" id="L87">    RESTART(62, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L88">    KEEP_ALIVE(63, TypeToken.of(CorfuMsg.class), true),</span>
 
     // Management Messages
-<span class="nc" id="L91">    MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken&lt;CorfuPayloadMsg&lt;Layout&gt;&gt;(){}, true),</span>
-<span class="nc" id="L92">    MANAGEMENT_NOBOOTSTRAP_ERROR(71, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L93">    MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true),</span>
-<span class="nc" id="L94">    MANAGEMENT_HEALING_DETECTED(73, new TypeToken&lt;CorfuPayloadMsg&lt;DetectorMsg&gt;&gt;(){}, true),</span>
-<span class="nc" id="L95">    MANAGEMENT_FAILURE_DETECTED(74, new TypeToken&lt;CorfuPayloadMsg&lt;DetectorMsg&gt;&gt;(){}, true),</span>
-<span class="nc" id="L96">    ORCHESTRATOR_REQUEST(77, new TypeToken&lt;CorfuPayloadMsg&lt;OrchestratorMsg&gt;&gt;() {}, true),</span>
-<span class="nc" id="L97">    ORCHESTRATOR_RESPONSE(78, new TypeToken&lt;CorfuPayloadMsg&lt;OrchestratorResponse&gt;&gt;() {}, true),</span>
-<span class="nc" id="L98">    MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L91">    MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken&lt;CorfuPayloadMsg&lt;Layout&gt;&gt;(){}, true),</span>
+<span class="fc" id="L92">    MANAGEMENT_NOBOOTSTRAP_ERROR(71, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L93">    MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true),</span>
+<span class="fc" id="L94">    MANAGEMENT_HEALING_DETECTED(73, new TypeToken&lt;CorfuPayloadMsg&lt;DetectorMsg&gt;&gt;(){}, true),</span>
+<span class="fc" id="L95">    MANAGEMENT_FAILURE_DETECTED(74, new TypeToken&lt;CorfuPayloadMsg&lt;DetectorMsg&gt;&gt;(){}, true),</span>
+<span class="fc" id="L96">    ORCHESTRATOR_REQUEST(77, new TypeToken&lt;CorfuPayloadMsg&lt;OrchestratorMsg&gt;&gt;() {}, true),</span>
+<span class="fc" id="L97">    ORCHESTRATOR_RESPONSE(78, new TypeToken&lt;CorfuPayloadMsg&lt;OrchestratorResponse&gt;&gt;() {}, true),</span>
+<span class="fc" id="L98">    MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true),</span>
 
     // Handshake Messages
-<span class="nc" id="L101">    HANDSHAKE_INITIATE(80, new TypeToken&lt;CorfuPayloadMsg&lt;HandshakeMsg&gt;&gt;() {}, true),</span>
-<span class="nc" id="L102">    HANDSHAKE_RESPONSE(81, new TypeToken&lt;CorfuPayloadMsg&lt;HandshakeResponse&gt;&gt;() {}, true),</span>
+<span class="fc" id="L101">    HANDSHAKE_INITIATE(80, new TypeToken&lt;CorfuPayloadMsg&lt;HandshakeMsg&gt;&gt;() {}, true),</span>
+<span class="fc" id="L102">    HANDSHAKE_RESPONSE(81, new TypeToken&lt;CorfuPayloadMsg&lt;HandshakeResponse&gt;&gt;() {}, true),</span>
 
-<span class="nc" id="L104">    NODE_STATE_REQUEST(82, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L105">    NODE_STATE_RESPONSE(83, new TypeToken&lt;CorfuPayloadMsg&lt;NodeState&gt;&gt;(){}, true),</span>
+<span class="fc" id="L104">    NODE_STATE_REQUEST(82, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L105">    NODE_STATE_RESPONSE(83, new TypeToken&lt;CorfuPayloadMsg&lt;NodeState&gt;&gt;(){}, true),</span>
 
-<span class="nc" id="L107">    FAILURE_DETECTOR_METRICS_REQUEST(84, TypeToken.of(CorfuMsg.class)),</span>
-<span class="nc" id="L108">    FAILURE_DETECTOR_METRICS_RESPONSE(85, new TypeToken&lt;CorfuPayloadMsg&lt;NodeState&gt;&gt;(){}, true),</span>
+<span class="fc" id="L107">    FAILURE_DETECTOR_METRICS_REQUEST(84, TypeToken.of(CorfuMsg.class)),</span>
+<span class="fc" id="L108">    FAILURE_DETECTOR_METRICS_RESPONSE(85, new TypeToken&lt;CorfuPayloadMsg&lt;NodeState&gt;&gt;(){}, true),</span>
 
-<span class="nc" id="L110">    KNOWN_ADDRESS_REQUEST(86, new TypeToken&lt;CorfuPayloadMsg&lt;KnownAddressRequest&gt;&gt;() {}),</span>
-<span class="nc" id="L111">    KNOWN_ADDRESS_RESPONSE(87, new TypeToken&lt;CorfuPayloadMsg&lt;KnownAddressResponse&gt;&gt;() {}),</span>
+<span class="fc" id="L110">    KNOWN_ADDRESS_REQUEST(86, new TypeToken&lt;CorfuPayloadMsg&lt;KnownAddressRequest&gt;&gt;() {}),</span>
+<span class="fc" id="L111">    KNOWN_ADDRESS_RESPONSE(87, new TypeToken&lt;CorfuPayloadMsg&lt;KnownAddressResponse&gt;&gt;() {}),</span>
 
-<span class="nc" id="L113">    ERROR_SERVER_EXCEPTION(200, new TypeToken&lt;CorfuPayloadMsg&lt;ExceptionMsg&gt;&gt;() {}, true),</span>
+<span class="fc" id="L113">    ERROR_SERVER_EXCEPTION(200, new TypeToken&lt;CorfuPayloadMsg&lt;ExceptionMsg&gt;&gt;() {}, true),</span>
     ;
 
 
     public final int type;
     public final TypeToken&lt;? extends CorfuMsg&gt; messageType;
-<span class="nc" id="L119">    public Boolean ignoreEpoch = false;</span>
+<span class="fc" id="L119">    public Boolean ignoreEpoch = false;</span>
 
     public &lt;T&gt; CorfuPayloadMsg&lt;T&gt; payloadMsg(T payload) {
         // todo:: maybe some typechecking here (performance impact?)
-<span class="nc" id="L123">        return new CorfuPayloadMsg&lt;T&gt;(this, payload);</span>
+<span class="fc" id="L123">        return new CorfuPayloadMsg&lt;T&gt;(this, payload);</span>
     }
 
     public CorfuMsg msg() {
-<span class="nc" id="L127">        return new CorfuMsg(this);</span>
+<span class="fc" id="L127">        return new CorfuMsg(this);</span>
     }
 
     @FunctionalInterface
@@ -132,30 +132,30 @@ public enum CorfuMsgType {
         T construct();
     }
 
-<span class="nc bnc" id="L135" title="All 8 branches missed.">    @Getter(lazy = true)</span>
+<span class="pc bpc" id="L135" title="4 of 8 branches missed.">    @Getter(lazy = true)</span>
     private final MessageConstructor&lt;? extends CorfuMsg&gt; constructor = resolveConstructor();
 
     public byte asByte() {
-<span class="nc" id="L139">        return (byte) type;</span>
+<span class="fc" id="L139">        return (byte) type;</span>
     }
 
     /** A lookup representing the context we'll use to do lookups. */
-<span class="nc" id="L143">    private static java.lang.invoke.MethodHandles.Lookup lookup = MethodHandles.lookup();</span>
+<span class="fc" id="L143">    private static java.lang.invoke.MethodHandles.Lookup lookup = MethodHandles.lookup();</span>
 
     /** Generate a lambda pointing to the constructor for this message type. */
     @SuppressWarnings(&quot;unchecked&quot;)
     private MessageConstructor&lt;? extends CorfuMsg&gt; resolveConstructor() {
         // Grab the constructor and get convert it to a lambda.
         try {
-<span class="nc" id="L150">            Constructor t = messageType.getRawType().getConstructor();</span>
-<span class="nc" id="L151">            MethodHandle mh = lookup.unreflectConstructor(t);</span>
-<span class="nc" id="L152">            MethodType mt = MethodType.methodType(Object.class);</span>
+<span class="fc" id="L150">            Constructor t = messageType.getRawType().getConstructor();</span>
+<span class="fc" id="L151">            MethodHandle mh = lookup.unreflectConstructor(t);</span>
+<span class="fc" id="L152">            MethodType mt = MethodType.methodType(Object.class);</span>
             try {
-<span class="nc" id="L154">                return (MessageConstructor&lt;? extends CorfuMsg&gt;) LambdaMetafactory.metafactory(</span>
+<span class="fc" id="L154">                return (MessageConstructor&lt;? extends CorfuMsg&gt;) LambdaMetafactory.metafactory(</span>
                         lookup, &quot;construct&quot;,
-<span class="nc" id="L156">                        MethodType.methodType(MessageConstructor.class),</span>
-<span class="nc" id="L157">                        mt, mh, mh.type())</span>
-<span class="nc" id="L158">                        .getTarget().invokeExact();</span>
+<span class="fc" id="L156">                        MethodType.methodType(MessageConstructor.class),</span>
+<span class="fc" id="L157">                        mt, mh, mh.type())</span>
+<span class="fc" id="L158">                        .getTarget().invokeExact();</span>
 <span class="nc" id="L159">            } catch (Throwable th) {</span>
 <span class="nc" id="L160">                throw new RuntimeException(th);</span>
             }

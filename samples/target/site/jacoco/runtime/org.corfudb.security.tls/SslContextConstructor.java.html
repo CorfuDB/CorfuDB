@@ -14,7 +14,7 @@ import io.netty.handler.ssl.SslProvider;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-<span class="nc" id="L17">@Slf4j</span>
+<span class="fc" id="L17">@Slf4j</span>
 <span class="nc" id="L18">public class SslContextConstructor {</span>
     /**
      * Create SslContext object based on a spec of individual configuration strings.
@@ -29,45 +29,45 @@ import lombok.extern.slf4j.Slf4j;
      *          Wrapper exception for any issue reading the key/trust store.
      */
     public static SslContext constructSslContext(boolean isServer,
-<span class="nc bnc" id="L32" title="All 2 branches missed.">                                                 @NonNull String keyStorePath,</span>
+<span class="pc bpc" id="L32" title="1 of 2 branches missed.">                                                 @NonNull String keyStorePath,</span>
                                                  String ksPasswordFile,
-<span class="nc bnc" id="L34" title="All 2 branches missed.">                                                 @NonNull String trustStorePath,</span>
+<span class="pc bpc" id="L34" title="1 of 2 branches missed.">                                                 @NonNull String trustStorePath,</span>
                                                  String tsPasswordFile) throws SSLException {
-<span class="nc" id="L36">        log.info(&quot;Construct ssl context based on the following information:&quot;);</span>
-<span class="nc" id="L37">        log.info(&quot;Key store file path: {}.&quot;, keyStorePath);</span>
-<span class="nc" id="L38">        log.info(&quot;Key store password file path: {}.&quot;, ksPasswordFile);</span>
-<span class="nc" id="L39">        log.info(&quot;Trust store file path: {}.&quot;, trustStorePath);</span>
-<span class="nc" id="L40">        log.info(&quot;Trust store password file path: {}.&quot;, tsPasswordFile);</span>
+<span class="fc" id="L36">        log.info(&quot;Construct ssl context based on the following information:&quot;);</span>
+<span class="fc" id="L37">        log.info(&quot;Key store file path: {}.&quot;, keyStorePath);</span>
+<span class="fc" id="L38">        log.info(&quot;Key store password file path: {}.&quot;, ksPasswordFile);</span>
+<span class="fc" id="L39">        log.info(&quot;Trust store file path: {}.&quot;, trustStorePath);</span>
+<span class="fc" id="L40">        log.info(&quot;Trust store password file path: {}.&quot;, tsPasswordFile);</span>
 
-<span class="nc" id="L42">        KeyManagerFactory kmf = createKeyManagerFactory(keyStorePath, ksPasswordFile);</span>
-<span class="nc" id="L43">        ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStorePath, tsPasswordFile);</span>
+<span class="fc" id="L42">        KeyManagerFactory kmf = createKeyManagerFactory(keyStorePath, ksPasswordFile);</span>
+<span class="fc" id="L43">        ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStorePath, tsPasswordFile);</span>
 
-<span class="nc" id="L45">        SslProvider provider = SslProvider.JDK;</span>
+<span class="fc" id="L45">        SslProvider provider = SslProvider.JDK;</span>
 
-<span class="nc bnc" id="L47" title="All 2 branches missed.">        if (OpenSsl.isAvailable()) {</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        if (OpenSsl.isAvailable()) {</span>
 <span class="nc" id="L48">            provider = SslProvider.OPENSSL;</span>
         } else {
-<span class="nc" id="L50">            log.warn(&quot;constructSslContext: couldn't load native openssl library, using JdkSslEngine instead!&quot;);</span>
+<span class="fc" id="L50">            log.warn(&quot;constructSslContext: couldn't load native openssl library, using JdkSslEngine instead!&quot;);</span>
         }
 
 
-<span class="nc bnc" id="L54" title="All 2 branches missed.">        if (isServer) {</span>
-<span class="nc" id="L55">            return SslContextBuilder.forServer(kmf).sslProvider(provider).trustManager(tmf).build();</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">        if (isServer) {</span>
+<span class="fc" id="L55">            return SslContextBuilder.forServer(kmf).sslProvider(provider).trustManager(tmf).build();</span>
         } else {
-<span class="nc" id="L57">            return SslContextBuilder.forClient().sslProvider(provider).keyManager(kmf).trustManager(tmf).build();</span>
+<span class="fc" id="L57">            return SslContextBuilder.forClient().sslProvider(provider).keyManager(kmf).trustManager(tmf).build();</span>
         }
     }
 
     private static KeyManagerFactory createKeyManagerFactory(String keyStorePath,
                                                              String ksPasswordFile) throws SSLException {
-<span class="nc" id="L63">        String keyStorePassword = TlsUtils.getKeyStorePassword(ksPasswordFile);</span>
-<span class="nc" id="L64">        KeyStore keyStore = TlsUtils.openKeyStore(keyStorePath, keyStorePassword);</span>
+<span class="fc" id="L63">        String keyStorePassword = TlsUtils.getKeyStorePassword(ksPasswordFile);</span>
+<span class="fc" id="L64">        KeyStore keyStore = TlsUtils.openKeyStore(keyStorePath, keyStorePassword);</span>
 
         KeyManagerFactory kmf;
         try {
-<span class="nc" id="L68">            kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());</span>
-<span class="nc" id="L69">            kmf.init(keyStore, keyStorePassword.toCharArray());</span>
-<span class="nc" id="L70">            return kmf;</span>
+<span class="fc" id="L68">            kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());</span>
+<span class="fc" id="L69">            kmf.init(keyStore, keyStorePassword.toCharArray());</span>
+<span class="fc" id="L70">            return kmf;</span>
 <span class="nc" id="L71">        } catch (UnrecoverableKeyException e) {</span>
 <span class="nc" id="L72">            String errorMessage = &quot;Unrecoverable key in key store &quot; + keyStorePath + &quot;.&quot;;</span>
 <span class="nc" id="L73">            log.error(errorMessage, e);</span>

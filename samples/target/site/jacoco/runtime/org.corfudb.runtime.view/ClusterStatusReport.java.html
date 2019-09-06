@@ -11,28 +11,28 @@ import lombok.Getter;
  *
  * &lt;p&gt;Created by zlokhandwala on 5/7/18.
  */
-<span class="nc bnc" id="L14" title="All 46 branches missed.">@Data</span>
+<span class="pc bnc" id="L14" title="All 46 branches missed.">@Data</span>
 public class ClusterStatusReport {
 
     /**
      * Connectivity to the node.
      */
-<span class="nc" id="L20">    public enum NodeStatus {</span>
+<span class="pc" id="L20">    public enum NodeStatus {</span>
 
         /**
          * Node is reachable.
          */
-<span class="nc" id="L25">        UP,</span>
+<span class="fc" id="L25">        UP,</span>
 
         /**
          * Node is reachable but does not have complete data redundancy.
          */
-<span class="nc" id="L30">        DB_SYNCING,</span>
+<span class="fc" id="L30">        DB_SYNCING,</span>
 
         /**
          * Node is not reachable.
          */
-<span class="nc" id="L35">        DOWN,</span>
+<span class="fc" id="L35">        DOWN,</span>
 
         /**
          * Whenever the state of a node cannot be determined.
@@ -40,85 +40,85 @@ public class ClusterStatusReport {
          * it is wrong to report them DOWN, nodes might be up and clients are unable
          * to connect.
          */
-<span class="nc" id="L43">        NA;</span>
+<span class="fc" id="L43">        NA;</span>
     }
 
     /**
      * Health of the cluster.
      */
-<span class="nc" id="L49">    public enum ClusterStatus {</span>
+<span class="pc" id="L49">    public enum ClusterStatus {</span>
 
         /**
          * The cluster is stable and all nodes are operational.
          */
-<span class="nc" id="L54">        STABLE(0),</span>
+<span class="fc" id="L54">        STABLE(0),</span>
 
         /**
          * The cluster is operational but one or several nodes are syncing in the background.
          * i.e., (replica catch up)
          */
-<span class="nc" id="L60">        DB_SYNCING(1),</span>
+<span class="fc" id="L60">        DB_SYNCING(1),</span>
 
         /**
          * The cluster is operational but working with reduced redundancy.
          */
-<span class="nc" id="L65">        DEGRADED(2),</span>
+<span class="fc" id="L65">        DEGRADED(2),</span>
 
         /**
          * The cluster is not operational.
          */
-<span class="nc" id="L70">        UNAVAILABLE(3);</span>
+<span class="fc" id="L70">        UNAVAILABLE(3);</span>
 
-<span class="nc" id="L72">        @Getter</span>
+<span class="fc" id="L72">        @Getter</span>
         final int healthValue;
 
-<span class="nc" id="L75">        ClusterStatus(int healthValue) {</span>
-<span class="nc" id="L76">            this.healthValue = healthValue;</span>
-<span class="nc" id="L77">        }</span>
+<span class="fc" id="L75">        ClusterStatus(int healthValue) {</span>
+<span class="fc" id="L76">            this.healthValue = healthValue;</span>
+<span class="fc" id="L77">        }</span>
     }
 
     /**
      * Represents the connectivity status of this runtime to a node.
      */
-<span class="nc" id="L83">    public enum ConnectivityStatus {</span>
+<span class="pc" id="L83">    public enum ConnectivityStatus {</span>
         /**
          * The node responds to pings from client.
          */
-<span class="nc" id="L87">        RESPONSIVE(true),</span>
+<span class="fc" id="L87">        RESPONSIVE(true),</span>
 
         /**
          * The node does not respond to pings from client.
          */
-<span class="nc" id="L92">        UNRESPONSIVE(false);</span>
+<span class="fc" id="L92">        UNRESPONSIVE(false);</span>
 
 <span class="nc" id="L94">        @Getter</span>
         final boolean ping;
 
-<span class="nc" id="L97">        ConnectivityStatus(boolean ping) {</span>
-<span class="nc" id="L98">            this.ping = ping;</span>
-<span class="nc" id="L99">        }</span>
+<span class="fc" id="L97">        ConnectivityStatus(boolean ping) {</span>
+<span class="fc" id="L98">            this.ping = ping;</span>
+<span class="fc" id="L99">        }</span>
     }
 
     /**
      * Represents the sources for cluster status computation.
      * This aims to provide an indicative of status reliability.
      */
-<span class="nc" id="L106">    public enum ClusterStatusReliability {</span>
+<span class="pc" id="L106">    public enum ClusterStatusReliability {</span>
         /**
          * Cluster Status reported based on quorum.
          */
-<span class="nc" id="L110">        STRONG_QUORUM,</span>
+<span class="fc" id="L110">        STRONG_QUORUM,</span>
 
         /**
          * Cluster Status reported based on highest layout in the system.
          */
-<span class="nc" id="L115">        WEAK_NO_QUORUM,</span>
+<span class="fc" id="L115">        WEAK_NO_QUORUM,</span>
 
         /**
          * Unavailable, whenever communication fails to ALL nodes, the source of reliability is
          * not available.
          */
-<span class="nc" id="L121">        UNAVAILABLE</span>
+<span class="fc" id="L121">        UNAVAILABLE</span>
     }
 
     /**
@@ -129,21 +129,21 @@ public class ClusterStatusReport {
     /**
      * Cluster health.
      */
-<span class="nc" id="L132">    private final ClusterStatus clusterStatus;</span>
+<span class="fc" id="L132">    private final ClusterStatus clusterStatus;</span>
 
     /**
      * Cluster Status Reliability (source of information)
      */
-<span class="nc" id="L137">    private final ClusterStatusReliability clusterStatusReliability;</span>
+<span class="fc" id="L137">    private final ClusterStatusReliability clusterStatusReliability;</span>
 
     /**
      * Individual Node Status (within cluster view).
      */
-<span class="nc" id="L142">    private final Map&lt;String, NodeStatus&gt; clusterNodeStatusMap;</span>
+<span class="fc" id="L142">    private final Map&lt;String, NodeStatus&gt; clusterNodeStatusMap;</span>
 
     /**
      * Map of connectivity of the client to the each cluster node.
      */
-<span class="nc" id="L147">    private final Map&lt;String, ConnectivityStatus&gt; clientServerConnectivityStatusMap;</span>
+<span class="fc" id="L147">    private final Map&lt;String, ConnectivityStatus&gt; clientServerConnectivityStatusMap;</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

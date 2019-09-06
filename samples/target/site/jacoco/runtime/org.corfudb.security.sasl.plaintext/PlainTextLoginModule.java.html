@@ -19,7 +19,7 @@ import javax.security.auth.spi.LoginModule;
  * http://docs.oracle.com/javase/8/docs/technotes/guides/security/jaas/JAASRefGuide.html
  */
 
-<span class="nc" id="L22">public class PlainTextLoginModule implements LoginModule {</span>
+<span class="fc" id="L22">public class PlainTextLoginModule implements LoginModule {</span>
 
     private static final String PLAIN_TEXT_USER_PREFIX = &quot;corfudb_user_&quot;;
     private CallbackHandler callbackHandler;
@@ -28,51 +28,51 @@ import javax.security.auth.spi.LoginModule;
     @Override
     public void initialize(Subject subject, CallbackHandler callbackHandler,
                            Map&lt;String, ?&gt; sharedState, Map&lt;String, ?&gt; options) {
-<span class="nc" id="L31">        this.callbackHandler = callbackHandler;</span>
-<span class="nc" id="L32">        this.options = options;</span>
-<span class="nc" id="L33">    }</span>
+<span class="fc" id="L31">        this.callbackHandler = callbackHandler;</span>
+<span class="fc" id="L32">        this.options = options;</span>
+<span class="fc" id="L33">    }</span>
 
     @Override
     public boolean login() throws LoginException {
-<span class="nc bnc" id="L37" title="All 2 branches missed.">        if (callbackHandler == null) {</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">        if (callbackHandler == null) {</span>
 <span class="nc" id="L38">            throw new LoginException(&quot;CallbackHandler not registered&quot;);</span>
         }
 
-<span class="nc" id="L41">        Callback[] callbacks = new Callback[2];</span>
-<span class="nc" id="L42">        callbacks[0] = new NameCallback(&quot;Username&quot;);</span>
-<span class="nc" id="L43">        callbacks[1] = new PasswordCallback(&quot;Password&quot;, false);</span>
+<span class="fc" id="L41">        Callback[] callbacks = new Callback[2];</span>
+<span class="fc" id="L42">        callbacks[0] = new NameCallback(&quot;Username&quot;);</span>
+<span class="fc" id="L43">        callbacks[1] = new PasswordCallback(&quot;Password&quot;, false);</span>
 
         try {
-<span class="nc" id="L46">            callbackHandler.handle(callbacks);</span>
+<span class="fc" id="L46">            callbackHandler.handle(callbacks);</span>
 <span class="nc" id="L47">        } catch (IOException ie) {</span>
 <span class="nc" id="L48">            throw new LoginException(&quot;IOException: &quot; + ie.toString());</span>
 <span class="nc" id="L49">        } catch (UnsupportedCallbackException uce) {</span>
 <span class="nc" id="L50">            throw new LoginException(&quot;UnsupportedCallbackException: &quot;</span>
 <span class="nc" id="L51">                + uce.getCallback().toString());</span>
-<span class="nc" id="L52">        }</span>
+<span class="fc" id="L52">        }</span>
 
-<span class="nc" id="L54">        String username = ((NameCallback)callbacks[0]).getName();</span>
-<span class="nc bnc" id="L55" title="All 2 branches missed.">        if (options.containsKey(PLAIN_TEXT_USER_PREFIX + username)) {</span>
-<span class="nc" id="L56">            String expectedPassword = (String) options.get(PLAIN_TEXT_USER_PREFIX + username);</span>
-<span class="nc" id="L57">            String password = new String(((PasswordCallback)callbacks[1]).getPassword());</span>
-<span class="nc bnc" id="L58" title="All 2 branches missed.">            if (!expectedPassword.equals(password)) {</span>
-<span class="nc" id="L59">                throw new LoginException(&quot;Incorrect password for: &quot; + username);</span>
+<span class="fc" id="L54">        String username = ((NameCallback)callbacks[0]).getName();</span>
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">        if (options.containsKey(PLAIN_TEXT_USER_PREFIX + username)) {</span>
+<span class="fc" id="L56">            String expectedPassword = (String) options.get(PLAIN_TEXT_USER_PREFIX + username);</span>
+<span class="fc" id="L57">            String password = new String(((PasswordCallback)callbacks[1]).getPassword());</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">            if (!expectedPassword.equals(password)) {</span>
+<span class="fc" id="L59">                throw new LoginException(&quot;Incorrect password for: &quot; + username);</span>
             }
-<span class="nc" id="L61">        } else {</span>
+<span class="fc" id="L61">        } else {</span>
 <span class="nc" id="L62">            throw new LoginException(&quot;User: &quot; + username + &quot; not found&quot;);</span>
         }
 
-<span class="nc" id="L65">        return true;</span>
+<span class="fc" id="L65">        return true;</span>
     }
 
     @Override
     public boolean commit() throws LoginException {
-<span class="nc" id="L70">        return true;</span>
+<span class="fc" id="L70">        return true;</span>
     }
 
     @Override
     public boolean abort() throws LoginException {
-<span class="nc" id="L75">        return true;</span>
+<span class="fc" id="L75">        return true;</span>
     }
 
     @Override

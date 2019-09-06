@@ -13,18 +13,18 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
  *  - Descending order of number of connections
  *  - Ascending order of a node name (alphabetically)
  */
-<span class="nc" id="L16">@AllArgsConstructor</span>
-<span class="nc bnc" id="L17" title="All 16 branches missed.">@EqualsAndHashCode</span>
+<span class="fc" id="L16">@AllArgsConstructor</span>
+<span class="pc bpc" id="L17" title="11 of 16 branches missed.">@EqualsAndHashCode</span>
 @Getter
 <span class="nc" id="L19">@ToString</span>
 public class NodeRank implements ICorfuPayload&lt;NodeRank&gt;,  Comparable&lt;NodeRank&gt; {
-<span class="nc" id="L21">    public static final NodeRank EMPTY_NODE_RANK = new NodeRank(&quot;--&quot;, Integer.MIN_VALUE);</span>
+<span class="fc" id="L21">    public static final NodeRank EMPTY_NODE_RANK = new NodeRank(&quot;--&quot;, Integer.MIN_VALUE);</span>
 
-<span class="nc" id="L23">    private final String endpoint;</span>
+<span class="fc" id="L23">    private final String endpoint;</span>
     /**
      * Number of successfully connected nodes to this node.
      */
-<span class="nc" id="L27">    private final int numConnections;</span>
+<span class="fc" id="L27">    private final int numConnections;</span>
 
     /**
      * Comparator, sorting nodes according to their number of connections and alphabetically
@@ -35,17 +35,17 @@ public class NodeRank implements ICorfuPayload&lt;NodeRank&gt;,  Comparable&lt;N
     @Override
     public int compareTo(NodeRank other) {
         //Descending order
-<span class="nc" id="L38">        int connectionRank = Integer.compare(other.numConnections, numConnections);</span>
-<span class="nc bnc" id="L39" title="All 2 branches missed.">        if (connectionRank != 0) {</span>
-<span class="nc" id="L40">            return connectionRank;</span>
+<span class="fc" id="L38">        int connectionRank = Integer.compare(other.numConnections, numConnections);</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        if (connectionRank != 0) {</span>
+<span class="fc" id="L40">            return connectionRank;</span>
         }
 
         //Ascending order
-<span class="nc" id="L44">        return endpoint.compareTo(other.endpoint);</span>
+<span class="fc" id="L44">        return endpoint.compareTo(other.endpoint);</span>
     }
 
     public boolean is(String endpoint) {
-<span class="nc" id="L48">        return this.endpoint.equals(endpoint);</span>
+<span class="fc" id="L48">        return this.endpoint.equals(endpoint);</span>
     }
 
 <span class="nc" id="L51">    public NodeRank(ByteBuf buf){</span>

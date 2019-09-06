@@ -45,9 +45,9 @@ import java.util.stream.Collectors;
  * (node B can connect to node B, but node B can not connect to node A) between two nodes
  * then make it symmetric which means neither node A nor B can connect to each other.
  */
-<span class="nc bnc" id="L48" title="All 6 branches missed.">@Builder</span>
+<span class="pc bpc" id="L48" title="3 of 6 branches missed.">@Builder</span>
 <span class="nc" id="L49">@ToString</span>
-<span class="nc" id="L50">@Slf4j</span>
+<span class="fc" id="L50">@Slf4j</span>
 public class ClusterGraph {
 
     @NonNull
@@ -68,17 +68,17 @@ public class ClusterGraph {
      * @return cluster graph
      */
     public static ClusterGraph toClusterGraph(ClusterState cluster) {
-<span class="nc" id="L71">        Map&lt;String, NodeConnectivity&gt; graph = cluster.getNodes()</span>
-<span class="nc" id="L72">                .values()</span>
-<span class="nc" id="L73">                .stream()</span>
-<span class="nc" id="L74">                .map(NodeState::getConnectivity)</span>
-<span class="nc" id="L75">                .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));</span>
+<span class="fc" id="L71">        Map&lt;String, NodeConnectivity&gt; graph = cluster.getNodes()</span>
+<span class="fc" id="L72">                .values()</span>
+<span class="fc" id="L73">                .stream()</span>
+<span class="fc" id="L74">                .map(NodeState::getConnectivity)</span>
+<span class="fc" id="L75">                .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));</span>
 
-<span class="nc" id="L77">        return ClusterGraph.builder()</span>
-<span class="nc" id="L78">                .localNode(cluster.getLocalEndpoint())</span>
-<span class="nc" id="L79">                .unresponsiveNodes(cluster.getUnresponsiveNodes())</span>
-<span class="nc" id="L80">                .graph(ImmutableMap.copyOf(graph))</span>
-<span class="nc" id="L81">                .build();</span>
+<span class="fc" id="L77">        return ClusterGraph.builder()</span>
+<span class="fc" id="L78">                .localNode(cluster.getLocalEndpoint())</span>
+<span class="fc" id="L79">                .unresponsiveNodes(cluster.getUnresponsiveNodes())</span>
+<span class="fc" id="L80">                .graph(ImmutableMap.copyOf(graph))</span>
+<span class="fc" id="L81">                .build();</span>
     }
 
     /**
@@ -97,66 +97,66 @@ public class ClusterGraph {
      * @return a graph with symmetric failures between nodes.
      */
     public ClusterGraph toSymmetric() {
-<span class="nc" id="L100">        Map&lt;String, NodeConnectivity&gt; symmetric = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L100">        Map&lt;String, NodeConnectivity&gt; symmetric = new HashMap&lt;&gt;();</span>
 
-<span class="nc" id="L102">        graph.keySet().forEach(nodeName -&gt; {</span>
-<span class="nc" id="L103">            NodeConnectivity node = graph.get(nodeName);</span>
-<span class="nc bnc" id="L104" title="All 2 branches missed.">            if (node.getType() == NodeConnectivityType.UNAVAILABLE) {</span>
-<span class="nc" id="L105">                symmetric.put(nodeName, node);</span>
-<span class="nc" id="L106">                return;</span>
+<span class="fc" id="L102">        graph.keySet().forEach(nodeName -&gt; {</span>
+<span class="fc" id="L103">            NodeConnectivity node = graph.get(nodeName);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">            if (node.getType() == NodeConnectivityType.UNAVAILABLE) {</span>
+<span class="fc" id="L105">                symmetric.put(nodeName, node);</span>
+<span class="fc" id="L106">                return;</span>
             }
 
-<span class="nc" id="L109">            Map&lt;String, ConnectionStatus&gt; newConnectivity = new HashMap&lt;&gt;();</span>
-<span class="nc" id="L110">            node.getConnectivity()</span>
+<span class="fc" id="L109">            Map&lt;String, ConnectionStatus&gt; newConnectivity = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L110">            node.getConnectivity()</span>
                     //Get list of adjacent nodes to this node
-<span class="nc" id="L112">                    .keySet()</span>
+<span class="fc" id="L112">                    .keySet()</span>
                     // For all adjacent nodes figure out if the node is connected to current node
-<span class="nc" id="L114">                    .forEach(adjNodeName -&gt; {</span>
-<span class="nc" id="L115">                        NodeConnectivity adjNode = graph.get(adjNodeName);</span>
+<span class="fc" id="L114">                    .forEach(adjNodeName -&gt; {</span>
+<span class="fc" id="L115">                        NodeConnectivity adjNode = graph.get(adjNodeName);</span>
 
                         //If current node is not the local node and another node is unavailable we don't change
                         // the adjacent node connectivity matrix, we leave it as is
-<span class="nc bnc" id="L119" title="All 2 branches missed.">                        if (adjNode.getType() == NodeConnectivityType.UNAVAILABLE) {</span>
-<span class="nc bnc" id="L120" title="All 2 branches missed.">                            if (!isLocalNode(node)) {</span>
-<span class="nc" id="L121">                                newConnectivity.put(adjNodeName, node.getConnectionStatus(adjNodeName));</span>
-<span class="nc" id="L122">                                return;</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">                        if (adjNode.getType() == NodeConnectivityType.UNAVAILABLE) {</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">                            if (!isLocalNode(node)) {</span>
+<span class="fc" id="L121">                                newConnectivity.put(adjNodeName, node.getConnectionStatus(adjNodeName));</span>
+<span class="fc" id="L122">                                return;</span>
                             }
                         }
 
                         //Get connection status for current node
-<span class="nc" id="L127">                        ConnectionStatus nodeConnection = getConnectionStatus(node, adjNode);</span>
+<span class="fc" id="L127">                        ConnectionStatus nodeConnection = getConnectionStatus(node, adjNode);</span>
                         //Get connection status for opposite node
-<span class="nc" id="L129">                        ConnectionStatus oppositeNodeConnection = getConnectionStatus(adjNode, node);</span>
+<span class="fc" id="L129">                        ConnectionStatus oppositeNodeConnection = getConnectionStatus(adjNode, node);</span>
 
                         //Symmetric failure - connection successful only if both nodes connected status is true
                         //in the other case - make the failure symmetric
-<span class="nc" id="L133">                        ConnectionStatus status = ConnectionStatus.OK;</span>
-<span class="nc bnc" id="L134" title="All 2 branches missed.">                        if (EnumSet.of(nodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)) {</span>
-<span class="nc" id="L135">                            status = ConnectionStatus.FAILED;</span>
+<span class="fc" id="L133">                        ConnectionStatus status = ConnectionStatus.OK;</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">                        if (EnumSet.of(nodeConnection, oppositeNodeConnection).contains(ConnectionStatus.FAILED)) {</span>
+<span class="fc" id="L135">                            status = ConnectionStatus.FAILED;</span>
                         }
-<span class="nc" id="L137">                        newConnectivity.put(adjNodeName, status);</span>
-<span class="nc" id="L138">                    });</span>
+<span class="fc" id="L137">                        newConnectivity.put(adjNodeName, status);</span>
+<span class="fc" id="L138">                    });</span>
 
-<span class="nc" id="L140">            NodeConnectivity symmetricConnectivity = NodeConnectivity.builder()</span>
-<span class="nc" id="L141">                    .endpoint(nodeName)</span>
-<span class="nc" id="L142">                    .epoch(node.getEpoch())</span>
-<span class="nc" id="L143">                    .connectivity(ImmutableMap.copyOf(newConnectivity))</span>
-<span class="nc" id="L144">                    .type(node.getType())</span>
-<span class="nc" id="L145">                    .build();</span>
+<span class="fc" id="L140">            NodeConnectivity symmetricConnectivity = NodeConnectivity.builder()</span>
+<span class="fc" id="L141">                    .endpoint(nodeName)</span>
+<span class="fc" id="L142">                    .epoch(node.getEpoch())</span>
+<span class="fc" id="L143">                    .connectivity(ImmutableMap.copyOf(newConnectivity))</span>
+<span class="fc" id="L144">                    .type(node.getType())</span>
+<span class="fc" id="L145">                    .build();</span>
 
-<span class="nc" id="L147">            symmetric.put(nodeName, symmetricConnectivity);</span>
-<span class="nc" id="L148">        });</span>
+<span class="fc" id="L147">            symmetric.put(nodeName, symmetricConnectivity);</span>
+<span class="fc" id="L148">        });</span>
 
         //Provide a new graph with symmetric failures
-<span class="nc" id="L151">        return ClusterGraph.builder()</span>
-<span class="nc" id="L152">                .localNode(localNode)</span>
-<span class="nc" id="L153">                .unresponsiveNodes(unresponsiveNodes)</span>
-<span class="nc" id="L154">                .graph(ImmutableMap.copyOf(symmetric))</span>
-<span class="nc" id="L155">                .build();</span>
+<span class="fc" id="L151">        return ClusterGraph.builder()</span>
+<span class="fc" id="L152">                .localNode(localNode)</span>
+<span class="fc" id="L153">                .unresponsiveNodes(unresponsiveNodes)</span>
+<span class="fc" id="L154">                .graph(ImmutableMap.copyOf(symmetric))</span>
+<span class="fc" id="L155">                .build();</span>
     }
 
     private boolean isLocalNode(NodeConnectivity node) {
-<span class="nc" id="L159">        return node.getEndpoint().equals(localNode);</span>
+<span class="fc" id="L159">        return node.getEndpoint().equals(localNode);</span>
     }
 
     /**
@@ -180,24 +180,24 @@ public class ClusterGraph {
      * @return a decision maker node
      */
     public Optional&lt;NodeRank&gt; getDecisionMaker() {
-<span class="nc" id="L183">        log.trace(&quot;Get decision maker&quot;);</span>
+<span class="fc" id="L183">        log.trace(&quot;Get decision maker&quot;);</span>
 
-<span class="nc" id="L185">        NavigableSet&lt;NodeRank&gt; nodes = getNodeRanks();</span>
+<span class="fc" id="L185">        NavigableSet&lt;NodeRank&gt; nodes = getNodeRanks();</span>
 
-<span class="nc bnc" id="L187" title="All 2 branches missed.">        if (nodes.isEmpty()) {</span>
+<span class="pc bpc" id="L187" title="1 of 2 branches missed.">        if (nodes.isEmpty()) {</span>
 <span class="nc" id="L188">            log.error(&quot;Empty graph. Can't provide decision maker&quot;);</span>
 <span class="nc" id="L189">            return Optional.empty();</span>
         }
 
-<span class="nc" id="L192">        NodeRank decisionMaker = nodes.first();</span>
+<span class="fc" id="L192">        NodeRank decisionMaker = nodes.first();</span>
 
-<span class="nc bnc" id="L194" title="All 2 branches missed.">        if (decisionMaker.getNumConnections() &lt; 1) {</span>
+<span class="pc bpc" id="L194" title="1 of 2 branches missed.">        if (decisionMaker.getNumConnections() &lt; 1) {</span>
 <span class="nc" id="L195">            log.trace(&quot;The node is fully disconnected from the graph. Decision maker doesn't exists&quot;);</span>
 <span class="nc" id="L196">            return Optional.empty();</span>
         }
 
-<span class="nc" id="L199">        log.trace(&quot;Decision maker has found: {}, all node ranks: {}&quot;, decisionMaker, nodes);</span>
-<span class="nc" id="L200">        return Optional.of(decisionMaker);</span>
+<span class="fc" id="L199">        log.trace(&quot;Decision maker has found: {}, all node ranks: {}&quot;, decisionMaker, nodes);</span>
+<span class="fc" id="L200">        return Optional.of(decisionMaker);</span>
     }
 
     /**
@@ -208,35 +208,35 @@ public class ClusterGraph {
      * @return failed node
      */
     public Optional&lt;NodeRank&gt; findFailedNode() {
-<span class="nc" id="L211">        log.trace(&quot;Looking for failed node&quot;);</span>
+<span class="fc" id="L211">        log.trace(&quot;Looking for failed node&quot;);</span>
 
-<span class="nc" id="L213">        NavigableSet&lt;NodeRank&gt; nodes = getNodeRanks();</span>
-<span class="nc bnc" id="L214" title="All 2 branches missed.">        if (nodes.isEmpty()) {</span>
+<span class="fc" id="L213">        NavigableSet&lt;NodeRank&gt; nodes = getNodeRanks();</span>
+<span class="pc bpc" id="L214" title="1 of 2 branches missed.">        if (nodes.isEmpty()) {</span>
 <span class="nc" id="L215">            log.error(&quot;Empty graph. Can't provide failed node&quot;);</span>
 <span class="nc" id="L216">            return Optional.empty();</span>
         }
 
-<span class="nc" id="L219">        NodeRank last = nodes.last();</span>
-<span class="nc bnc" id="L220" title="All 2 branches missed.">        if (last.getNumConnections() == graph.size()) {</span>
+<span class="fc" id="L219">        NodeRank last = nodes.last();</span>
+<span class="pc bpc" id="L220" title="1 of 2 branches missed.">        if (last.getNumConnections() == graph.size()) {</span>
 <span class="nc" id="L221">            return Optional.empty();</span>
         }
 
         //If the node is connected to all alive nodes (nodes not in unresponsive list)
         // in the cluster, that node can't be a failed node.
         // We can't rely on information from nodes in unresponsive list.
-<span class="nc" id="L227">        Optional&lt;NodeRank&gt; fullyConnected = findFullyConnectedNode(last.getEndpoint());</span>
+<span class="fc" id="L227">        Optional&lt;NodeRank&gt; fullyConnected = findFullyConnectedNode(last.getEndpoint());</span>
 
         //check if failed node is fully connected
-<span class="nc" id="L230">        boolean isFailedNodeFullyConnected = fullyConnected</span>
-<span class="nc" id="L231">                .map(fcNode -&gt; fcNode.equals(last))</span>
-<span class="nc" id="L232">                .orElse(false);</span>
+<span class="fc" id="L230">        boolean isFailedNodeFullyConnected = fullyConnected</span>
+<span class="fc" id="L231">                .map(fcNode -&gt; fcNode.equals(last))</span>
+<span class="fc" id="L232">                .orElse(false);</span>
 
-<span class="nc bnc" id="L234" title="All 2 branches missed.">        if (isFailedNodeFullyConnected) {</span>
-<span class="nc" id="L235">            log.trace(&quot;Fully connected node can't be a failed node&quot;);</span>
-<span class="nc" id="L236">            return Optional.empty();</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">        if (isFailedNodeFullyConnected) {</span>
+<span class="fc" id="L235">            log.trace(&quot;Fully connected node can't be a failed node&quot;);</span>
+<span class="fc" id="L236">            return Optional.empty();</span>
         }
 
-<span class="nc" id="L239">        return Optional.of(last);</span>
+<span class="fc" id="L239">        return Optional.of(last);</span>
     }
 
     /**
@@ -246,41 +246,41 @@ public class ClusterGraph {
      * @return local node rank
      */
     public Optional&lt;NodeRank&gt; findFullyConnectedNode(String endpoint) {
-<span class="nc" id="L249">        log.trace(&quot;Find responsive node. Unresponsive nodes: {}&quot;, unresponsiveNodes);</span>
+<span class="fc" id="L249">        log.trace(&quot;Find responsive node. Unresponsive nodes: {}&quot;, unresponsiveNodes);</span>
 
-<span class="nc" id="L251">        NodeConnectivity node = getNodeConnectivity(endpoint);</span>
+<span class="fc" id="L251">        NodeConnectivity node = getNodeConnectivity(endpoint);</span>
 
-<span class="nc bnc" id="L253" title="All 3 branches missed.">        switch (node.getType()) {</span>
+<span class="pc bpc" id="L253" title="1 of 3 branches missed.">        switch (node.getType()) {</span>
             case NOT_READY:
             case UNAVAILABLE:
-<span class="nc" id="L256">                log.trace(&quot;Not connected node: {}&quot;, endpoint);</span>
-<span class="nc" id="L257">                return Optional.empty();</span>
+<span class="fc" id="L256">                log.trace(&quot;Not connected node: {}&quot;, endpoint);</span>
+<span class="fc" id="L257">                return Optional.empty();</span>
             case CONNECTED:
-<span class="nc bnc" id="L259" title="All 2 branches missed.">                for (String adjacent : node.getConnectivity().keySet()) {</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">                for (String adjacent : node.getConnectivity().keySet()) {</span>
                     //if adjacent node is unresponsive then exclude it from fully connected graph
-<span class="nc bnc" id="L261" title="All 2 branches missed.">                    if (unresponsiveNodes.contains(adjacent)) {</span>
-<span class="nc" id="L262">                        continue;</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">                    if (unresponsiveNodes.contains(adjacent)) {</span>
+<span class="fc" id="L262">                        continue;</span>
                     }
 
-<span class="nc" id="L265">                    NodeConnectivity adjacentNode = getNodeConnectivity(adjacent);</span>
+<span class="fc" id="L265">                    NodeConnectivity adjacentNode = getNodeConnectivity(adjacent);</span>
 
                     //if adjacent node is unavailable then exclude it from  fully connected graph
-<span class="nc bnc" id="L268" title="All 2 branches missed.">                    if (adjacentNode.getType() == NodeConnectivityType.UNAVAILABLE) {</span>
-<span class="nc" id="L269">                        continue;</span>
+<span class="fc bfc" id="L268" title="All 2 branches covered.">                    if (adjacentNode.getType() == NodeConnectivityType.UNAVAILABLE) {</span>
+<span class="fc" id="L269">                        continue;</span>
                     }
 
-<span class="nc bnc" id="L272" title="All 2 branches missed.">                    if (adjacentNode.getConnectionStatus(endpoint) != ConnectionStatus.OK) {</span>
-<span class="nc" id="L273">                        log.trace(&quot;Fully connected node not found&quot;);</span>
-<span class="nc" id="L274">                        return Optional.empty();</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">                    if (adjacentNode.getConnectionStatus(endpoint) != ConnectionStatus.OK) {</span>
+<span class="fc" id="L273">                        log.trace(&quot;Fully connected node not found&quot;);</span>
+<span class="fc" id="L274">                        return Optional.empty();</span>
                     }
-<span class="nc" id="L276">                }</span>
+<span class="fc" id="L276">                }</span>
 
-<span class="nc" id="L278">                NodeRank rank = new NodeRank(</span>
+<span class="fc" id="L278">                NodeRank rank = new NodeRank(</span>
                         endpoint,
-<span class="nc" id="L280">                        getNodeConnectivity(endpoint).getConnected()</span>
+<span class="fc" id="L280">                        getNodeConnectivity(endpoint).getConnected()</span>
                 );
 
-<span class="nc" id="L283">                return Optional.of(rank);</span>
+<span class="fc" id="L283">                return Optional.of(rank);</span>
             default:
 <span class="nc" id="L285">                throw new IllegalStateException(&quot;Unknown node state&quot;);</span>
         }
@@ -294,7 +294,7 @@ public class ClusterGraph {
      */
     @VisibleForTesting
     public NodeConnectivity getNodeConnectivity(String node) {
-<span class="nc" id="L297">        return graph.get(node);</span>
+<span class="fc" id="L297">        return graph.get(node);</span>
     }
 
     /**
@@ -303,7 +303,7 @@ public class ClusterGraph {
      * @return size
      */
     public int size() {
-<span class="nc" id="L306">        return graph.size();</span>
+<span class="fc" id="L306">        return graph.size();</span>
     }
 
     public String toJson() {
@@ -320,14 +320,14 @@ public class ClusterGraph {
     }
 
     private NavigableSet&lt;NodeRank&gt; getNodeRanks() {
-<span class="nc" id="L323">        NavigableSet&lt;NodeRank&gt; nodes = new TreeSet&lt;&gt;();</span>
+<span class="fc" id="L323">        NavigableSet&lt;NodeRank&gt; nodes = new TreeSet&lt;&gt;();</span>
 
-<span class="nc" id="L325">        graph.keySet().forEach(node -&gt; {</span>
-<span class="nc" id="L326">            int numConnected = graph.get(node).getConnected();</span>
-<span class="nc" id="L327">            nodes.add(new NodeRank(node, numConnected));</span>
-<span class="nc" id="L328">        });</span>
+<span class="fc" id="L325">        graph.keySet().forEach(node -&gt; {</span>
+<span class="fc" id="L326">            int numConnected = graph.get(node).getConnected();</span>
+<span class="fc" id="L327">            nodes.add(new NodeRank(node, numConnected));</span>
+<span class="fc" id="L328">        });</span>
 
-<span class="nc" id="L330">        return nodes;</span>
+<span class="fc" id="L330">        return nodes;</span>
     }
 
     /**
@@ -344,17 +344,17 @@ public class ClusterGraph {
      */
     private ConnectionStatus getConnectionStatus(NodeConnectivity sourceNode, NodeConnectivity targetNode) {
 
-<span class="nc bnc" id="L347" title="All 4 branches missed.">        if (sourceNode == null || targetNode == null) {</span>
+<span class="pc bpc" id="L347" title="2 of 4 branches missed.">        if (sourceNode == null || targetNode == null) {</span>
 <span class="nc" id="L348">            String errMsg = &quot;Source or target node is null. Source: &quot; + sourceNode + &quot;, target: &quot; + targetNode;</span>
 <span class="nc" id="L349">            throw new IllegalArgumentException(errMsg);</span>
         }
 
-<span class="nc" id="L352">        Set&lt;NodeConnectivityType&gt; types = EnumSet.of(sourceNode.getType(), targetNode.getType());</span>
-<span class="nc bnc" id="L353" title="All 2 branches missed.">        if (types.contains(NodeConnectivityType.UNAVAILABLE)) {</span>
-<span class="nc" id="L354">            return ConnectionStatus.FAILED;</span>
+<span class="fc" id="L352">        Set&lt;NodeConnectivityType&gt; types = EnumSet.of(sourceNode.getType(), targetNode.getType());</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">        if (types.contains(NodeConnectivityType.UNAVAILABLE)) {</span>
+<span class="fc" id="L354">            return ConnectionStatus.FAILED;</span>
         }
 
-<span class="nc" id="L357">        return sourceNode.getConnectionStatus(targetNode.getEndpoint());</span>
+<span class="fc" id="L357">        return sourceNode.getConnectionStatus(targetNode.getEndpoint());</span>
     }
 
     /**
@@ -376,14 +376,14 @@ public class ClusterGraph {
         public static ClusterGraph cluster(String localNode,
                                            ImmutableList&lt;String&gt; unresponsiveNodes,
                                            NodeConnectivity... nodes) {
-<span class="nc" id="L379">            Map&lt;String, NodeConnectivity&gt; graph = Arrays.stream(nodes)</span>
-<span class="nc" id="L380">                    .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));</span>
+<span class="fc" id="L379">            Map&lt;String, NodeConnectivity&gt; graph = Arrays.stream(nodes)</span>
+<span class="fc" id="L380">                    .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));</span>
 
-<span class="nc" id="L382">            return ClusterGraph.builder()</span>
-<span class="nc" id="L383">                    .localNode(localNode)</span>
-<span class="nc" id="L384">                    .unresponsiveNodes(unresponsiveNodes)</span>
-<span class="nc" id="L385">                    .graph(ImmutableMap.copyOf(graph))</span>
-<span class="nc" id="L386">                    .build();</span>
+<span class="fc" id="L382">            return ClusterGraph.builder()</span>
+<span class="fc" id="L383">                    .localNode(localNode)</span>
+<span class="fc" id="L384">                    .unresponsiveNodes(unresponsiveNodes)</span>
+<span class="fc" id="L385">                    .graph(ImmutableMap.copyOf(graph))</span>
+<span class="fc" id="L386">                    .build();</span>
         }
     }
 }

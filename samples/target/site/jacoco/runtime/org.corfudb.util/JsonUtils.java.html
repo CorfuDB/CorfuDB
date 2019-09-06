@@ -14,8 +14,8 @@ public class JsonUtils {
         // prevent instantiation of this class
 <span class="nc" id="L15">    }</span>
 
-<span class="nc" id="L17">    public static final Gson parser = new GsonBuilder().setPrettyPrinting().create();</span>
-<span class="nc" id="L18">    private static final Gson REGULAR_PARSER = new GsonBuilder().create();</span>
+<span class="fc" id="L17">    public static final Gson parser = new GsonBuilder().setPrettyPrinting().create();</span>
+<span class="fc" id="L18">    private static final Gson REGULAR_PARSER = new GsonBuilder().create();</span>
 
 
     /**
@@ -30,7 +30,7 @@ public class JsonUtils {
     }
 
     public static &lt;T&gt; String toJson(T obj){
-<span class="nc" id="L33">        return REGULAR_PARSER.toJson(obj);</span>
+<span class="fc" id="L33">        return REGULAR_PARSER.toJson(obj);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

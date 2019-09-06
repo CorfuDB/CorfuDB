@@ -18,37 +18,37 @@ import java.util.concurrent.TimeoutException;
  *
  * Created by Maithem on 1/19/18.
  */
-<span class="nc" id="L21">@Slf4j</span>
+<span class="fc" id="L21">@Slf4j</span>
 public class AddNode extends WorkflowRequest {
 
-<span class="nc bnc" id="L24" title="All 4 branches missed.">    public AddNode(@NonNull String endpointToAdd, @NonNull CorfuRuntime runtime,</span>
-<span class="nc bnc" id="L25" title="All 2 branches missed.">                   int retry, @NonNull Duration timeout,</span>
-<span class="nc bnc" id="L26" title="All 2 branches missed.">                   @NonNull Duration pollPeriod) {</span>
-<span class="nc" id="L27">        this.nodeForWorkflow = endpointToAdd;</span>
-<span class="nc" id="L28">        this.runtime = runtime;</span>
-<span class="nc" id="L29">        this.retry = retry;</span>
-<span class="nc" id="L30">        this.timeout = timeout;</span>
-<span class="nc" id="L31">        this.pollPeriod = pollPeriod;</span>
-<span class="nc" id="L32">    }</span>
+<span class="pc bpc" id="L24" title="2 of 4 branches missed.">    public AddNode(@NonNull String endpointToAdd, @NonNull CorfuRuntime runtime,</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">                   int retry, @NonNull Duration timeout,</span>
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">                   @NonNull Duration pollPeriod) {</span>
+<span class="fc" id="L27">        this.nodeForWorkflow = endpointToAdd;</span>
+<span class="fc" id="L28">        this.runtime = runtime;</span>
+<span class="fc" id="L29">        this.retry = retry;</span>
+<span class="fc" id="L30">        this.timeout = timeout;</span>
+<span class="fc" id="L31">        this.pollPeriod = pollPeriod;</span>
+<span class="fc" id="L32">    }</span>
 
     @Override
-<span class="nc bnc" id="L35" title="All 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {</span>
         // Select the current tail node and send an add node request to the orchestrator
-<span class="nc" id="L37">        CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);</span>
-<span class="nc" id="L38">        log.info(&quot;sendRequest: requested to add {} on orchestrator {}:{}&quot;,</span>
-<span class="nc" id="L39">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
-<span class="nc" id="L40">                managementClient.getRouter().getPort());</span>
-<span class="nc" id="L41">        return resp.getWorkflowId();</span>
+<span class="fc" id="L37">        CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);</span>
+<span class="fc" id="L38">        log.info(&quot;sendRequest: requested to add {} on orchestrator {}:{}&quot;,</span>
+<span class="fc" id="L39">                nodeForWorkflow, managementClient.getRouter().getHost(),</span>
+<span class="fc" id="L40">                managementClient.getRouter().getPort());</span>
+<span class="fc" id="L41">        return resp.getWorkflowId();</span>
     }
 
     @Override
-<span class="nc bnc" id="L45" title="All 2 branches missed.">    protected boolean verifyRequest(@NonNull Layout layout) {</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">    protected boolean verifyRequest(@NonNull Layout layout) {</span>
         // Verify that the node has been added and that the address space isn't
         // segmented
-<span class="nc" id="L48">        log.info(&quot;verifyRequest: {} to {}&quot;, this, layout);</span>
-<span class="nc bnc" id="L49" title="All 2 branches missed.">        return layout.getAllServers().contains(nodeForWorkflow)</span>
-<span class="nc" id="L50">                &amp;&amp; layout.getSegmentsForEndpoint(nodeForWorkflow).size()</span>
-<span class="nc bnc" id="L51" title="All 2 branches missed.">                == layout.getSegments().size();</span>
+<span class="fc" id="L48">        log.info(&quot;verifyRequest: {} to {}&quot;, this, layout);</span>
+<span class="pc bpc" id="L49" title="1 of 2 branches missed.">        return layout.getAllServers().contains(nodeForWorkflow)</span>
+<span class="fc" id="L50">                &amp;&amp; layout.getSegmentsForEndpoint(nodeForWorkflow).size()</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">                == layout.getSegments().size();</span>
     }
 
     @Override

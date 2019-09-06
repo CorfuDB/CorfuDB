@@ -14,25 +14,25 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
  */
 public class AddNodeRequest implements CreateRequest {
 
-<span class="nc" id="L17">    @Getter</span>
+<span class="fc" id="L17">    @Getter</span>
     public String endpoint;
 
-<span class="nc" id="L20">    public AddNodeRequest(String endpoint) {</span>
-<span class="nc" id="L21">        this.endpoint = endpoint;</span>
-<span class="nc" id="L22">    }</span>
+<span class="fc" id="L20">    public AddNodeRequest(String endpoint) {</span>
+<span class="fc" id="L21">        this.endpoint = endpoint;</span>
+<span class="fc" id="L22">    }</span>
 
-<span class="nc" id="L24">    public AddNodeRequest(byte[] buf) {</span>
-<span class="nc" id="L25">        endpoint = new String(buf, StandardCharsets.UTF_8);</span>
-<span class="nc" id="L26">    }</span>
+<span class="fc" id="L24">    public AddNodeRequest(byte[] buf) {</span>
+<span class="fc" id="L25">        endpoint = new String(buf, StandardCharsets.UTF_8);</span>
+<span class="fc" id="L26">    }</span>
 
     @Override
     public OrchestratorRequestType getType() {
-<span class="nc" id="L30">        return ADD_NODE;</span>
+<span class="fc" id="L30">        return ADD_NODE;</span>
     }
 
     @Override
     public byte[] getSerialized() {
-<span class="nc" id="L35">        return endpoint.getBytes(StandardCharsets.UTF_8);</span>
+<span class="fc" id="L35">        return endpoint.getBytes(StandardCharsets.UTF_8);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

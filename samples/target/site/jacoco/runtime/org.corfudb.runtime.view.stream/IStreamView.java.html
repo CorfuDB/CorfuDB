@@ -50,25 +50,25 @@ public interface IStreamView extends
     void seek(long globalAddress);
 
     /** An enum representing search directions. */
-<span class="nc" id="L53">    @RequiredArgsConstructor</span>
+<span class="pc" id="L53">    @RequiredArgsConstructor</span>
     enum SearchDirection {
         /** Search forward. */
-<span class="nc" id="L56">        FORWARD(false, true),</span>
+<span class="fc" id="L56">        FORWARD(false, true),</span>
         /** Search forward, including address given. */
-<span class="nc" id="L58">        FORWARD_INCLUSIVE(true, true),</span>
+<span class="fc" id="L58">        FORWARD_INCLUSIVE(true, true),</span>
         /** Search backwards. */
-<span class="nc" id="L60">        REVERSE(false, false),</span>
+<span class="fc" id="L60">        REVERSE(false, false),</span>
         /** Search backwards, including address given. */
-<span class="nc" id="L62">        REVERSE_INCLUSIVE(true, false);</span>
+<span class="fc" id="L62">        REVERSE_INCLUSIVE(true, false);</span>
 
         /** Whether the address given should be included
          * in the search.
          */
-<span class="nc" id="L67">        @Getter</span>
+<span class="fc" id="L67">        @Getter</span>
         final boolean inclusive;
 
         /** True if the search is forward, false otherwise. */
-<span class="nc" id="L71">        @Getter</span>
+<span class="fc" id="L71">        @Getter</span>
         final boolean forward;
     }
 
@@ -110,7 +110,7 @@ public interface IStreamView extends
      * @return  The (global) address the object was written at.
      */
     default long append(Object object) {
-<span class="nc" id="L113">        return append(object, null, null);</span>
+<span class="fc" id="L113">        return append(object, null, null);</span>
     }
 
     /** Retrieve the next entry from this stream, up to the tail of the stream
@@ -121,7 +121,7 @@ public interface IStreamView extends
      */
     @Nullable
     default ILogData next() {
-<span class="nc" id="L124">        return nextUpTo(Long.MAX_VALUE);</span>
+<span class="fc" id="L124">        return nextUpTo(Long.MAX_VALUE);</span>
     }
 
     /** Retrieve the previous entry in the stream. If there are no previous entries,
@@ -165,7 +165,7 @@ public interface IStreamView extends
      */
     @Nonnull
     default List&lt;ILogData&gt; remaining() {
-<span class="nc" id="L168">        return remainingUpTo(Address.MAX);</span>
+<span class="fc" id="L168">        return remainingUpTo(Address.MAX);</span>
     }
 
     /** Retrieve all of the entries from this stream, up to the address given or
@@ -207,7 +207,7 @@ public interface IStreamView extends
      * @return              A spliterator for this stream view.
      */
     default Spliterator&lt;ILogData&gt; spliteratorUpTo(long maxGlobal) {
-<span class="nc" id="L210">        return new StreamSpliterator(this, maxGlobal);</span>
+<span class="fc" id="L210">        return new StreamSpliterator(this, maxGlobal);</span>
     }
 
     /** Get a Java stream from this stream view.
@@ -223,7 +223,7 @@ public interface IStreamView extends
      * @return              A spliterator for this stream view.
      */
     default Stream&lt;ILogData&gt; streamUpTo(long maxGlobal) {
-<span class="nc" id="L226">        return StreamSupport.stream(spliteratorUpTo(maxGlobal), false);</span>
+<span class="fc" id="L226">        return StreamSupport.stream(spliteratorUpTo(maxGlobal), false);</span>
     }
 
     /**

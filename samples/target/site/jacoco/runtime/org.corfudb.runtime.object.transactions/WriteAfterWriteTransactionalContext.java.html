@@ -19,20 +19,20 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
  *
  * &lt;p&gt;Created by mwei on 11/21/16.
  */
-<span class="nc" id="L22">@Slf4j</span>
+<span class="fc" id="L22">@Slf4j</span>
 public class WriteAfterWriteTransactionalContext
         extends OptimisticTransactionalContext {
 
     WriteAfterWriteTransactionalContext(Transaction transaction) {
-<span class="nc" id="L27">        super(transaction);</span>
-<span class="nc" id="L28">        getSnapshotTimestamp();</span>
-<span class="nc" id="L29">    }</span>
+<span class="fc" id="L27">        super(transaction);</span>
+<span class="fc" id="L28">        getSnapshotTimestamp();</span>
+<span class="fc" id="L29">    }</span>
 
     @Override
     public long commitTransaction() throws TransactionAbortedException {
-<span class="nc" id="L33">        log.debug(&quot;TX[{}] request write-write commit&quot;, this);</span>
+<span class="fc" id="L33">        log.debug(&quot;TX[{}] request write-write commit&quot;, this);</span>
 
-<span class="nc" id="L35">        return getConflictSetAndCommit(getWriteSetInfo());</span>
+<span class="fc" id="L35">        return getConflictSetAndCommit(getWriteSetInfo());</span>
     }
 
     @Override
@@ -44,6 +44,6 @@ public class WriteAfterWriteTransactionalContext
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
         // do nothing! write-write conflict TXs do not need to keep track of
         // read sets.
-<span class="nc" id="L47">    }</span>
+<span class="fc" id="L47">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

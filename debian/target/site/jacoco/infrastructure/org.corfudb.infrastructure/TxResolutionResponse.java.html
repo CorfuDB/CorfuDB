@@ -17,7 +17,7 @@ import java.util.UUID;
  */
 <span class="nc bnc" id="L18" title="All 32 branches missed.">@Data</span>
 <span class="nc" id="L19">@ToString</span>
-<span class="nc" id="L20">@AllArgsConstructor</span>
+<span class="fc" id="L20">@AllArgsConstructor</span>
 class TxResolutionResponse {
 
     /**
@@ -25,31 +25,31 @@ class TxResolutionResponse {
      *
      * @param tokenType response type from the sequencer
      */
-<span class="nc" id="L28">    public TxResolutionResponse(TokenType tokenType) {</span>
-<span class="nc" id="L29">        this.tokenType = tokenType;</span>
-<span class="nc" id="L30">        this.address = Address.NON_ADDRESS;</span>
-<span class="nc" id="L31">        this.conflictingKey = TokenResponse.NO_CONFLICT_KEY;</span>
-<span class="nc" id="L32">        this.conflictingStream = TokenResponse.NO_CONFLICT_STREAM;</span>
-<span class="nc" id="L33">    }</span>
+<span class="fc" id="L28">    public TxResolutionResponse(TokenType tokenType) {</span>
+<span class="fc" id="L29">        this.tokenType = tokenType;</span>
+<span class="fc" id="L30">        this.address = Address.NON_ADDRESS;</span>
+<span class="fc" id="L31">        this.conflictingKey = TokenResponse.NO_CONFLICT_KEY;</span>
+<span class="fc" id="L32">        this.conflictingStream = TokenResponse.NO_CONFLICT_STREAM;</span>
+<span class="fc" id="L33">    }</span>
 
     /**
      * Response type from the sequencer.
      */
-<span class="nc" id="L38">    TokenType tokenType;</span>
+<span class="fc" id="L38">    TokenType tokenType;</span>
 
     /**
      * Optional. In case of a conflict, what was the address at which that conflict occurred.
      */
-<span class="nc" id="L43">    Long address;</span>
+<span class="fc" id="L43">    Long address;</span>
 
     /**
      * Optional. In case of a conflict, what was the key that triggered a negative response.
      */
-<span class="nc" id="L48">    byte[] conflictingKey;</span>
+<span class="fc" id="L48">    byte[] conflictingKey;</span>
 
     /**
      * Optional. In case of a conflict, what was the stream ID that triggered a negative response.
      */
-<span class="nc" id="L53">    UUID conflictingStream;</span>
+<span class="fc" id="L53">    UUID conflictingStream;</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -23,22 +23,22 @@ import java.util.UUID;
  *
  * Created by amartinezman on 12/8/17.
  */
-<span class="nc" id="L26">@Slf4j</span>
+<span class="fc" id="L26">@Slf4j</span>
 public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
     private final UUID clientId;
     private final UUID nodeId;
     private final int handshakeTimeout;
     private final HandshakeState handshakeState;
-<span class="nc" id="L33">    private final Queue&lt;CorfuMsg&gt; messages = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L33">    private final Queue&lt;CorfuMsg&gt; messages = new LinkedList&lt;&gt;();</span>
     private static final String READ_TIMEOUT_HANDLER = &quot;readTimeoutHandler&quot;;
 
     /** Events that the handshaker sends to downstream handlers.
      *
      */
-<span class="nc" id="L39">    public enum ClientHandshakeEvent {</span>
-<span class="nc" id="L40">        CONNECTED,  /* Connection succeeded. */</span>
-<span class="nc" id="L41">        FAILED      /* Handshake failed. */</span>
+<span class="pc" id="L39">    public enum ClientHandshakeEvent {</span>
+<span class="fc" id="L40">        CONNECTED,  /* Connection succeeded. */</span>
+<span class="fc" id="L41">        FAILED      /* Handshake failed. */</span>
     }
 
     /**
@@ -48,18 +48,18 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * @param clientId Current Client Identifier.
      * @param serverId Remote Server Identifier to connect to.
      */
-<span class="nc bnc" id="L51" title="All 2 branches missed.">    public ClientHandshakeHandler(@NonNull UUID clientId, UUID serverId, int handshakeTimeout) {</span>
-<span class="nc" id="L52">        this.clientId = clientId;</span>
-<span class="nc bnc" id="L53" title="All 2 branches missed.">        if (serverId == null) {</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">    public ClientHandshakeHandler(@NonNull UUID clientId, UUID serverId, int handshakeTimeout) {</span>
+<span class="fc" id="L52">        this.clientId = clientId;</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">        if (serverId == null) {</span>
             // A null identifier, indicates node ID matching is not required. Send a default
             // (all 0's) UUID to Server, to ignore matching stage during handshake
-<span class="nc" id="L56">            this.nodeId = UUID.fromString(&quot;00000000-0000-0000-0000-000000000000&quot;);</span>
+<span class="fc" id="L56">            this.nodeId = UUID.fromString(&quot;00000000-0000-0000-0000-000000000000&quot;);</span>
         } else {
-<span class="nc" id="L58">            this.nodeId = serverId;</span>
+<span class="fc" id="L58">            this.nodeId = serverId;</span>
         }
-<span class="nc" id="L60">        this.handshakeTimeout = handshakeTimeout;</span>
-<span class="nc" id="L61">        this.handshakeState = new HandshakeState();</span>
-<span class="nc" id="L62">    }</span>
+<span class="fc" id="L60">        this.handshakeTimeout = handshakeTimeout;</span>
+<span class="fc" id="L61">        this.handshakeState = new HandshakeState();</span>
+<span class="fc" id="L62">    }</span>
 
     /**
      * Read data from the Channel.
@@ -72,12 +72,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     public void channelRead(ChannelHandlerContext ctx, Object m)
         throws Exception {
 
-<span class="nc bnc" id="L75" title="All 2 branches missed.">        if (this.handshakeState.failed()) {</span>
+<span class="pc bpc" id="L75" title="1 of 2 branches missed.">        if (this.handshakeState.failed()) {</span>
             // if handshake has already failed, return
 <span class="nc" id="L77">            return;</span>
         }
 
-<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (this.handshakeState.completed()) {</span>
+<span class="pc bpc" id="L80" title="1 of 2 branches missed.">        if (this.handshakeState.completed()) {</span>
             // If handshake completed successfully, but still a message came through this handler,
             // send on to the next handler in order to avoid message loss.
 <span class="nc" id="L83">            super.channelRead(ctx, m);</span>
@@ -87,12 +87,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         CorfuPayloadMsg&lt;HandshakeResponse&gt; handshakeResponse;
 
         try {
-<span class="nc" id="L90">            handshakeResponse = (CorfuPayloadMsg&lt;HandshakeResponse&gt;) m;</span>
-<span class="nc" id="L91">            log.info(&quot;channelRead: Handshake Response received. Removing {} from pipeline.&quot;,</span>
+<span class="fc" id="L90">            handshakeResponse = (CorfuPayloadMsg&lt;HandshakeResponse&gt;) m;</span>
+<span class="fc" id="L91">            log.info(&quot;channelRead: Handshake Response received. Removing {} from pipeline.&quot;,</span>
                     READ_TIMEOUT_HANDLER);
             // Remove the handler from the pipeline. Also remove the reference of the context from
             // the handler so that it does not disconnect the channel.
-<span class="nc" id="L95">            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);</span>
+<span class="fc" id="L95">            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);</span>
 <span class="nc" id="L96">        } catch (ClassCastException e) {</span>
 <span class="nc" id="L97">            log.warn(&quot;channelRead: Non-handshake message received by handshake handler. &quot; +</span>
                     &quot;Send upstream only if handshake succeeded.&quot;, e);
@@ -109,16 +109,16 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 <span class="nc" id="L109">                }</span>
             }
 <span class="nc" id="L111">            return;</span>
-<span class="nc" id="L112">        }</span>
+<span class="fc" id="L112">        }</span>
 
-<span class="nc" id="L114">        UUID serverId = handshakeResponse.getPayload().getServerId();</span>
-<span class="nc" id="L115">        String corfuVersion = handshakeResponse.getPayload().getCorfuVersion();</span>
+<span class="fc" id="L114">        UUID serverId = handshakeResponse.getPayload().getServerId();</span>
+<span class="fc" id="L115">        String corfuVersion = handshakeResponse.getPayload().getCorfuVersion();</span>
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
-<span class="nc bnc" id="L119" title="All 2 branches missed.">        if (this.nodeId.equals(UUID.fromString(&quot;00000000-0000-0000-0000-000000000000&quot;))) {</span>
-<span class="nc" id="L120">            log.info(&quot;channelRead: node id matching is not requested by client.&quot;);</span>
-<span class="nc bnc" id="L121" title="All 2 branches missed.">        } else if (!this.nodeId.equals(serverId)) {</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">        if (this.nodeId.equals(UUID.fromString(&quot;00000000-0000-0000-0000-000000000000&quot;))) {</span>
+<span class="fc" id="L120">            log.info(&quot;channelRead: node id matching is not requested by client.&quot;);</span>
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">        } else if (!this.nodeId.equals(serverId)) {</span>
             // Validation failed, client opened a socket to server with id
             // 'nodeId', instead server's id is 'serverId'
 <span class="nc" id="L124">            log.error(&quot;channelRead: Handshake validation failed. Server node id mismatch.&quot;);</span>
@@ -128,18 +128,18 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 <span class="nc" id="L128">            return;</span>
         }
 
-<span class="nc" id="L131">        log.info(&quot;channelRead: Handshake succeeded. Server Corfu Version: [{}]&quot;, corfuVersion);</span>
-<span class="nc" id="L132">        log.debug(&quot;channelRead: There are [{}] messages in queue to be flushed.&quot;, this.messages.size());</span>
+<span class="fc" id="L131">        log.info(&quot;channelRead: Handshake succeeded. Server Corfu Version: [{}]&quot;, corfuVersion);</span>
+<span class="fc" id="L132">        log.debug(&quot;channelRead: There are [{}] messages in queue to be flushed.&quot;, this.messages.size());</span>
         // Flush messages in queue
-<span class="nc bnc" id="L134" title="All 2 branches missed.">        while (!messages.isEmpty()) {</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">        while (!messages.isEmpty()) {</span>
 <span class="nc" id="L135">            ctx.writeAndFlush(messages.poll());</span>
         }
 
         // Remove this handler from the pipeline; handshake is completed.
-<span class="nc" id="L139">        log.info(&quot;channelRead: Removing handshake handler from pipeline.&quot;);</span>
-<span class="nc" id="L140">        ctx.pipeline().remove(this);</span>
-<span class="nc" id="L141">        this.fireHandshakeSucceeded(ctx);</span>
-<span class="nc" id="L142">    }</span>
+<span class="fc" id="L139">        log.info(&quot;channelRead: Removing handshake handler from pipeline.&quot;);</span>
+<span class="fc" id="L140">        ctx.pipeline().remove(this);</span>
+<span class="fc" id="L141">        this.fireHandshakeSucceeded(ctx);</span>
+<span class="fc" id="L142">    }</span>
 
     /**
      * Channel event that is triggered when a new connected channel is created.
@@ -150,17 +150,17 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx)
         throws Exception {
-<span class="nc" id="L153">        log.info(&quot;channelActive: Outgoing connection established to: {}&quot;, ctx.channel().remoteAddress());</span>
+<span class="fc" id="L153">        log.info(&quot;channelActive: Outgoing connection established to: {}&quot;, ctx.channel().remoteAddress());</span>
 
         // Write the handshake &amp; add a timeout listener.
-<span class="nc" id="L156">        CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE</span>
-<span class="nc" id="L157">            .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));</span>
+<span class="fc" id="L156">        CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE</span>
+<span class="fc" id="L157">            .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));</span>
 
-<span class="nc" id="L159">        log.debug(&quot;channelActive: Initiate handshake. Send handshake message.&quot;);</span>
-<span class="nc" id="L160">        ctx.writeAndFlush(handshake);</span>
-<span class="nc" id="L161">        log.debug(&quot;channelActive: Add {} to channel pipeline.&quot;, READ_TIMEOUT_HANDLER);</span>
-<span class="nc" id="L162">        ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));</span>
-<span class="nc" id="L163">    }</span>
+<span class="fc" id="L159">        log.debug(&quot;channelActive: Initiate handshake. Send handshake message.&quot;);</span>
+<span class="fc" id="L160">        ctx.writeAndFlush(handshake);</span>
+<span class="fc" id="L161">        log.debug(&quot;channelActive: Add {} to channel pipeline.&quot;, READ_TIMEOUT_HANDLER);</span>
+<span class="fc" id="L162">        ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));</span>
+<span class="fc" id="L163">    }</span>
 
     /**
      * Channel event that is triggered when the channel is closed.
@@ -170,11 +170,11 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-<span class="nc" id="L173">        log.debug(&quot;channelInactive: Channel closed.&quot;);</span>
-<span class="nc bnc" id="L174" title="All 2 branches missed.">        if (!this.handshakeState.completed()) {</span>
-<span class="nc" id="L175">            this.fireHandshakeFailed(ctx);</span>
+<span class="fc" id="L173">        log.debug(&quot;channelInactive: Channel closed.&quot;);</span>
+<span class="fc bfc" id="L174" title="All 2 branches covered.">        if (!this.handshakeState.completed()) {</span>
+<span class="fc" id="L175">            this.fireHandshakeFailed(ctx);</span>
         }
-<span class="nc" id="L177">    }</span>
+<span class="fc" id="L177">    }</span>
 
     /**
      * Channel event that is triggered when an exception is caught.
@@ -186,8 +186,8 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx,
         java.lang.Throwable cause) throws Exception {
-<span class="nc" id="L189">        log.error(&quot;exceptionCaught: Exception {} caught.&quot;, cause.getClass().getSimpleName(), cause);</span>
-<span class="nc bnc" id="L190" title="All 2 branches missed.">        if (cause instanceof ReadTimeoutException) {</span>
+<span class="fc" id="L189">        log.error(&quot;exceptionCaught: Exception {} caught.&quot;, cause.getClass().getSimpleName(), cause);</span>
+<span class="pc bpc" id="L190" title="1 of 2 branches missed.">        if (cause instanceof ReadTimeoutException) {</span>
             // Handshake has failed or completed. If none is True, handshake timed out.
 <span class="nc bnc" id="L192" title="All 2 branches missed.">            if (this.handshakeState.failed()) {</span>
 <span class="nc" id="L193">                log.debug(&quot;exceptionCaught: Handshake timeout checker: already failed.&quot;);</span>
@@ -206,12 +206,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
                     &quot;(handshake OK)&quot;);
             }
         }
-<span class="nc bnc" id="L209" title="All 2 branches missed.">        if (ctx.channel().isOpen()) {</span>
+<span class="pc bpc" id="L209" title="1 of 2 branches missed.">        if (ctx.channel().isOpen()) {</span>
 <span class="nc" id="L210">            ctx.channel().close();</span>
         } else {
-<span class="nc" id="L212">            this.fireHandshakeFailed(ctx);</span>
+<span class="fc" id="L212">            this.fireHandshakeFailed(ctx);</span>
         }
-<span class="nc" id="L214">    }</span>
+<span class="fc" id="L214">    }</span>
 
     /**
      * Channel event that is triggered when an outbound handler attempts to write into the channel.
@@ -246,20 +246,20 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * @param ctx channel handler context
      */
     private void fireHandshakeFailed(ChannelHandlerContext ctx) {
-<span class="nc" id="L249">        this.handshakeState.set(true, true);</span>
-<span class="nc" id="L250">        log.error(&quot;fireHandshakeFailed: Handshake Failed. Close Channel.&quot;);</span>
+<span class="fc" id="L249">        this.handshakeState.set(true, true);</span>
+<span class="fc" id="L250">        log.error(&quot;fireHandshakeFailed: Handshake Failed. Close Channel.&quot;);</span>
         // Let downstream handlers know the handshake failed
-<span class="nc" id="L252">        ctx.fireUserEventTriggered(ClientHandshakeEvent.FAILED);</span>
-<span class="nc" id="L253">        ctx.channel().close();</span>
-<span class="nc" id="L254">    }</span>
+<span class="fc" id="L252">        ctx.fireUserEventTriggered(ClientHandshakeEvent.FAILED);</span>
+<span class="fc" id="L253">        ctx.channel().close();</span>
+<span class="fc" id="L254">    }</span>
 
     /**
      * Signal handshake as succeeded.
      */
     private void fireHandshakeSucceeded(ChannelHandlerContext ctx) {
-<span class="nc" id="L260">        this.handshakeState.set(false, true);</span>
+<span class="fc" id="L260">        this.handshakeState.set(false, true);</span>
         // Let downstream handlers know the handshake succeeded.
-<span class="nc" id="L262">        ctx.fireUserEventTriggered(ClientHandshakeEvent.CONNECTED);</span>
-<span class="nc" id="L263">    }</span>
+<span class="fc" id="L262">        ctx.fireUserEventTriggered(ClientHandshakeEvent.CONNECTED);</span>
+<span class="fc" id="L263">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

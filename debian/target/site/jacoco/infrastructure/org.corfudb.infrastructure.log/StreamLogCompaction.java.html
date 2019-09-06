@@ -20,31 +20,31 @@ import java.util.concurrent.TimeUnit;
  * Execute log compaction safely (prevent scheduled executor corruption if the task throws an exception)
  * https://stackoverflow.com/questions/6894595/scheduledexecutorservice-exception-handling
  */
-<span class="nc" id="L23">@Slf4j</span>
+<span class="fc" id="L23">@Slf4j</span>
 public class StreamLogCompaction {
-<span class="nc" id="L25">    static final String STREAM_COMPACT_METRIC = CorfuComponent.INFRA_STREAM_OPS + &quot;compaction&quot;;</span>
+<span class="fc" id="L25">    static final String STREAM_COMPACT_METRIC = CorfuComponent.INFRA_STREAM_OPS + &quot;compaction&quot;;</span>
 
-<span class="nc" id="L27">    private final ThreadFactory threadFactory = new ThreadFactoryBuilder()</span>
-<span class="nc" id="L28">            .setDaemon(true)</span>
-<span class="nc" id="L29">            .setNameFormat(&quot;LogUnit-Maintenance-%d&quot;)</span>
-<span class="nc" id="L30">            .build();</span>
+<span class="fc" id="L27">    private final ThreadFactory threadFactory = new ThreadFactoryBuilder()</span>
+<span class="fc" id="L28">            .setDaemon(true)</span>
+<span class="fc" id="L29">            .setNameFormat(&quot;LogUnit-Maintenance-%d&quot;)</span>
+<span class="fc" id="L30">            .build();</span>
 
     /**
      * A timer that collect metrics about log compaction
      */
-<span class="nc" id="L35">    private final Timer compactionTimer = ServerContext.getMetrics().timer(STREAM_COMPACT_METRIC);</span>
+<span class="fc" id="L35">    private final Timer compactionTimer = ServerContext.getMetrics().timer(STREAM_COMPACT_METRIC);</span>
 
     /**
      * A scheduler, which is used to schedule periodic stream log compaction for garbage collection.
      */
-<span class="nc" id="L40">    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory);</span>
+<span class="fc" id="L40">    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory);</span>
     private final ScheduledFuture&lt;?&gt; compactor;
     private final Duration shutdownTimer;
 
     public StreamLogCompaction(StreamLog streamLog, long initialDelay, long period, TimeUnit timeUnit,
-<span class="nc" id="L45">                               Duration shutdownTimer) {</span>
-<span class="nc" id="L46">        this.shutdownTimer = shutdownTimer;</span>
-<span class="nc" id="L47">        Runnable task = () -&gt; {</span>
+<span class="fc" id="L45">                               Duration shutdownTimer) {</span>
+<span class="fc" id="L46">        this.shutdownTimer = shutdownTimer;</span>
+<span class="fc" id="L47">        Runnable task = () -&gt; {</span>
 <span class="nc" id="L48">            log.debug(&quot;Start log compaction.&quot;);</span>
 <span class="nc" id="L49">            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)){</span>
 <span class="nc" id="L50">                streamLog.compact();</span>
@@ -52,18 +52,18 @@ public class StreamLogCompaction {
 <span class="nc" id="L52">                log.error(&quot;Can't compact stream log.&quot;, ex);</span>
 <span class="nc" id="L53">            }</span>
 <span class="nc" id="L54">        };</span>
-<span class="nc" id="L55">        compactor = scheduler.scheduleWithFixedDelay(task, initialDelay, period, timeUnit);</span>
-<span class="nc" id="L56">    }</span>
+<span class="fc" id="L55">        compactor = scheduler.scheduleWithFixedDelay(task, initialDelay, period, timeUnit);</span>
+<span class="fc" id="L56">    }</span>
 
     public void shutdown() {
-<span class="nc" id="L59">        compactor.cancel(true);</span>
-<span class="nc" id="L60">        scheduler.shutdownNow();</span>
+<span class="fc" id="L59">        compactor.cancel(true);</span>
+<span class="fc" id="L60">        scheduler.shutdownNow();</span>
         try {
-<span class="nc" id="L62">            scheduler.awaitTermination(shutdownTimer.toMillis(), TimeUnit.MILLISECONDS);</span>
+<span class="fc" id="L62">            scheduler.awaitTermination(shutdownTimer.toMillis(), TimeUnit.MILLISECONDS);</span>
 <span class="nc" id="L63">        } catch (InterruptedException ie) {</span>
 <span class="nc" id="L64">            log.debug(&quot;Stream log compaction, awaitTermination interrupted : {}&quot;, ie);</span>
 <span class="nc" id="L65">            throw new UnrecoverableCorfuInterruptedError(ie);</span>
-<span class="nc" id="L66">        }</span>
-<span class="nc" id="L67">    }</span>
+<span class="fc" id="L66">        }</span>
+<span class="fc" id="L67">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

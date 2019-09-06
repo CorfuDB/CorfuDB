@@ -12,14 +12,14 @@ import lombok.extern.slf4j.Slf4j;
  * Tuple to store the rank and clientId for each round in Paxos.
  * Created by mdhawan on 6/28/16.
  */
-<span class="nc" id="L15">@Slf4j</span>
+<span class="fc" id="L15">@Slf4j</span>
 <span class="nc" id="L16">@ToString</span>
-<span class="nc" id="L17">@AllArgsConstructor</span>
-<span class="nc bnc" id="L18" title="All 22 branches missed.">@EqualsAndHashCode</span>
+<span class="fc" id="L17">@AllArgsConstructor</span>
+<span class="pc bpc" id="L18" title="10 of 22 branches missed.">@EqualsAndHashCode</span>
 public class Rank {
-<span class="nc" id="L20">    @Getter</span>
+<span class="fc" id="L20">    @Getter</span>
     Long rank;
-<span class="nc" id="L22">    @Getter</span>
+<span class="fc" id="L22">    @Getter</span>
     UUID clientId;
 
     /**
@@ -30,13 +30,13 @@ public class Rank {
      *     False otherwise or if other is null
      */
     public boolean lessThanEqualTo(Rank other) {
-<span class="nc bnc" id="L33" title="All 2 branches missed.">        if (other == null) {</span>
+<span class="pc bpc" id="L33" title="1 of 2 branches missed.">        if (other == null) {</span>
 <span class="nc" id="L34">            return false;</span>
         }
-<span class="nc bnc" id="L36" title="All 2 branches missed.">        if (this == other) {</span>
+<span class="pc bpc" id="L36" title="1 of 2 branches missed.">        if (this == other) {</span>
 <span class="nc" id="L37">            return true;</span>
         }
-<span class="nc bnc" id="L39" title="All 2 branches missed.">        return this.rank.compareTo(other.rank) &lt;= 0;</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        return this.rank.compareTo(other.rank) &lt;= 0;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

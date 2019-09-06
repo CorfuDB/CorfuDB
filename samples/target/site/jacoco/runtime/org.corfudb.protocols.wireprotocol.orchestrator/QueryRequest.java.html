@@ -14,29 +14,29 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
  */
 public class QueryRequest implements Request {
 
-<span class="nc" id="L17">    @Getter</span>
+<span class="fc" id="L17">    @Getter</span>
     public UUID id;
 
-<span class="nc" id="L20">    public QueryRequest(UUID id) {</span>
-<span class="nc" id="L21">        this.id = id;</span>
-<span class="nc" id="L22">    }</span>
+<span class="fc" id="L20">    public QueryRequest(UUID id) {</span>
+<span class="fc" id="L21">        this.id = id;</span>
+<span class="fc" id="L22">    }</span>
 
-<span class="nc" id="L24">    public QueryRequest(byte[] buf) {</span>
-<span class="nc" id="L25">        ByteBuffer bytes = ByteBuffer.wrap(buf);</span>
-<span class="nc" id="L26">        this.id = new UUID(bytes.getLong(), bytes.getLong());</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L24">    public QueryRequest(byte[] buf) {</span>
+<span class="fc" id="L25">        ByteBuffer bytes = ByteBuffer.wrap(buf);</span>
+<span class="fc" id="L26">        this.id = new UUID(bytes.getLong(), bytes.getLong());</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public OrchestratorRequestType getType() {
-<span class="nc" id="L31">        return QUERY;</span>
+<span class="fc" id="L31">        return QUERY;</span>
     }
 
     @Override
     public byte[] getSerialized() {
-<span class="nc" id="L36">        ByteBuffer buf = ByteBuffer.allocate(Long.BYTES * 2);</span>
-<span class="nc" id="L37">        buf.putLong(id.getMostSignificantBits());</span>
-<span class="nc" id="L38">        buf.putLong(id.getLeastSignificantBits());</span>
-<span class="nc" id="L39">        return buf.array();</span>
+<span class="fc" id="L36">        ByteBuffer buf = ByteBuffer.allocate(Long.BYTES * 2);</span>
+<span class="fc" id="L37">        buf.putLong(id.getMostSignificantBits());</span>
+<span class="fc" id="L38">        buf.putLong(id.getLeastSignificantBits());</span>
+<span class="fc" id="L39">        return buf.array();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

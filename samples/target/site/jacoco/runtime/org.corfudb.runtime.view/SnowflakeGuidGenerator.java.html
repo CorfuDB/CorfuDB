@@ -26,10 +26,10 @@ public class SnowflakeGuidGenerator implements OrderedGuidGenerator {
      *      SnowflakeGuidGenerator guidGenerator = new SnowflakeGuidGenerator(nodeId.node());
      * @param node - Simple integer representing the current node.
      */
-<span class="nc" id="L29">    public SnowflakeGuidGenerator(long node) {</span>
-<span class="nc" id="L30">        this.node = (short)(node &amp; NODE_MAX_VAL);</span>
-<span class="nc" id="L31">        sequence = new AtomicInteger(0);</span>
-<span class="nc" id="L32">    }</span>
+<span class="fc" id="L29">    public SnowflakeGuidGenerator(long node) {</span>
+<span class="fc" id="L30">        this.node = (short)(node &amp; NODE_MAX_VAL);</span>
+<span class="fc" id="L31">        sequence = new AtomicInteger(0);</span>
+<span class="fc" id="L32">    }</span>
 
     /**
      * Fast best effort generation scheme for compact snowflake generation.
@@ -41,9 +41,9 @@ public class SnowflakeGuidGenerator implements OrderedGuidGenerator {
      */
     @Override
     public long nextLong() {
-<span class="nc" id="L44">        long currentTime = System.currentTimeMillis();</span>
-<span class="nc" id="L45">        long counter = this.sequence.incrementAndGet() &amp; SEQ_MAX_VAL;</span>
-<span class="nc" id="L46">        return currentTime &lt;&lt; NODE_SHIFT_LONG &lt;&lt; SEQ_SHIFT</span>
+<span class="fc" id="L44">        long currentTime = System.currentTimeMillis();</span>
+<span class="fc" id="L45">        long counter = this.sequence.incrementAndGet() &amp; SEQ_MAX_VAL;</span>
+<span class="fc" id="L46">        return currentTime &lt;&lt; NODE_SHIFT_LONG &lt;&lt; SEQ_SHIFT</span>
                 | node &lt;&lt; SEQ_SHIFT
                 | counter;
     }
@@ -58,10 +58,10 @@ public class SnowflakeGuidGenerator implements OrderedGuidGenerator {
      */
     @Override
     public UUID nextUUID() {
-<span class="nc" id="L61">        long currentTime = System.currentTimeMillis();</span>
-<span class="nc" id="L62">        long counter = this.sequence.incrementAndGet();</span>
-<span class="nc" id="L63">        counter |= node &lt;&lt; NODE_SHIFT_UUID;</span>
-<span class="nc" id="L64">        return new UUID(currentTime, counter);</span>
+<span class="fc" id="L61">        long currentTime = System.currentTimeMillis();</span>
+<span class="fc" id="L62">        long counter = this.sequence.incrementAndGet();</span>
+<span class="fc" id="L63">        counter |= node &lt;&lt; NODE_SHIFT_UUID;</span>
+<span class="fc" id="L64">        return new UUID(currentTime, counter);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

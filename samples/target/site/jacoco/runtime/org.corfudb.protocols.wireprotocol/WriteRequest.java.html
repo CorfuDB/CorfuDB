@@ -10,30 +10,30 @@ import java.util.EnumMap;
 /**
  * Created by mwei on 8/9/16.
  */
-<span class="nc" id="L13">@Builder</span>
-<span class="nc" id="L14">@AllArgsConstructor</span>
+<span class="pc" id="L13">@Builder</span>
+<span class="fc" id="L14">@AllArgsConstructor</span>
 public class WriteRequest implements ICorfuPayload&lt;WriteRequest&gt;, IMetadata {
 
-<span class="nc" id="L17">    @Getter</span>
+<span class="fc" id="L17">    @Getter</span>
     final ILogData data;
 
     @SuppressWarnings(&quot;unchecked&quot;)
-<span class="nc" id="L21">    public WriteRequest(ByteBuf buf) {</span>
-<span class="nc" id="L22">        this.data = ICorfuPayload.fromBuffer(buf, LogData.class);</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L21">    public WriteRequest(ByteBuf buf) {</span>
+<span class="fc" id="L22">        this.data = ICorfuPayload.fromBuffer(buf, LogData.class);</span>
+<span class="fc" id="L23">    }</span>
 
-<span class="nc" id="L25">    public WriteRequest(DataType dataType, ByteBuf buf) {</span>
-<span class="nc" id="L26">        this.data = new LogData(dataType, buf);</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L25">    public WriteRequest(DataType dataType, ByteBuf buf) {</span>
+<span class="fc" id="L26">        this.data = new LogData(dataType, buf);</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L31">        ICorfuPayload.serialize(buf, data);</span>
-<span class="nc" id="L32">    }</span>
+<span class="fc" id="L31">        ICorfuPayload.serialize(buf, data);</span>
+<span class="fc" id="L32">    }</span>
 
     @Override
     public EnumMap&lt;LogUnitMetadataType, Object&gt; getMetadataMap() {
-<span class="nc" id="L36">        return data.getMetadataMap();</span>
+<span class="fc" id="L36">        return data.getMetadataMap();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

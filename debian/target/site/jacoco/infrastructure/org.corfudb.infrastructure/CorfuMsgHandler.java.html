@@ -35,10 +35,10 @@ import java.util.Set;
  *
  * &lt;p&gt;Created by mwei on 7/26/16.
  */
-<span class="nc" id="L38">@Slf4j</span>
+<span class="fc" id="L38">@Slf4j</span>
 public class CorfuMsgHandler {
 
-<span class="nc" id="L41">    private final Map&lt;CorfuMsgType, String&gt; timerNameCache = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L41">    private final Map&lt;CorfuMsgType, String&gt; timerNameCache = new HashMap&lt;&gt;();</span>
 
     /**
      * A functional interface for server message handlers. Server message handlers should
@@ -61,7 +61,7 @@ public class CorfuMsgHandler {
      * @return  A set containing the types this handler will handle.
      */
     public Set&lt;CorfuMsgType&gt; getHandledTypes() {
-<span class="nc" id="L64">        return handlerMap.keySet();</span>
+<span class="fc" id="L64">        return handlerMap.keySet();</span>
     }
 
     /** Get a handler for a specific message type.
@@ -75,9 +75,9 @@ public class CorfuMsgHandler {
     }
 
     /** Construct a new instance of CorfuMsgHandler. */
-<span class="nc" id="L78">    public CorfuMsgHandler() {</span>
-<span class="nc" id="L79">        handlerMap = new EnumMap&lt;&gt;(CorfuMsgType.class);</span>
-<span class="nc" id="L80">    }</span>
+<span class="fc" id="L78">    public CorfuMsgHandler() {</span>
+<span class="fc" id="L79">        handlerMap = new EnumMap&lt;&gt;(CorfuMsgType.class);</span>
+<span class="fc" id="L80">    }</span>
 
     /** Add a handler to this message handler.
      *
@@ -104,24 +104,24 @@ public class CorfuMsgHandler {
     @SuppressWarnings(&quot;unchecked&quot;)
     public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r) {
         // Get the handler for the message type
-<span class="nc" id="L107">        final Handler&lt;CorfuMsg&gt; handler = handlerMap.get(message.getMsgType());</span>
+<span class="fc" id="L107">        final Handler&lt;CorfuMsg&gt; handler = handlerMap.get(message.getMsgType());</span>
         // If present...
-<span class="nc bnc" id="L109" title="All 2 branches missed.">        if (handler != null) {</span>
+<span class="pc bpc" id="L109" title="1 of 2 branches missed.">        if (handler != null) {</span>
             try {
-<span class="nc" id="L111">                handler.handle(message, ctx, r);</span>
+<span class="fc" id="L111">                handler.handle(message, ctx, r);</span>
 <span class="nc" id="L112">            } catch (Exception ex) {</span>
                 // Log the exception during handling
 <span class="nc" id="L114">                log.error(&quot;handle: Unhandled exception processing {} message&quot;,</span>
 <span class="nc" id="L115">                        message.getMsgType(), ex);</span>
 <span class="nc" id="L116">                r.sendResponse(ctx, message,</span>
 <span class="nc" id="L117">                        CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));</span>
-<span class="nc" id="L118">            }</span>
+<span class="pc" id="L118">            }</span>
             // Otherwise log the unexpected message.
         } else {
 <span class="nc" id="L121">            log.error(&quot;handle: Unregistered message type {}&quot;, message.getMsgType());</span>
         }
 
-<span class="nc bnc" id="L124" title="All 2 branches missed.">        return handler != null;</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">        return handler != null;</span>
     }
 
     /** Generate handlers for a particular server.
@@ -132,11 +132,11 @@ public class CorfuMsgHandler {
      */
     public static CorfuMsgHandler generateHandler(@Nonnull final MethodHandles.Lookup caller,
             @Nonnull final AbstractServer server) {
-<span class="nc" id="L135">        CorfuMsgHandler handler = new CorfuMsgHandler();</span>
-<span class="nc" id="L136">        Arrays.stream(server.getClass().getDeclaredMethods())</span>
-<span class="nc" id="L137">            .filter(method -&gt; method.isAnnotationPresent(ServerHandler.class))</span>
-<span class="nc" id="L138">            .forEach(method -&gt; handler.registerMethod(caller, server, method));</span>
-<span class="nc" id="L139">        return handler;</span>
+<span class="fc" id="L135">        CorfuMsgHandler handler = new CorfuMsgHandler();</span>
+<span class="fc" id="L136">        Arrays.stream(server.getClass().getDeclaredMethods())</span>
+<span class="fc" id="L137">            .filter(method -&gt; method.isAnnotationPresent(ServerHandler.class))</span>
+<span class="fc" id="L138">            .forEach(method -&gt; handler.registerMethod(caller, server, method));</span>
+<span class="fc" id="L139">        return handler;</span>
     }
 
 
@@ -152,22 +152,22 @@ public class CorfuMsgHandler {
     private void registerMethod(@Nonnull final MethodHandles.Lookup caller,
             @Nonnull final AbstractServer server,
             @Nonnull final Method method) {
-<span class="nc" id="L155">        final ServerHandler annotation = method.getAnnotation(ServerHandler.class);</span>
+<span class="fc" id="L155">        final ServerHandler annotation = method.getAnnotation(ServerHandler.class);</span>
 
-<span class="nc bnc" id="L157" title="All 2 branches missed.">        if (!method.getParameterTypes()[0].isAssignableFrom(annotation.type().messageType</span>
-<span class="nc" id="L158">                .getRawType())) {</span>
+<span class="pc bpc" id="L157" title="1 of 2 branches missed.">        if (!method.getParameterTypes()[0].isAssignableFrom(annotation.type().messageType</span>
+<span class="fc" id="L158">                .getRawType())) {</span>
 <span class="nc" id="L159">            throw new UnrecoverableCorfuError(&quot;Incorrect message type, expected &quot;</span>
 <span class="nc" id="L160">                + annotation.type().messageType.getRawType() + &quot; but provided &quot;</span>
 <span class="nc" id="L161">                + method.getParameterTypes()[0]);</span>
         }
-<span class="nc bnc" id="L163" title="All 2 branches missed.">        if (handlerMap.containsKey(annotation.type())) {</span>
+<span class="pc bpc" id="L163" title="1 of 2 branches missed.">        if (handlerMap.containsKey(annotation.type())) {</span>
 <span class="nc" id="L164">            throw new UnrecoverableCorfuError(&quot;Handler for &quot; + annotation.type()</span>
                 + &quot; already registered!&quot;);
         }
         // convert the method into a Java8 Lambda for maximum execution speed...
         try {
             Handler&lt;CorfuMsg&gt; h;
-<span class="nc bnc" id="L170" title="All 2 branches missed.">            if (Modifier.isStatic(method.getModifiers())) {</span>
+<span class="pc bpc" id="L170" title="1 of 2 branches missed.">            if (Modifier.isStatic(method.getModifiers())) {</span>
 <span class="nc" id="L171">                MethodHandle mh = caller.unreflect(method);</span>
 <span class="nc" id="L172">                MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);</span>
 <span class="nc" id="L173">                h = (Handler&lt;CorfuMsg&gt;) LambdaMetafactory.metafactory(caller,</span>
@@ -177,28 +177,28 @@ public class CorfuMsgHandler {
 
 <span class="nc" id="L178">            } else {</span>
                 // instance method, so we need to capture the type.
-<span class="nc" id="L180">                MethodType mt = MethodType.methodType(method.getReturnType(),</span>
-<span class="nc" id="L181">                        method.getParameterTypes());</span>
-<span class="nc" id="L182">                MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);</span>
-<span class="nc" id="L183">                MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);</span>
-<span class="nc" id="L184">                h = (Handler&lt;CorfuMsg&gt;) LambdaMetafactory.metafactory(caller,</span>
+<span class="fc" id="L180">                MethodType mt = MethodType.methodType(method.getReturnType(),</span>
+<span class="fc" id="L181">                        method.getParameterTypes());</span>
+<span class="fc" id="L182">                MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);</span>
+<span class="fc" id="L183">                MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);</span>
+<span class="fc" id="L184">                h = (Handler&lt;CorfuMsg&gt;) LambdaMetafactory.metafactory(caller,</span>
                     &quot;handle&quot;,
-<span class="nc" id="L186">                    MethodType.methodType(Handler.class, server.getClass()),</span>
-<span class="nc" id="L187">                    mtGeneric.dropParameterTypes(0, 1), mh,</span>
-<span class="nc" id="L188">                    mh.type().dropParameterTypes(0, 1)).getTarget()</span>
-<span class="nc" id="L189">                    .bindTo(server).invoke();</span>
+<span class="fc" id="L186">                    MethodType.methodType(Handler.class, server.getClass()),</span>
+<span class="fc" id="L187">                    mtGeneric.dropParameterTypes(0, 1), mh,</span>
+<span class="fc" id="L188">                    mh.type().dropParameterTypes(0, 1)).getTarget()</span>
+<span class="fc" id="L189">                    .bindTo(server).invoke();</span>
             }
             // Install pre-conditions on handler
-<span class="nc" id="L192">            final Handler&lt;CorfuMsg&gt; handler =</span>
-<span class="nc" id="L193">                    generateConditionalHandler(server, annotation.type(), h);</span>
+<span class="fc" id="L192">            final Handler&lt;CorfuMsg&gt; handler =</span>
+<span class="fc" id="L193">                    generateConditionalHandler(server, annotation.type(), h);</span>
             // Install the handler in the map
-<span class="nc" id="L195">            handlerMap.put(annotation.type(), handler);</span>
+<span class="fc" id="L195">            handlerMap.put(annotation.type(), handler);</span>
 <span class="nc" id="L196">        } catch (Throwable e) {</span>
 <span class="nc" id="L197">            log.error(&quot;Exception during message handler registration&quot;, e);</span>
 <span class="nc" id="L198">            throw new UnrecoverableCorfuError(e);</span>
 
-<span class="nc" id="L200">        }</span>
-<span class="nc" id="L201">    }</span>
+<span class="fc" id="L200">        }</span>
+<span class="fc" id="L201">    }</span>
 
     /** Generate a conditional handler, which instruments the handler with metrics if configured
      * as enabled and checks whether the server is shutdown and ready.
@@ -212,24 +212,24 @@ public class CorfuMsgHandler {
             @Nonnull final CorfuMsgType type,
             @Nonnull final Handler&lt;CorfuMsg&gt; handler) {
         // Generate a timer based on the Corfu message type
-<span class="nc" id="L215">        final Timer timer = getTimer(type);</span>
+<span class="fc" id="L215">        final Timer timer = getTimer(type);</span>
 
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
-<span class="nc" id="L219">        return (msg, ctx, r) -&gt; {</span>
-<span class="nc" id="L220">            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {</span>
-<span class="nc" id="L221">                handler.handle(msg, ctx, r);</span>
-<span class="nc bnc" id="L222" title="All 8 branches missed.">            }</span>
-<span class="nc" id="L223">        };</span>
+<span class="fc" id="L219">        return (msg, ctx, r) -&gt; {</span>
+<span class="fc" id="L220">            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {</span>
+<span class="fc" id="L221">                handler.handle(msg, ctx, r);</span>
+<span class="pc bpc" id="L222" title="6 of 8 branches missed.">            }</span>
+<span class="fc" id="L223">        };</span>
     }
 
     // Create a timer using cached timer name for the corresponding type
     private Timer getTimer(@Nonnull CorfuMsgType type) {
-<span class="nc" id="L228">        timerNameCache.computeIfAbsent(type,</span>
-<span class="nc" id="L229">                                       aType -&gt; (CorfuComponent.INFRA_MSG_HANDLER +</span>
-<span class="nc" id="L230">                                                 aType.name().toLowerCase()));</span>
+<span class="fc" id="L228">        timerNameCache.computeIfAbsent(type,</span>
+<span class="fc" id="L229">                                       aType -&gt; (CorfuComponent.INFRA_MSG_HANDLER +</span>
+<span class="fc" id="L230">                                                 aType.name().toLowerCase()));</span>
 
-<span class="nc" id="L232">        return ServerContext.getMetrics().timer(timerNameCache.get(type));</span>
+<span class="fc" id="L232">        return ServerContext.getMetrics().timer(timerNameCache.get(type));</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -24,9 +24,9 @@ public class ClusterAdvisorFactory {
      * provided strategy.
      */
     public static ClusterAdvisor createForStrategy(ClusterType strategy, String localEndpoint) {
-<span class="nc bnc" id="L27" title="All 3 branches missed.">        switch (strategy) {</span>
+<span class="pc bpc" id="L27" title="2 of 3 branches missed.">        switch (strategy) {</span>
             case COMPLETE_GRAPH:
-<span class="nc" id="L29">                return new CompleteGraphAdvisor(localEndpoint);</span>
+<span class="fc" id="L29">                return new CompleteGraphAdvisor(localEndpoint);</span>
             case STAR_GRAPH:
 <span class="nc" id="L31">                throw new UnsupportedOperationException(strategy.name());</span>
             default:

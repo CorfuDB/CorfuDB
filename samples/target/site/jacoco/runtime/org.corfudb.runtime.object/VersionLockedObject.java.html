@@ -46,13 +46,13 @@ import java.util.function.Supplier;
  *
  * &lt;p&gt;Created by mwei on 11/13/16.
  */
-<span class="nc" id="L49">@Slf4j</span>
+<span class="fc" id="L49">@Slf4j</span>
 public class VersionLockedObject&lt;T&gt; {
 
     /**
      * The actual underlying object.
      */
-<span class="nc" id="L55">    @Getter</span>
+<span class="fc" id="L55">    @Getter</span>
     private T object;
 
     /**
@@ -64,14 +64,14 @@ public class VersionLockedObject&lt;T&gt; {
 
     // This enum is necessary because null cannot be inserted
     // into a ConcurrentHashMap.
-<span class="nc" id="L67">    enum NullValue {</span>
-<span class="nc" id="L68">        NULL_VALUE</span>
+<span class="pc" id="L67">    enum NullValue {</span>
+<span class="fc" id="L68">        NULL_VALUE</span>
     }
 
     /**
      * A list of upcall results, keyed by the address they were requested.
      */
-<span class="nc" id="L74">    @Getter</span>
+<span class="fc" id="L74">    @Getter</span>
     private final Map&lt;Long, Object&gt; upcallResults;
 
 
@@ -119,7 +119,7 @@ public class VersionLockedObject&lt;T&gt; {
     /**
      * Correctness Logging
      */
-<span class="nc" id="L122">    private final Logger correctnessLogger = LoggerFactory.getLogger(&quot;correctness&quot;);</span>
+<span class="fc" id="L122">    private final Logger correctnessLogger = LoggerFactory.getLogger(&quot;correctness&quot;);</span>
 
 
     /**
@@ -138,21 +138,21 @@ public class VersionLockedObject&lt;T&gt; {
                                Map&lt;String, ICorfuSMRUpcallTarget&lt;T&gt;&gt; upcallTargets,
                                Map&lt;String, IUndoRecordFunction&lt;T&gt;&gt; undoRecordTargets,
                                Map&lt;String, IUndoFunction&lt;T&gt;&gt; undoTargets,
-<span class="nc" id="L141">                               Set&lt;String&gt; resetSet) {</span>
-<span class="nc" id="L142">        this.smrStream = smrStream;</span>
+<span class="fc" id="L141">                               Set&lt;String&gt; resetSet) {</span>
+<span class="fc" id="L142">        this.smrStream = smrStream;</span>
 
-<span class="nc" id="L144">        this.upcallTargetMap = upcallTargets;</span>
-<span class="nc" id="L145">        this.undoRecordFunctionMap = undoRecordTargets;</span>
-<span class="nc" id="L146">        this.undoFunctionMap = undoTargets;</span>
-<span class="nc" id="L147">        this.resetSet = resetSet;</span>
+<span class="fc" id="L144">        this.upcallTargetMap = upcallTargets;</span>
+<span class="fc" id="L145">        this.undoRecordFunctionMap = undoRecordTargets;</span>
+<span class="fc" id="L146">        this.undoFunctionMap = undoTargets;</span>
+<span class="fc" id="L147">        this.resetSet = resetSet;</span>
 
-<span class="nc" id="L149">        this.newObjectFn = newObjectFn;</span>
-<span class="nc" id="L150">        this.object = newObjectFn.get();</span>
-<span class="nc" id="L151">        this.pendingUpcalls = ConcurrentHashMap.newKeySet();</span>
-<span class="nc" id="L152">        this.upcallResults = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L149">        this.newObjectFn = newObjectFn;</span>
+<span class="fc" id="L150">        this.object = newObjectFn.get();</span>
+<span class="fc" id="L151">        this.pendingUpcalls = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L152">        this.upcallResults = new ConcurrentHashMap&lt;&gt;();</span>
 
-<span class="nc" id="L154">        lock = new StampedLock();</span>
-<span class="nc" id="L155">    }</span>
+<span class="fc" id="L154">        lock = new StampedLock();</span>
+<span class="fc" id="L155">    }</span>
 
     /**
      * Run gc on this object. Since the stream that backs this object is not thread-safe:
@@ -203,63 +203,63 @@ public class VersionLockedObject&lt;T&gt; {
                         Function&lt;T, R&gt; accessFunction) {
         // First, we try to do an optimistic read on the object, in case it
         // meets the conditions for direct access.
-<span class="nc" id="L206">        long ts = lock.tryOptimisticRead();</span>
-<span class="nc bnc" id="L207" title="All 2 branches missed.">        if (ts != 0) {</span>
-<span class="nc" id="L208">            try (Timer.Context optimistReadDuration = VloMetricsHelper.getOptimisticReadContext()) {</span>
-<span class="nc bnc" id="L209" title="All 2 branches missed.">                if (directAccessCheckFunction.apply(this)) {</span>
-<span class="nc" id="L210">                    log.trace(&quot;Access [{}] Direct (optimistic-read) access at {}&quot;,</span>
-<span class="nc" id="L211">                            this, getVersionUnsafe());</span>
-<span class="nc" id="L212">                    R ret = accessFunction.apply(object);</span>
+<span class="fc" id="L206">        long ts = lock.tryOptimisticRead();</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">        if (ts != 0) {</span>
+<span class="fc" id="L208">            try (Timer.Context optimistReadDuration = VloMetricsHelper.getOptimisticReadContext()) {</span>
+<span class="fc bfc" id="L209" title="All 2 branches covered.">                if (directAccessCheckFunction.apply(this)) {</span>
+<span class="fc" id="L210">                    log.trace(&quot;Access [{}] Direct (optimistic-read) access at {}&quot;,</span>
+<span class="fc" id="L211">                            this, getVersionUnsafe());</span>
+<span class="fc" id="L212">                    R ret = accessFunction.apply(object);</span>
 
-<span class="nc" id="L214">                    long versionForCorrectness = getVersionUnsafe();</span>
-<span class="nc bnc" id="L215" title="All 2 branches missed.">                    if (lock.validate(ts)) {</span>
-<span class="nc" id="L216">                        correctnessLogger.trace(&quot;Version, {}&quot;, versionForCorrectness);</span>
-<span class="nc" id="L217">                        return ret;</span>
+<span class="fc" id="L214">                    long versionForCorrectness = getVersionUnsafe();</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">                    if (lock.validate(ts)) {</span>
+<span class="fc" id="L216">                        correctnessLogger.trace(&quot;Version, {}&quot;, versionForCorrectness);</span>
+<span class="fc" id="L217">                        return ret;</span>
                     }
                 }
-<span class="nc bnc" id="L220" title="All 12 branches missed.">            } catch (Exception e) {</span>
+<span class="pc bpc" id="L220" title="9 of 12 branches missed.">            } catch (Exception e) {</span>
                 // If we have an exception, we didn't get a chance to validate the lock.
                 // If it's still valid, then we should re-throw the exception since it was
                 // on a correct view of the object.
-<span class="nc bnc" id="L224" title="All 2 branches missed.">                if (lock.validate(ts)) {</span>
-<span class="nc" id="L225">                    throw e;</span>
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">                if (lock.validate(ts)) {</span>
+<span class="fc" id="L225">                    throw e;</span>
                 }
                 // Otherwise, it is not on a correct view of the object (the object was
                 // modified) and we should try again by upgrading the lock.
 <span class="nc" id="L229">                log.warn(&quot;Access [{}] Direct (optimistic-read) exception, upgrading lock. Exception &quot;,</span>
                         this, e);
-<span class="nc" id="L231">            }</span>
+<span class="fc" id="L231">            }</span>
         }
         // Next, we just upgrade to a full write lock if the optimistic
         // read fails, since it means that the state of the object was
         // updated.
-<span class="nc" id="L236">        try (Timer.Context updateObjectReadDuration = VloMetricsHelper.getUpdatedObjectReadContext()) {</span>
+<span class="fc" id="L236">        try (Timer.Context updateObjectReadDuration = VloMetricsHelper.getUpdatedObjectReadContext()) {</span>
             // Attempt an upgrade
-<span class="nc" id="L238">            ts = lock.tryConvertToWriteLock(ts);</span>
+<span class="fc" id="L238">            ts = lock.tryConvertToWriteLock(ts);</span>
             // Upgrade failed, try conversion again
-<span class="nc bnc" id="L240" title="All 2 branches missed.">            if (ts == 0) {</span>
-<span class="nc" id="L241">                ts = lock.writeLock();</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">            if (ts == 0) {</span>
+<span class="fc" id="L241">                ts = lock.writeLock();</span>
             }
             // Check if direct access is possible (unlikely).
-<span class="nc bnc" id="L244" title="All 2 branches missed.">            if (directAccessCheckFunction.apply(this)) {</span>
-<span class="nc" id="L245">                log.trace(&quot;Access [{}] Direct (writelock) access at {}&quot;, this, getVersionUnsafe());</span>
-<span class="nc" id="L246">                R ret = accessFunction.apply(object);</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">            if (directAccessCheckFunction.apply(this)) {</span>
+<span class="fc" id="L245">                log.trace(&quot;Access [{}] Direct (writelock) access at {}&quot;, this, getVersionUnsafe());</span>
+<span class="fc" id="L246">                R ret = accessFunction.apply(object);</span>
 
-<span class="nc" id="L248">                long versionForCorrectness = getVersionUnsafe();</span>
-<span class="nc bnc" id="L249" title="All 2 branches missed.">                if (lock.validate(ts)) {</span>
-<span class="nc" id="L250">                    correctnessLogger.trace(&quot;Version, {}&quot;, versionForCorrectness);</span>
-<span class="nc" id="L251">                    return ret;</span>
+<span class="fc" id="L248">                long versionForCorrectness = getVersionUnsafe();</span>
+<span class="pc bpc" id="L249" title="1 of 2 branches missed.">                if (lock.validate(ts)) {</span>
+<span class="fc" id="L250">                    correctnessLogger.trace(&quot;Version, {}&quot;, versionForCorrectness);</span>
+<span class="fc" id="L251">                    return ret;</span>
                 }
             }
             // If not, perform the update operations
-<span class="nc" id="L255">            updateFunction.accept(this);</span>
-<span class="nc" id="L256">            correctnessLogger.trace(&quot;Version, {}&quot;, getVersionUnsafe());</span>
-<span class="nc" id="L257">            log.trace(&quot;Access [{}] Updated (writelock) access at {}&quot;, this, getVersionUnsafe());</span>
-<span class="nc" id="L258">            return accessFunction.apply(object);</span>
+<span class="fc" id="L255">            updateFunction.accept(this);</span>
+<span class="fc" id="L256">            correctnessLogger.trace(&quot;Version, {}&quot;, getVersionUnsafe());</span>
+<span class="fc" id="L257">            log.trace(&quot;Access [{}] Updated (writelock) access at {}&quot;, this, getVersionUnsafe());</span>
+<span class="fc" id="L258">            return accessFunction.apply(object);</span>
             // And perform the access
-<span class="nc bnc" id="L260" title="All 12 branches missed.">        } finally {</span>
-<span class="nc" id="L261">            lock.unlock(ts);</span>
-<span class="nc" id="L262">        }</span>
+<span class="pc bpc" id="L260" title="9 of 12 branches missed.">        } finally {</span>
+<span class="fc" id="L261">            lock.unlock(ts);</span>
+<span class="fc" id="L262">        }</span>
     }
 
     /**
@@ -270,15 +270,15 @@ public class VersionLockedObject&lt;T&gt; {
      * @return The return value of the update function.
      */
     public &lt;R&gt; R update(Function&lt;VersionLockedObject&lt;T&gt;, R&gt; updateFunction) {
-<span class="nc" id="L273">        long ts = 0;</span>
+<span class="fc" id="L273">        long ts = 0;</span>
 
-<span class="nc" id="L275">        try (Timer.Context updateDuration = VloMetricsHelper.getVloUpdateContext()) {</span>
-<span class="nc" id="L276">            ts = lock.writeLock();</span>
-<span class="nc" id="L277">            log.trace(&quot;Update[{}] (writelock)&quot;, this);</span>
-<span class="nc" id="L278">            return updateFunction.apply(this);</span>
-<span class="nc bnc" id="L279" title="All 8 branches missed.">        } finally {</span>
-<span class="nc" id="L280">            lock.unlock(ts);</span>
-<span class="nc" id="L281">        }</span>
+<span class="fc" id="L275">        try (Timer.Context updateDuration = VloMetricsHelper.getVloUpdateContext()) {</span>
+<span class="fc" id="L276">            ts = lock.writeLock();</span>
+<span class="fc" id="L277">            log.trace(&quot;Update[{}] (writelock)&quot;, this);</span>
+<span class="fc" id="L278">            return updateFunction.apply(this);</span>
+<span class="pc bpc" id="L279" title="6 of 8 branches missed.">        } finally {</span>
+<span class="fc" id="L280">            lock.unlock(ts);</span>
+<span class="fc" id="L281">        }</span>
     }
 
     /**
@@ -293,10 +293,10 @@ public class VersionLockedObject&lt;T&gt; {
      *                             the supplied version.
      */
     public void rollbackObjectUnsafe(long rollbackVersion) {
-<span class="nc" id="L296">        log.trace(&quot;Rollback[{}] to {}&quot;, this, rollbackVersion);</span>
-<span class="nc" id="L297">        rollbackStreamUnsafe(smrStream, rollbackVersion);</span>
-<span class="nc" id="L298">        log.trace(&quot;Rollback[{}] completed&quot;, this);</span>
-<span class="nc" id="L299">    }</span>
+<span class="fc" id="L296">        log.trace(&quot;Rollback[{}] to {}&quot;, this, rollbackVersion);</span>
+<span class="fc" id="L297">        rollbackStreamUnsafe(smrStream, rollbackVersion);</span>
+<span class="fc" id="L298">        log.trace(&quot;Rollback[{}] completed&quot;, this);</span>
+<span class="fc" id="L299">    }</span>
 
     /**
      * Move the pointer for this object (effectively, forcefuly
@@ -306,8 +306,8 @@ public class VersionLockedObject&lt;T&gt; {
      * @param globalAddress The global address to set the pointer to
      */
     public void seek(long globalAddress) {
-<span class="nc" id="L309">        smrStream.seek(globalAddress);</span>
-<span class="nc" id="L310">    }</span>
+<span class="fc" id="L309">        smrStream.seek(globalAddress);</span>
+<span class="fc" id="L310">    }</span>
 
     /**
      * Bring the object to the requested version, rolling back or syncing
@@ -318,52 +318,52 @@ public class VersionLockedObject&lt;T&gt; {
     public void syncObjectUnsafe(long timestamp) {
         // If there is an optimistic stream attached,
         // and it belongs to this thread use that
-<span class="nc bnc" id="L321" title="All 2 branches missed.">        if (optimisticallyOwnedByThreadUnsafe()) {</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">        if (optimisticallyOwnedByThreadUnsafe()) {</span>
             // If there are no updates, ensure we are at the right snapshot
-<span class="nc bnc" id="L323" title="All 2 branches missed.">            if (optimisticStream.pos() == Address.NEVER_READ) {</span>
-<span class="nc" id="L324">                final WriteSetSMRStream currentOptimisticStream =</span>
+<span class="fc bfc" id="L323" title="All 2 branches covered.">            if (optimisticStream.pos() == Address.NEVER_READ) {</span>
+<span class="fc" id="L324">                final WriteSetSMRStream currentOptimisticStream =</span>
                         optimisticStream;
                 // If we are too far ahead, roll back to the past
-<span class="nc bnc" id="L327" title="All 2 branches missed.">                if (getVersionUnsafe() &gt; timestamp) {</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">                if (getVersionUnsafe() &gt; timestamp) {</span>
                     try {
-<span class="nc" id="L329">                        rollbackObjectUnsafe(timestamp);</span>
+<span class="fc" id="L329">                        rollbackObjectUnsafe(timestamp);</span>
 <span class="nc" id="L330">                    } catch (NoRollbackException nre) {</span>
 <span class="nc" id="L331">                        log.warn(&quot;SyncObjectUnsafe[{}] to {} failed {}&quot;, this, timestamp, nre);</span>
 <span class="nc" id="L332">                        resetUnsafe();</span>
-<span class="nc" id="L333">                    }</span>
+<span class="fc" id="L333">                    }</span>
                 }
                 // Now sync the regular log
-<span class="nc" id="L336">                syncStreamUnsafe(smrStream, timestamp);</span>
+<span class="fc" id="L336">                syncStreamUnsafe(smrStream, timestamp);</span>
                 // It's possible that due to reset,
                 // the optimistic stream is no longer
                 // present. Restore it.
-<span class="nc" id="L340">                optimisticStream = currentOptimisticStream;</span>
+<span class="fc" id="L340">                optimisticStream = currentOptimisticStream;</span>
             }
-<span class="nc" id="L342">            syncStreamUnsafe(optimisticStream, Address.OPTIMISTIC);</span>
+<span class="fc" id="L342">            syncStreamUnsafe(optimisticStream, Address.OPTIMISTIC);</span>
         } else {
             // If there is an optimistic stream for another
             // transaction, remove it by rolling it back first
-<span class="nc bnc" id="L346" title="All 2 branches missed.">            if (this.optimisticStream != null) {</span>
-<span class="nc" id="L347">                optimisticRollbackUnsafe();</span>
-<span class="nc" id="L348">                this.optimisticStream = null;</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">            if (this.optimisticStream != null) {</span>
+<span class="fc" id="L347">                optimisticRollbackUnsafe();</span>
+<span class="fc" id="L348">                this.optimisticStream = null;</span>
             }
             // If we are too far ahead, roll back to the past
-<span class="nc bnc" id="L351" title="All 2 branches missed.">            if (getVersionUnsafe() &gt; timestamp) {</span>
+<span class="fc bfc" id="L351" title="All 2 branches covered.">            if (getVersionUnsafe() &gt; timestamp) {</span>
                 try {
-<span class="nc" id="L353">                    rollbackObjectUnsafe(timestamp);</span>
+<span class="fc" id="L353">                    rollbackObjectUnsafe(timestamp);</span>
                     // Rollback successfully got us to the right
                     // version, we're done.
-<span class="nc bnc" id="L356" title="All 2 branches missed.">                    if (getVersionUnsafe() == timestamp) {</span>
-<span class="nc" id="L357">                        return;</span>
+<span class="pc bpc" id="L356" title="1 of 2 branches missed.">                    if (getVersionUnsafe() == timestamp) {</span>
+<span class="fc" id="L357">                        return;</span>
                     }
-<span class="nc" id="L359">                } catch (NoRollbackException nre) {</span>
-<span class="nc" id="L360">                    log.warn(&quot;Rollback[{}] to {} failed {}&quot;, this, timestamp, nre);</span>
-<span class="nc" id="L361">                    resetUnsafe();</span>
+<span class="fc" id="L359">                } catch (NoRollbackException nre) {</span>
+<span class="fc" id="L360">                    log.warn(&quot;Rollback[{}] to {} failed {}&quot;, this, timestamp, nre);</span>
+<span class="fc" id="L361">                    resetUnsafe();</span>
 <span class="nc" id="L362">                }</span>
             }
-<span class="nc" id="L364">            syncStreamUnsafe(smrStream, timestamp);</span>
+<span class="fc" id="L364">            syncStreamUnsafe(smrStream, timestamp);</span>
         }
-<span class="nc" id="L366">    }</span>
+<span class="fc" id="L366">    }</span>
 
     /**
      * Log an update to this object, noting a request to save the
@@ -375,12 +375,12 @@ public class VersionLockedObject&lt;T&gt; {
      * @return The address the update was logged at.
      */
     public long logUpdate(SMREntry entry, boolean saveUpcall) {
-<span class="nc" id="L378">        return smrStream.append(entry,</span>
+<span class="fc" id="L378">        return smrStream.append(entry,</span>
                 t -&gt; {
-<span class="nc bnc" id="L380" title="All 2 branches missed.">                    if (saveUpcall) {</span>
-<span class="nc" id="L381">                        pendingUpcalls.add(t.getToken().getSequence());</span>
+<span class="fc bfc" id="L380" title="All 2 branches covered.">                    if (saveUpcall) {</span>
+<span class="fc" id="L381">                        pendingUpcalls.add(t.getToken().getSequence());</span>
                     }
-<span class="nc" id="L383">                    return true;</span>
+<span class="fc" id="L383">                    return true;</span>
                 },
                 t -&gt; {
 <span class="nc bnc" id="L386" title="All 2 branches missed.">                    if (saveUpcall) {</span>
@@ -394,7 +394,7 @@ public class VersionLockedObject&lt;T&gt; {
      * Get a handle to the optimistic stream.
      */
     public WriteSetSMRStream getOptimisticStreamUnsafe() {
-<span class="nc" id="L397">        return optimisticStream;</span>
+<span class="fc" id="L397">        return optimisticStream;</span>
     }
 
     /**
@@ -403,8 +403,8 @@ public class VersionLockedObject&lt;T&gt; {
      * @return True, if the object was modified by this thread. False otherwise.
      */
     public boolean optimisticallyOwnedByThreadUnsafe() {
-<span class="nc bnc" id="L406" title="All 2 branches missed.">        return optimisticStream != null &amp;&amp;</span>
-<span class="nc bnc" id="L407" title="All 2 branches missed.">               optimisticStream.isStreamForThisThread();</span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">        return optimisticStream != null &amp;&amp;</span>
+<span class="fc bfc" id="L407" title="All 2 branches covered.">               optimisticStream.isStreamForThisThread();</span>
     }
 
     /**
@@ -414,11 +414,11 @@ public class VersionLockedObject&lt;T&gt; {
      * @param optimisticStream The new optimistic stream to install.
      */
     public void setOptimisticStreamUnsafe(WriteSetSMRStream optimisticStream) {
-<span class="nc bnc" id="L417" title="All 2 branches missed.">        if (this.optimisticStream != null) {</span>
-<span class="nc" id="L418">            optimisticRollbackUnsafe();</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">        if (this.optimisticStream != null) {</span>
+<span class="fc" id="L418">            optimisticRollbackUnsafe();</span>
         }
-<span class="nc" id="L420">        this.optimisticStream = optimisticStream;</span>
-<span class="nc" id="L421">    }</span>
+<span class="fc" id="L420">        this.optimisticStream = optimisticStream;</span>
+<span class="fc" id="L421">    }</span>
 
     /**
      * Get the version of this object. This corresponds to the position
@@ -427,25 +427,25 @@ public class VersionLockedObject&lt;T&gt; {
      * @return Returns the pointer position to the object in the stream.
      */
     public long getVersionUnsafe() {
-<span class="nc" id="L430">        return smrStream.pos();</span>
+<span class="fc" id="L430">        return smrStream.pos();</span>
     }
 
     /**
      * Check whether this object is currently under optimistic modifications.
      */
     public boolean isOptimisticallyModifiedUnsafe() {
-<span class="nc bnc" id="L437" title="All 4 branches missed.">        return optimisticStream != null &amp;&amp; optimisticStream.pos() != Address.NEVER_READ;</span>
+<span class="fc bfc" id="L437" title="All 4 branches covered.">        return optimisticStream != null &amp;&amp; optimisticStream.pos() != Address.NEVER_READ;</span>
     }
 
     /**
      * Reset this object to the uninitialized state.
      */
     public void resetUnsafe() {
-<span class="nc" id="L444">        log.debug(&quot;Reset[{}]&quot;, this);</span>
-<span class="nc" id="L445">        object = newObjectFn.get();</span>
-<span class="nc" id="L446">        smrStream.reset();</span>
-<span class="nc" id="L447">        optimisticStream = null;</span>
-<span class="nc" id="L448">    }</span>
+<span class="fc" id="L444">        log.debug(&quot;Reset[{}]&quot;, this);</span>
+<span class="fc" id="L445">        object = newObjectFn.get();</span>
+<span class="fc" id="L446">        smrStream.reset();</span>
+<span class="fc" id="L447">        optimisticStream = null;</span>
+<span class="fc" id="L448">    }</span>
 
     /**
      * Get the ID of the stream backing this object.
@@ -454,7 +454,7 @@ public class VersionLockedObject&lt;T&gt; {
      */
     @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
     public UUID getID() {
-<span class="nc" id="L457">        return smrStream.getID();</span>
+<span class="fc" id="L457">        return smrStream.getID();</span>
     }
 
     /**
@@ -482,22 +482,22 @@ public class VersionLockedObject&lt;T&gt; {
      * @param entry The entry to undo.
      */
     private void applyUndoRecordUnsafe(SMREntry entry) {
-<span class="nc" id="L485">        log.trace(&quot;Undo[{}] of {}@{} ({})&quot;, this, entry.getSMRMethod(),</span>
-<span class="nc bnc" id="L486" title="All 2 branches missed.">                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : &quot;OPT&quot;,</span>
-<span class="nc" id="L487">                entry.getUndoRecord());</span>
-<span class="nc" id="L488">        IUndoFunction&lt;T&gt; undoFunction = undoFunctionMap.get(entry.getSMRMethod());</span>
+<span class="fc" id="L485">        log.trace(&quot;Undo[{}] of {}@{} ({})&quot;, this, entry.getSMRMethod(),</span>
+<span class="fc bfc" id="L486" title="All 2 branches covered.">                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : &quot;OPT&quot;,</span>
+<span class="fc" id="L487">                entry.getUndoRecord());</span>
+<span class="fc" id="L488">        IUndoFunction&lt;T&gt; undoFunction = undoFunctionMap.get(entry.getSMRMethod());</span>
         // If the undo function exists, apply it.
-<span class="nc bnc" id="L490" title="All 2 branches missed.">        if (undoFunction != null) {</span>
-<span class="nc" id="L491">            undoFunction.doUndo(object, entry.getUndoRecord(), entry.getSMRArguments());</span>
-<span class="nc" id="L492">            return;</span>
-<span class="nc bnc" id="L493" title="All 2 branches missed.">        } else if (resetSet.contains(entry.getSMRMethod())) {</span>
+<span class="fc bfc" id="L490" title="All 2 branches covered.">        if (undoFunction != null) {</span>
+<span class="fc" id="L491">            undoFunction.doUndo(object, entry.getUndoRecord(), entry.getSMRArguments());</span>
+<span class="fc" id="L492">            return;</span>
+<span class="pc bpc" id="L493" title="1 of 2 branches missed.">        } else if (resetSet.contains(entry.getSMRMethod())) {</span>
             // If this is a reset, undo by restoring the
             // previous state.
-<span class="nc" id="L496">            object = (T) entry.getUndoRecord();</span>
+<span class="fc" id="L496">            object = (T) entry.getUndoRecord();</span>
             // clear the undo record, since it is now
             // consumed (the object may change)
-<span class="nc" id="L499">            entry.clearUndoRecord();</span>
-<span class="nc" id="L500">            return;</span>
+<span class="fc" id="L499">            entry.clearUndoRecord();</span>
+<span class="fc" id="L500">            return;</span>
         }
         // Otherwise we don't know how to undo,
         // throw a runtime exception, because
@@ -513,12 +513,12 @@ public class VersionLockedObject&lt;T&gt; {
      * @param entry The entry to apply.
      */
     private Object applyUpdateUnsafe(SMREntry entry) {
-<span class="nc" id="L516">        log.trace(&quot;Apply[{}] of {}@{} ({})&quot;, this, entry.getSMRMethod(),</span>
-<span class="nc bnc" id="L517" title="All 2 branches missed.">                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : &quot;OPT&quot;,</span>
-<span class="nc" id="L518">                entry.getSMRArguments());</span>
+<span class="fc" id="L516">        log.trace(&quot;Apply[{}] of {}@{} ({})&quot;, this, entry.getSMRMethod(),</span>
+<span class="fc bfc" id="L517" title="All 2 branches covered.">                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : &quot;OPT&quot;,</span>
+<span class="fc" id="L518">                entry.getSMRArguments());</span>
 
-<span class="nc" id="L520">        ICorfuSMRUpcallTarget&lt;T&gt; target = upcallTargetMap.get(entry.getSMRMethod());</span>
-<span class="nc bnc" id="L521" title="All 2 branches missed.">        if (target == null) {</span>
+<span class="fc" id="L520">        ICorfuSMRUpcallTarget&lt;T&gt; target = upcallTargetMap.get(entry.getSMRMethod());</span>
+<span class="pc bpc" id="L521" title="1 of 2 branches missed.">        if (target == null) {</span>
 <span class="nc" id="L522">            throw new RuntimeException(&quot;Unknown upcall &quot; + entry.getSMRMethod());</span>
         }
 
@@ -527,28 +527,28 @@ public class VersionLockedObject&lt;T&gt; {
         // In the case of optimistic entries, the snapshot may have changed
         // since the last time they were applied, so we need to recalculate
         // undo -- this is the case without snapshot isolation.
-<span class="nc bnc" id="L530" title="All 4 branches missed.">        if (!entry.isUndoable() || !Address.isAddress(entry.getGlobalAddress())) {</span>
+<span class="fc bfc" id="L530" title="All 4 branches covered.">        if (!entry.isUndoable() || !Address.isAddress(entry.getGlobalAddress())) {</span>
             // Can we generate an undo record?
-<span class="nc" id="L532">            IUndoRecordFunction&lt;T&gt; undoRecordTarget =</span>
-<span class="nc" id="L533">                    undoRecordFunctionMap.get(entry.getSMRMethod());</span>
+<span class="fc" id="L532">            IUndoRecordFunction&lt;T&gt; undoRecordTarget =</span>
+<span class="fc" id="L533">                    undoRecordFunctionMap.get(entry.getSMRMethod());</span>
             // If there was no previously calculated undo entry
-<span class="nc bnc" id="L535" title="All 2 branches missed.">            if (undoRecordTarget != null) {</span>
+<span class="fc bfc" id="L535" title="All 2 branches covered.">            if (undoRecordTarget != null) {</span>
                 // Calculate the undo record.
-<span class="nc" id="L537">                entry.setUndoRecord(undoRecordTarget</span>
-<span class="nc" id="L538">                        .getUndoRecord(object, entry.getSMRArguments()));</span>
-<span class="nc" id="L539">                log.trace(&quot;Apply[{}] Undo-&gt;{}&quot;, this, entry.getUndoRecord());</span>
-<span class="nc bnc" id="L540" title="All 2 branches missed.">            } else if (resetSet.contains(entry.getSMRMethod())) {</span>
+<span class="fc" id="L537">                entry.setUndoRecord(undoRecordTarget</span>
+<span class="fc" id="L538">                        .getUndoRecord(object, entry.getSMRArguments()));</span>
+<span class="fc" id="L539">                log.trace(&quot;Apply[{}] Undo-&gt;{}&quot;, this, entry.getUndoRecord());</span>
+<span class="fc bfc" id="L540" title="All 2 branches covered.">            } else if (resetSet.contains(entry.getSMRMethod())) {</span>
                 // This entry actually resets the object. So here
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
-<span class="nc" id="L544">                entry.setUndoRecord(object);</span>
-<span class="nc" id="L545">                object = newObjectFn.get();</span>
-<span class="nc" id="L546">                log.trace(&quot;Apply[{}] Undo-&gt;RESET&quot;, this);</span>
+<span class="fc" id="L544">                entry.setUndoRecord(object);</span>
+<span class="fc" id="L545">                object = newObjectFn.get();</span>
+<span class="fc" id="L546">                log.trace(&quot;Apply[{}] Undo-&gt;RESET&quot;, this);</span>
             }
         }
 
         // Now invoke the upcall
-<span class="nc" id="L551">        return target.upcall(object, entry.getSMRArguments());</span>
+<span class="fc" id="L551">        return target.upcall(object, entry.getSMRArguments());</span>
     }
 
     /**
@@ -564,38 +564,38 @@ public class VersionLockedObject&lt;T&gt; {
     protected void rollbackStreamUnsafe(ISMRStream stream, long rollbackVersion) {
         // If we're already at or before the given version, there's
         // nothing to do
-<span class="nc bnc" id="L567" title="All 2 branches missed.">        if (stream.pos() &lt;= rollbackVersion) {</span>
-<span class="nc" id="L568">            return;</span>
+<span class="fc bfc" id="L567" title="All 2 branches covered.">        if (stream.pos() &lt;= rollbackVersion) {</span>
+<span class="fc" id="L568">            return;</span>
         }
 
-<span class="nc" id="L571">        List&lt;SMREntry&gt; entries = stream.current();</span>
+<span class="fc" id="L571">        List&lt;SMREntry&gt; entries = stream.current();</span>
 
-<span class="nc bnc" id="L573" title="All 2 branches missed.">        while (!entries.isEmpty()) {</span>
-<span class="nc bnc" id="L574" title="All 2 branches missed.">            if (entries.stream().allMatch(SMREntry::isUndoable)) {</span>
+<span class="fc bfc" id="L573" title="All 2 branches covered.">        while (!entries.isEmpty()) {</span>
+<span class="fc bfc" id="L574" title="All 2 branches covered.">            if (entries.stream().allMatch(SMREntry::isUndoable)) {</span>
                 // start from the end, process one at a time
-<span class="nc" id="L576">                ListIterator&lt;SMREntry&gt; it = entries.listIterator(entries.size());</span>
-<span class="nc bnc" id="L577" title="All 2 branches missed.">                while (it.hasPrevious()) {</span>
-<span class="nc" id="L578">                    applyUndoRecordUnsafe(it.previous());</span>
+<span class="fc" id="L576">                ListIterator&lt;SMREntry&gt; it = entries.listIterator(entries.size());</span>
+<span class="fc bfc" id="L577" title="All 2 branches covered.">                while (it.hasPrevious()) {</span>
+<span class="fc" id="L578">                    applyUndoRecordUnsafe(it.previous());</span>
                 }
-<span class="nc" id="L580">            } else {</span>
-<span class="nc" id="L581">                Optional&lt;SMREntry&gt; entry = entries.stream().findFirst();</span>
-<span class="nc bnc" id="L582" title="All 2 branches missed.">                if (log.isTraceEnabled()) {</span>
+<span class="fc" id="L580">            } else {</span>
+<span class="fc" id="L581">                Optional&lt;SMREntry&gt; entry = entries.stream().findFirst();</span>
+<span class="pc bpc" id="L582" title="1 of 2 branches missed.">                if (log.isTraceEnabled()) {</span>
 <span class="nc" id="L583">                    log.trace(&quot;rollbackStreamUnsafe: one or more stream entries in address @{} are not undoable. &quot; +</span>
 <span class="nc" id="L584">                                    &quot;Undoable entries: {}/{}&quot;, stream.pos(),</span>
 <span class="nc" id="L585">                            (int) entries.stream().filter(SMREntry::isUndoable).count(),</span>
 <span class="nc" id="L586">                            entries.size());</span>
                 }
-<span class="nc" id="L588">                throw new NoRollbackException(entry, stream.pos(), rollbackVersion);</span>
+<span class="fc" id="L588">                throw new NoRollbackException(entry, stream.pos(), rollbackVersion);</span>
             }
 
-<span class="nc" id="L591">            entries = stream.previous();</span>
+<span class="fc" id="L591">            entries = stream.previous();</span>
 
-<span class="nc bnc" id="L593" title="All 2 branches missed.">            if (stream.pos() &lt;= rollbackVersion) {</span>
-<span class="nc" id="L594">                return;</span>
+<span class="fc bfc" id="L593" title="All 2 branches covered.">            if (stream.pos() &lt;= rollbackVersion) {</span>
+<span class="fc" id="L594">                return;</span>
             }
         }
 
-<span class="nc" id="L598">        throw new NoRollbackException(stream.pos(), rollbackVersion);</span>
+<span class="fc" id="L598">        throw new NoRollbackException(stream.pos(), rollbackVersion);</span>
     }
 
     /**
@@ -614,29 +614,29 @@ public class VersionLockedObject&lt;T&gt; {
      * @param timestamp The timestamp to sync up to.
      */
     protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
-<span class="nc bnc" id="L617" title="All 2 branches missed.">        log.trace(&quot;Sync[{}] {}&quot;, this, (timestamp == Address.OPTIMISTIC)</span>
+<span class="fc bfc" id="L617" title="All 2 branches covered.">        log.trace(&quot;Sync[{}] {}&quot;, this, (timestamp == Address.OPTIMISTIC)</span>
                 ? &quot;Optimistic&quot; : &quot;to &quot; + timestamp);
-<span class="nc bnc" id="L619" title="All 2 branches missed.">        long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;</span>
-<span class="nc" id="L620">        stream.streamUpTo(syncTo)</span>
-<span class="nc" id="L621">                .forEachOrdered(entry -&gt; {</span>
+<span class="fc bfc" id="L619" title="All 2 branches covered.">        long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;</span>
+<span class="fc" id="L620">        stream.streamUpTo(syncTo)</span>
+<span class="fc" id="L621">                .forEachOrdered(entry -&gt; {</span>
                     try {
-<span class="nc" id="L623">                        Object res = applyUpdateUnsafe(entry);</span>
-<span class="nc bnc" id="L624" title="All 2 branches missed.">                        if (timestamp == Address.OPTIMISTIC) {</span>
-<span class="nc" id="L625">                            entry.setUpcallResult(res);</span>
-<span class="nc bnc" id="L626" title="All 2 branches missed.">                        } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {</span>
-<span class="nc" id="L627">                            log.debug(&quot;Sync[{}] Upcall Result {}&quot;,</span>
-<span class="nc" id="L628">                                    this, entry.getGlobalAddress());</span>
-<span class="nc bnc" id="L629" title="All 2 branches missed.">                            upcallResults.put(entry.getGlobalAddress(), res == null</span>
+<span class="fc" id="L623">                        Object res = applyUpdateUnsafe(entry);</span>
+<span class="fc bfc" id="L624" title="All 2 branches covered.">                        if (timestamp == Address.OPTIMISTIC) {</span>
+<span class="fc" id="L625">                            entry.setUpcallResult(res);</span>
+<span class="fc bfc" id="L626" title="All 2 branches covered.">                        } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {</span>
+<span class="fc" id="L627">                            log.debug(&quot;Sync[{}] Upcall Result {}&quot;,</span>
+<span class="fc" id="L628">                                    this, entry.getGlobalAddress());</span>
+<span class="fc bfc" id="L629" title="All 2 branches covered.">                            upcallResults.put(entry.getGlobalAddress(), res == null</span>
                                     ? NullValue.NULL_VALUE : res);
-<span class="nc" id="L631">                            pendingUpcalls.remove(entry.getGlobalAddress());</span>
+<span class="fc" id="L631">                            pendingUpcalls.remove(entry.getGlobalAddress());</span>
                         }
-<span class="nc" id="L633">                        entry.setUpcallResult(res);</span>
-<span class="nc" id="L634">                    } catch (Exception e) {</span>
-<span class="nc" id="L635">                        log.error(&quot;Sync[{}] Error: Couldn't execute upcall due to {}&quot;, this, e);</span>
-<span class="nc" id="L636">                        throw new UnrecoverableCorfuError(e);</span>
-<span class="nc" id="L637">                    }</span>
-<span class="nc" id="L638">                });</span>
-<span class="nc" id="L639">    }</span>
+<span class="fc" id="L633">                        entry.setUpcallResult(res);</span>
+<span class="fc" id="L634">                    } catch (Exception e) {</span>
+<span class="fc" id="L635">                        log.error(&quot;Sync[{}] Error: Couldn't execute upcall due to {}&quot;, this, e);</span>
+<span class="fc" id="L636">                        throw new UnrecoverableCorfuError(e);</span>
+<span class="fc" id="L637">                    }</span>
+<span class="fc" id="L638">                });</span>
+<span class="fc" id="L639">    }</span>
 
     /**
      * Roll back the optimistic stream, resetting the object if it can not
@@ -644,15 +644,15 @@ public class VersionLockedObject&lt;T&gt; {
      */
     protected void optimisticRollbackUnsafe() {
         try {
-<span class="nc" id="L647">            log.trace(&quot;OptimisticRollback[{}] started&quot;, this);</span>
-<span class="nc" id="L648">            rollbackStreamUnsafe(this.optimisticStream,</span>
+<span class="fc" id="L647">            log.trace(&quot;OptimisticRollback[{}] started&quot;, this);</span>
+<span class="fc" id="L648">            rollbackStreamUnsafe(this.optimisticStream,</span>
                     Address.NEVER_READ);
-<span class="nc" id="L650">            log.trace(&quot;OptimisticRollback[{}] complete&quot;, this);</span>
-<span class="nc" id="L651">        } catch (NoRollbackException nre) {</span>
-<span class="nc" id="L652">            log.warn(&quot;OptimisticRollback[{}] failed&quot;, this);</span>
-<span class="nc" id="L653">            resetUnsafe();</span>
-<span class="nc" id="L654">        }</span>
-<span class="nc" id="L655">    }</span>
+<span class="fc" id="L650">            log.trace(&quot;OptimisticRollback[{}] complete&quot;, this);</span>
+<span class="fc" id="L651">        } catch (NoRollbackException nre) {</span>
+<span class="fc" id="L652">            log.warn(&quot;OptimisticRollback[{}] failed&quot;, this);</span>
+<span class="fc" id="L653">            resetUnsafe();</span>
+<span class="fc" id="L654">        }</span>
+<span class="fc" id="L655">    }</span>
 
     /** Apply an SMREntry to the version object, while
      * doing bookkeeping for the underlying stream.
@@ -660,33 +660,33 @@ public class VersionLockedObject&lt;T&gt; {
      * @param entry smr entry
      */
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
-<span class="nc" id="L663">        applyUpdateUnsafe(entry);</span>
-<span class="nc" id="L664">        seek(globalAddress + 1);</span>
-<span class="nc" id="L665">    }</span>
+<span class="fc" id="L663">        applyUpdateUnsafe(entry);</span>
+<span class="fc" id="L664">        seek(globalAddress + 1);</span>
+<span class="fc" id="L665">    }</span>
 
     /**
      * This class includes the metrics registry and the timer names used within VersionLockedObject
      * methods
      */
 <span class="nc" id="L671">    private static class VloMetricsHelper {</span>
-<span class="nc" id="L672">        private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();</span>
-<span class="nc" id="L673">        private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +</span>
+<span class="fc" id="L672">        private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();</span>
+<span class="fc" id="L673">        private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +</span>
                 &quot;vlo.optimistic-read&quot;;
-<span class="nc" id="L675">        private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +</span>
+<span class="fc" id="L675">        private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +</span>
                 &quot;vlo.updated-object-read&quot;;
-<span class="nc" id="L677">        private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + &quot;vlo.update&quot;;</span>
-<span class="nc" id="L678">        private static final String VLO_GC = CorfuComponent.OBJECT.toString() + &quot;vlo.gc&quot;;</span>
+<span class="fc" id="L677">        private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + &quot;vlo.update&quot;;</span>
+<span class="fc" id="L678">        private static final String VLO_GC = CorfuComponent.OBJECT.toString() + &quot;vlo.gc&quot;;</span>
 
         private static Timer.Context getOptimisticReadContext() {
-<span class="nc" id="L681">            return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));</span>
+<span class="fc" id="L681">            return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));</span>
         }
 
         private  static Timer.Context getUpdatedObjectReadContext() {
-<span class="nc" id="L685">            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATED_OBJECT_READ));</span>
+<span class="fc" id="L685">            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATED_OBJECT_READ));</span>
         }
 
         private  static Timer.Context getVloUpdateContext() {
-<span class="nc" id="L689">            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATE));</span>
+<span class="fc" id="L689">            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATE));</span>
         }
 
         private  static Timer.Context getVloGcContext() {

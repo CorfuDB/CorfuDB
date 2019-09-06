@@ -15,8 +15,8 @@ import java.util.TreeSet;
  * It can be saved in history and provide full information about a cluster and a failure.
  * The decision made by a node can be reproduced using this information.
  */
-<span class="nc" id="L18">@Builder</span>
-<span class="nc" id="L19">@AllArgsConstructor</span>
+<span class="pc" id="L18">@Builder</span>
+<span class="fc" id="L19">@AllArgsConstructor</span>
 public class FailureDetectorMetrics implements ICorfuPayload&lt;FailureDetectorMetrics&gt; {
     //state
     private final String localNode;
@@ -33,7 +33,7 @@ public class FailureDetectorMetrics implements ICorfuPayload&lt;FailureDetectorM
     private final long epoch;
 
     public String toJson(){
-<span class="nc" id="L36">        return JsonUtils.toJson(this);</span>
+<span class="fc" id="L36">        return JsonUtils.toJson(this);</span>
     }
 
 <span class="nc" id="L39">    public FailureDetectorMetrics(ByteBuf buf) {</span>
@@ -59,14 +59,14 @@ public class FailureDetectorMetrics implements ICorfuPayload&lt;FailureDetectorM
 <span class="nc" id="L59">        ICorfuPayload.serialize(buf, epoch);</span>
 <span class="nc" id="L60">    }</span>
 
-<span class="nc" id="L62">    public enum FailureDetectorAction {</span>
-<span class="nc" id="L63">        FAIL, HEAL, EXTERNAL_UPDATE</span>
+<span class="pc" id="L62">    public enum FailureDetectorAction {</span>
+<span class="fc" id="L63">        FAIL, HEAL, EXTERNAL_UPDATE</span>
     }
 
     /**
      * Simplified version of a ClusterGraph, contains only connectivity information.
      */
-<span class="nc" id="L69">    @AllArgsConstructor</span>
+<span class="fc" id="L69">    @AllArgsConstructor</span>
     public static class ConnectivityGraph implements ICorfuPayload&lt;ConnectivityGraph&gt; {
         private final NavigableSet&lt;NodeConnectivity&gt; graph;
 

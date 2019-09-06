@@ -6,32 +6,32 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
-<span class="nc" id="L9">@Slf4j</span>
+<span class="fc" id="L9">@Slf4j</span>
 public class ServerThreadFactory implements ThreadFactory {
 
-<span class="nc" id="L12">    private static final ThreadFactory defaultFactory = Executors.defaultThreadFactory();</span>
+<span class="fc" id="L12">    private static final ThreadFactory defaultFactory = Executors.defaultThreadFactory();</span>
 
     private final Thread.UncaughtExceptionHandler handler;
 
     private final String threadPrefix;
 
-<span class="nc" id="L18">    final AtomicInteger threadNumber = new AtomicInteger(0);</span>
+<span class="fc" id="L18">    final AtomicInteger threadNumber = new AtomicInteger(0);</span>
 
-<span class="nc" id="L20">    public ServerThreadFactory(String threadPrefix, Thread.UncaughtExceptionHandler handler) {</span>
-<span class="nc" id="L21">        this.threadPrefix = threadPrefix;</span>
-<span class="nc" id="L22">        this.handler = handler;</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L20">    public ServerThreadFactory(String threadPrefix, Thread.UncaughtExceptionHandler handler) {</span>
+<span class="fc" id="L21">        this.threadPrefix = threadPrefix;</span>
+<span class="fc" id="L22">        this.handler = handler;</span>
+<span class="fc" id="L23">    }</span>
 
     @Override
     public Thread newThread(Runnable run) {
-<span class="nc" id="L27">        Thread thread = defaultFactory.newThread(run);</span>
-<span class="nc" id="L28">        thread.setName(threadPrefix + threadNumber.getAndIncrement());</span>
-<span class="nc" id="L29">        thread.setUncaughtExceptionHandler(handler);</span>
-<span class="nc" id="L30">        thread.setDaemon(true);</span>
-<span class="nc" id="L31">        return thread;</span>
+<span class="fc" id="L27">        Thread thread = defaultFactory.newThread(run);</span>
+<span class="fc" id="L28">        thread.setName(threadPrefix + threadNumber.getAndIncrement());</span>
+<span class="fc" id="L29">        thread.setUncaughtExceptionHandler(handler);</span>
+<span class="fc" id="L30">        thread.setDaemon(true);</span>
+<span class="fc" id="L31">        return thread;</span>
     }
 
-<span class="nc" id="L34">    public static class ExceptionHandler implements Thread.UncaughtExceptionHandler {</span>
+<span class="fc" id="L34">    public static class ExceptionHandler implements Thread.UncaughtExceptionHandler {</span>
         @Override
         public void uncaughtException(Thread t, Throwable e) {
 <span class="nc" id="L37">            log.error(&quot;handleUncaughtException[{}]: Uncaught {}:{}&quot;,</span>

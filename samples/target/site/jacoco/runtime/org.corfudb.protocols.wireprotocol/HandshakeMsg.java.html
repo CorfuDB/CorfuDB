@@ -14,25 +14,25 @@ import lombok.Data;
  */
 @CorfuPayload
 <span class="nc bnc" id="L16" title="All 22 branches missed.">@Data</span>
-<span class="nc" id="L17">@AllArgsConstructor</span>
+<span class="fc" id="L17">@AllArgsConstructor</span>
 public class HandshakeMsg implements ICorfuPayload&lt;HandshakeMsg&gt; {
-<span class="nc" id="L19">    private UUID clientId;</span>
-<span class="nc" id="L20">    private UUID serverId;</span>
+<span class="fc" id="L19">    private UUID clientId;</span>
+<span class="fc" id="L20">    private UUID serverId;</span>
 
     /**
      * Constructor to generate an initiating Handshake Message Payload.
      *
      * @param buf The buffer to deserialize.
      */
-<span class="nc" id="L27">    public HandshakeMsg(ByteBuf buf) {</span>
-<span class="nc" id="L28">        clientId = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
-<span class="nc" id="L29">        serverId = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
-<span class="nc" id="L30">    }</span>
+<span class="fc" id="L27">    public HandshakeMsg(ByteBuf buf) {</span>
+<span class="fc" id="L28">        clientId = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
+<span class="fc" id="L29">        serverId = ICorfuPayload.fromBuffer(buf, UUID.class);</span>
+<span class="fc" id="L30">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L34">        ICorfuPayload.serialize(buf, clientId);</span>
-<span class="nc" id="L35">        ICorfuPayload.serialize(buf, serverId);</span>
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L34">        ICorfuPayload.serialize(buf, clientId);</span>
+<span class="fc" id="L35">        ICorfuPayload.serialize(buf, serverId);</span>
+<span class="fc" id="L36">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

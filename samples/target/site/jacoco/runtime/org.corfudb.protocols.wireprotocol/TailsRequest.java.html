@@ -27,7 +27,7 @@ public class TailsRequest implements ICorfuPayload&lt;TailsRequest&gt;  {
     public static final byte ALL_STREAMS_TAIL = 2;
 
     /** The type of the tail request, one of the above. */
-<span class="nc" id="L30">    private final byte reqType;</span>
+<span class="fc" id="L30">    private final byte reqType;</span>
 
     /** The streams for which tails are requested. */
 <span class="nc" id="L33">    private final List&lt;UUID&gt; streams;</span>
@@ -42,36 +42,36 @@ public class TailsRequest implements ICorfuPayload&lt;TailsRequest&gt;  {
 <span class="nc" id="L42">        this.streams = streams;</span>
 <span class="nc" id="L43">    }</span>
 
-<span class="nc" id="L45">    public TailsRequest(byte reqType) {</span>
-<span class="nc" id="L46">        this.reqType = reqType;</span>
-<span class="nc" id="L47">        this.streams = Collections.EMPTY_LIST;</span>
-<span class="nc" id="L48">    }</span>
+<span class="fc" id="L45">    public TailsRequest(byte reqType) {</span>
+<span class="fc" id="L46">        this.reqType = reqType;</span>
+<span class="fc" id="L47">        this.streams = Collections.EMPTY_LIST;</span>
+<span class="fc" id="L48">    }</span>
 
     /**
      * Deserialization Constructor from Bytebuf to TailsRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L55">    public TailsRequest(ByteBuf buf) {</span>
-<span class="nc" id="L56">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
+<span class="fc" id="L55">    public TailsRequest(ByteBuf buf) {</span>
+<span class="fc" id="L56">        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);</span>
 
-<span class="nc bnc" id="L58" title="All 2 branches missed.">        switch (reqType) {</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">        switch (reqType) {</span>
             case STREAMS_TAILS:
 <span class="nc" id="L60">                streams = ICorfuPayload.listFromBuffer(buf, UUID.class);</span>
 <span class="nc" id="L61">                break;</span>
 
             default:
-<span class="nc" id="L64">                streams = Collections.EMPTY_LIST;</span>
+<span class="fc" id="L64">                streams = Collections.EMPTY_LIST;</span>
                 break;
         }
-<span class="nc" id="L67">    }</span>
+<span class="fc" id="L67">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L71">        ICorfuPayload.serialize(buf, reqType);</span>
-<span class="nc bnc" id="L72" title="All 2 branches missed.">        if (reqType == STREAMS_TAILS) {</span>
+<span class="fc" id="L71">        ICorfuPayload.serialize(buf, reqType);</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">        if (reqType == STREAMS_TAILS) {</span>
 <span class="nc" id="L73">            ICorfuPayload.serialize(buf, streams);</span>
         }
-<span class="nc" id="L75">    }</span>
+<span class="fc" id="L75">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

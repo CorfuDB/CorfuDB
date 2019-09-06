@@ -1,2 +1,7 @@
-org/corfudb/common/result/Result.class
 org/corfudb/common/util/ClassUtils.class
+org/corfudb/common/metrics/providers/DropwizardMetricsProvider.class
+org/corfudb/common/metrics/MetricsProvider.class
+org/corfudb/common/metrics/MetricsServer.class
+org/corfudb/common/result/Result.class
+org/corfudb/common/metrics/servers/PrometheusMetricsServer$Config.class
+org/corfudb/common/metrics/servers/PrometheusMetricsServer.class

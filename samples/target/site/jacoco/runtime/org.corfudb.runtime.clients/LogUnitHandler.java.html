@@ -29,10 +29,10 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
  * &lt;p&gt;This class provides access to operations on a remote log unit.
  * &lt;p&gt;Created by zlokhandwala on 2/20/18.
  */
-<span class="nc" id="L32">public class LogUnitHandler implements IClient, IHandler&lt;LogUnitClient&gt; {</span>
+<span class="fc" id="L32">public class LogUnitHandler implements IClient, IHandler&lt;LogUnitClient&gt; {</span>
 
-<span class="nc" id="L34">    @Setter</span>
-<span class="nc" id="L35">    @Getter</span>
+<span class="fc" id="L34">    @Setter</span>
+<span class="fc" id="L35">    @Getter</span>
     IClientRouter router;
 
     @Override
@@ -43,9 +43,9 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     /**
      * The handler and handlers which implement this client.
      */
-<span class="nc" id="L46">    @Getter</span>
+<span class="fc" id="L46">    @Getter</span>
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-<span class="nc" id="L48">            .generateHandlers(MethodHandles.lookup(), this);</span>
+<span class="fc" id="L48">            .generateHandlers(MethodHandles.lookup(), this);</span>
 
     /**
      * Handle an WRITE_OK message.
@@ -57,7 +57,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
      */
     @ClientHandler(type = CorfuMsgType.WRITE_OK)
     private static Object handleOk(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L60">        return true;</span>
+<span class="fc" id="L60">        return true;</span>
     }
 
     /**
@@ -85,7 +85,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type = CorfuMsgType.ERROR_OVERWRITE)
     private static Object handleOverwrite(CorfuPayloadMsg&lt;Integer&gt; msg, ChannelHandlerContext ctx, IClientRouter r)
             throws Exception {
-<span class="nc" id="L88">        throw new OverwriteException(OverwriteCause.fromId(msg.getPayload()));</span>
+<span class="fc" id="L88">        throw new OverwriteException(OverwriteCause.fromId(msg.getPayload()));</span>
     }
 
     /**
@@ -100,7 +100,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     private static Object handleDataOutranked(CorfuMsg msg,
                                               ChannelHandlerContext ctx, IClientRouter r)
             throws Exception {
-<span class="nc" id="L103">        throw new DataOutrankedException();</span>
+<span class="fc" id="L103">        throw new DataOutrankedException();</span>
     }
 
 
@@ -114,7 +114,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type = CorfuMsgType.ERROR_VALUE_ADOPTED)
     private static Object handleValueAdoptedResponse(CorfuPayloadMsg&lt;ReadResponse&gt; msg,
                                                      ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L117">        throw new ValueAdoptedException(msg.getPayload());</span>
+<span class="fc" id="L117">        throw new ValueAdoptedException(msg.getPayload());</span>
     }
 
     /**
@@ -169,7 +169,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type = CorfuMsgType.READ_RESPONSE)
     private static Object handleReadResponse(CorfuPayloadMsg&lt;ReadResponse&gt; msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L172">        return msg.getPayload();</span>
+<span class="fc" id="L172">        return msg.getPayload();</span>
     }
 
     /**
@@ -182,8 +182,8 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type = CorfuMsgType.ERROR_DATA_CORRUPTION)
     private static Object handleReadDataCorruption(CorfuPayloadMsg&lt;Long&gt; msg,
                                                    ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L185">        long read = msg.getPayload().longValue();</span>
-<span class="nc" id="L186">        throw new DataCorruptionException(String.format(&quot;Encountered corrupted data while reading %s&quot;, read));</span>
+<span class="fc" id="L185">        long read = msg.getPayload().longValue();</span>
+<span class="fc" id="L186">        throw new DataCorruptionException(String.format(&quot;Encountered corrupted data while reading %s&quot;, read));</span>
     }
 
     /**
@@ -196,13 +196,13 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type = CorfuMsgType.TAIL_RESPONSE)
     private static Object handleTailResponse(CorfuPayloadMsg&lt;TailsResponse&gt; msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L199">        return msg.getPayload();</span>
+<span class="fc" id="L199">        return msg.getPayload();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
     private static Object handleStreamsAddressResponse(CorfuPayloadMsg&lt;TailsResponse&gt; msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L205">        return msg.getPayload();</span>
+<span class="fc" id="L205">        return msg.getPayload();</span>
     }
 
     /**
@@ -214,7 +214,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type=CorfuMsgType.TRIM_MARK_RESPONSE)
     private static Object handleTrimMarkResponse(CorfuPayloadMsg&lt;Long&gt; msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L217">        return msg.getPayload();</span>
+<span class="fc" id="L217">        return msg.getPayload();</span>
     }
 
     /**
@@ -228,7 +228,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
     @ClientHandler(type = CorfuMsgType.KNOWN_ADDRESS_RESPONSE)
     private static Object handleKnownAddressesResponse(CorfuPayloadMsg&lt;KnownAddressResponse&gt; msg,
                                                        ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L231">        return msg.getPayload();</span>
+<span class="fc" id="L231">        return msg.getPayload();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

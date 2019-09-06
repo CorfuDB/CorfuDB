@@ -51,15 +51,15 @@ public class ClusterStateContext {
 <span class="nc" id="L51">        return clusterView.get();</span>
     }
 
-<span class="nc" id="L54">    public static class HeartbeatCounter {</span>
+<span class="fc" id="L54">    public static class HeartbeatCounter {</span>
         // Heartbeat counter to convey the freshness of the cluster state views.
-<span class="nc" id="L56">        private final AtomicLong counter = new AtomicLong();</span>
+<span class="fc" id="L56">        private final AtomicLong counter = new AtomicLong();</span>
 
         /**
          * Increment local heartbeat counter.
          */
         public long incrementHeartbeat() {
-<span class="nc" id="L62">            return counter.incrementAndGet();</span>
+<span class="fc" id="L62">            return counter.incrementAndGet();</span>
         }
 
         public long get() {

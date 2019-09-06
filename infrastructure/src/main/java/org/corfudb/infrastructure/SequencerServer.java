@@ -11,6 +11,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.metrics.MetricsProvider;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -141,6 +142,7 @@ public class SequencerServer extends AbstractServer {
     private final ExecutorService executor;
 
     private final Counter tokenCounter;
+    private final Timer tokenQueryTimer;
 
     /**
      * Returns a new SequencerServer.
@@ -160,6 +162,7 @@ public class SequencerServer extends AbstractServer {
 
         this.cache = new SequencerServerCache(config.getCacheSize());
         this.tokenCounter = metricsProvider.getCounter(getClass().getName() + ".token-request");
+        this.tokenQueryTimer = metricsProvider.getTimer(getClass().getName() + ".token-query-timer");
 
         setUpTimerNameCache();
     }

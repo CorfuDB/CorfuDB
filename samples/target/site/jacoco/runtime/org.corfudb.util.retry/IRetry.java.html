@@ -22,7 +22,7 @@ public interface IRetry&lt;E extends Exception, F extends Exception, G extends E
     static &lt;R, Z extends IRetry&gt; IRetry&lt;RuntimeException, RuntimeException, RuntimeException,
             RuntimeException, R, Z&gt; build(Class&lt;Z&gt; retryType, IRetryable&lt;RuntimeException,
             RuntimeException, RuntimeException, RuntimeException, R&gt; runFunction) {
-<span class="nc" id="L25">        return build(retryType, RuntimeException.class, RuntimeException.class,</span>
+<span class="fc" id="L25">        return build(retryType, RuntimeException.class, RuntimeException.class,</span>
                 RuntimeException.class, RuntimeException.class, runFunction);
     }
 
@@ -30,7 +30,7 @@ public interface IRetry&lt;E extends Exception, F extends Exception, G extends E
             RuntimeException, R, Z&gt; build(Class&lt;Z&gt; retryType, Class&lt;? extends T&gt; firstExceptionType,
                                           IRetryable&lt;T, RuntimeException, RuntimeException,
                                                   RuntimeException, R&gt; runFunction) {
-<span class="nc" id="L33">        return build(retryType, firstExceptionType, RuntimeException.class, RuntimeException.class,</span>
+<span class="fc" id="L33">        return build(retryType, firstExceptionType, RuntimeException.class, RuntimeException.class,</span>
                 RuntimeException.class, runFunction);
     }
 
@@ -63,8 +63,8 @@ public interface IRetry&lt;E extends Exception, F extends Exception, G extends E
                                                Class&lt;? extends W&gt; fourthExceptionType, IRetryable&lt;T,
             U, V,
             W, R&gt; runFunction) {
-<span class="nc" id="L66">        return (IRetry&lt;T, U, V, W, R, Z&gt;) retryType.getConstructor(IRetryable.class)</span>
-<span class="nc" id="L67">                .newInstance(runFunction);</span>
+<span class="fc" id="L66">        return (IRetry&lt;T, U, V, W, R, Z&gt;) retryType.getConstructor(IRetryable.class)</span>
+<span class="fc" id="L67">                .newInstance(runFunction);</span>
     }
 
 
@@ -75,11 +75,11 @@ public interface IRetry&lt;E extends Exception, F extends Exception, G extends E
             throws E, F, G, H, InterruptedException {
         while (true) {
             try {
-<span class="nc" id="L78">                return getRunFunction().retryFunction();</span>
-<span class="nc" id="L79">            } catch (RetryNeededException ex) {</span>
+<span class="fc" id="L78">                return getRunFunction().retryFunction();</span>
+<span class="fc" id="L79">            } catch (RetryNeededException ex) {</span>
                 // retry requested
-<span class="nc" id="L81">                nextWait();</span>
-<span class="nc" id="L82">            }</span>
+<span class="fc" id="L81">                nextWait();</span>
+<span class="fc" id="L82">            }</span>
         }
     }
 
@@ -99,8 +99,8 @@ public interface IRetry&lt;E extends Exception, F extends Exception, G extends E
      */
     @SuppressWarnings(&quot;unchecked&quot;)
     default IRetry&lt;E, F, G, H, O, A&gt; setOptions(Consumer&lt;A&gt; settingsFunction) {
-<span class="nc" id="L102">        settingsFunction.accept((A) this);</span>
-<span class="nc" id="L103">        return this;</span>
+<span class="fc" id="L102">        settingsFunction.accept((A) this);</span>
+<span class="fc" id="L103">        return this;</span>
     }
 
     /**

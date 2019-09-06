@@ -7,10 +7,10 @@ import lombok.Getter;
  */
 public class QuorumUnreachableException extends RuntimeException {
 
-<span class="nc" id="L10">    @Getter</span>
+<span class="fc" id="L10">    @Getter</span>
     public int reachable;
 
-<span class="nc" id="L13">    @Getter</span>
+<span class="fc" id="L13">    @Getter</span>
     public int required;
 
     /**
@@ -19,9 +19,9 @@ public class QuorumUnreachableException extends RuntimeException {
      * @param required number of required quorum
      */
     public QuorumUnreachableException(int reachable, int required) {
-<span class="nc" id="L22">        super(&quot;Couldn't reach quorum, reachable=&quot; + reachable + &quot;, required=&quot; + required);</span>
-<span class="nc" id="L23">        this.reachable = reachable;</span>
-<span class="nc" id="L24">        this.required = required;</span>
-<span class="nc" id="L25">    }</span>
+<span class="fc" id="L22">        super(&quot;Couldn't reach quorum, reachable=&quot; + reachable + &quot;, required=&quot; + required);</span>
+<span class="fc" id="L23">        this.reachable = reachable;</span>
+<span class="fc" id="L24">        this.required = required;</span>
+<span class="fc" id="L25">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

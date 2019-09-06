@@ -11,35 +11,35 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRespon
  */
 public class QueryResponse implements Response {
 
-<span class="nc" id="L14">    @Getter</span>
+<span class="fc" id="L14">    @Getter</span>
     final boolean active;
 
-<span class="nc" id="L17">    public QueryResponse(boolean active) {</span>
-<span class="nc" id="L18">        this.active = active;</span>
-<span class="nc" id="L19">    }</span>
+<span class="fc" id="L17">    public QueryResponse(boolean active) {</span>
+<span class="fc" id="L18">        this.active = active;</span>
+<span class="fc" id="L19">    }</span>
 
-<span class="nc" id="L21">    public QueryResponse(byte[] buf) {</span>
-<span class="nc bnc" id="L22" title="All 2 branches missed.">        if (buf[0] == 0) {</span>
-<span class="nc" id="L23">            this.active = false;</span>
+<span class="fc" id="L21">    public QueryResponse(byte[] buf) {</span>
+<span class="fc bfc" id="L22" title="All 2 branches covered.">        if (buf[0] == 0) {</span>
+<span class="fc" id="L23">            this.active = false;</span>
         } else {
-<span class="nc" id="L25">            this.active = true;</span>
+<span class="fc" id="L25">            this.active = true;</span>
         }
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L27">    }</span>
 
     @Override
     public OrchestratorResponseType getType() {
-<span class="nc" id="L31">        return WORKFLOW_STATUS;</span>
+<span class="fc" id="L31">        return WORKFLOW_STATUS;</span>
     }
 
     @Override
     public byte[] getSerialized() {
-<span class="nc" id="L36">        byte[] buf = new byte[1];</span>
-<span class="nc bnc" id="L37" title="All 2 branches missed.">        if (active) {</span>
-<span class="nc" id="L38">            buf[0] = 1;</span>
+<span class="fc" id="L36">        byte[] buf = new byte[1];</span>
+<span class="fc bfc" id="L37" title="All 2 branches covered.">        if (active) {</span>
+<span class="fc" id="L38">            buf[0] = 1;</span>
         } else {
-<span class="nc" id="L40">            buf[0] = 0;</span>
+<span class="fc" id="L40">            buf[0] = 0;</span>
         }
-<span class="nc" id="L42">        return buf;</span>
+<span class="fc" id="L42">        return buf;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

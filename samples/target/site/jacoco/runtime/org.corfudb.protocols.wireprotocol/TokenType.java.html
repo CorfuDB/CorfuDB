@@ -13,41 +13,41 @@ import lombok.RequiredArgsConstructor;
  * An enum for distinguishing different response from the sequencer.
  * Created by dalia on 4/8/17.
  */
-<span class="nc" id="L16">@RequiredArgsConstructor</span>
+<span class="pc" id="L16">@RequiredArgsConstructor</span>
 public enum TokenType implements ICorfuPayload&lt;TokenType&gt; {
 
     // Standard token issue by sequencer or a tail-query response
-<span class="nc" id="L20">    NORMAL((byte) 0),</span>
+<span class="fc" id="L20">    NORMAL((byte) 0),</span>
 
     // Token request for optimistic TX-commit rejected due to conflict
-<span class="nc" id="L23">    TX_ABORT_CONFLICT((byte) 1),</span>
+<span class="fc" id="L23">    TX_ABORT_CONFLICT((byte) 1),</span>
 
     // Token request for optimistic TX-commit rejected due to a
     // failover-sequencer lacking conflict-resolution info
-<span class="nc" id="L27">    TX_ABORT_NEWSEQ((byte) 2),</span>
+<span class="fc" id="L27">    TX_ABORT_NEWSEQ((byte) 2),</span>
 
     // Sent when a transaction aborts a transaction due to missing information
     // (required data evicted from cache)
-<span class="nc" id="L31">    TX_ABORT_SEQ_OVERFLOW((byte) 3),</span>
+<span class="fc" id="L31">    TX_ABORT_SEQ_OVERFLOW((byte) 3),</span>
 
     // Sent when a transaction aborts because it has an old version (i.e. older than
     // the trim mark). This is to detect slow transactions
-<span class="nc" id="L35">    TX_ABORT_SEQ_TRIM((byte) 4);</span>
+<span class="fc" id="L35">    TX_ABORT_SEQ_TRIM((byte) 4);</span>
 
     final int val;
 
     byte asByte() {
-<span class="nc" id="L40">        return (byte) val;</span>
+<span class="fc" id="L40">        return (byte) val;</span>
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L45">        buf.writeByte(asByte());</span>
-<span class="nc" id="L46">    }</span>
+<span class="fc" id="L45">        buf.writeByte(asByte());</span>
+<span class="fc" id="L46">    }</span>
 
-<span class="nc" id="L48">    static Map&lt;Byte, TokenType&gt; typeMap =</span>
-<span class="nc" id="L49">            Arrays.stream(TokenType.values())</span>
-<span class="nc" id="L50">                    .collect(Collectors.toMap(TokenType::asByte, Function.identity()));</span>
+<span class="fc" id="L48">    static Map&lt;Byte, TokenType&gt; typeMap =</span>
+<span class="fc" id="L49">            Arrays.stream(TokenType.values())</span>
+<span class="fc" id="L50">                    .collect(Collectors.toMap(TokenType::asByte, Function.identity()));</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

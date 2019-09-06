@@ -27,7 +27,7 @@ public interface IClient {
      */
     default void setPriorityLevel(PriorityLevel level) {
         //no-op
-<span class="nc" id="L30">    }</span>
+<span class="fc" id="L30">    }</span>
 
     /**
      * Get the router used by the Netty client.
@@ -46,8 +46,8 @@ public interface IClient {
      * @param ctx The channel handler context
      */
     default void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-<span class="nc" id="L49">        getMsgHandler().handle(msg, ctx);</span>
-<span class="nc" id="L50">    }</span>
+<span class="fc" id="L49">        getMsgHandler().handle(msg, ctx);</span>
+<span class="fc" id="L50">    }</span>
 
     /**
      * Returns a set of message types that the client handles.
@@ -55,7 +55,7 @@ public interface IClient {
      * @return The set of message types this client handles.
      */
     default Set&lt;CorfuMsgType&gt; getHandledTypes() {
-<span class="nc" id="L58">        return getMsgHandler().getHandledTypes();</span>
+<span class="fc" id="L58">        return getMsgHandler().getHandledTypes();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

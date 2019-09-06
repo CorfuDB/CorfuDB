@@ -20,11 +20,11 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
  *
  * &lt;p&gt;Created by zlokhandwala on 2/20/18.
  */
-<span class="nc" id="L23">public class SequencerHandler implements IClient, IHandler&lt;SequencerClient&gt; {</span>
+<span class="fc" id="L23">public class SequencerHandler implements IClient, IHandler&lt;SequencerClient&gt; {</span>
 
 
-<span class="nc" id="L26">    @Setter</span>
-<span class="nc" id="L27">    @Getter</span>
+<span class="fc" id="L26">    @Setter</span>
+<span class="fc" id="L27">    @Getter</span>
     IClientRouter router;
 
     @Override
@@ -35,26 +35,26 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
     /**
      * The handler and handlers which implement this client.
      */
-<span class="nc" id="L38">    @Getter</span>
+<span class="fc" id="L38">    @Getter</span>
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-<span class="nc" id="L40">            .generateHandlers(MethodHandles.lookup(), this);</span>
+<span class="fc" id="L40">            .generateHandlers(MethodHandles.lookup(), this);</span>
 
     @ClientHandler(type = CorfuMsgType.SEQUENCER_METRICS_RESPONSE)
     private static Object handleMetricsResponse(CorfuPayloadMsg&lt;SequencerMetrics&gt; msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L45">        return msg.getPayload();</span>
+<span class="fc" id="L45">        return msg.getPayload();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.TOKEN_RES)
     private static Object handleTokenResponse(CorfuPayloadMsg&lt;TokenResponse&gt; msg,
                                               ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L51">        return msg.getPayload();</span>
+<span class="fc" id="L51">        return msg.getPayload();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.STREAMS_ADDRESS_RESPONSE)
     private static Object handleStreamAddressesResponse(CorfuPayloadMsg&lt;StreamsAddressResponse&gt; msg,
                                               ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L57">        return msg.getPayload();</span>
+<span class="fc" id="L57">        return msg.getPayload();</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -2,7 +2,8 @@
 
 import lombok.Builder;
 import lombok.NonNull;
-import org.corfudb.infrastructure.DataStore;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.Phase2Data;
 import org.corfudb.infrastructure.Rank;
 
@@ -11,7 +12,7 @@ import java.util.Optional;
 /**
  * Provides access and saves paxos entities: PHASE1 and PHASE2 ranks with values.
  */
-<span class="nc bnc" id="L14" title="All 2 branches missed.">@Builder</span>
+<span class="pc bpc" id="L15" title="1 of 2 branches missed.">@Builder</span>
 public class PaxosDataStore {
 
     public static final String PREFIX_PHASE_1 = &quot;PHASE_1&quot;;
@@ -28,8 +29,12 @@ public class PaxosDataStore {
      * @return phase1 rank
      */
     public Optional&lt;Rank&gt; getPhase1Rank(long serverEpoch) {
-<span class="nc" id="L31">        Rank rank = dataStore.get(Rank.class, PREFIX_PHASE_1, serverEpoch + KEY_SUFFIX_PHASE_1);</span>
-<span class="nc" id="L32">        return Optional.ofNullable(rank);</span>
+<span class="fc" id="L32">        KvRecord&lt;Rank&gt; phase1Record = KvRecord.of(</span>
+                PREFIX_PHASE_1, serverEpoch + KEY_SUFFIX_PHASE_1, Rank.class
+        );
+
+<span class="fc" id="L36">        Rank rank = dataStore.get(phase1Record);</span>
+<span class="fc" id="L37">        return Optional.ofNullable(rank);</span>
     }
 
     /**
@@ -38,8 +43,13 @@ public class PaxosDataStore {
      * @param serverEpoch current server epoch
      */
     public void setPhase1Rank(Rank rank, long serverEpoch) {
-<span class="nc" id="L41">        dataStore.put(Rank.class, PREFIX_PHASE_1, serverEpoch + KEY_SUFFIX_PHASE_1, rank);</span>
-<span class="nc" id="L42">    }</span>
+<span class="fc" id="L46">        KvRecord&lt;Rank&gt; phase1Record = KvRecord.of(</span>
+                PREFIX_PHASE_1,
+                serverEpoch + KEY_SUFFIX_PHASE_1,
+                Rank.class
+        );
+<span class="fc" id="L51">        dataStore.put(phase1Record, rank);</span>
+<span class="fc" id="L52">    }</span>
 
     /**
      * Returns phase2 data for current server epoch
@@ -47,13 +57,13 @@ public class PaxosDataStore {
      * @return phase2 data
      */
     public Optional&lt;Phase2Data&gt; getPhase2Data(long serverEpoch) {
-<span class="nc" id="L50">        Phase2Data rank = dataStore.get(</span>
-                Phase2Data.class,
+<span class="fc" id="L60">        KvRecord&lt;Phase2Data&gt; phase2Record = KvRecord.of(</span>
                 PREFIX_PHASE_2,
-                serverEpoch + KEY_SUFFIX_PHASE_2
+                serverEpoch + KEY_SUFFIX_PHASE_2,
+                Phase2Data.class
         );
 
-<span class="nc" id="L56">        return Optional.ofNullable(rank);</span>
+<span class="fc" id="L66">        return Optional.ofNullable(dataStore.get(phase2Record));</span>
     }
 
     /**
@@ -62,12 +72,12 @@ public class PaxosDataStore {
      * @param serverEpoch current server epoch
      */
     public void setPhase2Data(Phase2Data phase2Data, long serverEpoch) {
-<span class="nc" id="L65">        dataStore.put(</span>
-                Phase2Data.class,
+<span class="fc" id="L75">        KvRecord&lt;Phase2Data&gt; phase2Record = KvRecord.of(</span>
                 PREFIX_PHASE_2,
                 serverEpoch + KEY_SUFFIX_PHASE_2,
-                phase2Data
+                Phase2Data.class
         );
-<span class="nc" id="L71">    }</span>
+<span class="fc" id="L80">        dataStore.put(phase2Record, phase2Data);</span>
+<span class="fc" id="L81">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

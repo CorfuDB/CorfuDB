@@ -22,12 +22,12 @@ public class WrongClusterException extends RuntimeException {
      */
     public WrongClusterException(@Nullable UUID expectedCluster,
                                  @Nullable UUID actualCluster) {
-<span class="nc bnc" id="L25" title="All 2 branches missed.">        super(&quot;Expected: &quot;</span>
-<span class="nc bnc" id="L26" title="All 2 branches missed.">            + ((expectedCluster == null) ? &quot;null&quot; : UuidUtils.asBase64(expectedCluster))</span>
+<span class="pc bpc" id="L25" title="1 of 2 branches missed.">        super(&quot;Expected: &quot;</span>
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">            + ((expectedCluster == null) ? &quot;null&quot; : UuidUtils.asBase64(expectedCluster))</span>
             + &quot; Actual: &quot;
-<span class="nc" id="L28">            + ((actualCluster == null) ? &quot;null&quot; : UuidUtils.asBase64(actualCluster)));</span>
-<span class="nc" id="L29">        this.expectedCluster = expectedCluster;</span>
-<span class="nc" id="L30">        this.actualCluster = actualCluster;</span>
-<span class="nc" id="L31">    }</span>
+<span class="fc" id="L28">            + ((actualCluster == null) ? &quot;null&quot; : UuidUtils.asBase64(actualCluster)));</span>
+<span class="fc" id="L29">        this.expectedCluster = expectedCluster;</span>
+<span class="fc" id="L30">        this.actualCluster = actualCluster;</span>
+<span class="fc" id="L31">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

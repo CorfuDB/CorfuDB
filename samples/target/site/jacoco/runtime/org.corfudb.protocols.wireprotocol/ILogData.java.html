@@ -21,7 +21,7 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
 
     @Override
     default int compareTo(ILogData o) {
-<span class="nc" id="L24">        return getGlobalAddress().compareTo(o.getGlobalAddress());</span>
+<span class="fc" id="L24">        return getGlobalAddress().compareTo(o.getGlobalAddress());</span>
     }
 
     /**
@@ -43,7 +43,7 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
          * @return The serialized form of this handle.
          */
         public ILogData getSerialized() {
-<span class="nc" id="L46">            return data;</span>
+<span class="fc" id="L46">            return data;</span>
         }
 
         /**
@@ -52,18 +52,18 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
          *
          * @param data The log data to manage.
          */
-<span class="nc" id="L55">        public SerializationHandle(ILogData data) {</span>
-<span class="nc" id="L56">            this.data = data;</span>
-<span class="nc" id="L57">            data.acquireBuffer();</span>
-<span class="nc" id="L58">        }</span>
+<span class="fc" id="L55">        public SerializationHandle(ILogData data) {</span>
+<span class="fc" id="L56">            this.data = data;</span>
+<span class="fc" id="L57">            data.acquireBuffer();</span>
+<span class="fc" id="L58">        }</span>
 
         /**
          * {@inheritDoc}
          */
         @Override
         public void close() {
-<span class="nc" id="L65">            data.releaseBuffer();</span>
-<span class="nc" id="L66">        }</span>
+<span class="fc" id="L65">            data.releaseBuffer();</span>
+<span class="fc" id="L66">        }</span>
     }
 
     void releaseBuffer();
@@ -71,7 +71,7 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
     void acquireBuffer();
 
     default SerializationHandle getSerializedForm() {
-<span class="nc" id="L74">        return new SerializationHandle(this);</span>
+<span class="fc" id="L74">        return new SerializationHandle(this);</span>
     }
 
     /**
@@ -85,25 +85,25 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
      * Return the payload as a log entry.
      */
     default LogEntry getLogEntry(CorfuRuntime runtime) {
-<span class="nc" id="L88">        return (LogEntry) getPayload(runtime);</span>
+<span class="fc" id="L88">        return (LogEntry) getPayload(runtime);</span>
     }
 
     /**
      * Return if there is backpointer for a particular stream.
      */
     default boolean hasBackpointer(UUID streamId) {
-<span class="nc bnc" id="L95" title="All 2 branches missed.">        return getBackpointerMap() != null</span>
-<span class="nc bnc" id="L96" title="All 2 branches missed.">                &amp;&amp; getBackpointerMap().containsKey(streamId);</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">        return getBackpointerMap() != null</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">                &amp;&amp; getBackpointerMap().containsKey(streamId);</span>
     }
 
     /**
      * Return the backpointer for a particular stream.
      */
     default Long getBackpointer(UUID streamId) {
-<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (!hasBackpointer(streamId)) {</span>
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">        if (!hasBackpointer(streamId)) {</span>
 <span class="nc" id="L104">            return null;</span>
         }
-<span class="nc" id="L106">        return getBackpointerMap().get(streamId);</span>
+<span class="fc" id="L106">        return getBackpointerMap().get(streamId);</span>
     }
 
     /**
@@ -131,21 +131,21 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
      * Return whether the entry represents a hole or not.
      */
     default boolean isHole() {
-<span class="nc bnc" id="L134" title="All 2 branches missed.">        return getType() == DataType.HOLE;</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        return getType() == DataType.HOLE;</span>
     }
 
     /**
      * Return whether the entry represents an empty entry or not.
      */
     default boolean isEmpty() {
-<span class="nc bnc" id="L141" title="All 2 branches missed.">        return getType() == DataType.EMPTY;</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        return getType() == DataType.EMPTY;</span>
     }
 
     /**
      * Return true if and only if the entry represents a trimmed address.
      */
     default boolean isTrimmed() {
-<span class="nc bnc" id="L148" title="All 2 branches missed.">        return getType() == DataType.TRIMMED;</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        return getType() == DataType.TRIMMED;</span>
     }
 
     /**
@@ -155,16 +155,16 @@ public interface ILogData extends IMetadata, Comparable&lt;ILogData&gt; {
      * @return size of serialized buffer
      */
     static int getSerializedSize(Object obj) {
-<span class="nc" id="L158">        ILogData ld = new LogData(DataType.DATA, obj);</span>
-<span class="nc" id="L159">        ld.acquireBuffer();</span>
-<span class="nc" id="L160">        int size = ld.getSizeEstimate();</span>
-<span class="nc" id="L161">        ld.releaseBuffer();</span>
-<span class="nc" id="L162">        return size;</span>
+<span class="fc" id="L158">        ILogData ld = new LogData(DataType.DATA, obj);</span>
+<span class="fc" id="L159">        ld.acquireBuffer();</span>
+<span class="fc" id="L160">        int size = ld.getSizeEstimate();</span>
+<span class="fc" id="L161">        ld.releaseBuffer();</span>
+<span class="fc" id="L162">        return size;</span>
     }
 
     default void setId(UUID clientId) {
-<span class="nc" id="L166">        setClientId(clientId);</span>
-<span class="nc" id="L167">        setThreadId(Thread.currentThread().getId());</span>
-<span class="nc" id="L168">    }</span>
+<span class="fc" id="L166">        setClientId(clientId);</span>
+<span class="fc" id="L167">        setThreadId(Thread.currentThread().getId());</span>
+<span class="fc" id="L168">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -13,6 +13,7 @@ import javax.annotation.Nonnull;
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
@@ -38,12 +39,12 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
  *
  * Created by annym on 04/25/19.
  */
-<span class="nc" id="L41">@Slf4j</span>
+<span class="nc" id="L42">@Slf4j</span>
 public class AddressMapStreamView extends AbstractQueuedStreamView {
 
     private static final int DIFF_CONSECUTIVE_ADDRESSES = 1;
 
-<span class="nc" id="L46">    private long addressCount = 0L;</span>
+<span class="nc" id="L47">    private long addressCount = 0L;</span>
 
     /** Create a new address map stream view.
      *
@@ -53,26 +54,26 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     public AddressMapStreamView(final CorfuRuntime runtime,
                                 final UUID streamId,
                                 @Nonnull final StreamOptions options) {
-<span class="nc" id="L56">        super(runtime, streamId, options);</span>
-<span class="nc" id="L57">    }</span>
+<span class="nc" id="L57">        super(runtime, streamId, options);</span>
+<span class="nc" id="L58">    }</span>
 
     public AddressMapStreamView(final CorfuRuntime runtime,
                                 final UUID streamId) {
-<span class="nc" id="L61">        this(runtime, streamId, StreamOptions.DEFAULT);</span>
-<span class="nc" id="L62">    }</span>
+<span class="nc" id="L62">        this(runtime, streamId, StreamOptions.DEFAULT);</span>
+<span class="nc" id="L63">    }</span>
 
     @Override
     protected ILogData removeFromQueue(NavigableSet&lt;Long&gt; queue) {
         boolean readNext;
-<span class="nc" id="L67">        ILogData ld = null;</span>
+<span class="nc" id="L68">        ILogData ld = null;</span>
         Long currentRead;
 
         do {
-<span class="nc" id="L71">            currentRead = queue.pollFirst();</span>
+<span class="nc" id="L72">            currentRead = queue.pollFirst();</span>
 
-<span class="nc bnc" id="L73" title="All 2 branches missed.">            if (currentRead == null) {</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">            if (currentRead == null) {</span>
                 // no more entries, empty queue.
-<span class="nc" id="L75">                return null;</span>
+<span class="nc" id="L76">                return null;</span>
             }
 
             try {
@@ -81,44 +82,44 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // the stream's full address map, without reading the actual data), entries can be read in
                 // batches whenever we have a cache miss. This allows next reads
                 // to be serviced immediately, rather than reading one entry at a time.
-<span class="nc" id="L84">                ld = read(currentRead, queue);</span>
+<span class="nc" id="L85">                ld = read(currentRead, queue);</span>
 
-<span class="nc bnc" id="L86" title="All 4 branches missed.">                if (queue == getCurrentContext().readQueue &amp;&amp; ld != null) {</span>
+<span class="nc bnc" id="L87" title="All 4 branches missed.">                if (queue == getCurrentContext().readQueue &amp;&amp; ld != null) {</span>
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
-<span class="nc bnc" id="L90" title="All 2 branches missed.">                    if (ld.containsStream(this.id)) {</span>
-<span class="nc" id="L91">                        addToResolvedQueue(getCurrentContext(), currentRead, ld);</span>
-<span class="nc" id="L92">                        readNext = false;</span>
+<span class="nc bnc" id="L91" title="All 4 branches missed.">                    if (ld.containsStream(this.id) &amp;&amp; ld.getType() == DataType.DATA) {</span>
+<span class="nc" id="L92">                        addToResolvedQueue(getCurrentContext(), currentRead, ld);</span>
+<span class="nc" id="L93">                        readNext = false;</span>
                     } else {
-<span class="nc" id="L94">                        log.trace(&quot;getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.&quot;,</span>
+<span class="nc" id="L95">                        log.trace(&quot;getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.&quot;,</span>
                                 this, currentRead);
                         // Invalid entry (does not belong to this stream). Read next.
-<span class="nc" id="L97">                        readNext = true;</span>
+<span class="nc" id="L98">                        readNext = true;</span>
                     }
                 } else {
-<span class="nc" id="L100">                    readNext = false;</span>
+<span class="nc" id="L101">                    readNext = false;</span>
                 }
-<span class="nc" id="L102">            } catch (TrimmedException te) {</span>
+<span class="nc" id="L103">            } catch (TrimmedException te) {</span>
                 // Because addresses are requested in increasing order and system relies on prefix trim,
                 // we force trimmedExceptions to be thrown by lower layers, and handle ignoreTrimmed at this layer.
                 // Note that lower layers will cache the valid entries, to optimize read performance.
 
-<span class="nc bnc" id="L107" title="All 2 branches missed.">                if (!getReadOptions().isIgnoreTrim()) {</span>
-<span class="nc" id="L108">                    throw te;</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">                if (!getReadOptions().isIgnoreTrim()) {</span>
+<span class="nc" id="L109">                    throw te;</span>
                 }
 
-<span class="nc" id="L111">                log.debug(&quot;removeFromQueue[{}]: ignoring trimmed addresses {}&quot;, this, te.getTrimmedAddresses());</span>
+<span class="nc" id="L112">                log.debug(&quot;removeFromQueue[{}]: ignoring trimmed addresses {}&quot;, this, te.getTrimmedAddresses());</span>
                 // Ignore trimmed address, remove trimmed addresses and get next from queue
-<span class="nc" id="L113">                te.getTrimmedAddresses().forEach(address -&gt; queue.remove(address));</span>
+<span class="nc" id="L114">                te.getTrimmedAddresses().forEach(address -&gt; queue.remove(address));</span>
 
                 // If a TrimmedException was caught, the requested address (nextRead) is trimmed (lower of all),
                 // we need to continue reading to retrieve the next valid entry for this stream.
-<span class="nc" id="L117">                readNext = true;</span>
-<span class="nc" id="L118">            }</span>
-<span class="nc bnc" id="L119" title="All 2 branches missed.">        } while (readNext);</span>
+<span class="nc" id="L118">                readNext = true;</span>
+<span class="nc" id="L119">            }</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        } while (readNext);</span>
 
-<span class="nc" id="L121">        return ld;</span>
+<span class="nc" id="L122">        return ld;</span>
     }
 
     /**
@@ -147,49 +148,48 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // The startAddress refers to the max resolution we want to resolve this stream to,
         // while stopAddress refers to the lower boundary (locally resolved).
         // If startAddress is equal to stopAddress there is nothing to resolve.
-<span class="nc bnc" id="L150" title="All 4 branches missed.">        if (Address.isAddress(startAddress) &amp;&amp; (startAddress &gt; stopAddress)) {</span>
+<span class="nc bnc" id="L151" title="All 4 branches missed.">        if (Address.isAddress(startAddress) &amp;&amp; (startAddress &gt; stopAddress)) {</span>
 
-<span class="nc" id="L152">            StreamAddressSpace streamAddressSpace = getStreamAddressMap(startAddress, stopAddress, streamId);</span>
+<span class="nc" id="L153">            StreamAddressSpace streamAddressSpace = getStreamAddressMap(startAddress, stopAddress, streamId);</span>
 
-<span class="nc bnc" id="L154" title="All 2 branches missed.">            if (checkpoint) {</span>
-<span class="nc" id="L155">                processCheckpoint(streamAddressSpace, filter, queue);</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">            if (checkpoint) {</span>
+<span class="nc" id="L156">                processCheckpoint(streamAddressSpace, filter, queue);</span>
             } else {
                 // Transfer discovered addresses to queue. We must limit to maxGlobal,
                 // as startAddress could be ahead of maxGlobal---in case it reflects
                 // the tail of the stream.
-<span class="nc" id="L160">                queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));</span>
+<span class="nc" id="L161">                queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));</span>
 
-<span class="nc" id="L162">                long trimMark = streamAddressSpace.getTrimMark();</span>
+<span class="nc" id="L163">                long trimMark = streamAddressSpace.getTrimMark();</span>
 
                 // In case we are dealing with a stream that does not have the checkpoint
                 // capability, check to see if we are trying to access an address that has been
                 // previously trimmed.
-<span class="nc bnc" id="L167" title="All 2 branches missed.">                if (!isCheckpointCapable()</span>
-<span class="nc bnc" id="L168" title="All 4 branches missed.">                        &amp;&amp; Address.isAddress(trimMark)</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">                if (!isCheckpointCapable()</span>
+<span class="nc bnc" id="L169" title="All 4 branches missed.">                        &amp;&amp; Address.isAddress(trimMark)</span>
                         &amp;&amp; trimMark &gt; stopAddress) {
-<span class="nc" id="L170">                    String message = String.format(&quot;getStreamAddressMap[{%s}] stream has been &quot; +</span>
+<span class="nc" id="L171">                    String message = String.format(&quot;getStreamAddressMap[{%s}] stream has been &quot; +</span>
                                     &quot;trimmed at address %s and we are trying to access the &quot; +
                                     &quot;stream starting at address %s. This stream does not have &quot; +
-<span class="nc" id="L173">                                    &quot;the checkpoint capability.&quot;, this, trimMark, stopAddress);</span>
-<span class="nc" id="L174">                    log.info(message);</span>
-<span class="nc" id="L175">                    throw new TrimmedException(message);</span>
+<span class="nc" id="L174">                                    &quot;the checkpoint capability.&quot;, this, trimMark, stopAddress);</span>
+<span class="nc" id="L175">                    log.info(message);</span>
+<span class="nc" id="L176">                    throw new TrimmedException(message);</span>
                 }
                 // Address maps might have been trimmed, hence not reflecting all updates to the stream
                 // For this reason, in the case of a valid trim mark, we must be sure this space is
                 // already resolved or loaded by a checkpoint.
-<span class="nc bnc" id="L180" title="All 2 branches missed.">                if (isCheckpointCapable()</span>
-<span class="nc bnc" id="L181" title="All 2 branches missed.">                        &amp;&amp; Address.isAddress(trimMark)</span>
-<span class="nc bnc" id="L182" title="All 2 branches missed.">                        &amp;&amp; !isTrimCoveredByCheckpointOrLocalView(trimMark)) {</span>
-<span class="nc" id="L183">                    String message = String.format(&quot;getStreamAddressMap[{%s}] stream has been &quot; +</span>
-                                    &quot;trimmed at address %s and this space is not covered by the &quot; +
-                                    &quot;loaded checkpoint with start address %s, while accessing the &quot; +
-                                    &quot;stream at version %s. Looking for a new checkpoint.&quot;,this,
-<span class="nc" id="L187">                            trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);</span>
-<span class="nc" id="L188">                    log.info(message);</span>
-<span class="nc bnc" id="L189" title="All 2 branches missed.">                    if (getReadOptions().isIgnoreTrim()) {</span>
-<span class="nc" id="L190">                        log.debug(&quot;getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].&quot;,</span>
-<span class="nc" id="L191">                                this, streamAddressSpace.getTrimMark());</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">                if (isCheckpointCapable()</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">                        &amp;&amp; Address.isAddress(trimMark)</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">                        &amp;&amp; !isTrimCoveredByCheckpointOrLocalView(trimMark)) {</span>
+<span class="nc bnc" id="L184" title="All 2 branches missed.">                    if (getReadOptions().isIgnoreTrim()) {</span>
+<span class="nc" id="L185">                        log.debug(&quot;getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].&quot;,</span>
+<span class="nc" id="L186">                                this, streamAddressSpace.getTrimMark());</span>
                     } else {
+<span class="nc" id="L188">                        String message = String.format(&quot;getStreamAddressMap[{%s}] stream has been &quot; +</span>
+                                        &quot;trimmed at address %s and this space is not covered by the &quot; +
+                                        &quot;loaded checkpoint with start address %s, while accessing the &quot; +
+                                        &quot;stream at version %s. Looking for a new checkpoint.&quot;,this,
+<span class="nc" id="L192">                                trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);</span>
 <span class="nc" id="L193">                        throw new TrimmedException(message);</span>
                     }
                 }

@@ -44,6 +44,11 @@ public class CorfuSharedCounter$CORFUSMR extends CorfuSharedCounter implements I
   }
 
   @Override
+  public boolean equals(Object arg0) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
+  }
+
+  @Override
   @MutatorAccessor(
       name = "Increment"
   )
@@ -53,9 +58,8 @@ public class CorfuSharedCounter$CORFUSMR extends CorfuSharedCounter implements I
   }
 
   @Override
-  @Accessor
-  public int Get() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.Get();},null);
+  public int hashCode() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
   }
 
   @Override
@@ -72,13 +76,9 @@ public class CorfuSharedCounter$CORFUSMR extends CorfuSharedCounter implements I
   }
 
   @Override
-  public int hashCode() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
-  }
-
-  @Override
-  public boolean equals(Object arg0) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
+  @Accessor
+  public int Get() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.Get();},null);
   }
 
   public Map<String, ICorfuSMRUpcallTarget<CorfuSharedCounter>> getCorfuSMRUpcallMap() {

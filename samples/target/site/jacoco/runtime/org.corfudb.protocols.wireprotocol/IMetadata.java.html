@@ -34,9 +34,9 @@ import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.C
  */
 public interface IMetadata {
 
-<span class="nc" id="L37">    Map&lt;Byte, LogUnitMetadataType&gt; metadataTypeMap =</span>
-<span class="nc" id="L38">            Arrays.&lt;LogUnitMetadataType&gt;stream(LogUnitMetadataType.values())</span>
-<span class="nc" id="L39">                    .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));</span>
+<span class="fc" id="L37">    Map&lt;Byte, LogUnitMetadataType&gt; metadataTypeMap =</span>
+<span class="fc" id="L38">            Arrays.&lt;LogUnitMetadataType&gt;stream(LogUnitMetadataType.values())</span>
+<span class="fc" id="L39">                    .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));</span>
 
     EnumMap&lt;IMetadata.LogUnitMetadataType, Object&gt; getMetadataMap();
 
@@ -47,8 +47,8 @@ public interface IMetadata {
      */
     @SuppressWarnings(&quot;unchecked&quot;)
     default Set&lt;UUID&gt; getStreams() {
-<span class="nc" id="L50">        return ((Map&lt;UUID, Long&gt;) getMetadataMap().getOrDefault(</span>
-<span class="nc" id="L51">                LogUnitMetadataType.BACKPOINTER_MAP, Collections.emptyMap())).keySet();</span>
+<span class="fc" id="L50">        return ((Map&lt;UUID, Long&gt;) getMetadataMap().getOrDefault(</span>
+<span class="fc" id="L51">                LogUnitMetadataType.BACKPOINTER_MAP, Collections.emptyMap())).keySet();</span>
     }
 
     /**
@@ -57,7 +57,7 @@ public interface IMetadata {
      * @return          True, if the entry contains the given stream.
      */
     default boolean containsStream(UUID stream) {
-<span class="nc" id="L60">        return  getBackpointerMap().keySet().contains(stream);</span>
+<span class="fc" id="L60">        return  getBackpointerMap().keySet().contains(stream);</span>
     }
 
     /**
@@ -68,7 +68,7 @@ public interface IMetadata {
     @SuppressWarnings(&quot;unchecked&quot;)
     @Nullable
     default DataRank getRank() {
-<span class="nc" id="L71">        return (DataRank) getMetadataMap().getOrDefault(LogUnitMetadataType.RANK,</span>
+<span class="fc" id="L71">        return (DataRank) getMetadataMap().getOrDefault(LogUnitMetadataType.RANK,</span>
                 null);
     }
 
@@ -78,49 +78,49 @@ public interface IMetadata {
      * @param rank The rank of this append.
      */
     default void setRank(@Nullable DataRank rank) {
-<span class="nc" id="L81">        EnumMap&lt;LogUnitMetadataType, Object&gt; map = getMetadataMap();</span>
-<span class="nc bnc" id="L82" title="All 2 branches missed.">        if (rank != null) {</span>
-<span class="nc" id="L83">            map.put(LogUnitMetadataType.RANK, rank);</span>
+<span class="fc" id="L81">        EnumMap&lt;LogUnitMetadataType, Object&gt; map = getMetadataMap();</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (rank != null) {</span>
+<span class="fc" id="L83">            map.put(LogUnitMetadataType.RANK, rank);</span>
         } else {
-<span class="nc bnc" id="L85" title="All 2 branches missed.">            if (map.containsKey(LogUnitMetadataType.RANK)) {</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">            if (map.containsKey(LogUnitMetadataType.RANK)) {</span>
 <span class="nc" id="L86">                map.remove(LogUnitMetadataType.RANK);</span>
             }
         }
-<span class="nc" id="L89">    }</span>
+<span class="fc" id="L89">    }</span>
 
     @SuppressWarnings(&quot;unchecked&quot;)
     default Map&lt;UUID, Long&gt; getBackpointerMap() {
-<span class="nc" id="L93">        return (Map&lt;UUID, Long&gt;) getMetadataMap().getOrDefault(LogUnitMetadataType.BACKPOINTER_MAP,</span>
+<span class="fc" id="L93">        return (Map&lt;UUID, Long&gt;) getMetadataMap().getOrDefault(LogUnitMetadataType.BACKPOINTER_MAP,</span>
                 Collections.EMPTY_MAP);
     }
 
     default void setBackpointerMap(Map&lt;UUID, Long&gt; backpointerMap) {
-<span class="nc" id="L98">        getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);</span>
-<span class="nc" id="L99">    }</span>
+<span class="fc" id="L98">        getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);</span>
+<span class="fc" id="L99">    }</span>
 
     default void setGlobalAddress(Long address) {
-<span class="nc" id="L102">        getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);</span>
-<span class="nc" id="L103">    }</span>
+<span class="fc" id="L102">        getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);</span>
+<span class="fc" id="L103">    }</span>
 
     default void setEpoch(Long epoch) {
-<span class="nc" id="L106">        getMetadataMap().put(LogUnitMetadataType.EPOCH, epoch);</span>
-<span class="nc" id="L107">    }</span>
+<span class="fc" id="L106">        getMetadataMap().put(LogUnitMetadataType.EPOCH, epoch);</span>
+<span class="fc" id="L107">    }</span>
 
-<span class="nc" id="L109">    default void setClientId(UUID clientId) {getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId); }</span>
+<span class="fc" id="L109">    default void setClientId(UUID clientId) {getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId); }</span>
 
     @SuppressWarnings(&quot;unchecked&quot;)
     @Nullable
     default UUID getClientId() {
-<span class="nc" id="L114">            return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CLIENT_ID,</span>
+<span class="fc" id="L114">            return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CLIENT_ID,</span>
                     null);
     }
 
-<span class="nc" id="L118">    default void setThreadId(Long threadId) {getMetadataMap().put(LogUnitMetadataType.THREAD_ID, threadId); }</span>
+<span class="fc" id="L118">    default void setThreadId(Long threadId) {getMetadataMap().put(LogUnitMetadataType.THREAD_ID, threadId); }</span>
 
     @SuppressWarnings(&quot;unchecked&quot;)
     @Nullable
     default Long getThreadId() {
-<span class="nc" id="L123">        return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID,</span>
+<span class="fc" id="L123">        return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID,</span>
                 null);
     }
 
@@ -131,8 +131,8 @@ public interface IMetadata {
      */
     @SuppressWarnings(&quot;unchecked&quot;)
     default Long getGlobalAddress() {
-<span class="nc" id="L134">        return Optional.ofNullable((Long) getMetadataMap()</span>
-<span class="nc" id="L135">                .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse(Address.NON_ADDRESS);</span>
+<span class="fc" id="L134">        return Optional.ofNullable((Long) getMetadataMap()</span>
+<span class="fc" id="L135">                .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse(Address.NON_ADDRESS);</span>
     }
 
     /**
@@ -141,21 +141,21 @@ public interface IMetadata {
      * @return epoch.
      */
     default Long getEpoch() {
-<span class="nc bnc" id="L144" title="All 2 branches missed.">        if (getMetadataMap() == null</span>
-<span class="nc bnc" id="L145" title="All 2 branches missed.">                || getMetadataMap().get(LogUnitMetadataType.EPOCH) == null) {</span>
-<span class="nc" id="L146">            return Layout.INVALID_EPOCH;</span>
+<span class="pc bpc" id="L144" title="1 of 2 branches missed.">        if (getMetadataMap() == null</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">                || getMetadataMap().get(LogUnitMetadataType.EPOCH) == null) {</span>
+<span class="fc" id="L146">            return Layout.INVALID_EPOCH;</span>
         }
-<span class="nc" id="L148">        return Optional.ofNullable((Long) getMetadataMap()</span>
-<span class="nc" id="L149">                .get(LogUnitMetadataType.EPOCH)).orElse(Layout.INVALID_EPOCH);</span>
+<span class="fc" id="L148">        return Optional.ofNullable((Long) getMetadataMap()</span>
+<span class="fc" id="L149">                .get(LogUnitMetadataType.EPOCH)).orElse(Layout.INVALID_EPOCH);</span>
     }
 
     // TODO(Maithem): replace getGlobalAddress and getEpoch with getToken
     default Token getToken() {
-<span class="nc" id="L154">        return new Token(getEpoch(), getGlobalAddress());</span>
+<span class="fc" id="L154">        return new Token(getEpoch(), getGlobalAddress());</span>
     }
 
     default boolean hasCheckpointMetadata() {
-<span class="nc bnc" id="L158" title="All 4 branches missed.">        return getCheckpointType() != null &amp;&amp; getCheckpointId() != null;</span>
+<span class="pc bpc" id="L158" title="1 of 4 branches missed.">        return getCheckpointType() != null &amp;&amp; getCheckpointId() != null;</span>
     }
 
     /**
@@ -163,98 +163,98 @@ public interface IMetadata {
      */
     @Nullable
     default CheckpointEntry.CheckpointEntryType getCheckpointType() {
-<span class="nc" id="L166">        return (CheckpointEntry.CheckpointEntryType) getMetadataMap()</span>
-<span class="nc" id="L167">                .getOrDefault(LogUnitMetadataType.CHECKPOINT_TYPE,</span>
+<span class="fc" id="L166">        return (CheckpointEntry.CheckpointEntryType) getMetadataMap()</span>
+<span class="fc" id="L167">                .getOrDefault(LogUnitMetadataType.CHECKPOINT_TYPE,</span>
                         null);
     }
 
     default void setCheckpointType(CheckpointEntry.CheckpointEntryType type) {
-<span class="nc" id="L172">        getMetadataMap().put(CHECKPOINT_TYPE, type);</span>
-<span class="nc" id="L173">    }</span>
+<span class="fc" id="L172">        getMetadataMap().put(CHECKPOINT_TYPE, type);</span>
+<span class="fc" id="L173">    }</span>
 
     @Nullable
     @SuppressWarnings({&quot;checkstyle:abbreviationaswordinname&quot;, &quot;checkstyle:membername&quot;})
     default UUID getCheckpointId() {
-<span class="nc" id="L178">        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINT_ID,</span>
+<span class="fc" id="L178">        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINT_ID,</span>
                 null);
     }
 
     @SuppressWarnings({&quot;checkstyle:abbreviationaswordinname&quot;, &quot;checkstyle:membername&quot;})
     default void setCheckpointId(UUID id) {
-<span class="nc" id="L184">        getMetadataMap().put(CHECKPOINT_ID, id);</span>
-<span class="nc" id="L185">    }</span>
+<span class="fc" id="L184">        getMetadataMap().put(CHECKPOINT_ID, id);</span>
+<span class="fc" id="L185">    }</span>
 
     default UUID getCheckpointedStreamId() {
-<span class="nc" id="L188">        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_ID,</span>
+<span class="fc" id="L188">        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_ID,</span>
                 null);
     }
 
     default void setCheckpointedStreamId(UUID Id) {
-<span class="nc" id="L193">        getMetadataMap().put(CHECKPOINTED_STREAM_ID, Id);</span>
-<span class="nc" id="L194">    }</span>
+<span class="fc" id="L193">        getMetadataMap().put(CHECKPOINTED_STREAM_ID, Id);</span>
+<span class="fc" id="L194">    }</span>
 
     /**
      * Returns the tail of the checkpointed stream at the time of taking the checkpoint snapshot.
      */
     default Long getCheckpointedStreamStartLogAddress() {
-<span class="nc" id="L200">        return (Long) getMetadataMap()</span>
-<span class="nc" id="L201">                .getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS,</span>
-<span class="nc" id="L202">                        Address.NO_BACKPOINTER);</span>
+<span class="fc" id="L200">        return (Long) getMetadataMap()</span>
+<span class="fc" id="L201">                .getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS,</span>
+<span class="fc" id="L202">                        Address.NO_BACKPOINTER);</span>
     }
 
     default void setCheckpointedStreamStartLogAddress(Long startLogAddress) {
-<span class="nc" id="L206">        getMetadataMap().put(CHECKPOINTED_STREAM_START_LOG_ADDRESS, startLogAddress);</span>
-<span class="nc" id="L207">    }</span>
+<span class="fc" id="L206">        getMetadataMap().put(CHECKPOINTED_STREAM_START_LOG_ADDRESS, startLogAddress);</span>
+<span class="fc" id="L207">    }</span>
 
-<span class="nc" id="L209">    @RequiredArgsConstructor</span>
+<span class="pc" id="L209">    @RequiredArgsConstructor</span>
     enum LogUnitMetadataType implements ITypedEnum {
-<span class="nc" id="L211">        RANK(1, TypeToken.of(DataRank.class)),</span>
-<span class="nc" id="L212">        BACKPOINTER_MAP(3, new TypeToken&lt;Map&lt;UUID, Long&gt;&gt;() {}),</span>
-<span class="nc" id="L213">        GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),</span>
-<span class="nc" id="L214">        CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),</span>
-<span class="nc" id="L215">        CHECKPOINT_ID(7, TypeToken.of(UUID.class)),</span>
-<span class="nc" id="L216">        CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),</span>
-<span class="nc" id="L217">        CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),</span>
-<span class="nc" id="L218">        CLIENT_ID(10, TypeToken.of(UUID.class)),</span>
-<span class="nc" id="L219">        THREAD_ID(11, TypeToken.of(Long.class)),</span>
-<span class="nc" id="L220">        EPOCH(12, TypeToken.of(Long.class))</span>
+<span class="fc" id="L211">        RANK(1, TypeToken.of(DataRank.class)),</span>
+<span class="fc" id="L212">        BACKPOINTER_MAP(3, new TypeToken&lt;Map&lt;UUID, Long&gt;&gt;() {}),</span>
+<span class="fc" id="L213">        GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),</span>
+<span class="fc" id="L214">        CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),</span>
+<span class="fc" id="L215">        CHECKPOINT_ID(7, TypeToken.of(UUID.class)),</span>
+<span class="fc" id="L216">        CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),</span>
+<span class="fc" id="L217">        CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),</span>
+<span class="fc" id="L218">        CLIENT_ID(10, TypeToken.of(UUID.class)),</span>
+<span class="fc" id="L219">        THREAD_ID(11, TypeToken.of(Long.class)),</span>
+<span class="fc" id="L220">        EPOCH(12, TypeToken.of(Long.class))</span>
         ;
         final int type;
-<span class="nc" id="L223">        @Getter</span>
+<span class="fc" id="L223">        @Getter</span>
         final TypeToken&lt;?&gt; componentType;
 
         public byte asByte() {
-<span class="nc" id="L227">            return (byte) type;</span>
+<span class="fc" id="L227">            return (byte) type;</span>
         }
 
-<span class="nc" id="L230">        public static Map&lt;Byte, LogUnitMetadataType&gt; typeMap =</span>
-<span class="nc" id="L231">                Arrays.&lt;LogUnitMetadataType&gt;stream(LogUnitMetadataType.values())</span>
-<span class="nc" id="L232">                        .collect(Collectors.toMap(LogUnitMetadataType::asByte,</span>
-<span class="nc" id="L233">                                Function.identity()));</span>
+<span class="fc" id="L230">        public static Map&lt;Byte, LogUnitMetadataType&gt; typeMap =</span>
+<span class="fc" id="L231">                Arrays.&lt;LogUnitMetadataType&gt;stream(LogUnitMetadataType.values())</span>
+<span class="fc" id="L232">                        .collect(Collectors.toMap(LogUnitMetadataType::asByte,</span>
+<span class="fc" id="L233">                                Function.identity()));</span>
     }
 
 <span class="nc bnc" id="L236" title="All 14 branches missed.">    @Value</span>
-<span class="nc" id="L237">    @AllArgsConstructor</span>
+<span class="fc" id="L237">    @AllArgsConstructor</span>
     class DataRank implements Comparable&lt;DataRank&gt; {
-<span class="nc" id="L239">        public long rank;</span>
+<span class="fc" id="L239">        public long rank;</span>
         @NotNull
-<span class="nc" id="L241">        public UUID uuid;</span>
+<span class="fc" id="L241">        public UUID uuid;</span>
 
         public DataRank(long rank) {
-<span class="nc" id="L244">            this(rank, UUID.randomUUID());</span>
-<span class="nc" id="L245">        }</span>
+<span class="fc" id="L244">            this(rank, UUID.randomUUID());</span>
+<span class="fc" id="L245">        }</span>
 
         public DataRank buildHigherRank() {
-<span class="nc" id="L248">            return new DataRank(rank + 1, uuid);</span>
+<span class="fc" id="L248">            return new DataRank(rank + 1, uuid);</span>
         }
 
         @Override
         public int compareTo(DataRank o) {
-<span class="nc" id="L253">            int rankCompared = Long.compare(this.rank, o.rank);</span>
-<span class="nc bnc" id="L254" title="All 2 branches missed.">            if (rankCompared == 0) {</span>
-<span class="nc" id="L255">                return uuid.compareTo(o.getUuid());</span>
+<span class="fc" id="L253">            int rankCompared = Long.compare(this.rank, o.rank);</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">            if (rankCompared == 0) {</span>
+<span class="fc" id="L255">                return uuid.compareTo(o.getUuid());</span>
             } else {
-<span class="nc" id="L257">                return rankCompared;</span>
+<span class="fc" id="L257">                return rankCompared;</span>
             }
         }
     }

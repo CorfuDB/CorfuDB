@@ -16,27 +16,27 @@ import org.corfudb.runtime.view.Layout;
 <span class="nc bnc" id="L16" title="All 24 branches missed.">@Data</span>
 <span class="nc" id="L17">@AllArgsConstructor</span>
 public class LayoutCommittedRequest implements ICorfuPayload&lt;LayoutCommittedRequest&gt; {
-<span class="nc" id="L19">    private Boolean force;</span>
-<span class="nc" id="L20">    private long epoch;</span>
-<span class="nc" id="L21">    private Layout layout;</span>
+<span class="fc" id="L19">    private Boolean force;</span>
+<span class="fc" id="L20">    private long epoch;</span>
+<span class="fc" id="L21">    private Layout layout;</span>
 
-<span class="nc" id="L23">    public LayoutCommittedRequest(long epoch, Layout layout) {</span>
-<span class="nc" id="L24">        this.epoch = epoch;</span>
-<span class="nc" id="L25">        this.layout = layout;</span>
-<span class="nc" id="L26">        this.force = false;</span>
-<span class="nc" id="L27">    }</span>
+<span class="fc" id="L23">    public LayoutCommittedRequest(long epoch, Layout layout) {</span>
+<span class="fc" id="L24">        this.epoch = epoch;</span>
+<span class="fc" id="L25">        this.layout = layout;</span>
+<span class="fc" id="L26">        this.force = false;</span>
+<span class="fc" id="L27">    }</span>
 
-<span class="nc" id="L29">    public LayoutCommittedRequest(ByteBuf buf) {</span>
-<span class="nc" id="L30">        force = ICorfuPayload.fromBuffer(buf, Boolean.class);</span>
-<span class="nc" id="L31">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L32">        layout = ICorfuPayload.fromBuffer(buf, Layout.class);</span>
-<span class="nc" id="L33">    }</span>
+<span class="fc" id="L29">    public LayoutCommittedRequest(ByteBuf buf) {</span>
+<span class="fc" id="L30">        force = ICorfuPayload.fromBuffer(buf, Boolean.class);</span>
+<span class="fc" id="L31">        epoch = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L32">        layout = ICorfuPayload.fromBuffer(buf, Layout.class);</span>
+<span class="fc" id="L33">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L37">        ICorfuPayload.serialize(buf, force);</span>
-<span class="nc" id="L38">        ICorfuPayload.serialize(buf, epoch);</span>
-<span class="nc" id="L39">        ICorfuPayload.serialize(buf, layout);</span>
-<span class="nc" id="L40">    }</span>
+<span class="fc" id="L37">        ICorfuPayload.serialize(buf, force);</span>
+<span class="fc" id="L38">        ICorfuPayload.serialize(buf, epoch);</span>
+<span class="fc" id="L39">        ICorfuPayload.serialize(buf, layout);</span>
+<span class="fc" id="L40">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -20,13 +20,13 @@ import java.util.stream.Stream;
 public class ImmuableListSetWrapper&lt;E&gt; implements Set&lt;E&gt; {
     final List&lt;E&gt; internalList;
 
-<span class="nc" id="L23">    public ImmuableListSetWrapper(@Nonnull List&lt;E&gt; internalList) {</span>
-<span class="nc" id="L24">        this.internalList = internalList;</span>
-<span class="nc" id="L25">    }</span>
+<span class="fc" id="L23">    public ImmuableListSetWrapper(@Nonnull List&lt;E&gt; internalList) {</span>
+<span class="fc" id="L24">        this.internalList = internalList;</span>
+<span class="fc" id="L25">    }</span>
 
     @Override
     public int size() {
-<span class="nc" id="L29">        return internalList.size();</span>
+<span class="fc" id="L29">        return internalList.size();</span>
     }
 
     @Override
@@ -41,7 +41,7 @@ public class ImmuableListSetWrapper&lt;E&gt; implements Set&lt;E&gt; {
 
     @Override
     public Iterator&lt;E&gt; iterator() {
-<span class="nc" id="L44">        return internalList.iterator();</span>
+<span class="fc" id="L44">        return internalList.iterator();</span>
     }
 
     @Override

@@ -14,7 +14,7 @@ import org.corfudb.util.Utils;
  */
 public class TransactionAbortedException extends RuntimeException {
 
-<span class="nc" id="L17">    @Getter</span>
+<span class="fc" id="L17">    @Getter</span>
     AbortCause abortCause;
 
 <span class="nc" id="L20">    @Getter</span>
@@ -23,25 +23,25 @@ public class TransactionAbortedException extends RuntimeException {
     /**
      * The key that triggered the abort.
      */
-<span class="nc" id="L26">    @Getter</span>
+<span class="fc" id="L26">    @Getter</span>
     byte[] conflictKey;
 
     /**
      * The stream ID at which the conflict occurred.
      */
-<span class="nc" id="L32">    @Getter</span>
+<span class="fc" id="L32">    @Getter</span>
     UUID conflictStream;
 
     /**
      * The address at which the conflict occurred.
      */
-<span class="nc" id="L38">    @Getter</span>
+<span class="fc" id="L38">    @Getter</span>
     Long offendingAddress;
 
-<span class="nc" id="L41">    @Getter</span>
+<span class="fc" id="L41">    @Getter</span>
     Throwable cause;
 
-<span class="nc" id="L44">    @Getter</span>
+<span class="fc" id="L44">    @Getter</span>
     AbstractTransactionalContext context;
 
     /**
@@ -53,37 +53,37 @@ public class TransactionAbortedException extends RuntimeException {
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
             byte[] conflictKey, UUID conflictStream, Long offendingAddress, AbortCause abortCause,
             AbstractTransactionalContext context) {
-<span class="nc" id="L56">        this(txResolutionInfo, conflictKey, conflictStream, offendingAddress, abortCause, null, context);</span>
-<span class="nc" id="L57">    }</span>
+<span class="fc" id="L56">        this(txResolutionInfo, conflictKey, conflictStream, offendingAddress, abortCause, null, context);</span>
+<span class="fc" id="L57">    }</span>
 
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
             AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
-<span class="nc" id="L61">        this(txResolutionInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,</span>
-<span class="nc" id="L62">                Address.NON_ADDRESS, abortCause, cause, context);</span>
-<span class="nc" id="L63">    }</span>
+<span class="fc" id="L61">        this(txResolutionInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,</span>
+<span class="fc" id="L62">                Address.NON_ADDRESS, abortCause, cause, context);</span>
+<span class="fc" id="L63">    }</span>
 
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
             byte[] conflictKey, UUID conflictStream, Long offendingAddress,
             AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
-<span class="nc" id="L68">        super(&quot;TX ABORT &quot;</span>
-<span class="nc" id="L69">                + &quot; | Snapshot Time = &quot; + txResolutionInfo.getSnapshotTimestamp()</span>
-<span class="nc" id="L70">                + &quot; | Failed Transaction ID = &quot; + txResolutionInfo.getTXid()</span>
+<span class="fc" id="L68">        super(&quot;TX ABORT &quot;</span>
+<span class="fc" id="L69">                + &quot; | Snapshot Time = &quot; + txResolutionInfo.getSnapshotTimestamp()</span>
+<span class="fc" id="L70">                + &quot; | Failed Transaction ID = &quot; + txResolutionInfo.getTXid()</span>
                 + &quot; | Offending Address = &quot; + offendingAddress
-<span class="nc bnc" id="L72" title="All 2 branches missed.">                + &quot; | Conflict Key = &quot; + Utils.bytesToHex(conflictKey)</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">                + &quot; | Conflict Key = &quot; + Utils.bytesToHex(conflictKey)</span>
                 + &quot; | Conflict Stream = &quot; + conflictStream
                 + &quot; | Cause = &quot; + abortCause
                 + &quot; | Time = &quot; + (context == null ? &quot;Unknown&quot; :
-<span class="nc bnc" id="L76" title="All 2 branches missed.">                System.currentTimeMillis() -</span>
-<span class="nc" id="L77">                context.getStartTime()) + &quot; ms&quot;</span>
-<span class="nc" id="L78">                + (cause == null ? &quot;&quot; : &quot; | Message = &quot; + cause.getMessage()));</span>
-<span class="nc" id="L79">        this.txResolutionInfo = txResolutionInfo;</span>
-<span class="nc" id="L80">        this.conflictKey = conflictKey;</span>
-<span class="nc" id="L81">        this.conflictStream = conflictStream;</span>
-<span class="nc" id="L82">        this.offendingAddress = offendingAddress;</span>
-<span class="nc" id="L83">        this.abortCause = abortCause;</span>
-<span class="nc" id="L84">        this.cause = cause;</span>
-<span class="nc" id="L85">        this.context = context;</span>
-<span class="nc" id="L86">    }</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">                System.currentTimeMillis() -</span>
+<span class="fc" id="L77">                context.getStartTime()) + &quot; ms&quot;</span>
+<span class="fc" id="L78">                + (cause == null ? &quot;&quot; : &quot; | Message = &quot; + cause.getMessage()));</span>
+<span class="fc" id="L79">        this.txResolutionInfo = txResolutionInfo;</span>
+<span class="fc" id="L80">        this.conflictKey = conflictKey;</span>
+<span class="fc" id="L81">        this.conflictStream = conflictStream;</span>
+<span class="fc" id="L82">        this.offendingAddress = offendingAddress;</span>
+<span class="fc" id="L83">        this.abortCause = abortCause;</span>
+<span class="fc" id="L84">        this.cause = cause;</span>
+<span class="fc" id="L85">        this.context = context;</span>
+<span class="fc" id="L86">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

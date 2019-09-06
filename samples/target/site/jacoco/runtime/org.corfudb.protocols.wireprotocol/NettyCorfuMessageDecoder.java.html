@@ -13,14 +13,14 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Created by mwei on 10/1/15.
  */
-<span class="nc" id="L16">@Slf4j</span>
-<span class="nc" id="L17">public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {</span>
+<span class="fc" id="L16">@Slf4j</span>
+<span class="fc" id="L17">public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {</span>
 
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
                           List&lt;Object&gt; list) throws Exception {
-<span class="nc" id="L22">        list.add(CorfuMsg.deserialize(byteBuf));</span>
-<span class="nc" id="L23">    }</span>
+<span class="fc" id="L22">        list.add(CorfuMsg.deserialize(byteBuf));</span>
+<span class="fc" id="L23">    }</span>
 
     @Override
     protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in,
@@ -28,11 +28,11 @@ import lombok.extern.slf4j.Slf4j;
         //log.info(&quot;Netty channel handler context goes inactive, received out size is {}&quot;,
         // (out == null) ? null : out.size());
 
-<span class="nc bnc" id="L31" title="All 2 branches missed.">        if (in != Unpooled.EMPTY_BUFFER) {</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">        if (in != Unpooled.EMPTY_BUFFER) {</span>
 <span class="nc" id="L32">            this.decode(ctx, in, out);</span>
         }
         // ignore the Netty generated {@link EmptyByteBuf empty ByteBuf message} when channel
         // handler goes inactive (typically happened after each received burst of batch of messages)
-<span class="nc" id="L36">    }</span>
+<span class="fc" id="L36">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

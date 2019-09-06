@@ -12,26 +12,26 @@ import lombok.RequiredArgsConstructor;
  */
 @CorfuPayload
 <span class="nc bnc" id="L14" title="All 14 branches missed.">@Data</span>
-<span class="nc" id="L15">@RequiredArgsConstructor</span>
+<span class="fc" id="L15">@RequiredArgsConstructor</span>
 public class TrimRequest implements ICorfuPayload&lt;TrimRequest&gt; {
 
-<span class="nc" id="L18">    final Token address;</span>
+<span class="fc" id="L18">    final Token address;</span>
 
     /**
      * Deserialization Constructor from Bytebuf to TrimRequest.
      *
      * @param buf The buffer to deserialize
      */
-<span class="nc" id="L25">    public TrimRequest(ByteBuf buf) {</span>
-<span class="nc" id="L26">        long epoch = buf.readLong();</span>
-<span class="nc" id="L27">        long sequence = buf.readLong();</span>
-<span class="nc" id="L28">        address = new Token(epoch, sequence);</span>
-<span class="nc" id="L29">    }</span>
+<span class="fc" id="L25">    public TrimRequest(ByteBuf buf) {</span>
+<span class="fc" id="L26">        long epoch = buf.readLong();</span>
+<span class="fc" id="L27">        long sequence = buf.readLong();</span>
+<span class="fc" id="L28">        address = new Token(epoch, sequence);</span>
+<span class="fc" id="L29">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L33">        buf.writeLong(address.getEpoch());</span>
-<span class="nc" id="L34">        buf.writeLong(address.getSequence());</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L33">        buf.writeLong(address.getEpoch());</span>
+<span class="fc" id="L34">        buf.writeLong(address.getSequence());</span>
+<span class="fc" id="L35">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

@@ -12,34 +12,34 @@ import lombok.Getter;
  * &lt;p&gt;Created by Maithem on 7/9/19.&lt;/p&gt;
  */
 
-<span class="nc bnc" id="L15" title="All 8 branches missed.">@Builder(toBuilder=true)</span>
+<span class="pc bpc" id="L15" title="1 of 8 branches missed.">@Builder(toBuilder=true)</span>
 <span class="nc bnc" id="L16" title="All 22 branches missed.">@Data</span>
 public class ReadOptions {
     /**
      * Ignore trimmed exceptions encountered while syncing
      */
-<span class="nc" id="L21">    @Getter</span>
+<span class="fc" id="L21">    @Getter</span>
     @Builder.Default
     final boolean ignoreTrim = false;
 
     /**
      * The readers behavior when a hole is encountered
      */
-<span class="nc" id="L28">    @Getter</span>
+<span class="fc" id="L28">    @Getter</span>
     @Builder.Default
     private final boolean waitForHole = true;
 
     /**
      * Whether to cache the read on the client side
      */
-<span class="nc" id="L35">    @Getter</span>
+<span class="fc" id="L35">    @Getter</span>
     @Builder.Default
     private final boolean clientCacheable = true;
 
     /**
      * Cache hint for the server to determine whether to cache the read request or not
      */
-<span class="nc" id="L42">    @Getter</span>
+<span class="fc" id="L42">    @Getter</span>
     @Builder.Default
     private final boolean serverCacheable = true;
 }

@@ -18,8 +18,8 @@ public class TestClassUsingAnnotation$CORFUSMR extends TestClassUsingAnnotation 
   public ICorfuSMRProxy<TestClassUsingAnnotation> proxy_CORFUSMR;
 
   public final Map<String, ICorfuSMRUpcallTarget<TestClassUsingAnnotation>> upcallMap_CORFUSMR = new ImmutableMap.Builder<String, ICorfuSMRUpcallTarget<TestClassUsingAnnotation>>()
-  .put("testIncrement", (obj, args) -> { return obj.testIncrement();})
-  .put("reset", (obj, args) -> { obj.reset();return null;}).build();
+  .put("reset", (obj, args) -> { obj.reset();return null;})
+  .put("testIncrement", (obj, args) -> { return obj.testIncrement();}).build();
 
   public final Map<String, IUndoRecordFunction<TestClassUsingAnnotation>> undoRecordMap_CORFUSMR = new ImmutableMap.Builder<String, IUndoRecordFunction<TestClassUsingAnnotation>>().build();
 
@@ -40,15 +40,26 @@ public class TestClassUsingAnnotation$CORFUSMR extends TestClassUsingAnnotation 
   }
 
   @Override
-  @Accessor
-  public int getValue() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.getValue();},null);
+  public boolean equals(Object arg0) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
   }
 
   @Override
-  @PassThrough
-  public boolean testFn1() {
-    return  super.testFn1();
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  }
+
+  @Override
+  public int hashCode() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
+  }
+
+  @Override
+  @Mutator(
+      name = "reset"
+  )
+  public void reset() {
+    proxy_CORFUSMR.logUpdate("reset",false,null);
   }
 
   @Override
@@ -61,26 +72,15 @@ public class TestClassUsingAnnotation$CORFUSMR extends TestClassUsingAnnotation 
   }
 
   @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  @PassThrough
+  public boolean testFn1() {
+    return  super.testFn1();
   }
 
   @Override
-  @Mutator(
-      name = "reset"
-  )
-  public void reset() {
-    proxy_CORFUSMR.logUpdate("reset",false,null);
-  }
-
-  @Override
-  public boolean equals(Object arg0) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
-  }
-
-  @Override
-  public int hashCode() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.hashCode();},null);
+  @Accessor
+  public int getValue() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.getValue();},null);
   }
 
   public Map<String, ICorfuSMRUpcallTarget<TestClassUsingAnnotation>> getCorfuSMRUpcallMap() {

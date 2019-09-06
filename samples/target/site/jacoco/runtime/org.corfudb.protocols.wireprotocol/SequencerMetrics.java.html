@@ -12,35 +12,35 @@ import lombok.Data;
 <span class="nc bnc" id="L12" title="All 14 branches missed.">@Data</span>
 public class SequencerMetrics implements ICorfuPayload&lt;SequencerMetrics&gt; {
 
-<span class="nc" id="L15">    public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);</span>
-<span class="nc" id="L16">    public static final SequencerMetrics NOT_READY = new SequencerMetrics(SequencerStatus.NOT_READY);</span>
-<span class="nc" id="L17">    public static final SequencerMetrics UNKNOWN = new SequencerMetrics(SequencerStatus.UNKNOWN);</span>
+<span class="fc" id="L15">    public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);</span>
+<span class="fc" id="L16">    public static final SequencerMetrics NOT_READY = new SequencerMetrics(SequencerStatus.NOT_READY);</span>
+<span class="fc" id="L17">    public static final SequencerMetrics UNKNOWN = new SequencerMetrics(SequencerStatus.UNKNOWN);</span>
 
-<span class="nc" id="L19">    public enum SequencerStatus {</span>
+<span class="fc" id="L19">    public enum SequencerStatus {</span>
         // Sequencer is in READY state, and can dispatch tokens.
-<span class="nc" id="L21">        READY,</span>
+<span class="fc" id="L21">        READY,</span>
         // Sequencer is in a NOT_READY state.
-<span class="nc" id="L23">        NOT_READY,</span>
+<span class="fc" id="L23">        NOT_READY,</span>
         // Unknown state.
-<span class="nc" id="L25">        UNKNOWN</span>
+<span class="fc" id="L25">        UNKNOWN</span>
     }
 
     /**
      * Ready state ofN a sequencer to determine its READY/NOT_READY state.
      */
-<span class="nc" id="L31">    private final SequencerStatus sequencerStatus;</span>
+<span class="fc" id="L31">    private final SequencerStatus sequencerStatus;</span>
 
-<span class="nc" id="L33">    public SequencerMetrics(SequencerStatus sequencerStatus) {</span>
-<span class="nc" id="L34">        this.sequencerStatus = sequencerStatus;</span>
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L33">    public SequencerMetrics(SequencerStatus sequencerStatus) {</span>
+<span class="fc" id="L34">        this.sequencerStatus = sequencerStatus;</span>
+<span class="fc" id="L35">    }</span>
 
-<span class="nc" id="L37">    public SequencerMetrics(ByteBuf buf) {</span>
-<span class="nc" id="L38">        sequencerStatus = SequencerStatus.valueOf(ICorfuPayload.fromBuffer(buf, String.class));</span>
-<span class="nc" id="L39">    }</span>
+<span class="fc" id="L37">    public SequencerMetrics(ByteBuf buf) {</span>
+<span class="fc" id="L38">        sequencerStatus = SequencerStatus.valueOf(ICorfuPayload.fromBuffer(buf, String.class));</span>
+<span class="fc" id="L39">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L43">        ICorfuPayload.serialize(buf, sequencerStatus.toString());</span>
-<span class="nc" id="L44">    }</span>
+<span class="fc" id="L43">        ICorfuPayload.serialize(buf, sequencerStatus.toString());</span>
+<span class="fc" id="L44">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

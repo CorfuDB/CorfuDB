@@ -48,16 +48,12 @@ public class FGMap$CORFUSMR<K, V> extends FGMap<K, V> implements ICorfuSMR<FGMap
   }
 
   @Override
-  @PassThrough
-  int getPartitionNumber(Object key) {
-    return  super.getPartitionNumber(key);
-  }
-
-  @Override
-  @PassThrough
-  public V get(Object key) {
-    return  super.get(key);
-  }
+  @TransactionalMethod(
+      readOnly = true
+  )
+  public Collection<V> values() {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.values();
+    });}
 
   @Override
   @PassThrough
@@ -66,40 +62,17 @@ public class FGMap$CORFUSMR<K, V> extends FGMap<K, V> implements ICorfuSMR<FGMap
   }
 
   @Override
-  @PassThrough
-  UUID getStreamID(int partition) {
-    return  super.getStreamID(partition);
-  }
-
-  @Override
   @TransactionalMethod(
       readOnly = true
   )
-  public boolean containsValue(Object value) {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.containsValue(value);
+  public Set<K> keySet() {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.keySet();
     });}
 
   @Override
-  @PassThrough
-  public V remove(Object key) {
-    return  super.remove(key);
+  Set<UUID> putAllGetStreams(Map<? extends K, ? extends V> m) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.putAllGetStreams(m);},null);
   }
-
-  @Override
-  @TransactionalMethod(
-      modifiedStreamsFunction = "putAllGetStreams"
-  )
-  public void putAll(Map<? extends K, ? extends V> m) {
-    proxy_CORFUSMR.TXExecute(() -> {super.putAll(m);
-    return null; });}
-
-  @Override
-  @TransactionalMethod(
-      readOnly = true
-  )
-  public Collection<V> values() {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.values();
-    });}
 
   @Override
   @TransactionalMethod(
@@ -110,47 +83,12 @@ public class FGMap$CORFUSMR<K, V> extends FGMap<K, V> implements ICorfuSMR<FGMap
     });}
 
   @Override
-  @PassThrough
-  public V put(K key, V value) {
-    return  super.put(key, value);
-  }
-
-  @Override
   @TransactionalMethod(
-      modifiedStreamsFunction = "getAllStreamIDs"
+      modifiedStreamsFunction = "putAllGetStreams"
   )
-  public void clear() {
-    proxy_CORFUSMR.TXExecute(() -> {super.clear();
+  public void putAll(Map<? extends K, ? extends V> m) {
+    proxy_CORFUSMR.TXExecute(() -> {super.putAll(m);
     return null; });}
-
-  @Override
-  public boolean equals(Object arg0) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
-  }
-
-  @Override
-  @TransactionalMethod(
-      readOnly = true
-  )
-  public boolean isEmpty() {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.isEmpty();
-    });}
-
-  @Override
-  @PassThrough
-  Map<K, V> getPartition(Object key) {
-    return  super.getPartition(key);
-  }
-
-  @Override
-  public String toString() {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
-  }
-
-  @Override
-  Set<UUID> putAllGetStreams(Map<? extends K, ? extends V> m) {
-    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.putAllGetStreams(m);},null);
-  }
 
   @Override
   public int hashCode() {
@@ -164,18 +102,60 @@ public class FGMap$CORFUSMR<K, V> extends FGMap<K, V> implements ICorfuSMR<FGMap
   }
 
   @Override
+  @TransactionalMethod(
+      readOnly = true
+  )
+  public boolean isEmpty() {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.isEmpty();
+    });}
+
+  @Override
   @PassThrough
-  Set<UUID> getAllStreamIDs() {
-    return  super.getAllStreamIDs();
+  Map<K, V> getPartitionMap(int partition) {
+    return  super.getPartitionMap(partition);
+  }
+
+  @Override
+  public String toString() {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.toString();},null);
+  }
+
+  @Override
+  @PassThrough
+  public V put(K key, V value) {
+    return  super.put(key, value);
+  }
+
+  @Override
+  @PassThrough
+  int getPartitionNumber(Object key) {
+    return  super.getPartitionNumber(key);
+  }
+
+  @Override
+  @PassThrough
+  public V get(Object key) {
+    return  super.get(key);
   }
 
   @Override
   @TransactionalMethod(
       readOnly = true
   )
-  public Set<K> keySet() {
-    return proxy_CORFUSMR.TXExecute(() -> {return super.keySet();
+  public boolean containsValue(Object value) {
+    return proxy_CORFUSMR.TXExecute(() -> {return super.containsValue(value);
     });}
+
+  @Override
+  public boolean equals(Object arg0) {
+    return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.equals(arg0);},null);
+  }
+
+  @Override
+  @PassThrough
+  Map<K, V> getPartition(Object key) {
+    return  super.getPartition(key);
+  }
 
   @Override
   @TransactionalMethod(
@@ -187,9 +167,29 @@ public class FGMap$CORFUSMR<K, V> extends FGMap<K, V> implements ICorfuSMR<FGMap
 
   @Override
   @PassThrough
-  Map<K, V> getPartitionMap(int partition) {
-    return  super.getPartitionMap(partition);
+  public V remove(Object key) {
+    return  super.remove(key);
   }
+
+  @Override
+  @PassThrough
+  UUID getStreamID(int partition) {
+    return  super.getStreamID(partition);
+  }
+
+  @Override
+  @PassThrough
+  Set<UUID> getAllStreamIDs() {
+    return  super.getAllStreamIDs();
+  }
+
+  @Override
+  @TransactionalMethod(
+      modifiedStreamsFunction = "getAllStreamIDs"
+  )
+  public void clear() {
+    proxy_CORFUSMR.TXExecute(() -> {super.clear();
+    return null; });}
 
   public Map<String, ICorfuSMRUpcallTarget<FGMap<K, V>>> getCorfuSMRUpcallMap() {
     return upcallMap_CORFUSMR;

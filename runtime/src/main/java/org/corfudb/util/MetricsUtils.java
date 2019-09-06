@@ -152,7 +152,6 @@ public class MetricsUtils {
         if (isMetricsReportingSetUp(metrics)) {
             return;
         }
-
         metrics.counter(mpTrigger);
 
         loadVmProperties();
@@ -211,7 +210,6 @@ public class MetricsUtils {
             metricsCsvReportingEnabled = false;
             return;
         }
-
         CsvReporter csvReporter = CsvReporter.forRegistry(metrics)
                 .convertDurationsTo(TimeUnit.MICROSECONDS)
                 .convertRatesTo(TimeUnit.SECONDS)

@@ -10,7 +10,7 @@ import java.util.UUID;
  * &lt;p&gt;Created by mwei on 11/12/16.
  */
 
-<span class="nc" id="L13">public abstract class AbstractCorfuWrapper&lt;T&gt; implements ICorfuSMRProxyWrapper&lt;T&gt; {</span>
+<span class="fc" id="L13">public abstract class AbstractCorfuWrapper&lt;T&gt; implements ICorfuSMRProxyWrapper&lt;T&gt; {</span>
 
     ICorfuSMRProxy&lt;T&gt; proxy;
 
@@ -19,7 +19,7 @@ import java.util.UUID;
      * new Corfu objects.
      */
     protected IObjectBuilder&lt;?&gt; getBuilder() {
-<span class="nc" id="L22">        return proxy.getObjectBuilder();</span>
+<span class="fc" id="L22">        return proxy.getObjectBuilder();</span>
     }
 
     /**
@@ -29,12 +29,12 @@ import java.util.UUID;
      */
     @SuppressWarnings(&quot;checkstyle:abbreviation&quot;)
     protected UUID getStreamID() {
-<span class="nc" id="L32">        return proxy.getStreamID();</span>
+<span class="fc" id="L32">        return proxy.getStreamID();</span>
     }
 
     @Override
     public void setProxy$CORFUSMR(ICorfuSMRProxy&lt;T&gt; proxy) {
-<span class="nc" id="L37">        this.proxy = proxy;</span>
-<span class="nc" id="L38">    }</span>
+<span class="fc" id="L37">        this.proxy = proxy;</span>
+<span class="fc" id="L38">    }</span>
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

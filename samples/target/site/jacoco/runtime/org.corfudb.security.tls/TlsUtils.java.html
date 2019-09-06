@@ -18,7 +18,7 @@ import java.security.cert.CertificateException;
  * Utilities for common options parsing and session configuration for
  * encrypted &amp; authenticated TLS sessions.
  */
-<span class="nc" id="L21">@Slf4j</span>
+<span class="fc" id="L21">@Slf4j</span>
 public class TlsUtils {
 
 <span class="nc" id="L24">    private TlsUtils() {</span>
@@ -36,23 +36,23 @@ public class TlsUtils {
      */
     public static KeyStore openKeyStore(String keyStorePath,
                                         String password) throws SSLException {
-<span class="nc" id="L39">        File keyStoreFile = new File(keyStorePath);</span>
-<span class="nc bnc" id="L40" title="All 2 branches missed.">        if (!keyStoreFile.exists()) {</span>
-<span class="nc" id="L41">            String errorMessage = &quot;Key store file {&quot; + keyStorePath + &quot;} doesn't exist.&quot;;</span>
-<span class="nc" id="L42">            log.error(errorMessage);</span>
-<span class="nc" id="L43">            throw new SSLException(errorMessage);</span>
+<span class="fc" id="L39">        File keyStoreFile = new File(keyStorePath);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        if (!keyStoreFile.exists()) {</span>
+<span class="fc" id="L41">            String errorMessage = &quot;Key store file {&quot; + keyStorePath + &quot;} doesn't exist.&quot;;</span>
+<span class="fc" id="L42">            log.error(errorMessage);</span>
+<span class="fc" id="L43">            throw new SSLException(errorMessage);</span>
         }
 
-<span class="nc" id="L46">        FileInputStream inputStream = null;</span>
+<span class="fc" id="L46">        FileInputStream inputStream = null;</span>
         try {
-<span class="nc" id="L48">            inputStream = new FileInputStream(keyStorePath);</span>
-<span class="nc" id="L49">            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());</span>
-<span class="nc" id="L50">            keyStore.load(inputStream, password.toCharArray());</span>
-<span class="nc" id="L51">            return keyStore;</span>
-<span class="nc" id="L52">        } catch (IOException e) {</span>
-<span class="nc" id="L53">            String errorMessage = &quot;Unable to read key store file &quot; + keyStorePath + &quot;.&quot;;</span>
-<span class="nc" id="L54">            log.error(errorMessage, e);</span>
-<span class="nc" id="L55">            throw new SSLException(errorMessage, e);</span>
+<span class="fc" id="L48">            inputStream = new FileInputStream(keyStorePath);</span>
+<span class="fc" id="L49">            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());</span>
+<span class="fc" id="L50">            keyStore.load(inputStream, password.toCharArray());</span>
+<span class="fc" id="L51">            return keyStore;</span>
+<span class="fc" id="L52">        } catch (IOException e) {</span>
+<span class="fc" id="L53">            String errorMessage = &quot;Unable to read key store file &quot; + keyStorePath + &quot;.&quot;;</span>
+<span class="fc" id="L54">            log.error(errorMessage, e);</span>
+<span class="fc" id="L55">            throw new SSLException(errorMessage, e);</span>
 <span class="nc" id="L56">        } catch (CertificateException e) {</span>
 <span class="nc" id="L57">            String errorMessage = &quot;Unable to read certificates in key store file &quot; + keyStorePath + &quot;.&quot;;</span>
 <span class="nc" id="L58">            log.error(errorMessage, e);</span>
@@ -68,8 +68,8 @@ public class TlsUtils {
 <span class="nc" id="L68">            log.error(errorMessage, e);</span>
 <span class="nc" id="L69">            throw new SSLException(errorMessage, e);</span>
         } finally {
-<span class="nc" id="L71">            IOUtils.closeQuietly(inputStream);</span>
-<span class="nc" id="L72">        }</span>
+<span class="fc" id="L71">            IOUtils.closeQuietly(inputStream);</span>
+<span class="fc" id="L72">        }</span>
     }
 
     /**
@@ -83,15 +83,15 @@ public class TlsUtils {
      *      Wraps the IOException.
      */
     public static String getKeyStorePassword(String passwordFilePath) throws SSLException {
-<span class="nc bnc" id="L86" title="All 4 branches missed.">        if (passwordFilePath == null || passwordFilePath.isEmpty()) {</span>
-<span class="nc" id="L87">            return &quot;&quot;;</span>
+<span class="pc bpc" id="L86" title="1 of 4 branches missed.">        if (passwordFilePath == null || passwordFilePath.isEmpty()) {</span>
+<span class="fc" id="L87">            return &quot;&quot;;</span>
         }
         try {
-<span class="nc" id="L90">            return (new String(Files.readAllBytes(Paths.get(passwordFilePath)))).trim();</span>
-<span class="nc" id="L91">        } catch (IOException e) {</span>
-<span class="nc" id="L92">            String errorMessage = &quot;Unable to read password file &quot; + passwordFilePath + &quot;.&quot;;</span>
-<span class="nc" id="L93">            log.error(errorMessage, e);</span>
-<span class="nc" id="L94">            throw new SSLException(errorMessage, e);</span>
+<span class="fc" id="L90">            return (new String(Files.readAllBytes(Paths.get(passwordFilePath)))).trim();</span>
+<span class="fc" id="L91">        } catch (IOException e) {</span>
+<span class="fc" id="L92">            String errorMessage = &quot;Unable to read password file &quot; + passwordFilePath + &quot;.&quot;;</span>
+<span class="fc" id="L93">            log.error(errorMessage, e);</span>
+<span class="fc" id="L94">            throw new SSLException(errorMessage, e);</span>
         }
     }
 }

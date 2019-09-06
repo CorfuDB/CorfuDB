@@ -19,7 +19,7 @@ import org.corfudb.protocols.wireprotocol.VersionInfo;
  *
  * &lt;p&gt;Created by mwei on 12/9/15.
  */
-<span class="nc" id="L22">@Slf4j</span>
+<span class="fc" id="L22">@Slf4j</span>
 public class BaseClient implements IClient {
 
     /**
@@ -31,10 +31,10 @@ public class BaseClient implements IClient {
 
     private final long epoch;
 
-<span class="nc" id="L34">    public BaseClient(IClientRouter router, long epoch) {</span>
-<span class="nc" id="L35">        this.router = router;</span>
-<span class="nc" id="L36">        this.epoch = epoch;</span>
-<span class="nc" id="L37">    }</span>
+<span class="fc" id="L34">    public BaseClient(IClientRouter router, long epoch) {</span>
+<span class="fc" id="L35">        this.router = router;</span>
+<span class="fc" id="L36">        this.epoch = epoch;</span>
+<span class="fc" id="L37">    }</span>
 
     /**
      * Ping the endpoint, synchronously.
@@ -44,10 +44,10 @@ public class BaseClient implements IClient {
      */
     public boolean pingSync() {
         try {
-<span class="nc" id="L47">            return ping().get();</span>
-<span class="nc" id="L48">        } catch (Exception e) {</span>
-<span class="nc" id="L49">            log.error(&quot;Ping failed due to exception&quot;, e);</span>
-<span class="nc" id="L50">            return false;</span>
+<span class="fc" id="L47">            return ping().get();</span>
+<span class="fc" id="L48">        } catch (Exception e) {</span>
+<span class="fc" id="L49">            log.error(&quot;Ping failed due to exception&quot;, e);</span>
+<span class="fc" id="L50">            return false;</span>
         }
     }
 
@@ -58,15 +58,15 @@ public class BaseClient implements IClient {
      * @return Completable future which returns true on successful epoch set.
      */
     public CompletableFuture&lt;Boolean&gt; sealRemoteServer(long newEpoch) {
-<span class="nc" id="L61">        CorfuMsg msg = new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.SEAL, newEpoch).setEpoch(epoch);</span>
-<span class="nc" id="L62">        log.info(&quot;sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}&quot;,</span>
-<span class="nc" id="L63">                msg.getClientID(), epoch);</span>
-<span class="nc" id="L64">        return router.sendMessageAndGetCompletable(msg);</span>
+<span class="fc" id="L61">        CorfuMsg msg = new CorfuPayloadMsg&lt;&gt;(CorfuMsgType.SEAL, newEpoch).setEpoch(epoch);</span>
+<span class="fc" id="L62">        log.info(&quot;sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}&quot;,</span>
+<span class="fc" id="L63">                msg.getClientID(), epoch);</span>
+<span class="fc" id="L64">        return router.sendMessageAndGetCompletable(msg);</span>
     }
 
     public CompletableFuture&lt;VersionInfo&gt; getVersionInfo() {
-<span class="nc" id="L68">        return router.sendMessageAndGetCompletable(</span>
-<span class="nc" id="L69">                new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch));</span>
+<span class="fc" id="L68">        return router.sendMessageAndGetCompletable(</span>
+<span class="fc" id="L69">                new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch));</span>
     }
 
 
@@ -77,8 +77,8 @@ public class BaseClient implements IClient {
      * the endpoint is reachable, otherwise False or exceptional completion.
      */
     public CompletableFuture&lt;Boolean&gt; ping() {
-<span class="nc" id="L80">        return router.sendMessageAndGetCompletable(</span>
-<span class="nc" id="L81">                new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch));</span>
+<span class="fc" id="L80">        return router.sendMessageAndGetCompletable(</span>
+<span class="fc" id="L81">                new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch));</span>
     }
 
     /**

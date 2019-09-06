@@ -19,10 +19,10 @@ import org.corfudb.runtime.exceptions.NoBootstrapException;
  *
  * &lt;p&gt;Created by zlokhandwala on 2/20/18.
  */
-<span class="nc" id="L22">public class ManagementHandler implements IClient, IHandler&lt;ManagementClient&gt; {</span>
+<span class="fc" id="L22">public class ManagementHandler implements IClient, IHandler&lt;ManagementClient&gt; {</span>
 
-<span class="nc" id="L24">    @Setter</span>
-<span class="nc" id="L25">    @Getter</span>
+<span class="fc" id="L24">    @Setter</span>
+<span class="fc" id="L25">    @Getter</span>
     IClientRouter router;
 
     @Override
@@ -33,15 +33,15 @@ import org.corfudb.runtime.exceptions.NoBootstrapException;
     /**
      * The handler and handlers which implement this client.
      */
-<span class="nc" id="L36">    @Getter</span>
+<span class="fc" id="L36">    @Getter</span>
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-<span class="nc" id="L38">            .generateHandlers(MethodHandles.lookup(), this);</span>
+<span class="fc" id="L38">            .generateHandlers(MethodHandles.lookup(), this);</span>
 
 
     @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)
     private static Object handleOrchestratorResponse(CorfuPayloadMsg&lt;OrchestratorResponse&gt; msg,
                                                      ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L44">        return msg.getPayload();</span>
+<span class="fc" id="L44">        return msg.getPayload();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR)
@@ -55,13 +55,13 @@ import org.corfudb.runtime.exceptions.NoBootstrapException;
     private static Object handleAlreadyBootstrappedError(CorfuMsg msg,
                                                          ChannelHandlerContext ctx, IClientRouter r)
             throws Exception {
-<span class="nc" id="L58">        throw new AlreadyBootstrappedException();</span>
+<span class="fc" id="L58">        throw new AlreadyBootstrappedException();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.NODE_STATE_RESPONSE)
     private static Object handleNodeStateResponse(CorfuPayloadMsg&lt;NodeState&gt; msg,
                                                   ChannelHandlerContext ctx, IClientRouter r) {
-<span class="nc" id="L64">        return msg.getPayload();</span>
+<span class="fc" id="L64">        return msg.getPayload();</span>
     }
 
     @ClientHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_RESPONSE)

@@ -34,23 +34,23 @@ import org.corfudb.util.serializer.ISerializer;
             throws ClassNotFoundException, IllegalAccessException,
             InstantiationException {
         // Do we have a compiled wrapper for this type?
-<span class="nc" id="L37">        Class&lt;ICorfuSMR&lt;T&gt;&gt; wrapperClass = (Class&lt;ICorfuSMR&lt;T&gt;&gt;)</span>
-<span class="nc" id="L38">                Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);</span>
+<span class="fc" id="L37">        Class&lt;ICorfuSMR&lt;T&gt;&gt; wrapperClass = (Class&lt;ICorfuSMR&lt;T&gt;&gt;)</span>
+<span class="fc" id="L38">                Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);</span>
 
         // Instantiate a new instance of this class.
-<span class="nc" id="L41">        ICorfuSMR&lt;T&gt; wrapperObject = null;</span>
-<span class="nc bnc" id="L42" title="All 4 branches missed.">        if (args == null || args.length == 0) {</span>
-<span class="nc" id="L43">            wrapperObject = wrapperClass.newInstance();</span>
+<span class="fc" id="L41">        ICorfuSMR&lt;T&gt; wrapperObject = null;</span>
+<span class="pc bpc" id="L42" title="1 of 4 branches missed.">        if (args == null || args.length == 0) {</span>
+<span class="fc" id="L43">            wrapperObject = wrapperClass.newInstance();</span>
         } else {
             // This loop is not ideal, but the easiest way to get around Java
             // boxing, which results in primitive constructors not matching.
-<span class="nc bnc" id="L47" title="All 2 branches missed.">            for (Constructor&lt;?&gt; constructor : wrapperClass</span>
-<span class="nc" id="L48">                    .getDeclaredConstructors()) {</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">            for (Constructor&lt;?&gt; constructor : wrapperClass</span>
+<span class="fc" id="L48">                    .getDeclaredConstructors()) {</span>
                 try {
-<span class="nc" id="L50">                    wrapperObject = (ICorfuSMR&lt;T&gt;) constructor</span>
-<span class="nc" id="L51">                            .newInstance(args);</span>
-<span class="nc" id="L52">                    break;</span>
-<span class="nc" id="L53">                } catch (Exception e) {</span>
+<span class="fc" id="L50">                    wrapperObject = (ICorfuSMR&lt;T&gt;) constructor</span>
+<span class="fc" id="L51">                            .newInstance(args);</span>
+<span class="fc" id="L52">                    break;</span>
+<span class="fc" id="L53">                } catch (Exception e) {</span>
                     // just keep trying until one works.
                 }
             }
@@ -58,19 +58,19 @@ import org.corfudb.util.serializer.ISerializer;
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-<span class="nc" id="L61">        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy&lt;&gt;(rt, streamID,</span>
+<span class="fc" id="L61">        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy&lt;&gt;(rt, streamID,</span>
                 type, args, serializer,
-<span class="nc" id="L63">                wrapperObject.getCorfuSMRUpcallMap(),</span>
-<span class="nc" id="L64">                wrapperObject.getCorfuUndoMap(),</span>
-<span class="nc" id="L65">                wrapperObject.getCorfuUndoRecordMap(),</span>
-<span class="nc" id="L66">                wrapperObject.getCorfuResetSet()));</span>
+<span class="fc" id="L63">                wrapperObject.getCorfuSMRUpcallMap(),</span>
+<span class="fc" id="L64">                wrapperObject.getCorfuUndoMap(),</span>
+<span class="fc" id="L65">                wrapperObject.getCorfuUndoRecordMap(),</span>
+<span class="fc" id="L66">                wrapperObject.getCorfuResetSet()));</span>
 
-<span class="nc bnc" id="L68" title="All 2 branches missed.">        if (wrapperObject instanceof ICorfuSMRProxyWrapper) {</span>
-<span class="nc" id="L69">            ((ICorfuSMRProxyWrapper) wrapperObject)</span>
-<span class="nc" id="L70">                    .setProxy$CORFUSMR(wrapperObject.getCorfuSMRProxy());</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        if (wrapperObject instanceof ICorfuSMRProxyWrapper) {</span>
+<span class="fc" id="L69">            ((ICorfuSMRProxyWrapper) wrapperObject)</span>
+<span class="fc" id="L70">                    .setProxy$CORFUSMR(wrapperObject.getCorfuSMRProxy());</span>
         }
 
-<span class="nc" id="L73">        return (T) wrapperObject;</span>
+<span class="fc" id="L73">        return (T) wrapperObject;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>

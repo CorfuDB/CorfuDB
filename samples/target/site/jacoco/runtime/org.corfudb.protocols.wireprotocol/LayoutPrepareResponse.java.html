@@ -18,31 +18,31 @@ import org.corfudb.runtime.view.Layout;
  * &lt;p&gt;Created by mdhawan on 10/24/16.&lt;/p&gt;
  */
 <span class="nc bnc" id="L20" title="All 16 branches missed.">@Data</span>
-<span class="nc" id="L21">@AllArgsConstructor</span>
+<span class="fc" id="L21">@AllArgsConstructor</span>
 public class LayoutPrepareResponse implements ICorfuPayload&lt;LayoutPrepareResponse&gt; {
-<span class="nc" id="L23">    private long rank;</span>
-<span class="nc" id="L24">    private Layout layout;</span>
+<span class="fc" id="L23">    private long rank;</span>
+<span class="fc" id="L24">    private Layout layout;</span>
 
     /**
      * Constructor for layout server response in first phase of Paxos.
      */
-<span class="nc" id="L29">    public LayoutPrepareResponse(ByteBuf buf) {</span>
-<span class="nc" id="L30">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
-<span class="nc" id="L31">        boolean layoutPresent = ICorfuPayload.fromBuffer(buf, Boolean.class);</span>
-<span class="nc bnc" id="L32" title="All 2 branches missed.">        if (layoutPresent) {</span>
-<span class="nc" id="L33">            layout = ICorfuPayload.fromBuffer(buf, Layout.class);</span>
+<span class="fc" id="L29">    public LayoutPrepareResponse(ByteBuf buf) {</span>
+<span class="fc" id="L30">        rank = ICorfuPayload.fromBuffer(buf, Long.class);</span>
+<span class="fc" id="L31">        boolean layoutPresent = ICorfuPayload.fromBuffer(buf, Boolean.class);</span>
+<span class="fc bfc" id="L32" title="All 2 branches covered.">        if (layoutPresent) {</span>
+<span class="fc" id="L33">            layout = ICorfuPayload.fromBuffer(buf, Layout.class);</span>
         }
-<span class="nc" id="L35">    }</span>
+<span class="fc" id="L35">    }</span>
 
     @Override
     public void doSerialize(ByteBuf buf) {
-<span class="nc" id="L39">        ICorfuPayload.serialize(buf, rank);</span>
-<span class="nc bnc" id="L40" title="All 2 branches missed.">        boolean layoutPresent = layout != null;</span>
-<span class="nc" id="L41">        ICorfuPayload.serialize(buf, layoutPresent);</span>
-<span class="nc bnc" id="L42" title="All 2 branches missed.">        if (layoutPresent) {</span>
-<span class="nc" id="L43">            ICorfuPayload.serialize(buf, layout);</span>
+<span class="fc" id="L39">        ICorfuPayload.serialize(buf, rank);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        boolean layoutPresent = layout != null;</span>
+<span class="fc" id="L41">        ICorfuPayload.serialize(buf, layoutPresent);</span>
+<span class="fc bfc" id="L42" title="All 2 branches covered.">        if (layoutPresent) {</span>
+<span class="fc" id="L43">            ICorfuPayload.serialize(buf, layout);</span>
         }
-<span class="nc" id="L45">    }</span>
+<span class="fc" id="L45">    }</span>
 
 
 }

@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 12/11/15.
  */
-<span class="nc" id="L32">@Slf4j</span>
+<span class="fc" id="L32">@Slf4j</span>
 public class StreamsView extends AbstractView {
 
     /**
@@ -38,12 +38,12 @@ public class StreamsView extends AbstractView {
      */
     public static final String CHECKPOINT_SUFFIX = &quot;_cp&quot;;
 
-<span class="nc" id="L41">    @Getter</span>
-<span class="nc" id="L42">    Multimap&lt;UUID, IStreamView&gt; streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());</span>
+<span class="pc" id="L41">    @Getter</span>
+<span class="fc" id="L42">    Multimap&lt;UUID, IStreamView&gt; streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());</span>
 
     public StreamsView(final CorfuRuntime runtime) {
-<span class="nc" id="L45">        super(runtime);</span>
-<span class="nc" id="L46">    }</span>
+<span class="fc" id="L45">        super(runtime);</span>
+<span class="fc" id="L46">    }</span>
 
     /**
      * Get a view on a stream. The view has its own pointer to the stream.
@@ -52,7 +52,7 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream) {
-<span class="nc" id="L55">        return this.get(stream, StreamOptions.DEFAULT);</span>
+<span class="fc" id="L55">        return this.get(stream, StreamOptions.DEFAULT);</span>
     }
 
     /**
@@ -65,7 +65,7 @@ public class StreamsView extends AbstractView {
      * @return an unsafe (not thread safe) stream implementation
      */
     public IStreamView getUnsafe(UUID stream) {
-<span class="nc" id="L68">        return this.getUnsafe(stream, StreamOptions.DEFAULT);</span>
+<span class="fc" id="L68">        return this.getUnsafe(stream, StreamOptions.DEFAULT);</span>
     }
 
     /**
@@ -75,15 +75,15 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream, StreamOptions options) {
-<span class="nc" id="L78">        IStreamView streamView = runtime.getLayoutView().getLayout().getLatestSegment()</span>
-<span class="nc" id="L79">                .getReplicationMode().getStreamView(runtime, stream, options);</span>
-<span class="nc" id="L80">        streamCache.put(stream, streamView);</span>
-<span class="nc" id="L81">        return streamView;</span>
+<span class="fc" id="L78">        IStreamView streamView = runtime.getLayoutView().getLayout().getLatestSegment()</span>
+<span class="fc" id="L79">                .getReplicationMode().getStreamView(runtime, stream, options);</span>
+<span class="fc" id="L80">        streamCache.put(stream, streamView);</span>
+<span class="fc" id="L81">        return streamView;</span>
     }
 
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
-<span class="nc" id="L85">        return runtime.getLayoutView().getLayout().getLatestSegment()</span>
-<span class="nc" id="L86">                .getReplicationMode().getUnsafeStreamView(runtime, stream, options);</span>
+<span class="fc" id="L85">        return runtime.getLayoutView().getLayout().getLatestSegment()</span>
+<span class="fc" id="L86">                .getReplicationMode().getUnsafeStreamView(runtime, stream, options);</span>
     }
 
     /**
@@ -113,56 +113,56 @@ public class StreamsView extends AbstractView {
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull CacheOption cacheOption, @Nonnull UUID... streamIDs) {
 
-<span class="nc" id="L116">        final LogData ld = new LogData(DataType.DATA, object);</span>
-<span class="nc" id="L117">        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());</span>
+<span class="fc" id="L116">        final LogData ld = new LogData(DataType.DATA, object);</span>
+<span class="fc" id="L117">        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());</span>
 
-<span class="nc" id="L119">        TokenResponse tokenResponse = null;</span>
-<span class="nc bnc" id="L120" title="All 2 branches missed.">        for (int x = 0; x &lt; runtime.getParameters().getWriteRetry(); x++) {</span>
+<span class="fc" id="L119">        TokenResponse tokenResponse = null;</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        for (int x = 0; x &lt; runtime.getParameters().getWriteRetry(); x++) {</span>
             // Go to the sequencer, grab a token to write.
-<span class="nc bnc" id="L122" title="All 2 branches missed.">            tokenResponse = conflictInfo == null</span>
-<span class="nc" id="L123">                    ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info</span>
-<span class="nc" id="L124">                    : runtime.getSequencerView().next(conflictInfo, streamIDs); // Token w/ conflict info</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">            tokenResponse = conflictInfo == null</span>
+<span class="fc" id="L123">                    ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info</span>
+<span class="fc" id="L124">                    : runtime.getSequencerView().next(conflictInfo, streamIDs); // Token w/ conflict info</span>
 
             // Is our token a valid type?
-<span class="nc" id="L127">            AbortCause abortCause = null;</span>
-<span class="nc bnc" id="L128" title="All 5 branches missed.">            switch (tokenResponse.getRespType()) {</span>
+<span class="fc" id="L127">            AbortCause abortCause = null;</span>
+<span class="pc bfc" id="L128" title="All 5 branches covered.">            switch (tokenResponse.getRespType()) {</span>
                 case TX_ABORT_CONFLICT:
-<span class="nc" id="L130">                    abortCause = AbortCause.CONFLICT;</span>
-<span class="nc" id="L131">                    break;</span>
+<span class="fc" id="L130">                    abortCause = AbortCause.CONFLICT;</span>
+<span class="fc" id="L131">                    break;</span>
                 case TX_ABORT_NEWSEQ:
-<span class="nc" id="L133">                    abortCause = AbortCause.NEW_SEQUENCER;</span>
-<span class="nc" id="L134">                    break;</span>
+<span class="fc" id="L133">                    abortCause = AbortCause.NEW_SEQUENCER;</span>
+<span class="fc" id="L134">                    break;</span>
                 case TX_ABORT_SEQ_OVERFLOW:
-<span class="nc" id="L136">                    abortCause = AbortCause.SEQUENCER_OVERFLOW;</span>
-<span class="nc" id="L137">                    break;</span>
+<span class="fc" id="L136">                    abortCause = AbortCause.SEQUENCER_OVERFLOW;</span>
+<span class="fc" id="L137">                    break;</span>
                 case TX_ABORT_SEQ_TRIM:
-<span class="nc" id="L139">                    abortCause = AbortCause.SEQUENCER_TRIM;</span>
+<span class="fc" id="L139">                    abortCause = AbortCause.SEQUENCER_TRIM;</span>
                     break;
             }
 
-<span class="nc bnc" id="L143" title="All 2 branches missed.">            if (abortCause != null) {</span>
-<span class="nc" id="L144">                throw new TransactionAbortedException(</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">            if (abortCause != null) {</span>
+<span class="fc" id="L144">                throw new TransactionAbortedException(</span>
                         conflictInfo,
-<span class="nc" id="L146">                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),</span>
-<span class="nc" id="L147">                        tokenResponse.getToken().getSequence(), abortCause,</span>
-<span class="nc" id="L148">                        TransactionalContext.getCurrentContext());</span>
+<span class="fc" id="L146">                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),</span>
+<span class="fc" id="L147">                        tokenResponse.getToken().getSequence(), abortCause,</span>
+<span class="fc" id="L148">                        TransactionalContext.getCurrentContext());</span>
             }
 
             try {
                 // Attempt to write to the log.
-<span class="nc" id="L153">                runtime.getAddressSpaceView().write(tokenResponse, ld, cacheOption);</span>
+<span class="fc" id="L153">                runtime.getAddressSpaceView().write(tokenResponse, ld, cacheOption);</span>
                 // If we're here, we succeeded, return the acquired token.
-<span class="nc" id="L155">                return tokenResponse.getSequence();</span>
-<span class="nc" id="L156">            } catch (OverwriteException oe) {</span>
+<span class="fc" id="L155">                return tokenResponse.getSequence();</span>
+<span class="fc" id="L156">            } catch (OverwriteException oe) {</span>
                 // We were overwritten, get a new token and try again.
-<span class="nc" id="L158">                log.warn(&quot;append[{}]: Overwritten after {} retries, streams {}&quot;,</span>
-<span class="nc" id="L159">                        tokenResponse.getSequence(), x,</span>
-<span class="nc" id="L160">                        Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));</span>
+<span class="fc" id="L158">                log.warn(&quot;append[{}]: Overwritten after {} retries, streams {}&quot;,</span>
+<span class="fc" id="L159">                        tokenResponse.getSequence(), x,</span>
+<span class="fc" id="L160">                        Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));</span>
 
-<span class="nc bnc" id="L162" title="All 2 branches missed.">                if (conflictInfo != null) {</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">                if (conflictInfo != null) {</span>
                     // On retry, check for conflicts only from the previous attempt position,
                     // otherwise the transaction will always conflict with itself.
-<span class="nc" id="L165">                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());</span>
+<span class="fc" id="L165">                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());</span>
                 }
 
 <span class="nc" id="L168">            } catch (StaleTokenException se) {</span>
@@ -176,15 +176,15 @@ public class StreamsView extends AbstractView {
 <span class="nc" id="L176">                        tokenResponse.getToken().getSequence(),</span>
                         AbortCause.NEW_SEQUENCER, // in the future perhaps define a new AbortCause?
 <span class="nc" id="L178">                        TransactionalContext.getCurrentContext());</span>
-<span class="nc" id="L179">            }</span>
+<span class="fc" id="L179">            }</span>
         }
 
-<span class="nc bnc" id="L182" title="All 2 branches missed.">        log.error(&quot;append[{}]: failed after {} retries, streams {}, write size {} bytes&quot;,</span>
-<span class="nc" id="L183">                tokenResponse == null ? -1 : tokenResponse.getSequence(),</span>
-<span class="nc" id="L184">                runtime.getParameters().getWriteRetry(),</span>
-<span class="nc" id="L185">                Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),</span>
-<span class="nc" id="L186">                ILogData.getSerializedSize(object));</span>
-<span class="nc" id="L187">        throw new AppendException();</span>
+<span class="pc bpc" id="L182" title="1 of 2 branches missed.">        log.error(&quot;append[{}]: failed after {} retries, streams {}, write size {} bytes&quot;,</span>
+<span class="fc" id="L183">                tokenResponse == null ? -1 : tokenResponse.getSequence(),</span>
+<span class="fc" id="L184">                runtime.getParameters().getWriteRetry(),</span>
+<span class="fc" id="L185">                Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),</span>
+<span class="fc" id="L186">                ILogData.getSerializedSize(object));</span>
+<span class="fc" id="L187">        throw new AppendException();</span>
     }
 
     /**
@@ -194,7 +194,7 @@ public class StreamsView extends AbstractView {
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull UUID... streamIDs) {
-<span class="nc" id="L197">        return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);</span>
+<span class="fc" id="L197">        return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.7.9.201702052155</span></div></body></html>
