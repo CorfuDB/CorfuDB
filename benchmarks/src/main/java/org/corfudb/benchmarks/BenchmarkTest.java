@@ -156,7 +156,7 @@ public class BenchmarkTest {
     }
 
     private void runSequencerQueryTest() {
-        runTaskProducer("Sequencer_raw");
+        runTaskProducer("Sequencer_query");
         runConsumers();
         waitForAppToFinish();
     }
