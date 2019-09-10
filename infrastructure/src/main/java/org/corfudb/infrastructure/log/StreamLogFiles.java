@@ -104,10 +104,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // This is derived as a percentage of the log's filesystem capacity.
     private final long logSizeLimit;
 
-    Timer writeMetrics;
-    Timer readMetrics;
-    Timer syncMetrics;
-
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
@@ -124,9 +120,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
-        this.readMetrics = serverContext.getIOLatencyDetector ().getReadMetrics ();
-        this.writeMetrics = serverContext.getIOLatencyDetector().getWriteMetrics ();
-        this.syncMetrics = serverContext.getIOLatencyDetector().getSyncMetrics ();
 
         String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
         final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
@@ -253,10 +246,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
-        writeByteBuffer(fileChannel, buf);
-        long start = System.nanoTime ();
-        fileChannel.force(true);
-        IOLatencyDetector.update (syncMetrics, start);
+        IOLatencyDetector.write(fileChannel,buf, false, 0);
+        IOLatencyDetector.force (fileChannel, true);
     }
 
     private static Metadata getMetadata(AbstractMessage message) {
@@ -387,9 +378,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void sync(boolean force) throws IOException {
         if (force) {
             for (FileChannel ch : channelsToSync) {
-                long start = System.nanoTime ();
-                ch.force(true);
-                IOLatencyDetector.update (syncMetrics, start);
+                IOLatencyDetector.force (ch, true);
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
@@ -498,10 +487,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         ByteBuffer buf = ByteBuffer.allocate(METADATA_SIZE);
-        long start = System.nanoTime ();
-        int size = buf.remaining ();
-        fileChannel.read(buf);
-        IOLatencyDetector.update(readMetrics, start, size);
+        IOLatencyDetector.read(fileChannel, buf, false, 0);
         buf.flip();
 
         Metadata metadata;
@@ -552,8 +538,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         ByteBuffer buf = ByteBuffer.allocate(metadata.getLength());
         long start = System.nanoTime() ;
         int size = buf.remaining();
-        fileChannel.read(buf);
-        IOLatencyDetector.update (readMetrics, start, size);
+        IOLatencyDetector.read(fileChannel, buf, false, 0);
         buf.flip();
         return buf;
     }
@@ -683,8 +668,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 // to be ignored, or if the bytes correspond to a corrupted metadata field.
                 long start = System.nanoTime ();
                 fileChannel.truncate(fileChannel.position());
-                fileChannel.force(true);
-                IOLatencyDetector.update (syncMetrics, start);
+                IOLatencyDetector.force (fileChannel, true);
                 return;
             }
 
@@ -715,10 +699,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            long start = System.nanoTime ();
-            int size = (int)entryBuf.remaining ();
-            fileChannel.read(entryBuf, metaData.offset);
-            IOLatencyDetector.update (writeMetrics, start, size);
+            IOLatencyDetector.read(fileChannel, entryBuf, true, metaData.offset);
             return getLogData(LogEntry.parseFrom(entryBuf.array()));
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
@@ -971,11 +952,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         int size = buf.remaining();
 
         while (buf.hasRemaining()) {
-            channel.write(buf);
+            IOLatencyDetector.write(channel, buf, false, 0);
         }
-
-        // update the writeMetrics
-        IOLatencyDetector.update (writeMetrics, start, size);
     }
 
     /**

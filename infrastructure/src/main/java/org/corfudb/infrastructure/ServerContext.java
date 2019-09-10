@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -157,7 +156,6 @@ public class ServerContext implements AutoCloseable {
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
-    public IOLatencyDetector ioLatencyDetector = new IOLatencyDetector (this, 30, 2);
     /**
      * Returns a new ServerContext.
      *
@@ -192,6 +190,8 @@ public class ServerContext implements AutoCloseable {
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
+
+        IOLatencyDetector.setupIOLatencyDetector (this, 30, 2);
     }
 
     int getBaseServerThreadCount() {
@@ -700,9 +700,5 @@ public class ServerContext implements AutoCloseable {
                     TimeUnit.MILLISECONDS
             );
         }
-    }
-
-    public IOLatencyDetector getIOLatencyDetector() {
-        return ioLatencyDetector;
     }
 }
