@@ -31,16 +31,6 @@ public class IOLatencyDetector {
     @Getter
     static Timer syncMetrics;
 
-    public IOLatencyDetector(ServerContext serverContext, int threshVal, int maxLatencyVal) {
-        spikeDetected = false;
-        thresh = threshVal;
-        maxLatency = maxLatencyVal;
-        //xq todo: define good name for metrics
-        readMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":readMetrics");
-        writeMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":writeMetrics");
-        syncMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":syncMetrics");
-    }
-
     static public void setupIOLatencyDetector(ServerContext serverContext, int threshVal, int maxLatencyVal) {
         spikeDetected = false;
         thresh = threshVal;
@@ -51,8 +41,7 @@ public class IOLatencyDetector {
         syncMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":syncMetrics");
     }
 
-
-    public IOLatencyDetector(int threshVal, int maxLatencyVal, String writeMetricsName, String readMetricsName) {
+    static public void setupIOLatencyDetector(int threshVal, int maxLatencyVal, String writeMetricsName, String readMetricsName) {
         spikeDetected = false;
         thresh = threshVal;
         maxLatency = maxLatencyVal;
@@ -61,6 +50,7 @@ public class IOLatencyDetector {
         writeMetrics = ServerContext.getMetrics ().timer (readMetricsName + ":writeMetrics");
         syncMetrics = ServerContext.getMetrics ().timer (readMetricsName + ":syncMetrics");
     }
+
 
     public static void metricsHis(IOLatencyDetector ioLatencyDetector) {
         metricsHis (ioLatencyDetector.getReadMetrics ());

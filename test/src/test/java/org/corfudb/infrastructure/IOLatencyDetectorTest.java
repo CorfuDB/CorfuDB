@@ -75,7 +75,7 @@ public class IOLatencyDetectorTest {
         private IOLatencyDetector ioLatencyDetector;
         private long numPolls;
 
-        public MetricsPoller(String name, IOLatencyDetector ioLatencyDetector, long numPolls) {
+        public MetricsPoller(String name, long numPolls) {
             this.threadName = name;
             this.ioLatencyDetector = ioLatencyDetector;
             this.numPolls = numPolls;
@@ -110,7 +110,7 @@ public class IOLatencyDetectorTest {
     }
 
     public static void main(String[] args) throws Exception {
-        IOLatencyDetector ioLatencyDetector = new IOLatencyDetector (10, 1,
+        IOLatencyDetector.setupIOLatencyDetector (10, 1,
                 "WriteTest", "ReadTest");
 
         Args cmdArgs = new Args();
@@ -128,17 +128,17 @@ public class IOLatencyDetectorTest {
         long numPolls = cmdArgs.numPolls;
 
         //create a thread to feed read latency
-        Timer readMetrics = ioLatencyDetector.getReadMetrics();
+        Timer readMetrics = IOLatencyDetector.getReadMetrics();
         MetricsFeeder r1 = new MetricsFeeder(readMetrics.toString (), readMetrics, numFeeds);
         r1.start();
 
         //create a thread to feed write latency
-        Timer writeMetrics = ioLatencyDetector.getWriteMetrics();
+        Timer writeMetrics = IOLatencyDetector.getWriteMetrics();
         MetricsFeeder r2 = new MetricsFeeder(writeMetrics.toString (), writeMetrics, numFeeds);
         r2.start();
 
         //create a thread to poll detection
-        MetricsPoller poller = new MetricsPoller ("testpoller", ioLatencyDetector, numPolls);
+        MetricsPoller poller = new MetricsPoller ("testpoller", numPolls);
         poller.start ();
     }
 }
