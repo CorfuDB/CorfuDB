@@ -4,7 +4,9 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
+import java.util.concurrent.*;
 
 /**
  * This class is the super class for all performance tests.
@@ -46,8 +48,15 @@ public class BenchmarkTest {
      */
     protected String endpoint = null;
     protected CorfuRuntime[] rts = null;
+    final BlockingQueue<Operation> operationQueue;
+    final ExecutorService taskProducer;
+    final ExecutorService workers;
 
-    public BenchmarkTest(String[] args) {
+    private final long durationMs = 100;
+    static final int APPLICATION_TIMEOUT_IN_MS = 10000;
+    static final int QUEUE_CAPACITY = 1000;
+
+    BenchmarkTest(String[] args) {
         setArgs(args);
         rts = new CorfuRuntime[numRuntimes];
 
@@ -55,9 +64,14 @@ public class BenchmarkTest {
             rts[x] = new CorfuRuntime(endpoint).connect();
         }
         log.info("Connected {} runtimes...", numRuntimes);
+
+        operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+        taskProducer = Executors.newSingleThreadExecutor();
+        workers = Executors.newFixedThreadPool(numThreads);
+
     }
 
-    public void setArgs(String[] args) {
+    private void setArgs(String[] args) {
         Args cmdArgs = new Args();
         JCommander jc = JCommander.newBuilder()
                 .addObject(cmdArgs)
@@ -72,5 +86,82 @@ public class BenchmarkTest {
         numThreads = cmdArgs.numThreads;
         numRequests = cmdArgs.numRequests;
         endpoint = cmdArgs.endpoint;
+    }
+    private void enQueue(String operationName, CorfuRuntime rt) {
+        String[] names = operationName.split("_");
+        if (names.length != 2) {
+            log.error("invalid operation name");
+        }
+        Operation current = null;
+        if (names[0].equals("Sequencer")) {
+            current = new SequencerOps(names[1], rt);
+        }
+        if (current != null) {
+            try {
+                operationQueue.put(current);
+            } catch (InterruptedException e) {
+                throw new UnrecoverableCorfuInterruptedError(e);
+            } catch (Exception e) {
+                log.error("operation error", e);
+            }
+        } else {
+            log.error("no such operation");
+        }
+    }
+
+    private void runTaskProducer(String operationName) {
+        for (int i = 0; i < numThreads; i++) {
+            CorfuRuntime rt = rts[i % rts.length];
+            for (int j = 0; j < numRequests; j++) {
+                taskProducer.execute(() -> {
+                    enQueue(operationName, rt);
+                });
+            }
+        }
+    }
+
+    private void runConsumers() {
+        for (int i = 0; i < numThreads; i++) {
+            for (int j = 0; j < numRequests; j++) {
+                workers.execute(() -> {
+                    try {
+                        long start = System.nanoTime();
+                        Operation op = operationQueue.take();
+                        op.execute();
+                        long latency = System.nanoTime() - start;
+                        log.info("nextToken request latency: "+ latency);
+                    } catch (Exception e) {
+                        log.error("Operation failed with", e);
+                    }
+                });
+            }
+        }
+    }
+
+    private void waitForAppToFinish() {
+        workers.shutdown();
+        try {
+            boolean finishedInTime = workers.
+                    awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+
+            if (!finishedInTime) {
+                System.exit(1);
+            }
+        } catch (InterruptedException e) {
+            throw new UnrecoverableCorfuInterruptedError(e);
+        } finally {
+            System.exit(0);
+        }
+    }
+
+    private void runSequencerTest() {
+        runTaskProducer("Sequencer_query");
+        runConsumers();
+        waitForAppToFinish();
+    }
+
+    public static void main(String[] args) {
+        BenchmarkTest rbt = new BenchmarkTest(args);
+        rbt.runSequencerTest();
     }
 }
