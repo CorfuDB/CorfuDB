@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 @Log4j
 public class DockerSupportServer<N extends SupportServerParams> implements SupportServer {
     private static final String ALL_NETWORK_INTERFACES = "0.0.0.0";
+    private static final String LINUX_OS = "linux";
     private static final String PROMETHEUS_CONFIG_PATH = "/etc/prometheus/prometheus.yml";
     private static final Map<NodeType, String> IMAGE_NAME = ImmutableMap.<NodeType, String>builder()
             .put(NodeType.METRICS_SERVER, "prom/prometheus")
@@ -115,9 +116,11 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
 
     private String createConfiguration(Set<Integer> metricsPorts) {
         try {
-            final String corfuRuntimeIp =
-                    docker.inspectNetwork(universeParams.getNetworkName())
-                            .ipam().config().stream().findFirst().get().gateway();
+            String corfuRuntimeIp = "host.docker.internal";
+            if (System.getProperty("os.name").compareToIgnoreCase(LINUX_OS) == 0) {
+                corfuRuntimeIp = docker.inspectNetwork(universeParams.getNetworkName())
+                                .ipam().config().stream().findFirst().get().gateway();
+            }
             File tempConfiguration = File.createTempFile("prometheus", ".yml");
             BufferedWriter writer = new BufferedWriter(new FileWriter(tempConfiguration));
             writer.write(PromethousConfig.getConfig(corfuRuntimeIp, metricsPorts));
