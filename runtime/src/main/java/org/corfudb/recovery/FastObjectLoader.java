@@ -519,6 +519,7 @@ public class FastObjectLoader {
 
         // Re ask for the Head, if it changes while we were trying.
         findAndSetLogHead();
+        findAndSetLogTail();
 
         nextRead = logHead;
         resetAddressProcessed();
