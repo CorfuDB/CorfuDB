@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 public class SequencerBenchmarkTests extends BenchmarkTest {
     public SequencerBenchmarkTests(String[] args) {
         super(args);
-        MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
+
     }
 
     /**

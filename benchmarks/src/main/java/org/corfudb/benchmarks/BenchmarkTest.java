@@ -5,6 +5,7 @@ import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.util.MetricsUtils;
 
 import java.util.concurrent.*;
 
@@ -68,7 +69,7 @@ public class BenchmarkTest {
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         taskProducer = Executors.newSingleThreadExecutor();
         workers = Executors.newFixedThreadPool(numThreads);
-
+        MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
     }
 
     private void setArgs(String[] args) {
@@ -94,7 +95,7 @@ public class BenchmarkTest {
         }
         Operation current = null;
         if (names[0].equals("Sequencer")) {
-            current = new SequencerOps(names[1], rt);
+            current = new SequencerOperations(names[1], rt);
         }
         if (current != null) {
             try {
@@ -154,14 +155,14 @@ public class BenchmarkTest {
         }
     }
 
-    private void runSequencerTest() {
-        runTaskProducer("Sequencer_query");
+    private void runSequencerQueryTest() {
+        runTaskProducer("Sequencer_raw");
         runConsumers();
         waitForAppToFinish();
     }
 
     public static void main(String[] args) {
         BenchmarkTest rbt = new BenchmarkTest(args);
-        rbt.runSequencerTest();
+        rbt.runSequencerQueryTest();
     }
 }
