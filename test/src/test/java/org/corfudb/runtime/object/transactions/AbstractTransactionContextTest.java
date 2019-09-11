@@ -41,6 +41,10 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
         return getMap().put(key, value);
     }
 
+    String putIfAbsent(String key, String value) {
+        return getMap().putIfAbsent(key, value);
+    }
+
     String get(String key) {
         return getMap().get(key);
     }

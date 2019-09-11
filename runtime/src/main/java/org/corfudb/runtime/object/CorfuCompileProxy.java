@@ -395,10 +395,20 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     }
                 }
 
+                if (e.getAbortCause() == AbortCause.UNSUPPORTED_OPERATION) {
+                    // No need to deal with TransactionalContext in this case.
+                    throw e;
+                }
+
                 if (retries == 1) {
                     MetricsUtils
                             .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
                 }
+
+                if (retries > rt.getParameters().getMaxNumOfImplicitTxRetries()) {
+                    throw e; // Give up.
+                }
+
                 MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);

@@ -15,6 +15,7 @@ public enum AbortCause {
     SIZE_EXCEEDED,
     USER,
     NETWORK,
+    UNSUPPORTED_OPERATION,
     TRIM, /** Aborted because an access to this snapshot resulted in a trim exception. */
     SEQUENCER_OVERFLOW,
     SEQUENCER_TRIM,

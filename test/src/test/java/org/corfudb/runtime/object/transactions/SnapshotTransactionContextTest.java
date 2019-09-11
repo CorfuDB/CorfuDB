@@ -2,15 +2,18 @@ package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
  * Created by mwei on 11/22/16.
  */
 public class SnapshotTransactionContextTest extends AbstractTransactionContextTest {
+
     @Override
     public void TXBegin() { SnapshotTXBegin(); }
-
 
     @Test
     public void defaultSnapshotTest() {
@@ -102,6 +105,22 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         }));
         t(0, this::TXEnd);
         t(0, this::TXEnd);
+    }
 
+
+    /**
+     * Ensure that TransactionAbortedException(AbortCause.UNSUPPORTED_OPERATION) is thrown when
+     * doing a mutation inside of a snapshot read.
+     */
+    @Test
+    public void testUnsupportedOperationException() {
+        try {
+            SnapshotTXBegin();
+            putIfAbsent("k" , "v1");
+            TXEnd();
+            Assert.fail();
+        } catch (TransactionAbortedException e) {
+            Assert.assertTrue(e.getAbortCause() == AbortCause.UNSUPPORTED_OPERATION);
+        }
     }
 }

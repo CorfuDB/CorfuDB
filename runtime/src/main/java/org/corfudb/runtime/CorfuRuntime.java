@@ -468,6 +468,10 @@ public class CorfuRuntime {
          */
         @Default
         PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+        /** Maximum number of retries before we give up retrying an implicit transaction. */
+        @Default
+        int maxNumOfImplicitTxRetries = 20;
     }
 
     /**
