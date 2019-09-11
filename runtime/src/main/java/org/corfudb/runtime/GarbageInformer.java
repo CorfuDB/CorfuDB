@@ -215,18 +215,20 @@ public class GarbageInformer {
     public void sendGarbageBatch(GarbageBatch batch) {
         rt.getAddressSpaceView().layoutHelper(e -> {
             Layout layout = e.getLayout();
-            Map<Layout.LayoutStripe, List<SMRGarbageEntry>> stripToGarbageEntries = new HashMap<>();
+
+            // Assume the number of stripes of each stripe is equal and the order of stripes remains unchanged.
+            Map<Integer, List<SMRGarbageEntry>> stripIndexToGarbageEntries = new HashMap<>();
 
             // shard SMRGarbageEntries based on stripe.
             batch.getGarbageEntries().forEach(garbageEntry -> {
                 long globalAddress = garbageEntry.getGlobalAddress();
-                Layout.LayoutStripe strip = layout.getStripe(globalAddress);
-                stripToGarbageEntries.computeIfAbsent(strip, s -> new ArrayList<>()).add(garbageEntry);
+                int stripeIndex = layout.getStripeIndex(globalAddress);
+                stripIndexToGarbageEntries.computeIfAbsent(stripeIndex, s -> new ArrayList<>()).add(garbageEntry);
             });
 
             // send GarbageEntry batch.
-            stripToGarbageEntries.forEach((strip, garbageEntries) ->
-                    rt.getAddressSpaceView().sparseTrim(rt.getLayoutView().getRuntimeLayout(), strip,
+            stripIndexToGarbageEntries.forEach((stripeIndex, garbageEntries) ->
+                    rt.getAddressSpaceView().sparseTrim(rt.getLayoutView().getRuntimeLayout(), stripeIndex,
                             garbageEntries)
             );
 
