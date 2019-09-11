@@ -214,6 +214,16 @@ public class Layout {
     }
 
     /**
+     * Return the index of layout segment stripe.
+     * @param globalAddress The global address.
+     * @return the index of layout segment stripe.
+     */
+    public int getStripeIndex(long globalAddress) {
+        LayoutSegment ls = getSegment(globalAddress);
+        return (int) globalAddress % ls.getNumberOfStripes();
+    }
+
+    /**
      * Return layout segment stripe.
      *
      * @param globalAddress The global address.
