@@ -181,10 +181,10 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Sends garbage decisions to LogUnit servers in a stripe.
      * @param runtimeLayout Corfu runtime layout.
-     * @param stripe  one stripe in layout.
+     * @param stripeIndex  the index of one stripe in layout.
      * @param garbageEntries a collection of garbageEntries which contain garbage decisions.
      */
-    public void sparseTrim(RuntimeLayout runtimeLayout, Layout.LayoutStripe stripe,
+    public void sparseTrim(RuntimeLayout runtimeLayout, int stripeIndex,
                            Collection<SMRGarbageEntry> garbageEntries) {
         List<LogData> garbageDataList =
                 garbageEntries.stream().map(garbageEntry -> {
@@ -197,16 +197,32 @@ public class AddressSpaceView extends AbstractView {
             return garbageData;
         }).collect(Collectors.toList());
 
-        List<String> servers = stripe.getLogServers();
+        List<Layout.LayoutSegment> segments = runtimeLayout.getLayout().getSegments();
+
+        // TODO(xin): explain
+        // get the servers from the last segment
+        List<String> servers = segments.get(segments.size() - 1).getStripes().get(stripeIndex).getLogServers();
         int numUnits = servers.size();
-        // Reverse order
-        // TODO(Xin): add more comments to explain why use reverse order.
-        for (int i = numUnits - 1; i >= 0; --i) {
-            log.trace("sparseTrim ChainReplication[{}]: {}/{}", stripe, i + 1, numUnits);
+
+        CompletableFuture[] futures = new CompletableFuture[numUnits];
+
+        for (int i = 0; i < numUnits; ++i) {
+            log.trace("sparseTrimming [{}]: {}/{}", servers, i + 1, numUnits);
             String server = servers.get(i);
-            writeGarbageToLogUnit(runtimeLayout, server, garbageDataList);
+            futures[i] = CompletableFuture.runAsync(() -> writeGarbageToLogUnit(runtimeLayout, server,
+                    garbageDataList));
         }
 
+        for (int i = 0; i < numUnits; ++i) {
+            try {
+                futures[i].get();
+                log.trace("sparseTrimmed one server[{}]", servers.get(i));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        log.trace("sparseTrim complete[{}]", servers);
     }
 
     private void writeGarbageToLogUnit(RuntimeLayout runtimeLayout, String logUnitServer,
