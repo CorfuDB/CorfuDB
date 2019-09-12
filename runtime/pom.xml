@@ -53,6 +53,11 @@
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
+            <artifactId>corfudb-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
             <artifactId>format</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -62,9 +67,9 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-        <groupId>org.corfudb</groupId>
-        <artifactId>annotationProcessor</artifactId>
-        <version>${project.version}</version>
+            <groupId>org.corfudb</groupId>
+            <artifactId>annotationProcessor</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <dependency>
