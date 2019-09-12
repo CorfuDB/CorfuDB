@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime";
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/any.proto";
+
+// Logical Timestamp to perform queries and transactions at a particular snapshot.
+message Timestamp {
+    int64 epoch = 1;
+    int64 sequence = 2;
+}
+
+// Table name.
+message TableName {
+    string namespace = 1;
+    string table_name = 2;
+}
+
+// Descriptor to provide self describing schemas for the records.
+message TableDescriptors {
+    google.protobuf.DescriptorProto keyDescriptor = 1;
+    google.protobuf.DescriptorProto valueDescriptor = 2;
+}
+
+// Metadata.
+message TableMetadata {
+    TableName table_name = 1;
+    // True if the CorfuStore is disk based and False if it can be contained in memory.
+    bool disk_based = 2;
+    // True if these streams are to be cached, False otherwise.
+    bool cache = 3;
+}
+
+// Record to be persisted containing the value and the metadata.
+message Record {
+    google.protobuf.Any payload = 1;
+    google.protobuf.Any metadata = 2;
+}

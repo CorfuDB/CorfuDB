@@ -1,0 +1,24 @@
+syntax = "proto2";
+
+package org.corfudb.test;
+option java_package = "org.corfudb.test";
+
+import "corfu_options.proto";
+
+message Uuid {
+    optional uint64 msb = 1;
+    optional uint64 lsb = 2;
+}
+
+message EventInfo {
+    optional uint32 id = 1;
+    optional string name = 2;
+    optional uint32 port = 3;
+    optional int64 event_time = 4 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional uint32 frequency = 5;
+}
+
+message ManagedResources {
+    optional string create_user = 1;
+    optional int64 version = 2 [(org.corfudb.runtime.schema).version = true];
+}
