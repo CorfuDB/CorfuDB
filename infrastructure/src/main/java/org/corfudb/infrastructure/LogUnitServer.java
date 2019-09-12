@@ -1,10 +1,13 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.MetricsProvider;
+import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -26,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.LogUnitException;
@@ -37,11 +41,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -102,6 +102,12 @@ public class LogUnitServer extends AbstractServer {
 
     private ExecutorService executor;
 
+    /**
+     * A map to cache the name of timers to avoid creating timer names on each call.
+     */
+    private final Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
+    private final MetricsProvider metricsProvider;
+
     @Override
     public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
         return executor;
@@ -139,6 +145,8 @@ public class LogUnitServer extends AbstractServer {
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        metricsProvider = new DropwizardMetricsProvider("corfu-server", CorfuRuntime.getDefaultMetrics());
+        setUpTimerNameCache();
     }
 
     /**
@@ -147,10 +155,16 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest: received a tail request {}", msg);
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.TAIL_REQUEST));
+        Timer.Context context = timer.time();
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));
+                    context.stop();
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
+                    context.stop();
                     return null;
                 });
     }
@@ -161,14 +175,20 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
     public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST));
+        Timer.Context context = timer.time();
         CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
         payloadMsg.copyBaseFields(msg);
         log.debug("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
-                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    r.sendResponse(ctx, msg,
+                            CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp));
+                    context.stop();
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, payloadMsg, r);
+                    context.stop();
                     return null;
                 });
     }
@@ -212,6 +232,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.WRITE));
+        Timer.Context context = timer.time();
         LogData logData = (LogData) msg.getPayload().getData();
         log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
                 logData.getToken(), logData.getBackpointerMap());
@@ -227,8 +249,11 @@ public class LogUnitServer extends AbstractServer {
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
+                    context.stop();
+                }, executor)
+                .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
+                    context.stop();
                     return null;
         });
     }
@@ -239,14 +264,20 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
     public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
                            ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.RANGE_WRITE));
+        Timer.Context context = timer.time();
         List<LogData> range = msg.getPayload().getEntries();
         log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
         batchWriter.addTask(RANGE_WRITE, msg)
-                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
+                .thenRun(() -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+                    context.stop();
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
+                    context.stop();
                     return null;
                 });
     }
@@ -488,5 +519,16 @@ public class LogUnitServer extends AbstractServer {
                     .noSync((Boolean) opts.get("--no-sync"))
                     .build();
         }
+    }
+
+    /**
+     * Initialized the HashMap with the name of timers for different types of requests
+     */
+    private void setUpTimerNameCache() {
+        String prefixName = getClass().getName();
+        timerNameCache.put(CorfuMsgType.TAIL_REQUEST, prefixName + "tail-request");
+        timerNameCache.put(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST, prefixName + "log-address-space-request");
+        timerNameCache.put(CorfuMsgType.WRITE, prefixName + "write");
+        timerNameCache.put(CorfuMsgType.RANGE_WRITE, prefixName + "range-write");
     }
 }

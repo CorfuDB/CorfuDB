@@ -1,9 +1,11 @@
 package org.corfudb.common.metrics;
 
-
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Reservoir;
 import com.codahale.metrics.Timer;
+
 
 /**
  * MetricsProvider provide metrics by given name and prefix.
@@ -15,5 +17,9 @@ public interface MetricsProvider {
 
     Timer getTimer(String name);
 
-    void registerGauge(String gaugeName, Gauge gauge);
+    void registerGauge(String name, Gauge gauge);
+
+    Histogram getHistogram(String name);
+
+    Histogram registerHistogram(String name, Reservoir reservoir);
 }

@@ -1,9 +1,6 @@
 package org.corfudb.common.metrics.providers;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 import lombok.Getter;
 
 import org.corfudb.common.metrics.MetricsProvider;
@@ -35,5 +32,19 @@ public class DropwizardMetricsProvider implements MetricsProvider {
     public void registerGauge(String gaugeName, Gauge gauge) {
         String metricName = MetricRegistry.name(prefix, gaugeName);
         metricRegistry.register(metricName, gauge);
+    }
+
+    @Override
+    public Histogram getHistogram(String histogramName) {
+        String metricName = MetricRegistry.name(prefix, histogramName);
+        return metricRegistry.histogram(metricName);
+    }
+
+    @Override
+    public Histogram registerHistogram(String histogramName, Reservoir reservoir) {
+        String metricName = MetricRegistry.name(prefix, histogramName);
+        Histogram histogram = new Histogram(reservoir);
+        metricRegistry.register(metricName, histogram);
+        return histogram;
     }
 }
