@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -208,11 +209,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             } catch (TrimmedException te) {
                 log.warn("accessInner: Encountered a trim exception while accessing version {} on attempt {}",
                         timestamp, x);
-                // We encountered a TRIM during sync, reset the object
-                underlyingObject.update(o -> {
-                    o.resetUnsafe();
-                    return null;
-                });
             }
         }
 
@@ -326,9 +322,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         + " and we don't have a copy");
             });
         } catch (TrimmedException ex) {
+            // TrimmedException happens if the access version is smaller than compaction mark.
             log.warn("getUpcallResultInner: Encountered a trim exception while accessing version {}",
                     timestamp);
-            throw ex;
+            throw new TrimmedUpcallException(timestamp);
         }
     }
 

@@ -72,6 +72,8 @@ public class StateTransfer {
         IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
 
             try {
+                // TODO(Xin): Will there be any change in the context of sparse-trim garbage collection.
+
                 // State transfer should start from segment start address
                 final long segmentStart = segment.getStart();
                 final long segmentEnd = segment.getEnd() - 1;
