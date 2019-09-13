@@ -44,7 +44,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
-                .setPort(SERVERS.PORT_0)
+                .setPort(Integer.toString(SERVERS.PORT_0))
                 .build();
         server = new ManagementServer(serverContext);
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
