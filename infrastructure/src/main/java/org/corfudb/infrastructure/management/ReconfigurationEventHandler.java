@@ -68,10 +68,11 @@ public class ReconfigurationEventHandler {
      * @return A reasonable timeout to complete state transfer and rebuild logging unit.
      */
     private static Duration getStateTransferTimeoutEstimate(CorfuRuntime runtime) {
-
+        // TODO(xin): this state transfer timeout estimation relies on the fact that the address space is continuous,
+        //  whic in not true in the context of sparse-trim garbage collection.
         long tail = runtime.getAddressSpaceView().getLogTail();
+        long rangeToReplicate = tail;
 
-        long rangeToReplicate = tail - 0L;
         // Since the orchestrator client and the fault detector client use
         // the same configuration its reasonable to use these arguments.
         // TODO(Maithem): AddNode should use a similar mechanism to set the timeout
