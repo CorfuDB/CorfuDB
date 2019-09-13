@@ -47,14 +47,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class Utils {
 
-    private static int DEFAULT_LOGUNIT = 0;
+    private static final int DEFAULT_LOGUNIT = 0;
 
     private Utils() {
         // prevent instantiation of this class
     }
 
-    private static Printer printer = new Textifier();
-    private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
+    private static final Printer printer = new Textifier();
+    private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);
 
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
 
@@ -576,7 +576,7 @@ public class Utils {
 
         Layout.LayoutSegment segment = layout.getLatestSegment();
 
-        // Query the tail of the head log unit in every stripe.
+        // Query the head log unit in every stripe.
         if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
 
@@ -594,13 +594,13 @@ public class Utils {
     }
 
     static StreamsAddressResponse aggregateLogAddressSpace(Set<StreamsAddressResponse> responses) {
-        Map<UUID, StreamAddressSpace> globalStreamTails = new HashMap<>();
+        Map<UUID, StreamAddressSpace> streamAddressSpace = new HashMap<>();
         long logTail = Address.NON_ADDRESS;
 
         for (StreamsAddressResponse res : responses) {
             logTail = Math.max(logTail, res.getLogTail());
-            globalStreamTails = aggregateStreamAddressMap(res.getAddressMap(), globalStreamTails);
+            streamAddressSpace = aggregateStreamAddressMap(res.getAddressMap(), streamAddressSpace);
         }
-        return new StreamsAddressResponse(logTail, globalStreamTails);
+        return new StreamsAddressResponse(logTail, streamAddressSpace);
     }
 }

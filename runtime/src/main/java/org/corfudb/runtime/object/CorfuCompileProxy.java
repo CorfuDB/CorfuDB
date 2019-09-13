@@ -74,19 +74,19 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * The CorfuRuntime. This allows us to interact with the
      * Corfu log.
      */
-    CorfuRuntime rt;
+    final CorfuRuntime rt;
 
     /**
      * The ID of the stream of the log.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-            UUID streamID;
+    final UUID streamID;
 
     /**
      * The type of the underlying object. We use this to instantiate
      * new instances of the underlying object.
      */
-    Class<T> type;
+    final Class<T> type;
 
     /**
      * The serializer SMR entries will use to serialize their

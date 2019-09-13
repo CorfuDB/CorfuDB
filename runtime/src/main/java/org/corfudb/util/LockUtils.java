@@ -14,7 +14,7 @@ public class LockUtils {
 
     public static class AutoCloseRwLock implements AutoCloseable {
 
-        ReadWriteLock lock;
+        final ReadWriteLock lock;
         Lock releasingLock;
 
         public AutoCloseRwLock(ReadWriteLock lock) {

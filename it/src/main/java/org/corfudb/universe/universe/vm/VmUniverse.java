@@ -6,6 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
+import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.client.CorfuClient;
+import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
@@ -23,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group} gracefully within the provided timeout
  */
 @Slf4j
-public class VmUniverse extends AbstractUniverse<VmUniverseParams> {
+public class VmUniverse extends AbstractUniverse<Node.NodeParams, VmUniverseParams> {
     private final AtomicBoolean destroyed = new AtomicBoolean(false);
     @NonNull
     private final ApplianceManager applianceManager;
@@ -56,17 +59,14 @@ public class VmUniverse extends AbstractUniverse<VmUniverseParams> {
      */
     @Override
     protected Group buildGroup(GroupParams groupParams) {
-        switch (groupParams.getNodeType()) {
-            case CORFU_SERVER:
-                return VmCorfuCluster.builder()
-                        .universeParams(universeParams)
-                        .params(ClassUtils.cast(groupParams))
-                        .vms(applianceManager.getVms())
-                        .build();
-            case CORFU_CLIENT:
-                throw new UniverseException("Not implemented corfu client. Group config: " + groupParams);
-            default:
-                throw new UniverseException("Unknown node type");
+        if (groupParams instanceof CorfuServerParams) {
+            return VmCorfuCluster.builder()
+                    .universeParams(universeParams)
+                    .corfuClusterParams(ClassUtils.cast(groupParams))
+                    .vms(applianceManager.getVms())
+                    .build();
+        } else {
+            throw new UniverseException("Unknown node type");
         }
     }
 

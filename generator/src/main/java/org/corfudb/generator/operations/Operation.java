@@ -9,7 +9,7 @@ import org.corfudb.generator.State;
  * Created by maithem on 7/14/17.
  */
 public abstract class Operation {
-    protected State state;
+    protected final State state;
     String shortName;
 
     public Operation(State state) {
