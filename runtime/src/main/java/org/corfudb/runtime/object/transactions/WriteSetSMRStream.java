@@ -134,11 +134,6 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public void gc(long trimMark) {
-        //no-op
-    }
-
-    @Override
     public List<SMRRecord> remainingUpTo(long maxGlobal) {
         // Check for any new contexts
         if (TransactionalContext.getTransactionStack().size()

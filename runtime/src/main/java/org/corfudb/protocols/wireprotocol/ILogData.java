@@ -149,13 +149,6 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
-     * Return true if and only if the entry represents a trimmed address.
-     */
-    default boolean isTrimmed() {
-        return getType() == DataType.TRIMMED;
-    }
-
-    /**
      * Return the serialized size of an object
      *
      * @param obj the entry's payload object

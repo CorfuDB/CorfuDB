@@ -35,12 +35,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
-    public static LogData getTrimmed(long address) {
-        LogData logData = new LogData(DataType.TRIMMED);
-        logData.setGlobalAddress(address);
-        return logData;
-    }
-
     public static LogData getHole(long address) {
         LogData logData = new LogData(DataType.HOLE);
         logData.setGlobalAddress(address);
