@@ -315,7 +315,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     o.getUpcallResults().remove(timestamp);
                     return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
                 }
-
+                
                 // The version is already ahead, but we don't have the result.
                 // The only way to get the correct result
                 // of the upcall would be to rollback. For now, we throw an exception
