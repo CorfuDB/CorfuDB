@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -195,12 +196,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                         o -> accessMethod.access(o));
             } catch (TrimmedException te) {
                 log.info("accessInner: Encountered trimmed address space " +
-                                "while accessing version {} on attempt {}", timestamp, x);
-                // We encountered a TRIM during sync, reset the object
-                underlyingObject.update(o -> {
-                    o.resetUnsafe();
-                    return null;
-                });
+                        "while accessing version {} on attempt {}", timestamp, x);
             }
         }
 
@@ -296,9 +292,10 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                         + " and we don't have a copy");
             });
         } catch (TrimmedException ex) {
+            // TrimmedException happens if the access version is smaller than compaction mark.
             log.info("getUpcallResultInner: Encountered trimmed address space " +
                     "while accessing version {}", timestamp);
-            throw ex;
+            throw new TrimmedUpcallException(timestamp);
         }
     }
 
