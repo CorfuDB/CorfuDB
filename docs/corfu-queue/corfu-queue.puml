@@ -1,0 +1,63 @@
+@startuml
+title A Persisted Queue Transaction using State Machine Replication
+
+box "Node A"
+actor ApplicationA
+control CorfuGuidGeneratorA
+participant CorfuRuntimeA
+end box
+
+database CorfuCluster
+
+box "Node B"
+participant CorfuRuntimeB
+control CorfuGuidGeneratorB
+actor ApplicationB
+end box
+
+group Transaction with enqueue(A)
+ApplicationA --> CorfuRuntimeA: enqueue object A
+CorfuRuntimeA --> CorfuGuidGeneratorA: get 8 byte unique Id for A
+CorfuGuidGeneratorA --> CorfuRuntimeA: 0001
+CorfuRuntimeA ->> CorfuCluster: write to map <0001, A>
+CorfuRuntimeA --> ApplicationA: 0001
+end
+
+group Transaction with enqueue(B)
+ApplicationB --> CorfuRuntimeB: enqueue object B
+CorfuRuntimeB --> CorfuGuidGeneratorB: get 8 byte unique Id for B
+CorfuGuidGeneratorB --> CorfuRuntimeB: 0002
+CorfuRuntimeB ->> CorfuCluster: write to map <0002, B>
+CorfuRuntimeB --> ApplicationB: 0002
+end
+
+hnote over CorfuCluster #red
+Transaction B commits first!,
+followed by TransactionA
+endhnote
+
+note over CorfuCluster
+CorfuCluster assigns address 100 to object B and
+address 200 to object A based on their commit order
+
+endnote
+
+group Corfu State Machine Replication
+CorfuCluster -[#blue]>> CorfuRuntimeB: put map<0001, A> @ Address 200
+note over CorfuRuntimeA: NodeA's Map now has [0001 -> A, 0002 -> B]
+CorfuCluster -[#blue]>> CorfuRuntimeA: put map<0002, B> @ Address 100
+note over CorfuRuntimeB: NodeB's Map now has [0001 -> A, 0002 -> B]
+end
+
+group ApplicationA as subscriber
+ApplicationA --> CorfuRuntimeA : entryList()
+CorfuRuntimeA --> ApplicationA : **[100+0002 => B, 200+0001 => A]**
+note over CorfuRuntimeA: object B is ordered before object A
+end
+
+group ApplicationB as subscriber
+ApplicationB --> CorfuRuntimeB : entryList()
+CorfuRuntimeB --> ApplicationB : **[100+0002 => B, 200+0001 => A]**
+note over CorfuRuntimeB: object B is ordered before object A
+end
+@enduml
