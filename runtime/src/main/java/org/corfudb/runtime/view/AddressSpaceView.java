@@ -9,7 +9,7 @@ import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
-import lombok.Data;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
@@ -43,7 +43,6 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -53,7 +52,6 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -522,15 +520,14 @@ public class AddressSpaceView extends AbstractView {
             // resulted in a cache miss and need to be fetched
             if (!addressesToFetch.isEmpty()) {
                 Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, options);
-                result.putAll(checkForCompactedAddresses(fetchedAddresses, options));
+                result.putAll(filterCompactedAddresses(fetchedAddresses, options));
             }
 
             return result;
         }
 
         Map<Long, ILogData> readAddresses = fetchAll(addresses, options);
-        return checkForCompactedAddresses(readAddresses, options);
-
+        return filterCompactedAddresses(readAddresses, options);
     }
 
     /**
@@ -620,24 +617,22 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Cache list of returned data with given cache options.
      */
-    private Map<Long, ILogData> checkForCompactedAddresses(Map<Long, ILogData> result, ReadOptions options) {
-        Collection<Long> compactedAddressses = new ArrayList<>();
+    private Map<Long, ILogData> filterCompactedAddresses(Map<Long, ILogData> result, ReadOptions options) {
+        Collection<Long> compactedAddresses = new ArrayList<>();
         for (Map.Entry<Long, ILogData> entry : result.entrySet()) {
             // Add compacted addresses to list
             if (!checkLogData(entry.getKey(), entry.getValue())) {
-                compactedAddressses.add(entry.getKey());
+                compactedAddresses.add(entry.getKey());
             } else {
                 if (options.isClientCacheable()) {
                     // After fetching a value, we need to insert it in the cache.
                     // Even if trimmed exceptions are thrown, we cache the valid data.
-                    result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
-                } else {
-                    result.put(entry.getKey(), entry.getValue());
+                    cacheLoadAndGet(readCache, entry.getKey(), entry.getValue());
                 }
             }
         }
 
-        result.keySet().removeAll(compactedAddressses);
+        result.keySet().removeAll(compactedAddresses);
 
         return result;
     }
