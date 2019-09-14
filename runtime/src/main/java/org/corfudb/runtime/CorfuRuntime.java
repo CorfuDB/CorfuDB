@@ -468,6 +468,13 @@ public class CorfuRuntime {
          */
         @Default
         PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+        /**
+         * Port at which the {@link CorfuRuntime} will allow third-party
+         * collectors to pull for metrics.
+         */
+        @Default
+        int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
     }
 
     /**
@@ -577,14 +584,6 @@ public class CorfuRuntime {
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
 
-    /** Initialize a default static registry which through that different metrics
-     * can be registered and reported */
-    static {
-        synchronized (defaultMetrics) {
-            MetricsUtils.metricsReportingSetup(defaultMetrics);
-        }
-    }
-
     /**
      * Register SystemDownHandler.
      * Please use CorfuRuntimeParameters builder to register this.
@@ -682,6 +681,14 @@ public class CorfuRuntime {
 
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
+
+        // Try to expose metrics via Dropwizard CsvReporter JmxReporter and Slf4jReporter.
+        MetricsUtils.metricsReportingSetup(defaultMetrics);
+        if (parameters.getPrometheusMetricsPort() != MetricsUtils.NO_METRICS_PORT) {
+            // Try to expose metrics via Prometheus.
+            MetricsUtils.metricsReportingSetup(
+                    defaultMetrics,parameters.getPrometheusMetricsPort());
+        }
 
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
