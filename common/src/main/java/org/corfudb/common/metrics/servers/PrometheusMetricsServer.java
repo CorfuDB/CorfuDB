@@ -70,6 +70,7 @@ public class PrometheusMetricsServer implements MetricsServer {
     public static class Config {
         private final int port;
         private final boolean enabled;
+        public static final Boolean ENABLED = true;
         public static final String METRICS_PARAM = "--metrics";
         public static final String METRICS_PORT_PARAM = "--metrics-port";
 
