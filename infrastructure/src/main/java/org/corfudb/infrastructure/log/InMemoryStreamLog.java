@@ -139,6 +139,11 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
+    public LogData readGarbageEntry(long address) {
+        return null;
+    }
+
+    @Override
     public long getGlobalCompactionMark() {
         return Address.NON_ADDRESS;
     }
