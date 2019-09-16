@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -19,6 +20,7 @@ import java.util.List;
  */
 @Slf4j
 @RequiredArgsConstructor
+@ToString
 class CompactionMetadata {
 
     // Ordinal of the segment.
@@ -76,7 +78,7 @@ class CompactionMetadata {
             // If this LogData is sent from client, it should have data field.
             if (logData.getData() != null) {
                 totalPayloadSize += logData.getData().length;
-                return;
+                continue;
             }
 
             // If this is a new LogData created on server (e.g. during compaction),
