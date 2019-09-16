@@ -20,6 +20,9 @@ import org.corfudb.util.MetricsUtils;
 @Slf4j
 public class IOLatencyDetector {
     static final int PAGE_SIZE = ( 1<< 12);
+    static final String READ_METRICS = "FileReadMetrics";
+    static final String WRITE_METRICS = "FileWriteMetrics";
+    static final String SYNC_METRICS = "FileSyncMetrics";
     static boolean spikeDetected = false;
     static int thresh;
     static int maxLatency;
@@ -31,99 +34,82 @@ public class IOLatencyDetector {
     @Getter
     static Timer syncMetrics;
 
-    static public void setupIOLatencyDetector(ServerContext serverContext, int threshVal, int maxLatencyVal) {
+    static public void setupIOLatencyDetector(int threshVal, int maxLatencyVal) {
         spikeDetected = false;
         thresh = threshVal;
         maxLatency = maxLatencyVal;
-        //xq todo: define good name for metrics
-        readMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":readMetrics");
-        writeMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":writeMetrics");
-        syncMetrics = ServerContext.getMetrics ().timer (serverContext.getNodeId ().toString () + ":syncMetrics");
+        readMetrics = ServerContext.getMetrics ().timer (READ_METRICS);
+        writeMetrics = ServerContext.getMetrics ().timer (WRITE_METRICS);
+        syncMetrics = ServerContext.getMetrics ().timer (SYNC_METRICS);
+        System.out.println ("start metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ()));
     }
 
-    static public void setupIOLatencyDetector(int threshVal, int maxLatencyVal, String writeMetricsName, String readMetricsName) {
-        spikeDetected = false;
-        thresh = threshVal;
-        maxLatency = maxLatencyVal;
-        //xq todo: define good name for metrics
-        readMetrics = ServerContext.getMetrics ().timer (writeMetricsName + ":readMetrics");
-        writeMetrics = ServerContext.getMetrics ().timer (readMetricsName + ":writeMetrics");
-        syncMetrics = ServerContext.getMetrics ().timer (readMetricsName + ":syncMetrics");
+    static public void metricsHis() {
+        metricsHis (readMetrics, READ_METRICS);
+        metricsHis (writeMetrics, WRITE_METRICS);
+        metricsHis (syncMetrics, SYNC_METRICS);
     }
 
-
-    public static void metricsHis(IOLatencyDetector ioLatencyDetector) {
-        metricsHis (ioLatencyDetector.getReadMetrics ());
-        metricsHis (ioLatencyDetector.getWriteMetrics ());
-        metricsHis (ioLatencyDetector.getSyncMetrics ());
-    }
-
-    public static void update(Timer timer, long start, int size) {
-        int numUnit = (size + PAGE_SIZE - 1) >> 12;
+    public static void update(Timer timer, String name, long start, int numUnit) {
         long dur = (System.nanoTime () - start) / numUnit;
 
         if ((dur > (timer.getSnapshot ().getMean () * thresh)) && dur > maxLatency) {
             spikeDetected = true;
-            metricsHis(timer);
-            log.warn ("spikeDetected");
+            metricsHis(timer, name);
+            log.warn (name + " spike Detected");
+            System.out.println ("spikeDetected");
         } else if (spikeDetected && dur < timer.getSnapshot ().getMean ()) {
             spikeDetected = false;
-            metricsHis(timer);
-            log.warn ("spike cleared");
+            metricsHis(timer, name);
+            log.warn (name + " spike cleared");
+            System.out.println ("spike cleared");
         }
-        timer.update ((System.nanoTime () - start) / numUnit, TimeUnit.NANOSECONDS);
+        timer.update(dur, TimeUnit.NANOSECONDS);
     }
 
-    // used by syncMetrics
-    public static void update(Timer timer, long start) {
-        long dur = (System.nanoTime () - start);
-
-        if ((dur > (timer.getSnapshot ().getMean () * thresh)) && dur > maxLatency) {
-            spikeDetected = true;
-            metricsHis(timer);
-            log.warn ("spikeDetected");
-        } else if (spikeDetected && dur < timer.getSnapshot ().getMean ()) {
-            spikeDetected = false;
-            metricsHis(timer);
-            log.warn ("spike cleared");
-        }
-        timer.update (System.nanoTime () - start, TimeUnit.NANOSECONDS);
+    static private int getUnit(int size) {
+        return (size + PAGE_SIZE - 1) / PAGE_SIZE;
     }
 
-    static void read(FileChannel fileChannel, ByteBuffer buf, boolean use_position, long position) throws IOException {
+    static public int read(FileChannel fileChannel, ByteBuffer buf, boolean use_position, long position) throws IOException {
         long start = System.nanoTime ();
         int size = buf.remaining ();
-        if (!use_position)
-            fileChannel.read(buf);
-        else {
-            fileChannel.read(buf, position);
+        int res = 0;
+
+        if (!use_position) {
+            res = fileChannel.read (buf);
+        } else {
+            res = fileChannel.read(buf, position);
         }
-        IOLatencyDetector.update(readMetrics, start, size);
+        IOLatencyDetector.update(readMetrics, READ_METRICS, start, getUnit(size));
+        return res;
     }
 
-    static void write(FileChannel fileChannel, ByteBuffer buf, boolean use_position, long position) throws IOException {
+    static public int write(FileChannel fileChannel, ByteBuffer buf, boolean use_position, long position) throws IOException {
         long start = System.nanoTime ();
         int size = buf.remaining ();
+        int res = 0;
         if (!use_position)
-            fileChannel.read(buf);
+            res = fileChannel.write(buf);
         else {
-            fileChannel.read(buf, position);
+            res = fileChannel.write(buf, position);
         }
-        IOLatencyDetector.update(writeMetrics, start, size);
+        IOLatencyDetector.update(writeMetrics, WRITE_METRICS, start, getUnit (size));
+        return res;
     }
 
-    static void force(FileChannel fileChannel, boolean force) throws IOException {
+    static public void force(FileChannel fileChannel, boolean force) throws IOException {
         long start = System.nanoTime ();
         fileChannel.force (force);
-        IOLatencyDetector.update(writeMetrics, start);
+        IOLatencyDetector.update(syncMetrics, SYNC_METRICS, start, 1);
     }
 
 
-    public static boolean reportSpike() {
+    static public  boolean reportSpike() {
         return spikeDetected;
     }
 
-    static public void metricsHis(Timer timer) {
+    static public void metricsHis(Timer timer, String name) {
         log.info ("Timer {} Count {} Latency mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
                 timer.toString (),
                 timer.getCount (),
