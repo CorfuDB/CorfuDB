@@ -144,16 +144,12 @@
             <version>${project.version}</version>
         </dependency>
 
+
         <!-- External Dependencies-->
         <dependency>
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>
             <version>0.6.0.20150202</version>
-        </dependency>
-        <dependency>
-            <groupId>org.fusesource.jansi</groupId>
-            <artifactId>jansi</artifactId>
-            <version>1.14</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>

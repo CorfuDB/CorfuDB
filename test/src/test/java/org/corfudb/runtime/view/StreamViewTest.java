@@ -471,7 +471,8 @@ public class StreamViewTest extends AbstractViewTest {
 
         map.put("k1", "k1");
 
-        Token baseVersion = r.getSequencerView().query(CorfuRuntime.getStreamID(stream)).getToken();
+        UUID streamId = CorfuRuntime.getStreamID(stream);
+        long baseVersion = r.getSequencerView().query(streamId);
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(map);
@@ -480,7 +481,6 @@ public class StreamViewTest extends AbstractViewTest {
         // Add some more write after the checkpoint
         map.put("k2", "k2");
         map.put("k3", "k3");
-
 
         Map<String, String> mapCopy = r.getObjectsView()
                 .build()
@@ -505,11 +505,12 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(finalVersion.getSequence());
         assertThat(sv.previous()).isNotNull();
         assertThat(sv.previous()).isNull();
-        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion.getSequence());
+        // This +1 represents the checkpoint NO_OP entry
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion + 1);
         // Calling previous on a stream when the pointer points to a a base checkpoint
         // should throw a TrimmedException
         assertThatThrownBy(() -> sv.previous()).isInstanceOf(TrimmedException.class);
-        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion.getSequence());
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion + 1);
     }
 
     /**
@@ -587,7 +588,7 @@ public class StreamViewTest extends AbstractViewTest {
         assertThatThrownBy(() -> txStream.remaining()).isInstanceOf(TrimmedException.class);
 
         // Ensure that we can recover.
-        txStream.seek(localRuntime.getSequencerView().query().getToken().getSequence());
+        txStream.seek(localRuntime.getSequencerView().query().getSequence());
         txStream.remaining();
     }
 }

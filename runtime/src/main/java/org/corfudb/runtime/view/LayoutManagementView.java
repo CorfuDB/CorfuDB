@@ -187,7 +187,7 @@ public class LayoutManagementView extends AbstractView {
 
             // Seal the node to be healed.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
-                    .getBaseClient(endpoint).setRemoteEpoch(currentLayout.getEpoch()));
+                    .getBaseClient(endpoint).sealRemoteServer(currentLayout.getEpoch()));
 
             // Reset the node to be healed.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)

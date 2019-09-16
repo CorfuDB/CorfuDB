@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
@@ -9,6 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.metrics.MetricsProvider;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -33,7 +35,6 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -139,12 +140,14 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+    private final Counter tokenCounter;
+
     /**
      * Returns a new SequencerServer.
      *
      * @param serverContext context object providing parameters and objects
      */
-    public SequencerServer(ServerContext serverContext) {
+    public SequencerServer(ServerContext serverContext, MetricsProvider metricsProvider) {
         this.serverContext = serverContext;
         Config config = Config.parse(serverContext.getServerConfig());
 
@@ -156,6 +159,7 @@ public class SequencerServer extends AbstractServer {
         globalLogTail = config.getInitialToken();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
+        this.tokenCounter = metricsProvider.getCounter(getClass().getName() + ".token-request");
 
         setUpTimerNameCache();
     }
@@ -314,23 +318,19 @@ public class SequencerServer extends AbstractServer {
                                   ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
         List<UUID> streams = req.getStreams();
-        List<Long> streamTails;
+        Map<UUID, Long> streamTails;
         Token token;
         if (req.getStreams().isEmpty()) {
             // Global tail query
             token = new Token(sequencerEpoch, globalLogTail - 1);
-            streamTails = Collections.emptyList();
-        } else if (req.getStreams().size() == 1) {
-            // single stream query
-            token = new Token(sequencerEpoch, streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST));
-            streamTails = Collections.emptyList();
+            streamTails = Collections.emptyMap();
         } else {
-            // multiple stream query, the token is populated with the global tail and the tail queries are stored in
-            // streamTails
+            // multiple or single stream query, the token is populated with the global tail
+            // and the tail queries are stored in streamTails
             token = new Token(sequencerEpoch, globalLogTail - 1);
-            streamTails = new ArrayList<>(streams.size());
+            streamTails = new HashMap<>(streams.size());
             for (UUID stream : streams) {
-                streamTails.add(streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
+                streamTails.put(stream, streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
             }
         }
 
@@ -478,6 +478,7 @@ public class SequencerServer extends AbstractServer {
 
         TokenRequest req = msg.getPayload();
         final Timer timer = getTimer(req.getReqType());
+        tokenCounter.inc();
 
         // dispatch request handler according to request type while collecting the timer metrics
         try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
@@ -559,7 +560,7 @@ public class SequencerServer extends AbstractServer {
                     txResolutionResponse.getTokenType(),
                     txResolutionResponse.getConflictingKey(),
                     txResolutionResponse.getConflictingStream(),
-                    newToken, Collections.emptyMap(), Collections.emptyList())));
+                    newToken, Collections.emptyMap(), Collections.emptyMap())));
             return;
         }
 

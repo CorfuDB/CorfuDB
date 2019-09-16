@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.channel.DefaultEventLoopGroup;
@@ -11,6 +12,7 @@ import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.LayoutServer;
@@ -94,8 +96,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     /** Test Endpoint hostname. */
     private final static String testHostname = "tcp://test";
-
-    private boolean followBackpointers = false;
 
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
@@ -526,7 +526,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 serverRouter = new TestServerRouter();
             }
             this.baseServer = new BaseServer(serverContext);
-            this.sequencerServer = new SequencerServer(serverContext);
+            MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+            this.sequencerServer = new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-runtime", metricRegistry));
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
             this.managementServer = new ManagementServer(serverContext);

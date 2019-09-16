@@ -1,11 +1,6 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -15,14 +10,16 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Version;
 import org.docopt.Docopt;
-import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
 
@@ -60,6 +57,7 @@ public class CorfuServer {
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[--metrics] [--metrics-port <metrics_port>]"
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -173,6 +171,10 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the logunit server.\n"
                     + "                                                                          "
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
+                    + " --metrics                                                                "
+                    + "              Enable metrics provider.\n                                  "
+                    + " --metrics-port=<metrics_port>                                            "
+                    + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -200,7 +202,6 @@ public class CorfuServer {
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
         // Print a nice welcome message.
-        AnsiConsole.systemInstall();
         printStartupMsg(opts);
         configureLogger(opts);
 
@@ -237,7 +238,9 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
-                activeServer = new CorfuServerNode(serverContext);
+                MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+                setupMetrics(opts, metricRegistry);
+                activeServer = new CorfuServerNode(serverContext, metricRegistry);
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
@@ -347,7 +350,6 @@ public class CorfuServer {
      * Print the corfu logo.
      */
     private static void printLogo() {
-        println(ansi().fg(WHITE).toString());
         println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
         println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
         println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
@@ -357,7 +359,6 @@ public class CorfuServer {
         println("███    ███ ███    ███   ███    ███   ███       ███    ███");
         println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
         println("                        ███    ███");
-        println(ansi().reset().toString());
     }
 
     /**
@@ -379,13 +380,25 @@ public class CorfuServer {
      */
     private static void printStartupMsg(Map<String, Object> opts) {
         printLogo();
-        int port = Integer.parseInt((String) opts.get("<port>"));
-        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
-        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
-                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                        opts.get("--log-path")).reset());
+        println("Welcome to CORFU SERVER");
+        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+
+        final int port = Integer.parseInt((String) opts.get("<port>"));
+        final String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                opts.get("--log-path").toString();
+
+        println("Serving on port " + port);
+        println("Data location: " + dataLocation);
+    }
+
+    /**
+     * Generate metrics server config and start server.
+     *
+     * @param opts Command line parameters.
+     */
+    private static void setupMetrics(Map<String, Object> opts, MetricRegistry metricRegistry) {
+        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
+        MetricsServer server = new PrometheusMetricsServer(config, metricRegistry);
+        server.start();
     }
 }

@@ -1,15 +1,23 @@
 package org.corfudb.runtime.view;
 
 import java.util.UUID;
+
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.NodeLocator;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -22,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
 /**
  * Created by mwei on 1/6/16.
@@ -658,6 +667,5 @@ public class LayoutViewTest extends AbstractViewTest {
         final long rank3 = 3L;
         Layout alreadyProposedLayout3 = corfuRuntime1.getLayoutView().prepare(l.getEpoch(), rank3);
         assertThat(alreadyProposedLayout3).isEqualTo(l2);
-
     }
 }

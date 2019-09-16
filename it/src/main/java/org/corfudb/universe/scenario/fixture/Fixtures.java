@@ -4,10 +4,13 @@ import com.google.common.collect.ImmutableList;
 import lombok.Data;
 import lombok.experimental.Accessors;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
+import org.corfudb.universe.group.cluster.SupportClusterParams;
+import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.ServerUtil;
+import org.corfudb.universe.node.server.SupportServerParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
@@ -17,8 +20,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
@@ -65,11 +71,23 @@ public interface Fixtures {
 
             this.servers = FixtureUtil.buildMultipleServers(numNodes, corfuCluster.getName());
             servers.forEach(corfuCluster::add);
-
             data = UniverseParams.universeBuilder()
                     .build()
                     .add(corfuCluster);
 
+            if (metricsPorts.isEmpty()) {
+                return data;
+            }
+
+            final SupportServerParams monitoring =
+                    SupportServerParams.builder()
+                            .clusterName(monitoringCluster.getName())
+                            .metricPorts(metricsPorts)
+                            .nodeType(Node.NodeType.METRICS_SERVER)
+                            .build();
+
+            monitoringCluster.add(monitoring);
+            data.add(monitoringCluster);
             return data;
         }
     }
@@ -126,14 +144,17 @@ public interface Fixtures {
     @Accessors(chain = true)
     abstract class AbstractUniverseFixture<T extends UniverseParams> implements Fixture<T> {
         protected int numNodes;
+        protected Set<Integer> metricsPorts;
         protected ClientParams client;
         protected CorfuClusterParams corfuCluster;
+        protected SupportClusterParams monitoringCluster;
         protected ImmutableList<CorfuServerParams> servers;
 
         public AbstractUniverseFixture() {
             this.numNodes = 3;
             this.client = ClientParams.builder().build();
             this.corfuCluster = CorfuClusterParams.builder().build();
+            this.monitoringCluster = SupportClusterParams.builder().build();
         }
     }
 

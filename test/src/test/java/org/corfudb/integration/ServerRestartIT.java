@@ -859,12 +859,12 @@ public class ServerRestartIT extends AbstractIT {
             // Checkpoint Writer 2
             CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
                     "checkpointer-2", corfuTable1);
-            Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+            Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), (long) snapshotAddress2 - 1);
 
             // Checkpoint Writer 1
             CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
                     "checkpointer-1", corfuTable1);
-            cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+            cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), (long) snapshotAddress1 - 1);
 
             // Trim @snapshotAddress=15 (Checkpoint Writer 2)
             r.getAddressSpaceView().prefixTrim(cp2Token);
@@ -910,7 +910,7 @@ public class ServerRestartIT extends AbstractIT {
         final int numEntries = 10;
 
         final List<Long> expectedAddresses = new ArrayList<>(
-                Arrays.asList(13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L));
+                Arrays.asList(14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L, 23L));
 
         CorfuRuntime r = null;
         CorfuRuntime runtimeRestart = null;
