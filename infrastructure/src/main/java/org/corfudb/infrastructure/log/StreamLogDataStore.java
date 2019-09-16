@@ -17,6 +17,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -99,6 +100,8 @@ public class StreamLogDataStore {
     void updateTailSegment(long newTailSegment) {
         if (updateIfGreater(tailSegment, newTailSegment, TAIL_SEGMENT_RECORD)) {
             log.debug("Updated tail segment to: {}", newTailSegment);
+        } else {
+            log.trace("New tail segment not greater than current, ignore.");
         }
     }
 
@@ -130,6 +133,8 @@ public class StreamLogDataStore {
     void updateStartingAddress(long newStartingAddress) {
         if (updateIfGreater(startingAddress, newStartingAddress, STARTING_ADDRESS_RECORD)) {
             log.debug("Updated starting address to: {}", newStartingAddress);
+        } else {
+            log.trace("New starting address not greater than current, ignore.");
         }
     }
 
@@ -159,6 +164,8 @@ public class StreamLogDataStore {
     void updateGlobalCompactionMark(long newCompactionMark) {
         if (updateIfGreater(globalCompactionMark, newCompactionMark, COMPACTION_MARK_RECORD)) {
             log.debug("Updated global compaction mark to: {}", newCompactionMark);
+        } else {
+            log.trace("New global compaction mark not greater than current, ignore.");
         }
     }
 
@@ -208,6 +215,9 @@ public class StreamLogDataStore {
             return new Roaring64NavigableMap();
         }
 
+        // Cannot use flip() in case the buf is cached since flip() would
+        // change limit to position, but position is 0 if cached.
+        buf.rewind();
         ByteArrayInputStream byteStream = new ByteArrayInputStream(
                 buf.array(), buf.position(), buf.remaining());
         DataInput input = new DataInputStream(byteStream);
@@ -218,7 +228,7 @@ public class StreamLogDataStore {
             return bitmap;
         } catch (IOException ioe) {
             throw new SerializerException("Exception when attempting to " +
-                    "deserialize compacted addresses bitmap bitmap.", ioe);
+                    "deserialize compacted addresses bitmap.", ioe);
         } finally {
             IOUtils.closeQuietly(byteStream);
         }
@@ -232,16 +242,17 @@ public class StreamLogDataStore {
         return new KvRecord<>(COMPACTED_ADDRESSES_PREFIX, String.valueOf(segment), ByteBuffer.class);
     }
 
-
     private boolean updateIfGreater(AtomicLong target, long newAddress, KvRecord<Long> key) {
-        long updatedAddress = target.updateAndGet(curr -> {
+        AtomicBoolean updated = new AtomicBoolean(false);
+        target.updateAndGet(curr -> {
             if (newAddress <= curr) {
                 return curr;
             }
+            updated.set(true);
             dataStore.put(key, newAddress);
             return newAddress;
         });
 
-        return updatedAddress == newAddress;
+        return updated.get();
     }
 }

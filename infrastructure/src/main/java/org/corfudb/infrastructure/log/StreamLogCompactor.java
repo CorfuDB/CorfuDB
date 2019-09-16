@@ -172,6 +172,7 @@ public class StreamLogCompactor {
             log.error("compactSegment: encountered an exception, " +
                     "compaction on segment: {} might be uncompleted.", ordinal, t);
             closeSegments(inputStreamSegment, outputStreamSegment, inputGarbageSegment, outputGarbageSegment);
+            throw t;
         }
     }
 
@@ -188,7 +189,7 @@ public class StreamLogCompactor {
         for (IndexedLogEntry indexedEntry : inputStreamSegment) {
             LogData logData = getLogData(indexedEntry.logEntry);
             long address = logData.getGlobalAddress();
-            LogData newLogData = compactLogEntry(logData, address,
+            LogData newLogData = compactStreamLogEntry(logData, address,
                     garbageInfoMap.get(address), compactionFeedback);
             // If the entire LogData is compacted, do not append to new segment.
             if (newLogData != null) {
@@ -199,15 +200,15 @@ public class StreamLogCompactor {
             flushBatchCount = writeBatchToCompactionOutput(batch,
                     STREAM_COMPACTION_BATCH_SIZE, flushBatchCount, outputStreamSegment);
         }
-        outputStreamSegment.sync();
+        writeBatchToCompactionOutput(batch, outputStreamSegment);
 
         return compactionFeedback;
     }
 
     @Nullable
-    private LogData compactLogEntry(LogData logData, long address,
-                                    SMRGarbageEntry garbageEntry,
-                                    CompactionFeedback compactionFeedback) {
+    private LogData compactStreamLogEntry(LogData logData, long address,
+                                          SMRGarbageEntry garbageEntry,
+                                          CompactionFeedback compactionFeedback) {
         // If it's a hole, return null but add to the compacted address because
         // a hole might be the global tail and we don't want to regress it.
         if (logData.getType() == DataType.HOLE) {
@@ -354,7 +355,7 @@ public class StreamLogCompactor {
                     GARBAGE_COMPACTION_BATCH_SIZE, flushBatchCount, outputGarbageSegment);
         }
 
-        outputGarbageSegment.sync();
+        writeBatchToCompactionOutput(batch, outputGarbageSegment);
     }
 
     private int writeBatchToCompactionOutput(List<LogData> batch,
@@ -373,6 +374,12 @@ public class StreamLogCompactor {
         }
 
         return flushBatchCount;
+    }
+
+    private void writeBatchToCompactionOutput(List<LogData> batch,
+                                             AbstractLogSegment compactionOutput) {
+        compactionOutput.append(batch);
+        compactionOutput.sync();
     }
 
     private void closeSegments(AbstractLogSegment... segments) {
