@@ -16,14 +16,13 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.Arrays;
 
 
-
 /**
  * Created by mwei on 1/8/16.
  */
 @SuppressWarnings("checkstyle:abbreviation")
 @ToString
+@EqualsAndHashCode(exclude = {"serializedSize"})
 @NoArgsConstructor
-@EqualsAndHashCode
 @AllArgsConstructor
 @Builder
 public class SMRRecord {
@@ -173,6 +172,7 @@ public class SMRRecord {
      * @param b byte buffer to serialize to.
      */
     void serialize(ByteBuf b) {
+        int startPos = b.writerIndex();
         b.writeBoolean(isCompacted());
         if (isCompacted()) {
             // A compacted record does not need serializedSize;
@@ -194,7 +194,7 @@ public class SMRRecord {
                     b.writerIndex(lengthIndex + length + 4);
                 });
         // including the size of serializedSize itself.
-        serializedSize = b.readableBytes() + 4;
+        serializedSize = b.writerIndex() - startPos + 4;
         b.writeInt(serializedSize);
     }
 }

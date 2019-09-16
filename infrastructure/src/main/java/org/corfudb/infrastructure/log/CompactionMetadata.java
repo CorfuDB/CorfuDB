@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -19,6 +20,7 @@ import java.util.List;
  */
 @Slf4j
 @RequiredArgsConstructor
+@ToString
 class CompactionMetadata {
 
     // Ordinal of the segment.
@@ -73,17 +75,12 @@ class CompactionMetadata {
                 continue;
             }
 
-            // If this LogData is sent from client, it should have data field.
-            if (logData.getData() != null) {
-                totalPayloadSize += logData.getData().length;
+            if (!logData.hasPayloadSize()) {
+                log.error("updateTotalPayloadSize: entry {} payload size unknown, skip.", logData);
                 return;
             }
 
-            // If this is a new LogData created on server (e.g. during compaction),
-            // we should serialize it first to get the size.
-            try (ILogData.SerializationHandle sh = logData.getSerializedForm()) {
-                totalPayloadSize += logData.getSizeEstimate();
-            }
+            totalPayloadSize += logData.getPayloadSize();
         }
     }
 
