@@ -106,6 +106,18 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return value;
     }
 
+    /**
+     * Serialize the payload. NOT thread-safe.
+     *
+     * @param buf the buffer to serialize to
+     */
+    public void serializePayload(ByteBuf buf) {
+        if (payload.get() == null) {
+            return;
+        }
+        Serializers.CORFU.serialize(payload.get(), buf);
+    }
+
     @Override
     public synchronized void releaseBuffer() {
         if (serializedCache != null) {
@@ -169,12 +181,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         this.type = type;
         this.data = null;
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-    }
-
-    public LogData(DataType type, EnumMap<LogUnitMetadataType, Object> metadataMap) {
-        this.type = type;
-        this.data = null;
-        this.metadataMap = metadataMap;
     }
 
     /**
@@ -257,13 +263,13 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
     }
 
-    void doSerializeInternal(ByteBuf buf) {
+    private void doSerializeInternal(ByteBuf buf) {
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA || type == DataType.GARBAGE) {
             if (data == null) {
                 int lengthIndex = buf.writerIndex();
                 buf.writeInt(0);
-                Serializers.CORFU.serialize(payload.get(), buf);
+                serializePayload(buf);
                 int size = buf.writerIndex() - (lengthIndex + 4);
                 buf.writerIndex(lengthIndex);
                 buf.writeInt(size);
@@ -304,7 +310,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     @Override
     public String toString() {
-        return "LogData[" + getGlobalAddress() + "]";
+        return String.format("LogData.%s[%d]", type, getGlobalAddress());
     }
 
     /**

@@ -6,6 +6,8 @@ enum DataType {
     HOLE = 2;
     TRIMMED = 3;
     PROPOSAL = 4;
+    GARBAGE = 5;
+    COMPACTED = 6;
 }
 
 enum CheckpointEntryType {
