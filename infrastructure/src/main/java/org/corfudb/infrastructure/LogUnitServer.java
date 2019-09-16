@@ -154,9 +154,9 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleTailRequest: received a tail request {}", msg);
         Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.TAIL_REQUEST));
         Timer.Context context = timer.time();
+        log.debug("handleTailRequest: received a tail request {}", msg);
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
                 .thenAccept(tailsResp -> {
                     r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));
@@ -198,8 +198,11 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
     public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.TRIM_MARK_REQUEST));
+        Timer.Context context = timer.time();
         log.debug("handleTrimMarkRequest: received a trim mark request {}", msg);
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
+        context.stop();
     }
 
     /**
@@ -292,17 +295,25 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.PREFIX_TRIM));
+        Timer.Context context = timer.time();
         log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
         batchWriter.addTask(PREFIX_TRIM, msg)
-                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
+                .thenRun(() -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                    context.stop();
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
+                    context.stop();
                     return null;
                 });
     }
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     public void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.READ_REQUEST));
+        Timer.Context context = timer.time();
         long address = msg.getPayload().getAddress();
         boolean cacheable = msg.getPayload().isCacheReadResult();
         log.trace("read: {}, cacheable: {}", msg.getPayload().getAddress(), cacheable);
@@ -320,10 +331,13 @@ public class LogUnitServer extends AbstractServer {
             log.error("Data corruption exception while reading address {}", address, e);
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.payloadMsg(address));
         }
+        context.stop();
     }
 
     @ServerHandler(type = CorfuMsgType.MULTIPLE_READ_REQUEST)
     public void multiRead(CorfuPayloadMsg<MultipleReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.MULTIPLE_READ_REQUEST));
+        Timer.Context context = timer.time();
         boolean cacheable = msg.getPayload().isCacheReadResult();
         log.trace("multiRead: {}, cacheable: {}", msg.getPayload().getAddresses(), cacheable);
 
@@ -350,7 +364,8 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.KNOWN_ADDRESS_REQUEST)
     private void getKnownAddressesInRange(CorfuPayloadMsg<KnownAddressRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
-
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.KNOWN_ADDRESS_REQUEST));
+        Timer.Context context = timer.time();
         KnownAddressRequest request = msg.getPayload();
         try {
             Set<Long> knownAddresses = streamLog
@@ -360,20 +375,27 @@ public class LogUnitServer extends AbstractServer {
         } catch (Exception e) {
             handleException(e, ctx, msg, r);
         }
+        context.stop();
     }
 
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
     private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.COMPACT_REQUEST));
+        Timer.Context context = timer.time();
         log.debug("handleCompactRequest: received a compact request {}", msg);
         streamLog.compact();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        context.stop();
     }
 
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
     private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Timer timer = metricsProvider.getTimer(timerNameCache.get(CorfuMsgType.FLUSH_CACHE));
+        Timer.Context context = timer.time();
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
         dataCache.invalidateAll();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        context.stop();
     }
 
     /**
@@ -525,10 +547,12 @@ public class LogUnitServer extends AbstractServer {
      * Initialized the HashMap with the name of timers for different types of requests
      */
     private void setUpTimerNameCache() {
-        String prefixName = getClass().getName();
-        timerNameCache.put(CorfuMsgType.TAIL_REQUEST, prefixName + "tail-request");
-        timerNameCache.put(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST, prefixName + "log-address-space-request");
-        timerNameCache.put(CorfuMsgType.WRITE, prefixName + "write");
-        timerNameCache.put(CorfuMsgType.RANGE_WRITE, prefixName + "range-write");
+        String className = getClass().getSimpleName();
+        timerNameCache.put(CorfuMsgType.TAIL_REQUEST, className + "tail-request");
+        timerNameCache.put(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST, className + "log-address-space-request");
+        timerNameCache.put(CorfuMsgType.WRITE, className + "write");
+        timerNameCache.put(CorfuMsgType.RANGE_WRITE, className + "range-write");
+        timerNameCache.put(CorfuMsgType.PREFIX_TRIM, className + "prefix-trim");
+
     }
 }

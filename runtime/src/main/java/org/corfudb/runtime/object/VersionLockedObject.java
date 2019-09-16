@@ -310,19 +310,27 @@ public class VersionLockedObject<T> {
     }
 
     /**
+     * @see VersionLockedObject#syncObjectUnsafeInner
+     */
+    public void syncObjectUnsafe(long timestamp) {
+        try (Timer.Context updateDuration = VloMetricsHelper.getVloSyncContext()) {
+            syncObjectUnsafeInner(timestamp);
+        }
+    }
+
+    /**
      * Bring the object to the requested version, rolling back or syncing
      * the object from the log if necessary to reach the requested version.
      *
      * @param timestamp The timestamp to update the object to.
      */
-    public void syncObjectUnsafe(long timestamp) {
+    private void syncObjectUnsafeInner(long timestamp) {
         // If there is an optimistic stream attached,
         // and it belongs to this thread use that
         if (optimisticallyOwnedByThreadUnsafe()) {
             // If there are no updates, ensure we are at the right snapshot
             if (optimisticStream.pos() == Address.NEVER_READ) {
-                final WriteSetSMRStream currentOptimisticStream =
-                        optimisticStream;
+                final WriteSetSMRStream currentOptimisticStream = optimisticStream;
                 // If we are too far ahead, roll back to the past
                 if (getVersionUnsafe() > timestamp) {
                     try {
@@ -403,8 +411,7 @@ public class VersionLockedObject<T> {
      * @return True, if the object was modified by this thread. False otherwise.
      */
     public boolean optimisticallyOwnedByThreadUnsafe() {
-        return optimisticStream != null &&
-               optimisticStream.isStreamForThisThread();
+        return optimisticStream != null && optimisticStream.isStreamForThisThread();
     }
 
     /**
@@ -675,7 +682,12 @@ public class VersionLockedObject<T> {
         private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +
                 "vlo.updated-object-read";
         private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + "vlo.update";
+        private static final String VLO_SYNC = CorfuComponent.OBJECT.toString() + "vlo.sync";
         private static final String VLO_GC = CorfuComponent.OBJECT.toString() + "vlo.gc";
+
+        private static Timer.Context getVloSyncContext() {
+            return MetricsUtils.getConditionalContext(metrics.timer(VLO_SYNC));
+        }
 
         private static Timer.Context getOptimisticReadContext() {
             return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));
