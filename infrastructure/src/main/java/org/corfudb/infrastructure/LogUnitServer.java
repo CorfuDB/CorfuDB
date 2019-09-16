@@ -327,6 +327,25 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    @ServerHandler(type = CorfuMsgType.MULTIPLE_GARBAGE_REQUEST)
+    public void multiGarbageRead(CorfuPayloadMsg<MultipleReadRequest> msg,
+                                 ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("multiGarbageRead: {}", msg.getPayload().getAddresses());
+        ReadResponse rr = new ReadResponse();
+
+        try {
+            for (long address : msg.getPayload().getAddresses()) {
+                LogData logData = streamLog.readGarbageEntry(address);
+                if (logData != null) {
+                    rr.put(address, logData);
+                }
+            }
+            r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+        } catch (DataCorruptionException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+        }
+    }
+
     /**
      * Handles requests for known entries in specified range.
      * This is used by state transfer to catch up only the remainder of the segment.

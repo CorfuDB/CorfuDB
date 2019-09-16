@@ -101,6 +101,10 @@ public class GarbageLogSegment extends AbstractLogSegment {
     @Override
     public void append(List<LogData> entries) {
         try {
+            if (entries.isEmpty()) {
+                return;
+            }
+
             List<SMRGarbageEntry> uniqueGarbageEntries = new ArrayList<>();
             List<LogData> uniqueGarbageLogData = new ArrayList<>();
 
@@ -160,6 +164,14 @@ public class GarbageLogSegment extends AbstractLogSegment {
         return uniqueGarbageEntry.get();
     }
 
+    /**
+     * Given an address in this segment, read the corresponding
+     * garbage log entry.
+     *
+     * @param address address to read from the log
+     * @return garbage log entry if it exists, otherwise return null
+     */
+    @Override
     public LogData read(long address) {
         SMRGarbageEntry garbageEntry = garbageEntryMap.get(address);
         if (garbageEntry == null || garbageEntry.getGarbageRecordCount() == 0) {

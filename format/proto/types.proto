@@ -6,6 +6,8 @@ enum DataType {
     HOLE = 2;
     TRIMMED = 3;
     PROPOSAL = 4;
+    GARBAGE = 5;
+    COMPACTED = 6;
 }
 
 enum CheckpointEntryType {
@@ -33,7 +35,7 @@ message LogEntry {
     optional int64 checkpointId_least_significant = 12;
     optional int64 checkpointedStreamId_most_significant = 13;
     optional int64 checkpointedStreamId_least_significant = 14;
-    //  Tail of the stream at the time of taking the checkpoint snapshot.
+    // Tail of the stream at the time of taking the checkpoint snapshot.
     optional int64 checkpointedStreamStartLogAddress = 15;
 
     // ClientId is the Corfu runtime id that created this LogEntry
@@ -46,6 +48,8 @@ message LogEntry {
     // less than 4-bytes to encode, since the codecType
     // range is positive and fits in a byte
     optional int32 codecType = 19;
+    // The un-compressed, serialized payload size.
+    optional int32 payloadSize = 20;
 }
 
 message LogHeader {

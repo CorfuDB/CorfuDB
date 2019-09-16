@@ -437,7 +437,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor.shutdown();
-            executor.awaitTermination(1, TimeUnit.MINUTES);
+            executor.awaitTermination(2, TimeUnit.MINUTES);
 
             System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in: %s ms",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
@@ -460,7 +460,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor2.shutdown();
-            executor2.awaitTermination(1, TimeUnit.MINUTES);
+            executor2.awaitTermination(2, TimeUnit.MINUTES);
 
             long followBackpointersTime = System.currentTimeMillis() - startTime;
 
@@ -487,7 +487,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor3.shutdown();
-            executor3.awaitTermination(1, TimeUnit.MINUTES);
+            executor3.awaitTermination(2, TimeUnit.MINUTES);
 
             long addressMapTime = System.currentTimeMillis() - startTime;
 

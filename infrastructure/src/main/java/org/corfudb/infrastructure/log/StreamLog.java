@@ -41,12 +41,20 @@ public interface StreamLog {
     void append(List<LogData> entries);
 
     /**
-     * Given an address, read the corresponding stream entry.
+     * Given an address, read the corresponding stream log entry.
      *
      * @param address address to read from the log
-     * @return Stream entry if it exists, otherwise return null
+     * @return stream entry if it exists, otherwise return null
      */
     LogData read(long address);
+
+    /**
+     * Given an address, read the corresponding garbage log entry.
+     *
+     * @param address address to read from the log
+     * @return garbage entry if it exists, otherwise return null
+     */
+    LogData readGarbageEntry(long address);
 
     /**
      * Return the current compaction marks for a list of stream
