@@ -6,7 +6,9 @@ import com.beust.jcommander.Parameter;
 import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.IOLatencyDetector;
+import org.corfudb.util.MetricsUtils;
 
+import java.util.IdentityHashMap;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import static java.lang.Thread.sleep;
@@ -52,7 +54,7 @@ public class IOLatencyDetectorTest {
                     if (i % 100 > 95)
                         val = 2000;
                     sleep (val);
-                    IOLatencyDetector.update (metrics, start, 1);
+                    IOLatencyDetector.update (metrics, threadName, start, 1);
                 } catch (Exception e) {
                     // ignore exception
                     log.warn ("statusReporter: encountered exception", e);
@@ -99,7 +101,7 @@ public class IOLatencyDetectorTest {
                     if (IOLatencyDetector.reportSpike ()) {
                         System.out.println ("------spike detected------");
                     }
-                    IOLatencyDetector.metricsHis (ioLatencyDetector);
+                    IOLatencyDetector.metricsHis ();
 
                 } catch (Exception e) {
                     // ignore exception
@@ -110,8 +112,7 @@ public class IOLatencyDetectorTest {
     }
 
     public static void main(String[] args) throws Exception {
-        IOLatencyDetector.setupIOLatencyDetector (10, 1,
-                "WriteTest", "ReadTest");
+        IOLatencyDetector.setupIOLatencyDetector (10, 1);
 
         Args cmdArgs = new Args();
         JCommander jc = JCommander.newBuilder()
@@ -126,6 +127,13 @@ public class IOLatencyDetectorTest {
 
         long numFeeds = cmdArgs.numFeeds;
         long numPolls = cmdArgs.numPolls;
+
+        IdentityHashMap<Object, Object> visited = new IdentityHashMap<Object, Object>();
+        for (int i = 0; i < 1000000; i++) {
+            visited.put (new Integer(i), new Integer(i));
+        }
+
+        System.out.println ("size " + MetricsUtils.sizeOf.deepSizeOf(visited));
 
         //create a thread to feed read latency
         Timer readMetrics = IOLatencyDetector.getReadMetrics();

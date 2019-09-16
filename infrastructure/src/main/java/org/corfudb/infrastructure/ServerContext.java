@@ -191,7 +191,7 @@ public class ServerContext implements AutoCloseable {
             MetricsUtils.metricsReportingSetup(metrics);
         }
 
-        IOLatencyDetector.setupIOLatencyDetector (this, 30, 2);
+        IOLatencyDetector.setupIOLatencyDetector (30, 2);
     }
 
     int getBaseServerThreadCount() {
