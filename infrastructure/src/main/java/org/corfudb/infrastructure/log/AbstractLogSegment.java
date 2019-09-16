@@ -93,6 +93,15 @@ public abstract class AbstractLogSegment implements AutoCloseable,
     }
 
     /**
+     * Given an address in this segment, read the corresponding
+     * log entry.
+     *
+     * @param address address to read from the log
+     * @return log entry if it exists, otherwise return null
+     */
+    public abstract LogData read(long address);
+
+    /**
      * Append an entry to the log segment file.
      *
      * @param address address of append entry
@@ -299,9 +308,12 @@ public abstract class AbstractLogSegment implements AutoCloseable,
                         writeHeader(writeChannel, logSizeQuota, VERSION, logParams.verifyChecksum);
                     }
                 }
-            } catch (IOException e) {
-                log.error("SegmentIterator: Error reading file: {}", filePath, e);
-                throw new IllegalStateException(e);
+            } catch (ClosedChannelException cce) {
+                log.warn("SegmentIterator: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+                throw new ClosedSegmentException(cce);
+            } catch (IOException ioe) {
+                log.error("SegmentIterator: Error reading file: {}", filePath, ioe);
+                throw new IllegalStateException(ioe);
             }
         }
 
@@ -338,9 +350,12 @@ public abstract class AbstractLogSegment implements AutoCloseable,
 
                 return true;
 
-            } catch (IOException e) {
-                log.error("SegmentIterator: Error reading file: {}", filePath, e);
-                throw new IllegalStateException(e);
+            } catch (ClosedChannelException cce) {
+                log.warn("SegmentIterator: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+                throw new ClosedSegmentException(cce);
+            } catch (IOException ioe) {
+                log.error("SegmentIterator: Error reading file: {}", filePath, ioe);
+                throw new IllegalStateException(ioe);
             }
         }
 

@@ -53,9 +53,9 @@ public class ServerContextBuilder {
     String compactionWorkers = "4";
     String maxSegmentsForCompaction = "8";
     String protectedSegments = "1";
-    String segmentGarbageRatioThreshold = "0.5";
-    String segmentGarbageSizeThresholdMB = "0.2";
-    String totalGarbageSizeThresholdMB = "1.0";
+    String segmentGarbageRatioThreshold = "0.1";
+    String segmentGarbageSizeThresholdMB = "0.1";
+    String totalGarbageSizeThresholdMB = "10.0";
 
     String clusterId = "auto";
     boolean isTest = true;

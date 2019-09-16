@@ -18,9 +18,7 @@ import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.StreamLog.assertAppendPermittedUnsafe;
 import static org.corfudb.infrastructure.log.StreamLog.getOverwriteCauseForAddress;
@@ -58,11 +56,13 @@ class StreamLogSegment extends AbstractLogSegment {
     }
 
     /**
-     * Read a log entry in a stream log segment.
+     * Given an address in this segment, read the corresponding
+     * stream log entry.
      *
      * @param address the address of the entry to read
-     * @return the log unit entry at that address, or NULL if there is no entry
+     * @return stream log entry if it exists, otherwise return null
      */
+    @Override
     public LogData read(long address) {
         try {
             return readRecord(address);
@@ -137,6 +137,10 @@ class StreamLogSegment extends AbstractLogSegment {
     @Override
     public void append(List<LogData> entries) {
         try {
+            if (entries.isEmpty()) {
+                return;
+            }
+
             // Check if any entry exists.
             if (anyEntryExists(entries)) {
                 log.debug("append[{}]: Overwritten exception", entries);
@@ -179,7 +183,7 @@ class StreamLogSegment extends AbstractLogSegment {
     }
 
     /**
-     * loads the entire address space of this segment file and
+     * Loads the entire address space of this segment file and
      * update the in-memory index of each entry read. If this
      * is a new segment, a log header will be appended.
      */
@@ -195,7 +199,7 @@ class StreamLogSegment extends AbstractLogSegment {
             knownAddresses.put(indexedEntry.logEntry.getGlobalAddress(), addressMetadata);
             LogData logData = getLogData(indexedEntry.logEntry);
             compactionMetaData.updateTotalPayloadSize(Collections.singletonList(logData));
-            compactedAddresses = dataStore.getCompactedAddresses(ordinal);
         }
+        compactedAddresses = dataStore.getCompactedAddresses(ordinal);
     }
 }

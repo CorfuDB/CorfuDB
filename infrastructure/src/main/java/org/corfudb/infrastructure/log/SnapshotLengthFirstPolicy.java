@@ -47,7 +47,14 @@ public class SnapshotLengthFirstPolicy extends AbstractCompactionPolicy {
 
         // Skip compaction for the first cycle after startup.
         if (CompactionMetadata.getNextCompactionUpperBound() == Address.MAX) {
-            CompactionMetadata.setNextCompactionUpperBound(logMetadata.getGlobalTail());
+            // Minus 1 to avoid handling the case where log tail not moving when
+            // being compacted in the next cycle and the log tail happens to be a
+            // hole. In that case, if the hole is compacted and server restarted,
+            // the rebuilt global log tail could regress.
+            long nextCompactionUpperBound = logMetadata.getGlobalTail() - 1;
+            if (Address.isAddress(nextCompactionUpperBound)) {
+                CompactionMetadata.setNextCompactionUpperBound(nextCompactionUpperBound);
+            }
             return Collections.emptyList();
         }
 
