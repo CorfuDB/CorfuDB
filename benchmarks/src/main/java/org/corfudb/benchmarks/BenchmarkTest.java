@@ -2,11 +2,18 @@ package org.corfudb.benchmarks;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import com.codahale.metrics.MetricRegistry;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.MetricsUtils;
-
+import io.prometheus.client.CollectorRegistry;
+import io.prometheus.client.dropwizard.DropwizardExports;
+import io.prometheus.client.exporter.MetricsServlet;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 import java.util.concurrent.*;
 
 /**
@@ -31,7 +38,11 @@ public class BenchmarkTest {
 
         @Parameter(names = {"--num-requests"}, description = "Number of requests per thread", required = true)
         int numRequests;
+
+        @Parameter(names = {"--ratio"}, description = "Ratio of put operations among all requests", required = true)
+        double ratio;
     }
+
     /**
      * Number of clients
      */
@@ -48,13 +59,15 @@ public class BenchmarkTest {
      * Server endpoint.
      */
     protected String endpoint = null;
+
+    protected double ratio = 1.0;
     protected CorfuRuntime[] rts = null;
     final BlockingQueue<Operation> operationQueue;
     final ExecutorService taskProducer;
     final ExecutorService workers;
 
-    private final long durationMs = 100;
-    static final int APPLICATION_TIMEOUT_IN_MS = 10000;
+    private final long durationMs = 1000;
+    static final int APPLICATION_TIMEOUT_IN_MS = 10000000;
     static final int QUEUE_CAPACITY = 1000;
 
     BenchmarkTest(String[] args) {
@@ -69,7 +82,31 @@ public class BenchmarkTest {
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         taskProducer = Executors.newSingleThreadExecutor();
         workers = Executors.newFixedThreadPool(numThreads);
-        MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
+        //MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
+        startPrometheusExporter(CorfuRuntime.getDefaultMetrics(), 1000);
+    }
+
+    private void startPrometheusExporter(@NonNull MetricRegistry registry, int metricsPort) {
+        if (metricsPort == -1) {
+            log.info("Metrics exporting via Prometheus is not enabled.");
+            return;
+        }
+
+        Server server = new Server(metricsPort);
+        ServletContextHandler context = new ServletContextHandler();
+        context.setContextPath("/");
+        server.setHandler(context);
+
+        try {
+            server.start();
+        } catch (Exception e) {
+            log.error("Failed to start the metrics exporter.", e);
+            return;
+        }
+
+        context.addServlet(new ServletHolder(new MetricsServlet()), "/metrics");
+        CollectorRegistry.defaultRegistry.register(new DropwizardExports(registry));
+        log.info("Metrics exporting via Prometheus has been enabled at port {}.", metricsPort);
     }
 
     private void setArgs(String[] args) {
@@ -87,82 +124,52 @@ public class BenchmarkTest {
         numThreads = cmdArgs.numThreads;
         numRequests = cmdArgs.numRequests;
         endpoint = cmdArgs.endpoint;
-    }
-    private void enQueue(String operationName, CorfuRuntime rt) {
-        String[] names = operationName.split("_");
-        if (names.length != 2) {
-            log.error("invalid operation name");
-        }
-        Operation current = null;
-        if (names[0].equals("Sequencer")) {
-            current = new SequencerOperations(names[1], rt);
-        }
-        if (current != null) {
-            try {
-                operationQueue.put(current);
-            } catch (InterruptedException e) {
-                throw new UnrecoverableCorfuInterruptedError(e);
-            } catch (Exception e) {
-                log.error("operation error", e);
-            }
-        } else {
-            log.error("no such operation");
-        }
+        ratio = cmdArgs.ratio;
     }
 
-    private void runTaskProducer(String operationName) {
+    void runTaskProducer(Operation operation) {
+            taskProducer.execute(() -> {
+                try {
+                    operationQueue.put(operation);
+                } catch (InterruptedException e) {
+                    throw new UnrecoverableCorfuInterruptedError(e);
+                } catch (Exception e) {
+                    log.error("operation error", e);
+                }
+            });
+    }
+
+    void runConsumers() {
         for (int i = 0; i < numThreads; i++) {
-            CorfuRuntime rt = rts[i % rts.length];
-            for (int j = 0; j < numRequests; j++) {
-                taskProducer.execute(() -> {
-                    enQueue(operationName, rt);
-                });
-            }
+            workers.execute(() -> {
+                try {
+                    long start = System.nanoTime();
+                    Operation op = operationQueue.take();
+                    op.execute();
+                    long latency = System.nanoTime() - start;
+                    log.info("nextToken request latency: " + latency);
+                } catch (Exception e) {
+                    log.error("Operation failed with", e);
+                }
+            });
         }
     }
 
-    private void runConsumers() {
-        for (int i = 0; i < numThreads; i++) {
-            for (int j = 0; j < numRequests; j++) {
-                workers.execute(() -> {
-                    try {
-                        long start = System.nanoTime();
-                        Operation op = operationQueue.take();
-                        op.execute();
-                        long latency = System.nanoTime() - start;
-                        log.info("nextToken request latency: "+ latency);
-                    } catch (Exception e) {
-                        log.error("Operation failed with", e);
-                    }
-                });
-            }
-        }
-    }
-
-    private void waitForAppToFinish() {
+    void waitForAppToFinish() {
         workers.shutdown();
         try {
             boolean finishedInTime = workers.
                     awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
 
             if (!finishedInTime) {
+                log.error("not finished in time.");
                 System.exit(1);
             }
         } catch (InterruptedException e) {
+            log.error(String.valueOf(e));
             throw new UnrecoverableCorfuInterruptedError(e);
         } finally {
             System.exit(0);
         }
-    }
-
-    private void runSequencerQueryTest() {
-        runTaskProducer("Sequencer_query");
-        runConsumers();
-        waitForAppToFinish();
-    }
-
-    public static void main(String[] args) {
-        BenchmarkTest rbt = new BenchmarkTest(args);
-        rbt.runSequencerQueryTest();
     }
 }

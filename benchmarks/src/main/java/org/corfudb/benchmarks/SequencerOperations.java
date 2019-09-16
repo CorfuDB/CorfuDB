@@ -11,62 +11,75 @@ import java.util.*;
 
 @Slf4j
 public class SequencerOperations extends Operation {
-    SequencerOperations(String name, CorfuRuntime rt) {
+    SequencerOperations(String name, CorfuRuntime rt, long numRequest) {
         super(rt);
+        System.out.println("sequencer operation: " + name);
         shortName = name;
+        this.numRequest = numRequest;
     }
 
-    private void token_query() {
-        rt.getSequencerView().query();
+    private void tokenQuery() {
+        for (int i = 0; i < numRequest; i++) {
+            rt.getSequencerView().query();
+        }
     }
 
-    private void token_raw() {
-        rt.getSequencerView().next();
+    private void tokenRaw() {
+        for (int i = 0; i < numRequest; i++) {
+            rt.getSequencerView().next();
+        }
     }
 
-    private void token_multi_stream() {
-        UUID stream = UUID.nameUUIDFromBytes("Stream".getBytes());
-        rt.getSequencerView().next(stream);
+    private void tokenMultiStream() {
+        for (int i = 0; i < numRequest; i++) {
+            UUID stream = UUID.nameUUIDFromBytes("Stream".getBytes());
+            rt.getSequencerView().next(stream);
+        }
     }
 
-    private void token_tx() {
-        UUID transactionID = UUID.nameUUIDFromBytes("transaction".getBytes());
-        UUID stream = UUID.randomUUID();
-        Map<UUID, Set<byte[]>> conflictMap = new HashMap<>();
-        Set<byte[]> conflictSet = new HashSet<>();
-        byte[] value = new byte[]{0, 0, 0, 1};
-        conflictSet.add(value);
-        conflictMap.put(stream, conflictSet);
+    private void tokenTx() {
+        for (int i = 0; i < numRequest; i++) {
+            UUID transactionID = UUID.nameUUIDFromBytes("transaction".getBytes());
+            UUID stream = UUID.randomUUID();
+            Map<UUID, Set<byte[]>> conflictMap = new HashMap<>();
+            Set<byte[]> conflictSet = new HashSet<>();
+            byte[] value = new byte[]{0, 0, 0, 1};
+            conflictSet.add(value);
+            conflictMap.put(stream, conflictSet);
 
-        Map<UUID, Set<byte[]>> writeConflictParams = new HashMap<>();
-        Set<byte[]> writeConflictSet = new HashSet<>();
-        byte[] value1 = new byte[]{0, 0, 0, 1};
-        writeConflictSet.add(value1);
-        writeConflictParams.put(stream, writeConflictSet);
+            Map<UUID, Set<byte[]>> writeConflictParams = new HashMap<>();
+            Set<byte[]> writeConflictSet = new HashSet<>();
+            byte[] value1 = new byte[]{0, 0, 0, 1};
+            writeConflictSet.add(value1);
+            writeConflictParams.put(stream, writeConflictSet);
 
-        TxResolutionInfo conflictInfo = new TxResolutionInfo(transactionID,
-                new Token(0, -1),
-                conflictMap,
-                writeConflictParams);
-        rt.getSequencerView().next(conflictInfo, stream);
+            TxResolutionInfo conflictInfo = new TxResolutionInfo(transactionID,
+                    new Token(0, -1),
+                    conflictMap,
+                    writeConflictParams);
+            rt.getSequencerView().next(conflictInfo, stream);
+        }
     }
 
     private void getStreamAddress() {
-        UUID stream = UUID.nameUUIDFromBytes("Stream".getBytes());
-        final int tokenCount = 3;
-        rt.getSequencerView().getStreamAddressSpace(new StreamAddressRange(stream,  tokenCount, Address.NON_ADDRESS));
+        for (int i = 0; i < numRequest; i++) {
+            UUID stream = UUID.nameUUIDFromBytes("Stream".getBytes());
+            final int tokenCount = 3;
+            rt.getSequencerView().getStreamAddressSpace(new StreamAddressRange(stream, tokenCount, Address.NON_ADDRESS));
+        }
     }
 
     @Override
     public void execute() {
         if (shortName.equals("query")) {
-            token_query();
+            System.out.println("query");
+            tokenQuery();
         } else if (shortName.equals("raw")) {
-            token_raw();
+            tokenRaw();
         } else if (shortName.equals("multistream")) {
-            token_multi_stream();
+            tokenMultiStream();
         } else if (shortName.equals("tx")) {
-            token_tx();
+            tokenTx();
         } else if (shortName.equals("getstreamaddr")) {
             getStreamAddress();
         } else {
