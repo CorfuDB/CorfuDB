@@ -26,11 +26,11 @@ public class SMRGarbageRecord {
     /**
      * Constructor for SMRGarbageRecord
      * @param markerAddress The Global address of the SRMRecord that supersedes this SMRRecord.
-     * @param smrEntrySize  Serialized size of this SMRRecord in byte.
+     * @param smrRecordSize  Serialized size of this SMRRecord in byte.
      */
-    public SMRGarbageRecord(long markerAddress, int smrEntrySize) {
+    public SMRGarbageRecord(long markerAddress, int smrRecordSize) {
         this.markerAddress = markerAddress;
-        this.smrEntrySize = smrEntrySize;
+        this.smrEntrySize = smrRecordSize;
     }
 
     /**
