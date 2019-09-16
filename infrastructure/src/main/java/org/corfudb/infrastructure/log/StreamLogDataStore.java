@@ -208,6 +208,9 @@ public class StreamLogDataStore {
             return new Roaring64NavigableMap();
         }
 
+        // Cannot use flip() in case the buf is cached since flip() would
+        // change limit to position, but position is 0 if cached.
+        buf.rewind();
         ByteArrayInputStream byteStream = new ByteArrayInputStream(
                 buf.array(), buf.position(), buf.remaining());
         DataInput input = new DataInputStream(byteStream);
@@ -218,7 +221,7 @@ public class StreamLogDataStore {
             return bitmap;
         } catch (IOException ioe) {
             throw new SerializerException("Exception when attempting to " +
-                    "deserialize compacted addresses bitmap bitmap.", ioe);
+                    "deserialize compacted addresses bitmap.", ioe);
         } finally {
             IOUtils.closeQuietly(byteStream);
         }
@@ -231,7 +234,6 @@ public class StreamLogDataStore {
     private KvRecord<ByteBuffer> getCompactedAddressesRecord(long segment) {
         return new KvRecord<>(COMPACTED_ADDRESSES_PREFIX, String.valueOf(segment), ByteBuffer.class);
     }
-
 
     private boolean updateIfGreater(AtomicLong target, long newAddress, KvRecord<Long> key) {
         long updatedAddress = target.updateAndGet(curr -> {

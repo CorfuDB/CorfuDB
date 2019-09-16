@@ -8,7 +8,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -20,7 +19,6 @@ import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.log.CompactionPolicy.CompactionPolicyType;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -93,6 +91,7 @@ public class StreamLogFiles implements StreamLog {
     // by a reset API that clears the state of this class, on reset
     // a new instance of this class should be created after deleting
     // the files of the old instance
+    @Getter
     private LogMetadata logMetadata;
 
     // Derived size in bytes that normal writes to the log unit are capped at.
@@ -661,7 +660,7 @@ public class StreamLogFiles implements StreamLog {
     static Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
-            log.error("Meta data has wrong size. Actual size: {}, expected: {}",
+            log.warn("Meta data has wrong size. Actual size: {}, expected: {}",
                     actualMetaDataSize, METADATA_SIZE
             );
             return null;
@@ -727,7 +726,7 @@ public class StreamLogFiles implements StreamLog {
     static LogHeader parseHeader(FileChannel channel, String segmentFile) throws IOException {
         Metadata metadata = parseMetadata(channel, segmentFile);
         if (metadata == null) {
-            // Partial write on the metadata for the header
+            // Partial write on the metadata for the header or no header
             // Rewind the channel position to the beginning of the file
             channel.position(0);
             return null;
@@ -835,7 +834,7 @@ public class StreamLogFiles implements StreamLog {
             data = entry.getData();
         } else {
             ByteBuf buf = Unpooled.buffer();
-            ICorfuPayload.serialize(buf, entry);
+            entry.serializePayload(buf);
             data = buf.array();
         }
 

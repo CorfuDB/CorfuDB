@@ -102,6 +102,10 @@ public class GarbageLogSegment extends AbstractLogSegment {
     @Override
     public void append(List<LogData> entries) {
         try {
+            if (entries.isEmpty()) {
+                return;
+            }
+
             List<SMRGarbageEntry> uniqueGarbageEntries = new ArrayList<>();
             List<LogData> uniqueGarbageLogData = new ArrayList<>();
 
