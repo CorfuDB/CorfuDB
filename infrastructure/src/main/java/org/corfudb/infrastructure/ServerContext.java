@@ -195,10 +195,11 @@ public class ServerContext implements AutoCloseable {
         }
 
         IOLatencyDetector.setupIOLatencyDetector (OP_LATENCY_SPIKE, OP_THRESH_LATENCY);
+        logMetricsSize ();
     }
 
-    void logMetricsSize() {
-        log.info("corfu server metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ()));
+    public void logMetricsSize() {
+        log.debug("corfu server metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ()));
     }
 
     int getBaseServerThreadCount() {
