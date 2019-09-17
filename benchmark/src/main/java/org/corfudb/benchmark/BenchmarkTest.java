@@ -14,7 +14,7 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import java.util.concurrent.*;
 
 /**
- * This class is the super class for all performance tests.
+ * This class is the super class for all benchmark tests.
  * It set test parameters like how many clients to run, how many threads each client run,
  * and how many request one thread send.
  */
@@ -92,7 +92,12 @@ public class BenchmarkTest {
         endpoint = parseArgs.getEndpoint();
     }
 
-    void runTaskProducer(Operation operation) {
+    /**
+     * producer puts one operation into operationQueue.
+     * Operation can be Sequencer operation, CorfuTable operation, etc.
+     * @param operation the operation pushed into operationQueue
+     */
+    void runProducer(Operation operation) {
             taskProducer.execute(() -> {
                 try {
                     operationQueue.put(operation);
@@ -104,6 +109,9 @@ public class BenchmarkTest {
             });
     }
 
+    /**
+     * Comsumers use a thread pool to execute operations in operationQueue
+     */
     void runConsumers() {
         for (int i = 0; i < numThreads; i++) {
             workers.execute(() -> {
@@ -120,6 +128,9 @@ public class BenchmarkTest {
         }
     }
 
+    /**
+     * wait sometime for workers to finish the jobs.
+     */
     void waitForAppToFinish() {
         workers.shutdown();
         try {

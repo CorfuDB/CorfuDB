@@ -5,24 +5,39 @@ import com.beust.jcommander.Parameter;
 import lombok.Getter;
 
 public class ParseArgs {
+    /**
+     * Number of runtimes
+     */
     @Getter
     protected int numRuntimes = -1;
+
+    /**
+     *
+     */
     @Getter
     protected int numThreads = -1;
+
     /**
      * Number of requests per thread.
      */
     @Getter
     protected int numRequests = -1;
+
     /**
      * Server endpoint.
      */
     @Getter
     protected String endpoint = null;
 
+    /**
+     *
+     */
     @Getter
     protected double ratio;
 
+    /**
+     *
+     */
     @Getter
     protected String op = null;
 

@@ -16,7 +16,7 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         for (int i = 0; i < numThreads; i++) {
             CorfuRuntime rt = rts[i % rts.length];
             CorfuTableOperations corfuTableOperations = new CorfuTableOperations(operationName, rt, numRequests, ratio,false, false);
-            runTaskProducer(corfuTableOperations);
+            runProducer(corfuTableOperations);
         }
     }
 
