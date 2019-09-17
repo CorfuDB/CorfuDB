@@ -42,7 +42,7 @@ public class CorfuServerNodeTest extends AbstractCorfuTest {
 
         // Shutdown
         runtime.shutdown();
-        serverNode.close();
+        //serverNode.close();
     }
 
     private CorfuRuntime.CorfuRuntimeParameters buildCorfuRuntimeParameters() {

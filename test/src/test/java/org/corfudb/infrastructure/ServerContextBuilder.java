@@ -36,7 +36,7 @@ public class ServerContextBuilder {
 
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
-    int port = 9000;
+    String port = "9000";
     String seqCache = "1000";
     String logSizeLimitPercentage = "100.0";
     String batchSize = "100";
@@ -113,7 +113,8 @@ public class ServerContextBuilder {
      * @return      A {@link ServerContext} with a {@link TestServerRouter} installed.
      */
     public static ServerContext defaultTestContext(int port) {
-        ServerContext sc = new ServerContextBuilder().setPort(port).build();
+        ServerContext sc = new ServerContextBuilder()
+            .setPort(Integer.toString(port)).build();
         sc.setServerRouter(new TestServerRouter());
         return sc;
     }
@@ -124,7 +125,8 @@ public class ServerContextBuilder {
      * @return      A non-test {@link ServerContext}
      */
     public static ServerContext defaultContext(int port) {
-        ServerContext sc = new ServerContextBuilder().setPort(port)
+        ServerContext sc = new ServerContextBuilder()
+            .setPort(Integer.toString(port))
             .setImplementation("auto")
             .build();
         return sc;
