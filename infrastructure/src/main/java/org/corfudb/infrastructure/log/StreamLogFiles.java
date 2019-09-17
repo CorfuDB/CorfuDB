@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;

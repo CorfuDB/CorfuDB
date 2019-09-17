@@ -25,7 +25,7 @@ public class IOLatencyDetector {
     static final String SYNC_METRICS = "FileSyncMetrics";
     static boolean spikeDetected = false;
     static int thresh;
-    static int maxLatency;
+    static int maxLatency; //in seconds
 
     @Getter
     static Timer writeMetrics;
@@ -53,7 +53,7 @@ public class IOLatencyDetector {
     public static void update(Timer timer, String name, long start, int numUnit) {
         long dur = (System.nanoTime () - start) / numUnit;
 
-        if ((dur > (timer.getSnapshot ().getMean () * thresh)) && dur > maxLatency) {
+        if ((dur > (timer.getSnapshot ().getMean () * thresh)) && TimeUnit.SECONDS.convert(dur, TimeUnit.NANOSECONDS) > maxLatency) {
             spikeDetected = true;
             metricsHis(timer, name);
             log.warn (name + " spike Detected");
