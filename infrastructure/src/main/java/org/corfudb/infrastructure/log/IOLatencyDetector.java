@@ -41,7 +41,7 @@ public class IOLatencyDetector {
         readMetrics = ServerContext.getMetrics ().timer (READ_METRICS);
         writeMetrics = ServerContext.getMetrics ().timer (WRITE_METRICS);
         syncMetrics = ServerContext.getMetrics ().timer (SYNC_METRICS);
-        System.out.println ("start metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ()));
+        log.info("start metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ()));
     }
 
     static public void metricsHis() {
@@ -57,12 +57,10 @@ public class IOLatencyDetector {
             spikeDetected = true;
             metricsHis(timer, name);
             log.warn (name + " spike Detected");
-            System.out.println ("spikeDetected");
         } else if (spikeDetected && dur < timer.getSnapshot ().getMean ()) {
             spikeDetected = false;
             metricsHis(timer, name);
             log.warn (name + " spike cleared");
-            System.out.println ("spike cleared");
         }
         timer.update(dur, TimeUnit.NANOSECONDS);
     }

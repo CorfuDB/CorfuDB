@@ -119,6 +119,8 @@ public class ServerContext implements AutoCloseable {
      */
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
+    private static final int OP_THRESH_LATENCY = 2;
+    private static final int OP_LATENCY_SPIKE = 100;
 
     @Getter
     private final Map<String, Object> serverConfig;
@@ -189,13 +191,14 @@ public class ServerContext implements AutoCloseable {
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
+            logMetricsSize();
         }
 
-        IOLatencyDetector.setupIOLatencyDetector (30, 2);
+        IOLatencyDetector.setupIOLatencyDetector (OP_LATENCY_SPIKE, OP_THRESH_LATENCY);
     }
 
     void logMetricsSize() {
-        log.debug("corfu server metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ());
+        log.info("corfu server metrics size " + MetricsUtils.sizeOf.deepSizeOf(ServerContext.getMetrics ()));
     }
 
     int getBaseServerThreadCount() {
@@ -685,6 +688,7 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
+        logMetricsSize();
         CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
