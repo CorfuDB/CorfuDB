@@ -1,13 +1,10 @@
-package org.corfudb.benchmarks;
+package org.corfudb.benchmark;
 
-import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
 import com.codahale.metrics.MetricRegistry;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.util.MetricsUtils;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
 import io.prometheus.client.exporter.MetricsServlet;
@@ -23,26 +20,6 @@ import java.util.concurrent.*;
  */
 @Slf4j
 public class BenchmarkTest {
-    private static class Args {
-        @Parameter(names = {"-h", "--help"}, description = "Help message", help = true)
-        boolean help;
-
-        @Parameter(names = {"--endpoint"}, description = "Cluster endpoint", required = true)
-        String endpoint; //ip:portnum
-
-        @Parameter(names = {"--num-clients"}, description = "Number of clients", required = true)
-        int numClients;
-
-        @Parameter(names = {"--num-threads"}, description = "Total number of threads", required = true)
-        int numThreads;
-
-        @Parameter(names = {"--num-requests"}, description = "Number of requests per thread", required = true)
-        int numRequests;
-
-        @Parameter(names = {"--ratio"}, description = "Ratio of put operations among all requests", required = true)
-        double ratio;
-    }
-
     /**
      * Number of clients
      */
@@ -60,7 +37,6 @@ public class BenchmarkTest {
      */
     protected String endpoint = null;
 
-    protected double ratio = 1.0;
     protected CorfuRuntime[] rts = null;
     final BlockingQueue<Operation> operationQueue;
     final ExecutorService taskProducer;
@@ -70,8 +46,8 @@ public class BenchmarkTest {
     static final int APPLICATION_TIMEOUT_IN_MS = 10000000;
     static final int QUEUE_CAPACITY = 1000;
 
-    BenchmarkTest(String[] args) {
-        setArgs(args);
+    BenchmarkTest(ParseArgs parseArgs) {
+        setArgs(parseArgs);
         rts = new CorfuRuntime[numRuntimes];
 
         for (int x = 0; x < rts.length; x++) {
@@ -109,22 +85,11 @@ public class BenchmarkTest {
         log.info("Metrics exporting via Prometheus has been enabled at port {}.", metricsPort);
     }
 
-    private void setArgs(String[] args) {
-        Args cmdArgs = new Args();
-        JCommander jc = JCommander.newBuilder()
-                .addObject(cmdArgs)
-                .build();
-        jc.parse(args);
-
-        if (cmdArgs.help) {
-            jc.usage();
-            System.exit(0);
-        }
-        numRuntimes = cmdArgs.numClients;
-        numThreads = cmdArgs.numThreads;
-        numRequests = cmdArgs.numRequests;
-        endpoint = cmdArgs.endpoint;
-        ratio = cmdArgs.ratio;
+    private void setArgs(ParseArgs parseArgs) {
+        numRuntimes = parseArgs.getNumRuntimes();
+        numThreads = parseArgs.getNumThreads();
+        numRequests = parseArgs.getNumRequests();
+        endpoint = parseArgs.getEndpoint();
     }
 
     void runTaskProducer(Operation operation) {
@@ -147,7 +112,7 @@ public class BenchmarkTest {
                     Operation op = operationQueue.take();
                     op.execute();
                     long latency = System.nanoTime() - start;
-                    log.info("nextToken request latency: " + latency);
+                    System.out.println("nextToken request latency: " + latency);
                 } catch (Exception e) {
                     log.error("Operation failed with", e);
                 }

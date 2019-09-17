@@ -1,39 +1,69 @@
-package org.corfudb.benchmarks;
+package org.corfudb.benchmark;
 
+import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
+import com.codahale.metrics.MetricRegistry;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
 
 import java.util.*;
 
 @Slf4j
 public class SequencerOperations extends Operation {
-    SequencerOperations(String name, CorfuRuntime rt, long numRequest) {
+    private Timer queryTimer;
+    private Timer rawTimer;
+    private Timer multiStreamTimer;
+    private Timer txTimer;
+    private Timer getStreamSpaceTimer;
+    SequencerOperations(String name, CorfuRuntime rt, int numRequest) {
         super(rt);
-        System.out.println("sequencer operation: " + name);
         shortName = name;
         this.numRequest = numRequest;
+        setTimer();
+    }
+
+    private void setTimer() {
+        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+        queryTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "benchmark-query-token");
+        rawTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "benchmark-raw-token");
+        multiStreamTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "benchmark-multistream-token");
+        txTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "benchmark-tx-token");
+        getStreamSpaceTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "benchmark-getstreamspace-token");
+
     }
 
     private void tokenQuery() {
         for (int i = 0; i < numRequest; i++) {
-            rt.getSequencerView().query();
+            try(Timer.Context context = MetricsUtils.getConditionalContext(queryTimer)) {
+                rt.getSequencerView().query();
+            }
         }
     }
 
     private void tokenRaw() {
         for (int i = 0; i < numRequest; i++) {
-            rt.getSequencerView().next();
+            try(Timer.Context context = MetricsUtils.getConditionalContext(rawTimer)) {
+                rt.getSequencerView().next();
+            }
         }
     }
 
     private void tokenMultiStream() {
         for (int i = 0; i < numRequest; i++) {
             UUID stream = UUID.nameUUIDFromBytes("Stream".getBytes());
-            rt.getSequencerView().next(stream);
+            try(Timer.Context context = MetricsUtils.getConditionalContext(multiStreamTimer)) {
+                rt.getSequencerView().next(stream);
+            }
         }
     }
 
@@ -57,7 +87,9 @@ public class SequencerOperations extends Operation {
                     new Token(0, -1),
                     conflictMap,
                     writeConflictParams);
-            rt.getSequencerView().next(conflictInfo, stream);
+            try(Timer.Context context = MetricsUtils.getConditionalContext(txTimer)) {
+                rt.getSequencerView().next(conflictInfo, stream);
+            }
         }
     }
 
@@ -65,14 +97,15 @@ public class SequencerOperations extends Operation {
         for (int i = 0; i < numRequest; i++) {
             UUID stream = UUID.nameUUIDFromBytes("Stream".getBytes());
             final int tokenCount = 3;
-            rt.getSequencerView().getStreamAddressSpace(new StreamAddressRange(stream, tokenCount, Address.NON_ADDRESS));
+            try(Timer.Context context = MetricsUtils.getConditionalContext(getStreamSpaceTimer)) {
+                rt.getSequencerView().getStreamAddressSpace(new StreamAddressRange(stream, tokenCount, Address.NON_ADDRESS));
+            }
         }
     }
 
     @Override
     public void execute() {
         if (shortName.equals("query")) {
-            System.out.println("query");
             tokenQuery();
         } else if (shortName.equals("raw")) {
             tokenRaw();

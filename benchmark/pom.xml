@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>benchmarks</artifactId>
+    <artifactId>benchmark</artifactId>
 
 
     <dependencies>
@@ -63,7 +63,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>org.corfudb.benchmarks.SequencerFlood</mainClass>
+                            <mainClass>org.corfudb.benchmark.SequencerFlood</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

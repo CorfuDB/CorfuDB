@@ -1,4 +1,4 @@
-package org.corfudb.benchmarks;
+package org.corfudb.benchmark;
 
 import org.corfudb.runtime.CorfuRuntime;
 

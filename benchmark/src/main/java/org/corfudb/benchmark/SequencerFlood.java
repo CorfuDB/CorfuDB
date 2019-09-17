@@ -1,12 +1,12 @@
-package org.corfudb.benchmarks;
+package org.corfudb.benchmark;
 
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
 import lombok.extern.slf4j.Slf4j;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.Sleep;
-
 
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -15,18 +15,48 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 
 
+/**
+ * Created by Maithem on 8/1/19.
+ */
 @Slf4j
-public class TransactionRecorder {
+public class SequencerFlood {
+    static class Args {
+        @Parameter(names = {"-h", "--help"}, description = "Help message", help = true)
+        boolean help;
+
+        @Parameter(names = {"--endpoint"}, description = "Cluster endpoint", required = true)
+        String endpoint; //ip:portnum
+
+        @Parameter(names = {"--num-clients"}, description = "Number of clients", required = true)
+        int numClients;
+
+        @Parameter(names = {"--num-threads"}, description = "Total number of threads", required = true)
+        int numThreads;
+
+        @Parameter(names = {"--num-requests"}, description = "Number of requests per thread", required = true)
+        int numRequests;
+    }
+
     public static void main(String[] args) throws Exception {
-        int numRuntimes = 1;
-        int numThreads = 2;
-        int numRequests = 100000;
-        String endpoint = "localhost:9000";
+
+        Args cmdArgs = new Args();
+        JCommander jc = JCommander.newBuilder()
+                .addObject(cmdArgs)
+                .build();
+        jc.parse(args);
+
+        if (cmdArgs.help) {
+            jc.usage();
+            System.exit(0);
+        }
+
+        int numRuntimes = cmdArgs.numClients;
+        int numThreads = cmdArgs.numThreads;
+        int numRequests = cmdArgs.numRequests;
         CorfuRuntime[] rts = new CorfuRuntime[numRuntimes];
 
-        // one runtime
         for (int x = 0; x < rts.length; x++) {
-            rts[x] = new CorfuRuntime(endpoint).connect();
+            rts[x] = new CorfuRuntime(cmdArgs.endpoint).connect();
         }
         log.info("Connected {} runtimes...", numRuntimes);
 
@@ -36,21 +66,13 @@ public class TransactionRecorder {
         SimpleTrace[] traces = new SimpleTrace[numThreads];
 
         for (int tNum = 0; tNum < numThreads; tNum++) {
-            CorfuRuntime rt = rts[tNum % numRuntimes];
+            CorfuRuntime rt = rts[tNum % rts.length];
             int id = tNum;
             service.submit(() -> {
-                CorfuTable map = rt.getObjectsView()
-                        .build()
-                        .setStreamName(String.valueOf(id))
-                        .setType(CorfuTable.class)
-                        .open();
-
-                traces[id] = new SimpleTrace("Recorder");
-                for (int i = 1; i <= numRequests; i++) {
+                traces[id] = new SimpleTrace ("Recorder");
+                for (int reqId = 0; reqId < numRequests; reqId++) {
                     long start = System.nanoTime();
-                    rt.getObjectsView().TXBegin();
-                    map.put(i, i);
-                    rt.getObjectsView().TXEnd();
+                    rt.getSequencerView().query();
                     long end = System.nanoTime();
                     traces[id].start();
                     recorder.recordValue(TimeUnit.NANOSECONDS.toMicros(end - start));
@@ -59,7 +81,6 @@ public class TransactionRecorder {
                 }
             });
         }
-
 
         Thread statusReporter = new Thread(() -> {
             long currTs;
@@ -96,14 +117,6 @@ public class TransactionRecorder {
 
         service.shutdown();
         service.awaitTermination(Long.MAX_VALUE, TimeUnit.MINUTES);
-        for (int i = 0; i < numRuntimes; i++) {
-            traces[i].log(true);
-        }
         SimpleTrace.log(traces, "Recorder Overhead");
-
-        for (int x = 0; x < rts.length; x++) {
-            rts[x].shutdown();
-        }
     }
 }
-
