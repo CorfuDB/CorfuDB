@@ -87,7 +87,7 @@ public class BenchmarkTest {
                     Operation op = operationQueue.take();
                     op.execute();
                     long latency = System.nanoTime() - start;
-                    //System.out.println("nextToken request latency: " + latency);
+                    log.info("nextToken request latency: " + latency);
                 } catch (Exception e) {
                     log.error("Operation failed with", e);
                 }
