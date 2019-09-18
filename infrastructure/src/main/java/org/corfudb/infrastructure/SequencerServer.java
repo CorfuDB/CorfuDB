@@ -11,10 +11,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.metrics.MetricsProvider;
-<<<<<<< HEAD
-import org.corfudb.runtime.CorfuRuntime;
-=======
->>>>>>> 6d933fa95f8bf72cf0652f80acbc9c1543c2f455
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;

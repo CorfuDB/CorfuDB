@@ -8,6 +8,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
 import io.prometheus.client.exporter.MetricsServlet;
+import org.corfudb.util.MetricsUtils;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
@@ -58,31 +59,6 @@ public class BenchmarkTest {
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         taskProducer = Executors.newSingleThreadExecutor();
         workers = Executors.newFixedThreadPool(numThreads);
-        //MetricsUtils.metricsReportingSetup(CorfuRuntime.getDefaultMetrics());
-        startPrometheusExporter(CorfuRuntime.getDefaultMetrics(), 1000);
-    }
-
-    private void startPrometheusExporter(@NonNull MetricRegistry registry, int metricsPort) {
-        if (metricsPort == -1) {
-            log.info("Metrics exporting via Prometheus is not enabled.");
-            return;
-        }
-
-        Server server = new Server(metricsPort);
-        ServletContextHandler context = new ServletContextHandler();
-        context.setContextPath("/");
-        server.setHandler(context);
-
-        try {
-            server.start();
-        } catch (Exception e) {
-            log.error("Failed to start the metrics exporter.", e);
-            return;
-        }
-
-        context.addServlet(new ServletHolder(new MetricsServlet()), "/metrics");
-        CollectorRegistry.defaultRegistry.register(new DropwizardExports(registry));
-        log.info("Metrics exporting via Prometheus has been enabled at port {}.", metricsPort);
     }
 
     private void setArgs(ParseArgs parseArgs) {
