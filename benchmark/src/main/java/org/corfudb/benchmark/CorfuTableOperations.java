@@ -9,6 +9,10 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 
+/**
+ * Operations for CorfuTable, contains build, ,put, get, put+get operations.
+ * TODO: add secondary index and cache, see performance difference
+ */
 @Slf4j
 public class CorfuTableOperations extends Operation {
     //private Set<String> keySet;
@@ -56,6 +60,9 @@ public class CorfuTableOperations extends Operation {
 
     }
 
+    /**
+     * Benchmark Tests for build operation.
+     */
     private void corfuTableBuild() {
         for (int i = 0; i < numRequest; i++) {
             try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTableBuildTimer)) {
@@ -71,6 +78,9 @@ public class CorfuTableOperations extends Operation {
         }
     }
 
+    /**
+     * Benchmark Tests for put operation.
+     */
     private void corfuTablePut() {
         for (int i = 0; i < numRequest; i++) {
             String key = String.valueOf(i);
@@ -81,6 +91,9 @@ public class CorfuTableOperations extends Operation {
         }
     }
 
+    /**
+     * Benchmark Tests for get operation.
+     */
     private void corfuTableGet() {
         for (int i = 0; i < numRequest; i++) {
             String key = String.valueOf(i % 10);
@@ -90,6 +103,9 @@ public class CorfuTableOperations extends Operation {
         }
     }
 
+    /**
+     * Benchmark Operation for combination of put and get operations.
+     */
     private void corfuTablePutGet() {
         int numPut = (int) (numRequest * ratio);
         int numGet = numRequest - numPut;

@@ -30,13 +30,13 @@ public class ParseArgs {
     protected String endpoint = null;
 
     /**
-     *
+     * ratio of CorfuTable put operation.
      */
     @Getter
     protected double ratio;
 
     /**
-     *
+     * operation name.
      */
     @Getter
     protected String op = null;

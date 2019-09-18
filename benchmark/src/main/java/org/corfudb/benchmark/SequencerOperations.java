@@ -13,6 +13,10 @@ import org.corfudb.util.MetricsUtils;
 
 import java.util.*;
 
+/**
+ * Operation of Sequencer, contains query, raw token request, multi stream token request,
+ * transaction token request, get stream address space operations.
+ */
 @Slf4j
 public class SequencerOperations extends Operation {
     private Timer queryTimer;

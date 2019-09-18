@@ -2,6 +2,9 @@ package org.corfudb.benchmark;
 
 import org.corfudb.runtime.CorfuRuntime;
 
+/**
+ * BenchmarkTest to CorfuTable.
+ */
 public class CorfuTableBenchmarkTest extends BenchmarkTest {
     double ratio;
     String operationName = null;
