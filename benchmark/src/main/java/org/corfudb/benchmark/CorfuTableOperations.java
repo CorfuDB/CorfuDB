@@ -11,7 +11,7 @@ import org.corfudb.util.MetricsUtils;
 
 /**
  * Operations for CorfuTable, contains build, ,put, get, put+get operations.
- * TODO: add secondary index and cache, see performance difference
+ * TODO: add secondary index and cache, see performance difference, add memory size parameter.
  */
 @Slf4j
 public class CorfuTableOperations extends Operation {
