@@ -67,7 +67,7 @@ public class SequencerView extends AbstractView {
      * @param streamIds the streams to query
      * @return the global tail or a list of tails
      */
-    public TokenResponse query(UUID... streamIds) { // TX_Query
+    public TokenResponse query(UUID... streamIds) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)){
             if (streamIds.length == 0) {
                 return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
@@ -85,7 +85,7 @@ public class SequencerView extends AbstractView {
      * @param streamId the stream to query
      * @return the stream tail
      */
-    public long query(UUID streamId) { //TX_QUERY
+    public long query(UUID streamId) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)) {
                 return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);
@@ -98,7 +98,7 @@ public class SequencerView extends AbstractView {
      * @param streamIds The stream IDs to retrieve from.
      * @return The first token retrieved.
      */
-    public TokenResponse next(UUID ... streamIds) {// TX_MULTI_STREAM
+    public TokenResponse next(UUID ... streamIds) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Arrays.asList(streamIds), 1)));
@@ -138,7 +138,7 @@ public class SequencerView extends AbstractView {
      * @param streamIds streams to acquire the token for
      * @return First token to be written for the streams if there are no conflicts
      */
-    public TokenResponse next(TxResolutionInfo conflictInfo, UUID ... streamIds) {// TK_TX
+    public TokenResponse next(TxResolutionInfo conflictInfo, UUID ... streamIds) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextMultipleStream)) {
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));
