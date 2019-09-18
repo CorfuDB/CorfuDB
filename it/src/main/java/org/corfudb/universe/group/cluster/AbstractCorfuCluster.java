@@ -71,7 +71,7 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams> extends Abs
     public LocalCorfuClient getLocalCorfuClient() {
         return LocalCorfuClient.builder()
                 .serverEndpoints(getClusterLayoutServers())
-                .metricsPort(Optional.empty())
+                .prometheusMetricsPort(Optional.empty())
                 .build()
                 .deploy();
     }
@@ -79,7 +79,7 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams> extends Abs
     @Override
     public LocalCorfuClient getLocalCorfuClient(int metricsPort) {
         return LocalCorfuClient.builder()
-                .metricsPort(Optional.of(metricsPort))
+                .prometheusMetricsPort(Optional.of(metricsPort))
                 .serverEndpoints(getClusterLayoutServers())
                 .build()
                 .deploy();
