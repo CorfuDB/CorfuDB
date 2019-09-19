@@ -39,7 +39,6 @@ public abstract class EhCacheState {
     @Getter
     CorfuTableBenchmarkHelper helper;
 
-    @Setup
     void init(int dataSize, int tableSize) throws IOException {
         log.info("Initialization...");
 
