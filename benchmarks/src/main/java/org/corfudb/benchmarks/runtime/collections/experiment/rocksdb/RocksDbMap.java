@@ -32,7 +32,6 @@ import java.util.Set;
  */
 @Builder
 public class RocksDbMap<K, V> implements Map<K, V> {
-    private static final String TMP_DIR = System.getProperty("java.io.tmpdir");
 
     static {
         RocksDB.loadLibrary();
@@ -48,9 +47,8 @@ public class RocksDbMap<K, V> implements Map<K, V> {
     private final Class<V> valueType;
 
     @NonNull
-    @Default
     @Getter
-    private final Path dbPath = Paths.get(TMP_DIR, "corfu", "rt", "persistence", "rocks_db");
+    private final Path dbPath;
 
     @NonNull
     @Default

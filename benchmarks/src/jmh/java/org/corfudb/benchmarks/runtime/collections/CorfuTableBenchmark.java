@@ -8,12 +8,12 @@ import static org.corfudb.benchmarks.runtime.collections.helper.CorfuTableBenchm
 import static org.corfudb.benchmarks.runtime.collections.helper.CorfuTableBenchmarkHelper.TABLE_SIZE_FIELD;
 
 import org.corfudb.benchmarks.runtime.collections.helper.CorfuTableBenchmarkHelper;
-import org.corfudb.benchmarks.runtime.collections.state.EhCacheStateForGet;
-import org.corfudb.benchmarks.runtime.collections.state.EhCacheStateForPut;
-import org.corfudb.benchmarks.runtime.collections.state.HashMapStateForGet;
-import org.corfudb.benchmarks.runtime.collections.state.HashMapStateForPut;
-import org.corfudb.benchmarks.runtime.collections.state.RocksDbStateForGet;
-import org.corfudb.benchmarks.runtime.collections.state.RocksDbStateForPut;
+import org.corfudb.benchmarks.runtime.collections.state.EhCacheState.EhCacheStateForGet;
+import org.corfudb.benchmarks.runtime.collections.state.EhCacheState.EhCacheStateForPut;
+import org.corfudb.benchmarks.runtime.collections.state.HashMapState.HashMapStateForGet;
+import org.corfudb.benchmarks.runtime.collections.state.HashMapState.HashMapStateForPut;
+import org.corfudb.benchmarks.runtime.collections.state.RocksDbState;
+import org.corfudb.benchmarks.runtime.collections.state.RocksDbState.RocksDbStateForPut;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.infra.Blackhole;
@@ -109,7 +109,7 @@ public class CorfuTableBenchmark {
      * @param blackhole jmh blackhole
      */
     @Benchmark
-    public void rocksDbGet(RocksDbStateForGet state, Blackhole blackhole) {
+    public void rocksDbGet(RocksDbState.RocksDbStateForGet state, Blackhole blackhole) {
         CorfuTableBenchmarkHelper helper = state.getHelper();
         int key = helper.generate();
         String value = helper.getTable().get(key);
