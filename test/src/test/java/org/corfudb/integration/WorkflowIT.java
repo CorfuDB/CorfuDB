@@ -88,8 +88,6 @@ public class WorkflowIT extends AbstractIT {
 
         Token prefix = mcw.appendCheckpoints(runtime, "Maithem");
 
-        runtime.getAddressSpaceView().prefixTrim(prefix);
-
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getAddressSpaceView().invalidateServerCaches();
 

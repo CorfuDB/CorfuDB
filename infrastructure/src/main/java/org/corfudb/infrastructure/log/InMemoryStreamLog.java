@@ -30,7 +30,6 @@ import static org.corfudb.infrastructure.log.StreamLog.getOverwriteCauseForAddre
 public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
-    private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
 
     /**
@@ -38,7 +37,6 @@ public class InMemoryStreamLog implements StreamLog {
      */
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap<>();
-        startingAddress = 0;
         logMetadata = new LogMetadata();
     }
 
@@ -61,11 +59,6 @@ public class InMemoryStreamLog implements StreamLog {
         }
         logCache.put(address, entry);
         logMetadata.update(Collections.singletonList(entry));
-    }
-
-    @Override
-    public synchronized void prefixTrim(long address) {
-        // No-op for now, might be used for data migration.
     }
 
     @Override
@@ -94,11 +87,6 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public synchronized StreamsAddressResponse getStreamsAddressSpace() {
         return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
-    }
-
-    @Override
-    public long getTrimMark() {
-        return startingAddress;
     }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
@@ -165,7 +153,6 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public void reset() {
-        startingAddress = 0;
         logMetadata = new LogMetadata();
         // Clearing all data from the cache.
         logCache.clear();

@@ -53,9 +53,6 @@ public class State {
     @Setter
     volatile long lastSuccessfulWriteOperationTimestamp = -1;
 
-    @Getter
-    volatile Token trimMark = Token.UNINITIALIZED;
-
     public final Random rand;
 
     public State(int numStreams, int numKeys, CorfuRuntime rt) {
@@ -75,12 +72,6 @@ public class State {
         operations.populate();
 
         openObjects();
-    }
-
-    public void updateTrimMark(Token newTrimMark) {
-        if (newTrimMark.compareTo(trimMark) > 0) {
-            trimMark = newTrimMark;
-        }
     }
 
     private void openObjects() {
