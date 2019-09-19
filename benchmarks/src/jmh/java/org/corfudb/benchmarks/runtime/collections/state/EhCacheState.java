@@ -57,8 +57,7 @@ public abstract class EhCacheState {
                 .dataSize(dataSize)
                 .tableSize(tableSize)
                 .build()
-                .check()
-                .fillTable();
+                .check();
     }
 
     private void cleanDbDir() throws IOException {
