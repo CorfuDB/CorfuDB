@@ -242,15 +242,6 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Get the starting address of a log unit.
-     *
-     * @return a CompletableFuture for the starting address
-     */
-    public CompletableFuture<Long> getTrimMark() {
-        return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
-    }
-
-    /**
      * Request for known addresses in the specified range.
      *
      * @param startRange Start of range.
@@ -261,17 +252,6 @@ public class LogUnitClient extends AbstractClient {
                                                                          long endRange) {
         return sendMessageWithFuture(CorfuMsgType.KNOWN_ADDRESS_REQUEST
                 .payloadMsg(new KnownAddressRequest(startRange, endRange)));
-    }
-
-    /**
-     * Send a prefix trim request that will trim the log up to a certain address
-     *
-     * @param address an address to trim up to (i.e. [0, address))
-     * @return an empty completableFuture
-     */
-    public CompletableFuture<Void> prefixTrim(Token address) {
-        return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM
-                .payloadMsg(new TrimRequest(address)));
     }
 
     /**

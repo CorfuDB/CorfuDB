@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -208,11 +209,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             } catch (TrimmedException te) {
                 log.warn("accessInner: Encountered a trim exception while accessing version {} on attempt {}",
                         timestamp, x);
-                // We encountered a TRIM during sync, reset the object
-                underlyingObject.update(o -> {
-                    o.resetUnsafe();
-                    return null;
-                });
             }
         }
 
@@ -315,7 +311,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     o.getUpcallResults().remove(timestamp);
                     return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
                 }
-                
+
                 // The version is already ahead, but we don't have the result.
                 // The only way to get the correct result
                 // of the upcall would be to rollback. For now, we throw an exception
@@ -328,7 +324,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         } catch (TrimmedException ex) {
             log.warn("getUpcallResultInner: Encountered a trim exception while accessing version {}",
                     timestamp);
-            throw ex;
+            throw new TrimmedUpcallException(timestamp);
         }
     }
 

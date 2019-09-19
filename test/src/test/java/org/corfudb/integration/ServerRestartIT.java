@@ -513,9 +513,8 @@ public class ServerRestartIT extends AbstractIT {
     /**
      * loop that randomizes a combination of the following activities:
      * (i) map put()s
-     * (ii) checkpoint/trim
-     * (iii) leaving holes behind
-     * (iv) server shutdown/restart
+     * (ii) leaving holes behind
+     * (iii) server shutdown/restart
      *
      * @throws Exception
      */
@@ -557,25 +556,6 @@ public class ServerRestartIT extends AbstractIT {
                 System.out.println(r + "..no map updates");
             }
 
-            // activity (ii): log checkpoint and trim
-            boolean doCkpoint = rand.nextBoolean();
-
-            if (doCkpoint) {
-                // checkpoint and trim
-                MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-                mcw1.addMap((SMRMap) mapA);
-                mcw1.addMap((SMRMap) mapB);
-                Token checkpointAddress = mcw1.appendCheckpoints(runtime, "dahlia");
-
-                // Trim the log
-                runtime.getAddressSpaceView().prefixTrim(checkpointAddress);
-                runtime.getAddressSpaceView().invalidateServerCaches();
-                runtime.getAddressSpaceView().invalidateClientCache();
-
-                System.out.println(r + "..ckpoint and trimmed @" + checkpointAddress);
-            } else {
-                System.out.println(r + "..no checkpoint/trim");
-            }
 
             SequencerClient sequencerClient = runtime
                     .getLayoutView().getRuntimeLayout()
@@ -594,7 +574,7 @@ public class ServerRestartIT extends AbstractIT {
                     .get();
 
 
-            // activity (iii) shutdown and restart
+            // activity (ii) shutdown and restart
             runtime.shutdown();
             assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
@@ -624,7 +604,7 @@ public class ServerRestartIT extends AbstractIT {
             assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
                     .isEqualTo(expectedTokenResponseB.getSequence());
 
-            // activity (iv): leave holes behind
+            // activity (iii): leave holes behind
             // this is done by having another shutdown/restart, so the token above becomes stale
 
             boolean restartwithHoles = true; // rand.nextBoolean();

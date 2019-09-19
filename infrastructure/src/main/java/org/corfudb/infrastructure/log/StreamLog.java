@@ -64,13 +64,6 @@ public interface StreamLog {
     long getGlobalCompactionMark();
 
     /**
-     * Prefix trim the global log.
-     *
-     * @param address address to trim the log up to
-     */
-    void prefixTrim(long address);
-
-    /**
      * Start running log compactor.
      */
     void startCompactor();
@@ -94,11 +87,6 @@ public interface StreamLog {
      * Get the address space for every stream.
      */
     StreamsAddressResponse getStreamsAddressSpace();
-
-    /**
-     * Get the first untrimmed address in the address space.
-     */
-    long getTrimMark();
 
     /**
      * Returns the known addresses in this Log Unit in the specified consecutive

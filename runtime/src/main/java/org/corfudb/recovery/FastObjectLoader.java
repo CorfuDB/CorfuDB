@@ -19,6 +19,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ISMRStream;
@@ -528,7 +529,7 @@ public class FastObjectLoader {
 
                 invokeNecromancer(range, logDataProcessor);
 
-            } catch (Exception ex) {
+            } catch (TrimmedException ex) {
                 log.warn("Error loading data", ex);
                 handleRetry();
             }

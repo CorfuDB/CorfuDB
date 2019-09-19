@@ -219,9 +219,9 @@ public class SequencerServerTest extends AbstractServerTest {
         // This one should not be updated
         long newTailC = tailC - 1;
 
-        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailA)));
-        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailB)));
-        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailC)));
+        tailMap.put(streamA, new StreamAddressSpace(Roaring64NavigableMap.bitmapOf(newTailA)));
+        tailMap.put(streamB, new StreamAddressSpace(Roaring64NavigableMap.bitmapOf(newTailB)));
+        tailMap.put(streamC, new StreamAddressSpace(Roaring64NavigableMap.bitmapOf(newTailC)));
 
         // Modifying the sequencerEpoch to simulate sequencer reset.
         server.setSequencerEpoch(-1L);
@@ -277,7 +277,7 @@ public class SequencerServerTest extends AbstractServerTest {
                 Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.NACK);
         sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
-                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(num))), newEpoch, false)));
+                num, Collections.singletonMap(streamA, new StreamAddressSpace(Roaring64NavigableMap.bitmapOf(num))), newEpoch, false)));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
         sendMessage(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())));
