@@ -16,7 +16,7 @@ public class SequencerBenchmarkTest extends BenchmarkTest {
 
     private void runProducer() {
         for (int i = 0; i < numThreads; i++) {
-            CorfuRuntime rt = rts[i % rts.length];
+            CorfuRuntime rt = runtimes.getRuntime(i);
             SequencerOperations sequencerOperations = new SequencerOperations(operationName, rt, numRequests);
             runProducer(sequencerOperations);
         }

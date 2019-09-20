@@ -3,31 +3,35 @@ package org.corfudb.benchmark;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import lombok.Getter;
+import lombok.NonNull;
 
 public class ParseArgs {
     /**
      * Number of runtimes
      */
     @Getter
-    protected int numRuntimes = -1;
+    protected int numRuntimes;
 
     /**
      *
      */
     @Getter
-    protected int numThreads = -1;
+    protected int numThreads;
 
     /**
      * Number of requests per thread.
      */
     @Getter
-    protected int numRequests = -1;
+    protected int numRequests;
 
+    @Getter
+    protected int numStreams;
     /**
      * Server endpoint.
      */
     @Getter
-    protected String endpoint = null;
+    @NonNull
+    protected String endpoint;
 
     /**
      * ratio of CorfuTable put operation.
@@ -39,7 +43,8 @@ public class ParseArgs {
      * operation name.
      */
     @Getter
-    protected String op = null;
+    @NonNull
+    protected String op;
 
     ParseArgs(String[] args) {
         Args cmdArgs = new Args();
@@ -55,6 +60,7 @@ public class ParseArgs {
         numRequests = cmdArgs.numRequests;
         numRuntimes = cmdArgs.numClients;
         numThreads = cmdArgs.numThreads;
+        numStreams = cmdArgs.numStreams;
         endpoint = cmdArgs.endpoint;
         ratio = cmdArgs.ratio;
         op = cmdArgs.op;
@@ -75,8 +81,13 @@ public class ParseArgs {
 
         @Parameter(names = {"--num-requests"}, description = "Number of requests per thread", required = true)
         int numRequests;
+
+        @Parameter(names = {"--num-streams"}, description = "Number of streams", required = true)
+        int numStreams;
+
         @Parameter(names = {"--ratio"}, description = "num of put operations / num of requests", required = false)
         double ratio;
+
         @Parameter(names = {"--op"}, description = "operation you want to test", required = true)
         String op;
     }

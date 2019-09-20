@@ -1,13 +1,18 @@
 package org.corfudb.benchmark;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
+
+import java.util.UUID;
 
 /**
  * BenchmarkTest to CorfuTable.
  */
+@Slf4j
 public class CorfuTableBenchmarkTest extends BenchmarkTest {
     double ratio;
-    String operationName = null;
+    String operationName;
 
     CorfuTableBenchmarkTest(ParseArgs parseArgs) {
         super(parseArgs);
@@ -17,8 +22,11 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
 
     private void runProducer() {
         for (int i = 0; i < numThreads; i++) {
-            CorfuRuntime rt = rts[i % rts.length];
-            CorfuTableOperations corfuTableOperations = new CorfuTableOperations(operationName, rt, numRequests, ratio,false, false);
+            CorfuRuntime runtime = runtimes.getRuntime(i);
+            UUID uuid = streams.getStreamID(i);
+
+            CorfuTable<String, String> table = corfuTables.getTable(uuid);
+            CorfuTableOperations corfuTableOperations = new CorfuTableOperations(operationName, runtime, table, numRequests, ratio);
             runProducer(corfuTableOperations);
         }
     }

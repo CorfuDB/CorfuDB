@@ -4,6 +4,7 @@ import com.codahale.metrics.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -49,7 +50,7 @@ public class SequencerOperations extends Operation {
     private void tokenQuery() {
         for (int i = 0; i < numRequest; i++) {
             try(Timer.Context context = MetricsUtils.getConditionalContext(queryTimer)) {
-                rt.getSequencerView().query();
+                TokenResponse tokenResponse = rt.getSequencerView().query();
             }
         }
     }

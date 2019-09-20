@@ -1,8 +1,13 @@
 package org.corfudb.benchmark;
 
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+
+import java.util.HashMap;
+import java.util.UUID;
 import java.util.concurrent.*;
 
 /**
@@ -15,37 +20,41 @@ public class BenchmarkTest {
     /**
      * Number of clients
      */
-    protected int numRuntimes = -1;
+    protected int numRuntimes;
     /**
      * Number of threads per client.
      */
-    protected int numThreads = -1;
+    protected int numThreads;
     /**
      * Number of requests per thread.
      */
-    protected int numRequests = -1;
+    protected int numRequests;
     /**
      * Server endpoint.
      */
-    protected String endpoint = null;
+    protected int numStreams;
 
-    protected CorfuRuntime[] rts = null;
-    final BlockingQueue<Operation> operationQueue;
-    final ExecutorService taskProducer;
-    final ExecutorService workers;
+    private String endpoint;
 
-    private final long durationMs = 1000;
+    protected Runtimes runtimes;
+
+    protected Streams streams;
+
+    protected CorfuTables corfuTables;
+    private final BlockingQueue<Operation> operationQueue;
+    private final ExecutorService taskProducer;
+    private final ExecutorService workers;
+
+    private final long DURATION_IN_MS = 1000;
     static final int APPLICATION_TIMEOUT_IN_MS = 10000000;
     static final int QUEUE_CAPACITY = 1000;
 
     BenchmarkTest(ParseArgs parseArgs) {
         setArgs(parseArgs);
-        rts = new CorfuRuntime[numRuntimes];
-
-        for (int x = 0; x < rts.length; x++) {
-            rts[x] = new CorfuRuntime(endpoint).connect();
-        }
+        runtimes = new Runtimes(numRuntimes, endpoint);
         log.info("Connected {} runtimes...", numRuntimes);
+        streams = new Streams(numStreams);
+        corfuTables = new CorfuTables(numStreams, openObjects());
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         taskProducer = Executors.newSingleThreadExecutor();
@@ -57,6 +66,23 @@ public class BenchmarkTest {
         numThreads = parseArgs.getNumThreads();
         numRequests = parseArgs.getNumRequests();
         endpoint = parseArgs.getEndpoint();
+        numStreams = parseArgs.getNumStreams();
+    }
+
+    private HashMap<UUID, CorfuTable> openObjects() {
+        HashMap<UUID, CorfuTable> tempMaps = new HashMap<>();
+        for (int i = 0; i < numStreams; i++) {
+            CorfuRuntime runtime = runtimes.getRuntime(i);
+            UUID uuid = streams.getStreamID(i);
+            CorfuTable<String, String> map = runtime.getObjectsView()
+                    .build()
+                    .setStreamID(uuid)
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .open();
+
+            tempMaps.put(uuid, map);
+        }
+        return tempMaps;
     }
 
     /**
@@ -102,17 +128,18 @@ public class BenchmarkTest {
         workers.shutdown();
         try {
             boolean finishedInTime = workers.
-                    awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+                    awaitTermination(DURATION_IN_MS + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
 
             if (!finishedInTime) {
                 log.error("not finished in time.");
-                System.exit(1);
+                System.exit(0);
             }
         } catch (InterruptedException e) {
             log.error(String.valueOf(e));
             throw new UnrecoverableCorfuInterruptedError(e);
+
         } finally {
-            System.exit(0);
+            System.exit(1);
         }
     }
 }

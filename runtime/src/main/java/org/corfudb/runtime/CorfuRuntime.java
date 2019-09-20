@@ -683,6 +683,7 @@ public class CorfuRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         // Try to expose metrics via Dropwizard CsvReporter JmxReporter and Slf4jReporter.
+        System.out.println("set up metrics reporting");
         MetricsUtils.metricsReportingSetup(defaultMetrics);
         if (parameters.getPrometheusMetricsPort() != MetricsUtils.NO_METRICS_PORT) {
             // Try to expose metrics via Prometheus.

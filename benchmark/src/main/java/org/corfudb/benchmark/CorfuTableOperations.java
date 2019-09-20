@@ -1,5 +1,6 @@
 package org.corfudb.benchmark;
 
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.reflect.TypeToken;
@@ -15,49 +16,38 @@ import org.corfudb.util.MetricsUtils;
  */
 @Slf4j
 public class CorfuTableOperations extends Operation {
-    //private Set<String> keySet;
-    private boolean hasSecordaryIndex;
-    private boolean cacheEnabled;
     private double ratio;
     CorfuTable<String, String> corfuTable;
     private Timer corfuTableBuildTimer;
     private Timer corfuTableGetTimer;
     private Timer corfuTablePutTimer;
-    public static final double THRESHOULD = 50000.38;// different threshould for different operations
+    //private Gauge<Long> corfuTableSizeGauge;
+    public static final double THRESHOULD = 50000.38;
 
-    CorfuTableOperations(String name, CorfuRuntime rt, int numRequest, double ratio, boolean hasSecordaryIndex, boolean cacheEnabled) {
-        super(rt);
+    CorfuTableOperations(String name, CorfuRuntime runtime, CorfuTable corfuTable, int numRequest, double ratio) {
+        super(runtime);
         shortName = name;
+        this.corfuTable = corfuTable;
         this.numRequest = numRequest;
-        this.hasSecordaryIndex = hasSecordaryIndex;
-        this.cacheEnabled = cacheEnabled;
         this.ratio = ratio;
         fillTable();
-        setTimer();
-    }
-
-    private void buildCorfuTable() {
-        corfuTable = rt.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("benchmark-corfutable")
-                .open();
+        setMetrics();
     }
 
     private void fillTable() {
-        buildCorfuTable();
         for (int i = 0; i < 10; i ++) {
             corfuTable.put(String.valueOf(i), String.valueOf(i));
         }
     }
 
-    void setTimer() {
+    void setMetrics() {
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         corfuTableBuildTimer = metricRegistry.timer(CorfuComponent.OBJECT +
                 "corfutable-build");
         corfuTableGetTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-get");
         //corfuTableBuildCachedTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-build-cached");
         corfuTablePutTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-put");
-
+        //corfuTableSizeGauge = MetricsUtils.addMemoryMeasurerFor(metricRegistry, corfuTable);
     }
 
     /**
@@ -123,15 +113,6 @@ public class CorfuTableOperations extends Operation {
             }
         }
     }
-
-//    private void corfuTableRemove() {
-//        for (int i = 0; i < numRemove; i++) {
-//            String key = String.valueOf(i);
-//            try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTablePutTimer)) {
-//                corfuTable.remove(key);
-//            }
-//        }
-//    }
 
     @Override
     public void execute() {
