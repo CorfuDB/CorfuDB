@@ -5,16 +5,21 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
 
 /**
  * A sequencer client.
@@ -24,9 +29,18 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
  * <p>Created by mwei on 12/10/15.
  */
 public class SequencerClient extends AbstractClient {
-
+    private Timer nextTokenTimer;
+    private Timer nextTokenTxTimer;
+    private Timer getStreamSpaceTimer;
+    private Timer bootstrapTimer;
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     public SequencerClient(IClientRouter router, long epoch) {
         super(router, epoch);
+        nextTokenTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "next-token");
+        nextTokenTxTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "next-tx-token");
+        getStreamSpaceTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "get-stream-space");
+        bootstrapTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "bootstrap");
     }
 
     /**
@@ -44,8 +58,10 @@ public class SequencerClient extends AbstractClient {
      * @return A completable future with the token response from the sequencer.
      */
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens) {
-        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                new TokenRequest(numTokens, streamIDs)));
+        try (Timer.Context context = MetricsUtils.getConditionalContext(nextTokenTimer)) {
+            return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
+                    new TokenRequest(numTokens, streamIDs)));
+        }
     }
 
     /**
@@ -55,8 +71,10 @@ public class SequencerClient extends AbstractClient {
      * @return streams address maps in the given range.
      */
     public CompletableFuture<StreamsAddressResponse> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
-        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(
-                new StreamsAddressRequest(streamsAddressesRange)));
+        try (Timer.Context context = MetricsUtils.getConditionalContext(getStreamSpaceTimer)) {
+            return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REQUEST.payloadMsg(
+                    new StreamsAddressRequest(streamsAddressesRange)));
+        }
     }
 
     /**
@@ -69,8 +87,10 @@ public class SequencerClient extends AbstractClient {
      */
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
-        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                new TokenRequest(numTokens, streamIDs, conflictInfo)));
+        try (Timer.Context context = MetricsUtils.getConditionalContext(nextTokenTxTimer)) {
+            return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
+                    new TokenRequest(numTokens, streamIDs, conflictInfo)));
+        }
     }
 
     public CompletableFuture<Void> trimCache(Long address) {
@@ -91,9 +111,11 @@ public class SequencerClient extends AbstractClient {
     public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
-        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
-                        bootstrapWithoutTailsUpdate)));
+        try (Timer.Context context = MetricsUtils.getConditionalContext(bootstrapTimer)) {
+            return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
+                    new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
+                            bootstrapWithoutTailsUpdate)));
+        }
     }
 
     /**
