@@ -5,7 +5,6 @@
 *.pydevproject
 .project
 .metadata
-./bin/corfu_server
 tmp/
 *.tmp
 *.bak

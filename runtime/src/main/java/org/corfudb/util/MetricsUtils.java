@@ -235,13 +235,11 @@ public class MetricsUtils {
             return;
         }
 
-        System.out.println("set CsvReporter");
         CsvReporter csvReporter = CsvReporter.forRegistry(metrics)
                 .convertDurationsTo(TimeUnit.MICROSECONDS)
                 .convertRatesTo(TimeUnit.SECONDS)
                 .filter(ADDRESS_SPACE_FILTER)
                 .build(directory);
-        System.out.println("csvReporter start");
         csvReporter.start(metricsCsvInterval, TimeUnit.SECONDS);
     }
 
