@@ -70,11 +70,11 @@ public class CorfuServerNode implements AutoCloseable {
      *
      * @param metricRegistry Centralized Dropwizard Metric Registry.
      */
-    public CorfuServerNode(@Nonnull ServerContext serverContext, MetricRegistry metricRegistry) {
+    public CorfuServerNode(@Nonnull ServerContext serverContext) {
         this(serverContext,
                 ImmutableMap.<Class, AbstractServer>builder()
                         .put(BaseServer.class, new BaseServer(serverContext))
-                        .put(SequencerServer.class, new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-server", metricRegistry)))
+                        .put(SequencerServer.class, new SequencerServer(serverContext))
                         .put(LayoutServer.class, new LayoutServer(serverContext))
                         .put(LogUnitServer.class, new LogUnitServer(serverContext))
                         .put(ManagementServer.class, new ManagementServer(serverContext))

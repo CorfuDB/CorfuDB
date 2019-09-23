@@ -53,7 +53,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 // Required for management server to fetch the latest layout and connect runtime.
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
-                .add(new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-runtime", metricRegistry)))
+                .add(new SequencerServer(serverContext))
                 .add(new LogUnitServer(serverContext))
                 .add(new BaseServer(serverContext))
                 .build();

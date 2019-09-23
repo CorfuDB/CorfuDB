@@ -238,9 +238,8 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
-                MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-                setupMetrics(opts, metricRegistry);
-                activeServer = new CorfuServerNode(serverContext, metricRegistry);
+                setupMetrics(opts);
+                activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
@@ -396,9 +395,9 @@ public class CorfuServer {
      *
      * @param opts Command line parameters.
      */
-    private static void setupMetrics(Map<String, Object> opts, MetricRegistry metricRegistry) {
+    private static void setupMetrics(Map<String, Object> opts) {
         PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
-        MetricsServer server = new PrometheusMetricsServer(config, metricRegistry);
+        MetricsServer server = new PrometheusMetricsServer(config, ServerContext.getMetrics());
         server.start();
     }
 }

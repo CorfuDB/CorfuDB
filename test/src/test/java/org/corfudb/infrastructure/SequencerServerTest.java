@@ -39,8 +39,7 @@ public class SequencerServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         serverContext = ServerContextBuilder.defaultTestContext(SERVERS.PORT_0);
-        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-        server = new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-server", metricRegistry));
+        server = new SequencerServer(serverContext);
         return server;
     }
 

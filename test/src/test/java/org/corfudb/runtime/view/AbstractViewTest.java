@@ -526,8 +526,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 serverRouter = new TestServerRouter();
             }
             this.baseServer = new BaseServer(serverContext);
-            MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-            this.sequencerServer = new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-runtime", metricRegistry));
+            this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
             this.managementServer = new ManagementServer(serverContext);

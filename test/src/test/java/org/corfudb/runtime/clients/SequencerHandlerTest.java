@@ -30,7 +30,7 @@ public class SequencerHandlerTest extends AbstractClientTest {
     Set<AbstractServer> getServersForTest() {
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new SequencerServer(defaultServerContext(), new DropwizardMetricsProvider("corfu-runtime", metricRegistry)))
+                .add(new SequencerServer(defaultServerContext()))
                 .build();
     }
 
