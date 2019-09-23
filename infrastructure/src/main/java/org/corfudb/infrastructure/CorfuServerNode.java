@@ -65,8 +65,6 @@ public class CorfuServerNode implements AutoCloseable {
      * Corfu Server initialization.
      *
      * @param serverContext Initialized Server Context.
-     *
-     * @param metricRegistry Centralized Dropwizard Metric Registry.
      */
     public CorfuServerNode(@Nonnull ServerContext serverContext) {
         this(serverContext,
