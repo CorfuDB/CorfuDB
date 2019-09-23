@@ -24,8 +24,10 @@ public class IOLatencyDetector {
     static final String WRITE_METRICS = "FileWriteMetrics";
     static final String SYNC_METRICS = "FileSyncMetrics";
     static boolean spikeDetected = false;
-    static int thresh;
-    static int maxLatency; //in seconds
+    static int spikeLatency; //in seconds
+    static int spikeDuration; //in seconds
+    static int cnt; //count the number of long latency period
+    static long timestart;
 
     @Getter
     static Timer writeMetrics;
@@ -34,10 +36,10 @@ public class IOLatencyDetector {
     @Getter
     static Timer syncMetrics;
 
-    static public void setupIOLatencyDetector(int threshVal, int maxLatencyVal) {
+    static public void setupIOLatencyDetector(int duration, int maxLatencyVal) {
         spikeDetected = false;
-        thresh = threshVal;
-        maxLatency = maxLatencyVal;
+        spikeDuration = duration;
+        spikeLatency = maxLatencyVal;
         readMetrics = ServerContext.getMetrics ().timer (READ_METRICS);
         writeMetrics = ServerContext.getMetrics ().timer (WRITE_METRICS);
         syncMetrics = ServerContext.getMetrics ().timer (SYNC_METRICS);
@@ -50,18 +52,27 @@ public class IOLatencyDetector {
         metricsHis (syncMetrics, SYNC_METRICS);
     }
 
-    public static void update(Timer timer, String name, long start, int numUnit) {
+    synchronized public static void update(Timer timer, String name, long start, int numUnit) {
         long dur = (System.nanoTime () - start) / numUnit;
+        long durSec = TimeUnit.SECONDS.convert (dur, TimeUnit.NANOSECONDS);
 
-        if ((dur > (timer.getSnapshot ().getMean () * thresh)) && TimeUnit.SECONDS.convert(dur, TimeUnit.NANOSECONDS) > maxLatency) {
+        if ( !spikeDetected  && durSec > spikeLatency) {
             spikeDetected = true;
+            cnt = 1;
+            timestart = System.currentTimeMillis ();
             metricsHis(timer, name);
-            log.warn (name + " spike Detected");
-        } else if (spikeDetected && dur < timer.getSnapshot ().getMean ()) {
+            log.warn (name + " spike Detected " + durSec + " seconds");
+        } else if (spikeDetected && dur < spikeLatency /2 ) {
             spikeDetected = false;
+            cnt = 0;
+            timestart = System.currentTimeMillis ();
             metricsHis(timer, name);
-            log.warn (name + " spike cleared");
+            log.warn (name + " spike cleared delay " + durSec + " seconds");
+        } else if (spikeDetected) {
+            cnt++;
+            log.warn (name + " spike cont delay " + durSec + " seconds" + " cnt " + cnt);
         }
+
         timer.update(dur, TimeUnit.NANOSECONDS);
     }
 
@@ -104,7 +115,10 @@ public class IOLatencyDetector {
 
 
     static public  boolean reportSpike() {
-        return spikeDetected;
+        if (spikeDetected && System.currentTimeMillis () - timestart >=  spikeDuration)
+            return spikeDetected;
+        else
+            return false;
     }
 
     static public void metricsHis(Timer timer, String name) {
@@ -115,7 +129,5 @@ public class IOLatencyDetector {
                 timer.getSnapshot ().get75thPercentile ()/1000000,
                 timer.getSnapshot ().get95thPercentile ()/1000000,
                 timer.getSnapshot ().get99thPercentile ()/1000000);
-        System.out.println ("Timer " + timer.toString () + " Count " + timer.getCount () + " Latency mean " +timer.getSnapshot ().getMean ()/1000000 +" ms" +
-                " 75%: " + timer.getSnapshot ().get75thPercentile ()/1000000 + " ms " + "  99%: " + timer.getSnapshot ().get99thPercentile ()/1000000 +" ms");
     }
 }

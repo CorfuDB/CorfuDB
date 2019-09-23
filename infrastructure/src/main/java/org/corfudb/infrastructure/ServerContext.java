@@ -119,8 +119,8 @@ public class ServerContext implements AutoCloseable {
      */
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
-    private static final int OP_THRESH_LATENCY = 2;
-    private static final int OP_LATENCY_SPIKE = 100;
+    private static final int OP_SPIKE_LATENCY = 1; //Consider 1 second as the spike for r/w/sync disk operation
+    private static final int OP_SPIKE_DURATION = 30; //If continuously the spike happens for 30 seconds, report a disk problem.
 
     @Getter
     private final Map<String, Object> serverConfig;
@@ -194,7 +194,7 @@ public class ServerContext implements AutoCloseable {
             logMetricsSize();
         }
 
-        IOLatencyDetector.setupIOLatencyDetector (OP_LATENCY_SPIKE, OP_THRESH_LATENCY);
+        IOLatencyDetector.setupIOLatencyDetector (OP_SPIKE_LATENCY, OP_SPIKE_DURATION);
         logMetricsSize ();
     }
 
