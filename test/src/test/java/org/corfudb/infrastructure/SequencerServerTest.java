@@ -7,12 +7,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import com.codahale.metrics.MetricRegistry;
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;

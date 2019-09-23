@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.MetricRegistry;
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;

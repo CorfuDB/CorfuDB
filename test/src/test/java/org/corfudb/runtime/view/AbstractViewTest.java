@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.channel.DefaultEventLoopGroup;
@@ -12,7 +11,6 @@ import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.LayoutServer;

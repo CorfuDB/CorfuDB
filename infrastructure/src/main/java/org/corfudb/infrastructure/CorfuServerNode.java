@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -32,7 +31,6 @@ import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
