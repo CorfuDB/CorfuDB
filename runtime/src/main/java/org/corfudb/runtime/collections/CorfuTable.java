@@ -254,6 +254,10 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
         this(IndexRegistry.empty(), new HashMap<>());
     }
 
+    public CorfuTable(Map<K, V> underlying) {
+        this(IndexRegistry.empty(), underlying);
+    }
+
     /** {@inheritDoc} */
     @Override
     @Accessor
