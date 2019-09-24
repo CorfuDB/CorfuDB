@@ -194,7 +194,7 @@ public class ServerContext implements AutoCloseable {
             logMetricsSize();
         }
 
-        IOLatencyDetector.setupIOLatencyDetector (OP_SPIKE_LATENCY, OP_SPIKE_DURATION);
+        IOLatencyDetector.setupIOLatencyDetector (OP_SPIKE_LATENCY, OP_SPIKE_DURATION, false);
         logMetricsSize ();
     }
 

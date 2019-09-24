@@ -28,6 +28,7 @@ public class IOLatencyDetector {
     static int spikeDuration; //in seconds
     static int cnt; //count the number of long latency period
     static long timestart;
+    static boolean enabled;
 
     @Getter
     static Timer writeMetrics;
@@ -36,7 +37,8 @@ public class IOLatencyDetector {
     @Getter
     static Timer syncMetrics;
 
-    static public void setupIOLatencyDetector(int duration, int maxLatencyVal) {
+    static public void setupIOLatencyDetector(int duration, int maxLatencyVal, boolean report) {
+        enabled = report;
         spikeDetected = false;
         spikeDuration = duration;
         spikeLatency = maxLatencyVal;
@@ -115,7 +117,8 @@ public class IOLatencyDetector {
 
 
     static public  boolean reportSpike() {
-        if (spikeDetected && (TimeUnit.SECONDS.convert (System.nanoTime () - timestart, TimeUnit.NANOSECONDS)
+        if (enabled && spikeDetected &&
+                (TimeUnit.SECONDS.convert (System.nanoTime () - timestart, TimeUnit.NANOSECONDS)
                 >= spikeDuration))
             return spikeDetected;
         else
