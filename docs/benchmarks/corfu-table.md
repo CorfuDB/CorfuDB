@@ -44,7 +44,7 @@ RocksDb 50-100% faster than EhCache for single threaded application.
 RocksDb provides better performance for multithreaded applications.
 
 Conclusion:
-  - RocksDb more stable and solid solution then EhCache 
+  - RocksDb is more performant than EhCache
   - RocksDb provides higher throughput
   - RocksDb more flexible: it provides a big number of the parameters and almost all the parameters can be tuned
   - EhCache can be used for relatively small data sets but it's slower and doesn't provide any advantages over RocksDb
