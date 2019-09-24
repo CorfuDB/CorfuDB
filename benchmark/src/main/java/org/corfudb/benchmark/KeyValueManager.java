@@ -16,7 +16,9 @@ public class KeyValueManager {
 
     String generateKey() {
         int index = random.nextInt(this.capacity);
-        return "key_" + index;
+        String key = "key_" + index;
+        keySet.add(key);
+        return key;
     }
 
     void addKey(String key) {
