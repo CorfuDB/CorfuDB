@@ -10,6 +10,8 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 
+import java.util.UUID;
+
 /**
  * Operations for CorfuTable, contains build, ,put, get, put+get operations.
  * TODO: add secondary index and cache, see performance difference, add memory size parameter.
@@ -18,25 +20,29 @@ import org.corfudb.util.MetricsUtils;
 public class CorfuTableOperations extends Operation {
     private double ratio;
     CorfuTable<String, String> corfuTable;
+    KeyValueManager keyValueManager;
     private Timer corfuTableBuildTimer;
     private Timer corfuTableGetTimer;
     private Timer corfuTablePutTimer;
     //private Gauge<Long> corfuTableSizeGauge;
     public static final double THRESHOULD = 50000.38;
 
-    CorfuTableOperations(String name, CorfuRuntime runtime, CorfuTable corfuTable, int numRequest, double ratio) {
+    CorfuTableOperations(String name, CorfuRuntime runtime, CorfuTable corfuTable, int numRequest, double ratio, int keySize) {
         super(runtime);
         shortName = name;
         this.corfuTable = corfuTable;
         this.numRequest = numRequest;
         this.ratio = ratio;
+        keyValueManager = new KeyValueManager(keySize);
         fillTable();
         setMetrics();
     }
 
     private void fillTable() {
         for (int i = 0; i < 10; i ++) {
-            corfuTable.put(String.valueOf(i), String.valueOf(i));
+            String key = keyValueManager.generateKey();
+            String value = keyValueManager.generateValue();
+            corfuTable.put(key, value);
         }
     }
 
@@ -73,8 +79,8 @@ public class CorfuTableOperations extends Operation {
      */
     private void corfuTablePut() {
         for (int i = 0; i < numRequest; i++) {
-            String key = String.valueOf(i);
-            String value = String.valueOf(i);
+            String key = keyValueManager.generateKey();
+            String value = keyValueManager.generateValue();
             try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTablePutTimer)) {
                 corfuTable.put(key, value);
             }
@@ -86,7 +92,7 @@ public class CorfuTableOperations extends Operation {
      */
     private void corfuTableGet() {
         for (int i = 0; i < numRequest; i++) {
-            String key = String.valueOf(i % 10);
+            String key = keyValueManager.getKey();
             try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTableGetTimer)) {
                 corfuTable.get(key);
             }
@@ -100,14 +106,14 @@ public class CorfuTableOperations extends Operation {
         int numPut = (int) (numRequest * ratio);
         int numGet = numRequest - numPut;
         for (int i = 0; i < numPut; i++) {
-            String key = String.valueOf(i);
-            String value = String.valueOf(i);
+            String key = keyValueManager.generateKey();
+            String value = keyValueManager.generateValue();
             try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTablePutTimer)) {
                 corfuTable.put(key, value);
             }
         }
         for (int i = 0; i < numGet; i++) {
-            String key = String.valueOf(i % numPut);
+            String key = keyValueManager.getKey();
             try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTableGetTimer)) {
                 corfuTable.get(key);
             }

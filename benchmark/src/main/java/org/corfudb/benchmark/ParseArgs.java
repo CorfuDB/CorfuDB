@@ -46,6 +46,9 @@ public class ParseArgs {
     @NonNull
     protected String op;
 
+    @Getter
+    protected int keySize;
+
     ParseArgs(String[] args) {
         Args cmdArgs = new Args();
         JCommander jc = JCommander.newBuilder()
@@ -64,6 +67,7 @@ public class ParseArgs {
         endpoint = cmdArgs.endpoint;
         ratio = cmdArgs.ratio;
         op = cmdArgs.op;
+        keySize = cmdArgs.keySize;
     }
 
     public static class Args {
@@ -90,5 +94,8 @@ public class ParseArgs {
 
         @Parameter(names = {"--op"}, description = "operation you want to test", required = true)
         String op;
+
+        @Parameter(names = {"--key-size"}, description = "maximum number of keys you want to store", required = false)
+        int keySize;
     }
 }
