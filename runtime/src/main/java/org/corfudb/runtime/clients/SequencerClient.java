@@ -29,10 +29,10 @@ import org.corfudb.util.MetricsUtils;
  * <p>Created by mwei on 12/10/15.
  */
 public class SequencerClient extends AbstractClient {
-    private Timer nextTokenTimer;
-    private Timer nextTokenTxTimer;
-    private Timer getStreamSpaceTimer;
-    private Timer bootstrapTimer;
+    private final Timer nextTokenTimer;
+    private final Timer nextTokenTxTimer;
+    private final Timer getStreamSpaceTimer;
+    private final Timer bootstrapTimer;
     private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     public SequencerClient(IClientRouter router, long epoch) {
         super(router, epoch);
