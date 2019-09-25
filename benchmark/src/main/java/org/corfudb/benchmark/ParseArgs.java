@@ -47,7 +47,10 @@ public class ParseArgs {
     protected String op;
 
     @Getter
-    protected int keySize;
+    protected int keyNum;
+
+    @Getter
+    protected int valueSize;
 
     ParseArgs(String[] args) {
         Args cmdArgs = new Args();
@@ -67,7 +70,8 @@ public class ParseArgs {
         endpoint = cmdArgs.endpoint;
         ratio = cmdArgs.ratio;
         op = cmdArgs.op;
-        keySize = cmdArgs.keySize;
+        keyNum = cmdArgs.keyNum;
+        valueSize = cmdArgs.valueSize;
     }
 
     @Override
@@ -80,7 +84,8 @@ public class ParseArgs {
                 .append(", endpoint=").append(endpoint)
                 .append(", ratio=").append(ratio)
                 .append(", operation=").append(op)
-                .append(", keysize=").append(keySize);
+                .append(", keyNum=").append(keyNum)
+                .append(", valueSize=").append(valueSize);
         return stringBuilder.toString();
     }
 
@@ -109,7 +114,10 @@ public class ParseArgs {
         @Parameter(names = {"--op"}, description = "operation you want to test", required = true)
         String op;
 
-        @Parameter(names = {"--key-size"}, description = "maximum number of keys you want to store", required = false)
-        int keySize;
+        @Parameter(names = {"--key-num"}, description = "maximum number of keys you want to store", required = false)
+        int keyNum;
+
+        @Parameter(names = {"--value-size"}, description = "maximum number of keys you want to store", required = false)
+        int valueSize;
     }
 }
