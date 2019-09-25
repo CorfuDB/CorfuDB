@@ -70,6 +70,20 @@ public class ParseArgs {
         keySize = cmdArgs.keySize;
     }
 
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("ParseArgs: numRuntimes=").append(numRuntimes)
+                .append(", numThreads=").append(numThreads)
+                .append(", numStreams=").append(numStreams)
+                .append(", numRequests=").append(numRequests)
+                .append(", endpoint=").append(endpoint)
+                .append(", ratio=").append(ratio)
+                .append(", operation=").append(op)
+                .append(", keysize=").append(keySize);
+        return stringBuilder.toString();
+    }
+
     public static class Args {
         @Parameter(names = {"-h", "--help"}, description = "Help message", help = true)
         boolean help;
