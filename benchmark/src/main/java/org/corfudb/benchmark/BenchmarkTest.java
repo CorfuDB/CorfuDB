@@ -2,6 +2,7 @@ package org.corfudb.benchmark;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -42,8 +43,9 @@ public class BenchmarkTest {
 
     protected CorfuTables corfuTables;
     private final BlockingQueue<Operation> operationQueue;
-    private final ExecutorService taskProducer;
+    //private final ExecutorService taskProducer;
     private final ExecutorService workers;
+    final ScheduledExecutorService producerScheduler;
 
     private final long DURATION_IN_MS = 1000;
     static final int APPLICATION_TIMEOUT_IN_MS = 10000000;
@@ -57,8 +59,9 @@ public class BenchmarkTest {
         corfuTables = new CorfuTables(numStreams, openObjects());
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-        taskProducer = Executors.newSingleThreadExecutor();
+        //taskProducer = Executors.newSingleThreadExecutor();
         workers = Executors.newFixedThreadPool(numThreads);
+        producerScheduler = Executors.newScheduledThreadPool(1);
     }
 
     private void setArgs(ParseArgs parseArgs) {
@@ -91,7 +94,7 @@ public class BenchmarkTest {
      * @param operation the operation pushed into operationQueue
      */
     void runProducer(Operation operation) {
-        taskProducer.execute(() -> {
+        Runnable task = () -> {
             try {
                 operationQueue.put(operation);
             } catch (InterruptedException e) {
@@ -99,7 +102,8 @@ public class BenchmarkTest {
             } catch (Exception e) {
                 log.error("operation error", e);
             }
-        });
+        };
+        producerScheduler.scheduleAtFixedRate(task, 100, 10, TimeUnit.MILLISECONDS);
     }
 
     /**
