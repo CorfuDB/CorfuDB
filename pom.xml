@@ -20,6 +20,7 @@
         <module>generator</module>
         <module>it</module>
         <module>benchmark</module>
+        <module>benchmarks</module>
     </modules>
 
 

@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableSet;
 
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -30,7 +29,7 @@ public class SequencerHandlerTest extends AbstractClientTest {
     Set<AbstractServer> getServersForTest() {
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new SequencerServer(defaultServerContext(), new DropwizardMetricsProvider("corfu-runtime", metricRegistry)))
+                .add(new SequencerServer(defaultServerContext()))
                 .build();
     }
 
