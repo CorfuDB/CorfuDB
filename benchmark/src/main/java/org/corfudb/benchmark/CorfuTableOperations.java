@@ -118,7 +118,6 @@ public class CorfuTableOperations extends Operation {
     private void corfuTablePutGet() {
         int numPut = (int) (numRequest * ratio);
         int numGet = numRequest - numPut;
-
         int putI = 0;
         int getI = 0;
         while (putI < numPut && getI < numGet) {

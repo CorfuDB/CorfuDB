@@ -1,8 +1,10 @@
 package org.corfudb.benchmark;
 
+import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.junit.Test;
 
 import java.util.UUID;
 
