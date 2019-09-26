@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
@@ -62,8 +64,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
-
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
  * This StreamLog implementation can detect log file corruption, if checksum is enabled, otherwise
@@ -106,22 +106,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
-    /**
-     * Returns a file-based stream log object.
-     *
-     * @param serverContext Context object that provides server state such as epoch,
-     *                      segment and start address
-     * @param noVerify      Disable checksum if true
-     */
-    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
-        logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
+    public StreamLogFiles(Path logDir, StreamLogDataStore dataStore,
+                          double logSizeLimitPercentage, boolean noVerify) {
+
+        this.logDir = logDir;
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
-        this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
+        this.dataStore = dataStore;
 
-        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
-        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
         if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
             String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
                     logSizeLimitPercentage);
@@ -140,6 +133,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // Starting address initialization should happen before
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
         logMetadata = new LogMetadata();
+
         initializeLogMetadata();
 
         // This can happen if a prefix trim happens on
@@ -147,6 +141,22 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
             syncTailSegment(getTrimMark() - 1);
         }
+    }
+
+    /**
+     * Returns a file-based stream log object.
+     *
+     * @param serverContext Context object that provides server state such as epoch,
+     *                      segment and start address
+     * @param noVerify      Disable checksum if true
+     */
+    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+        this(
+                Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log"),
+                StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build(),
+                serverContext.getServerConfig(Double.class, "--log-size-quota-percentage", 100D),
+                noVerify
+        );
     }
 
     private long getStartingSegment() {
