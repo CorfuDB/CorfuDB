@@ -16,7 +16,12 @@ public class Runtimes {
         this.endPoint = endPoint;
         runtimes = new ArrayList<>();
         for (int i = 0; i < numRuntimes; i++) {
-            runtimes.add(new CorfuRuntime(endPoint).connect());
+            CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
+            parameters.setPrometheusMetricsPort(1234);
+            CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
+            runtime.addLayoutServer(endPoint);
+            runtime.connect();
+            runtimes.add(runtime);
         }
     }
 
