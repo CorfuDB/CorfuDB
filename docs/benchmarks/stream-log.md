@@ -21,6 +21,9 @@ Conclusion:
   - The poor performance of loading data segments
   - Inefficient and data intensive operation. It loads all the data to build small index, 
   almost all resources spending on loading data which is a redundant operation.
+  - For instance, we have 10mil records, average size of each record 2kb. 
+  Stream log can read 9 segments per second. The total time would be: 10mil/10_000/9=111 seconds.
+  Also it will read all the data from the disk: 10mil*2kb=20gb.
 
 #### JMH benchmark sample report:
 ```
