@@ -2,11 +2,14 @@ package org.corfudb.runtime.clients;
 
 import java.util.concurrent.CompletableFuture;
 
+import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.Setter;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.util.MetricsUtils;
 
 /**
  * Abstract clients stamped with an epoch to send messages stamped with the required epoch.
@@ -33,6 +36,17 @@ abstract class AbstractClient implements IClient {
     <T> CompletableFuture<T> sendMessageWithFuture(CorfuMsg msg) {
         return router.sendMessageAndGetCompletable(msg.setEpoch(epoch)
                 .setPriorityLevel(priorityLevel));
+    }
+
+    <T> CompletableFuture<T> sendMessageWithFuture(CorfuMsg msg, Timer timer) {
+        Timer.Context context = MetricsUtils.getConditionalContext(timer);
+        CorfuMsg message = msg.setEpoch(epoch).setPriorityLevel(priorityLevel);
+        return router
+                .<T>sendMessageAndGetCompletable(message)
+                .thenApply(token -> {
+                    MetricsUtils.stopConditionalContext(context);
+                    return token;
+                });
     }
 
     public void sendMessage(CorfuMsg msg) {
