@@ -15,6 +15,8 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -201,6 +203,17 @@ public class ObjectsView extends AbstractView {
             throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
         } finally {
             TransactionalContext.removeContext();
+        }
+    }
+
+    /**
+     * Run garbage collection on all opened objects. Note that objects
+     * open with the NO_CACHE options will not be gc'd
+     */
+    public void gc(long trimMark) {
+        for (Object obj : getObjectCache().values()) {
+            ((CorfuCompileProxy) ((ICorfuSMR) obj).
+                    getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
         }
     }
 

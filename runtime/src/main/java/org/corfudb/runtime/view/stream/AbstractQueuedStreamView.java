@@ -115,6 +115,31 @@ public abstract class AbstractQueuedStreamView extends
 
     /**
      * {@inheritDoc}
+     */
+    @Override
+    public void gc(long trimMark) {
+        // GC stream only if the pointer is ahead from the trim mark,
+        if (getCurrentContext().getGlobalPointer() >= trimMark) {
+            log.debug("gc[{}]: start GC on stream {} for trim mark {}", this, this.getId(),
+                    trimMark);
+
+            // Remove all the entries that are strictly less than
+            // the trim mark (compaction mark).
+            getCurrentContext().readQueue.headSet(trimMark).clear();
+            getCurrentContext().resolvedQueue.headSet(trimMark).clear();
+
+            if (!getCurrentContext().resolvedQueue.isEmpty()) {
+                getCurrentContext().minResolution = getCurrentContext()
+                        .resolvedQueue.first();
+            }
+        } else {
+            log.debug("gc[{}]: GC not performed on stream {}. Global pointer {} is below trim mark {}",
+                    this, this.getId(), getCurrentContext().getGlobalPointer(), trimMark);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
      *
      * <p>We loop forever trying to
      * write, and automatically retrying if we get overwritten (hole filled).
