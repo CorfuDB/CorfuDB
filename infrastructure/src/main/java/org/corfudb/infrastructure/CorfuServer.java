@@ -196,6 +196,7 @@ public class CorfuServer {
             startServer(args);
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
+            throw err;
         }
     }
 
