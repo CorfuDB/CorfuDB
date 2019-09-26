@@ -30,8 +30,6 @@ public class SequencerView extends AbstractView {
     private Timer sequencerNextOneStream;
     private Timer sequencerQuery;
     private Timer sequencerNextMultipleStream;
-    private Timer sequencerDeprecatedNextOneStream;
-    private Timer sequencerDeprecatedNextMultipleStream;
     private Timer sequencerTrimCache;
     private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
@@ -54,10 +52,6 @@ public class SequencerView extends AbstractView {
                 "particular-next");
         sequencerNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
                 "multiple-next");
-        sequencerDeprecatedNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "deprecated-particular-next");
-        sequencerDeprecatedNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "deprecated-multiple-next");
     }
 
     /**
@@ -158,19 +152,15 @@ public class SequencerView extends AbstractView {
      */
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerDeprecatedNextOneStream)){
-            return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .nextToken(Lists.newArrayList(streamIDs), numTokens)));
-        }
+        return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                .nextToken(Lists.newArrayList(streamIDs), numTokens)));
     }
 
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens,
                                    TxResolutionInfo conflictInfo) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerDeprecatedNextMultipleStream)){
-            return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
-        }
+        return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
     }
 
     public void trimCache(long address) {
