@@ -26,40 +26,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class SequencerServerCacheTest extends AbstractObjectTest {
 
-    @Test
-    public void testSequencerCacheTrim() {
-
-        getDefaultRuntime();
-
-        Map<Integer, Integer> map = getDefaultRuntime()
-                .getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
-                })
-                .setStreamName("test")
-                .open();
-
-        final int numTxn = 500;
-        final Token trimAddress = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), 250);
-        for (int x = 0; x < numTxn; x++) {
-            getRuntime().getObjectsView().TXBegin();
-            map.put(x, x);
-            getRuntime().getObjectsView().TXEnd();
-        }
-
-        SequencerServer sequencerServer = getSequencer(0);
-        SequencerServerCache cache = sequencerServer.getCache();
-        assertThat(cache.size()).isEqualTo(numTxn);
-        getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);
-        // Since the addressSpace only sends a hint to the sequencer, its possible
-        // that the method returns before the sequencer receives the trim request,
-        // therefore it must be directly invoked to wait for the future.
-        getDefaultRuntime().getLayoutView().getRuntimeLayout()
-                .getPrimarySequencerClient()
-                .trimCache(trimAddress.getSequence()).join();
-        assertThat(cache.size()).isEqualTo((int) trimAddress.getSequence());
-    }
-
     /**
      * Check cache eviction algorithm (it must be atomic operation).
      * Check cache invalidation

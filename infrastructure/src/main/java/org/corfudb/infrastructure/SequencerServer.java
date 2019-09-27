@@ -95,8 +95,6 @@ public class SequencerServer extends AbstractServer {
     @Getter
     private long globalLogTail = Address.getMinAddress();
 
-    private long trimMark = Address.NON_ADDRESS;
-
     /**
      * - {@link SequencerServer::streamTailToGlobalTailMap}:
      * per streams map to last issued global-log position. used for backpointers.
@@ -104,8 +102,7 @@ public class SequencerServer extends AbstractServer {
     private Map<UUID, Long> streamTailToGlobalTailMap = new HashMap<>();
 
     /**
-     * Per streams map and their corresponding address space (an address space is defined by the stream's addresses
-     *  and its latest trim mark)
+     * Per streams map and their corresponding address space (an address space is defined by the stream's addresses)
      */
     private Map<UUID, StreamAddressSpace> streamsAddressMap = new HashMap<>();
 
@@ -237,11 +234,6 @@ public class SequencerServer extends AbstractServer {
             return new TxResolutionResponse(TokenType.TX_ABORT_NEWSEQ);
         }
 
-        if (txSnapshotTimestamp.getSequence() < trimMark) {
-            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo, txSnapshotTimestamp, trimMark);
-            return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_TRIM);
-        }
-
         for (Map.Entry<UUID, Set<byte[]>> conflictStream : txInfo.getConflictSet().entrySet()) {
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
@@ -338,25 +330,6 @@ public class SequencerServer extends AbstractServer {
 
     }
 
-    @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
-    public void trimCache(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("trimCache: Starting cache eviction");
-        if (trimMark < msg.getPayload()) {
-            // Advance the trim mark, if the new trim request has a higher trim mark.
-            trimMark = msg.getPayload();
-            cache.invalidateUpTo(trimMark);
-
-            // Remove trimmed addresses from each address map and set new trim mark
-            for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
-                streamAddressSpace.trim(trimMark);
-            }
-        }
-
-        log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark, streamsAddressMap);
-
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
     /**
      * Service an incoming request to reset the sequencer.
      */
@@ -426,10 +399,9 @@ public class SequencerServer extends AbstractServer {
             this.streamsAddressMap.putAll(addressSpaceMap);
 
             for (Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : this.streamsAddressMap.entrySet()) {
-                log.info("Stream[{}] set to last trimmed address {} and {} addresses in the range [{}-{}], " +
+                log.info("Stream[{}]: addresses in the range [{}-{}], " +
                                 "on sequencer reset.",
                         Utils.toReadableId(streamAddressSpace.getKey()),
-                        streamAddressSpace.getValue().getTrimMark(),
                         streamAddressSpace.getValue().getAddressMap().getLongCardinality(),
                         streamAddressSpace.getValue().getLowestAddress(),
                         streamAddressSpace.getValue().getHighestAddress());
@@ -605,7 +577,7 @@ public class SequencerServer extends AbstractServer {
             // step 3. add allocated addresses to each stream's address map (to keep track of all updates to this stream)
             streamsAddressMap.compute(id, (streamId, addressMap) -> {
                 if (addressMap == null) {
-                    addressMap = new StreamAddressSpace(Address.NON_ADDRESS, new Roaring64NavigableMap());
+                    addressMap = new StreamAddressSpace(new Roaring64NavigableMap());
                 }
 
                 for (long i = globalLogTail; i < newTail; i++) {
@@ -684,7 +656,7 @@ public class SequencerServer extends AbstractServer {
             if (streamsAddressMap.containsKey(streamId)) {
                 addressMap = streamsAddressMap.get(streamId).getAddressesInRange(streamAddressRange);
                 requestedAddressSpaces.put(streamId,
-                        new StreamAddressSpace(streamsAddressMap.get(streamId).getTrimMark(), addressMap));
+                        new StreamAddressSpace(addressMap));
             } else {
                 log.warn("handleStreamsAddressRequest: address space map is not present for stream {}. " +
                         "Verify this is a valid stream.", streamId);
