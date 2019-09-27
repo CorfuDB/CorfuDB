@@ -3,7 +3,6 @@ package org.corfudb.runtime.view.stream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 
@@ -53,16 +52,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
 
             thisRead = queue.pollFirst();
-            try {
-                ld = read(thisRead);
-            } catch (TrimmedException te) {
-                if (!getReadOptions().isIgnoreTrim()) {
-                    throw te;
-                }
 
-                readNext = true;
-                continue;
-            }
+            ld = read(thisRead);
 
             if (queue == getCurrentContext().readQueue && ld != null) {
                 addToResolvedQueue(getCurrentContext(), thisRead);
@@ -85,7 +76,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                            final long startAddress,
                                            final long stopAddress,
                                            final Function<ILogData, Boolean> filter,
-                                           final boolean checkpoint,
                                            final long maxGlobal) {
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
@@ -109,18 +99,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // Read the current address
             ILogData d;
-            try {
-                log.trace("followBackpointers: readAddress[{}]", currentAddress);
-                d = read(currentAddress, readStartTime);
-            } catch (TrimmedException e) {
-                if (getReadOptions().isIgnoreTrim()) {
-                    log.warn("followBackpointers: Ignoring trimmed exception for address[{}]," +
-                            " stream[{}]", currentAddress, id);
-                    return !queue.isEmpty();
-                } else {
-                    throw e;
-                }
-            }
+
+            log.trace("followBackpointers: readAddress[{}]", currentAddress);
+            d = read(currentAddress, readStartTime);
+
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {
@@ -130,10 +112,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // Check whether we should include the address
                 filter.apply(d);
 
-                if (!checkpoint) {
-                    log.trace("followBackpointers: Adding backpointer to address[{}] to queue", currentAddress);
-                    queue.add(currentAddress);
-                }
+                log.trace("followBackpointers: Adding backpointer to address[{}] to queue", currentAddress);
+                queue.add(currentAddress);
+
             }
 
             boolean singleStep = true;
@@ -170,10 +151,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 log.trace("followBackpointers[{}]: downgrading to single step, found hole at {}", this, currentAddress);
                 currentAddress = currentAddress - 1;
             }
-        }
-
-        if (checkpoint) {
-            queue.addAll(resolveCheckpoint(getCurrentContext()));
         }
 
         return !queue.isEmpty();

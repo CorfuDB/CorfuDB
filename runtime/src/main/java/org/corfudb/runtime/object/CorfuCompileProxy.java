@@ -17,7 +17,6 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -277,38 +276,30 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
             return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
-        for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-            try {
-                return underlyingObject.update(o -> {
-                    o.syncObjectUnsafe(timestamp);
-                    if (o.getUpcallResults().containsKey(timestamp)) {
-                        log.trace("Upcall[{}] {} Sync'd", this, timestamp);
-                        R ret = (R) o.getUpcallResults().get(timestamp);
-                        o.getUpcallResults().remove(timestamp);
-                        return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-                    }
+        try {
+            return underlyingObject.update(o -> {
+                o.syncObjectUnsafe(timestamp);
+                if (o.getUpcallResults().containsKey(timestamp)) {
+                    log.trace("Upcall[{}] {} Sync'd", this, timestamp);
+                    R ret = (R) o.getUpcallResults().get(timestamp);
+                    o.getUpcallResults().remove(timestamp);
+                    return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
+                }
 
-                    // The version is already ahead, but we don't have the result.
-                    // The only way to get the correct result
-                    // of the upcall would be to rollback. For now, we throw an exception
-                    // since this is generally not expected. --- and probably a bug if it happens.
-                    throw new RuntimeException("Attempted to get the result "
-                            + "of an upcall@" + timestamp + " but we are @"
-                            + underlyingObject.getVersionUnsafe()
-                            + " and we don't have a copy");
-                });
-            } catch (TrimmedException ex) {
-                log.info("getUpcallResultInner: Encountered trimmed address space " +
-                        "while accessing version {} on attempt {}", timestamp, x);
-                // We encountered a TRIM during sync, reset the object
-                underlyingObject.update(o -> {
-                    o.resetUnsafe();
-                    return null;
-                });
-            }
+                // The version is already ahead, but we don't have the result.
+                // The only way to get the correct result
+                // of the upcall would be to rollback. For now, we throw an exception
+                // since this is generally not expected. --- and probably a bug if it happens.
+                throw new RuntimeException("Attempted to get the result "
+                        + "of an upcall@" + timestamp + " but we are @"
+                        + underlyingObject.getVersionUnsafe()
+                        + " and we don't have a copy");
+            });
+        } catch (TrimmedException ex) {
+            log.info("getUpcallResultInner: Encountered trimmed address space " +
+                    "while accessing version {}", timestamp);
+            throw ex;
         }
-
-        throw new TrimmedUpcallException(timestamp);
     }
 
     /**

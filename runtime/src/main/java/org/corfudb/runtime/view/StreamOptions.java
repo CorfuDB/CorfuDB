@@ -11,16 +11,8 @@ import lombok.Getter;
 @Builder
 public class StreamOptions {
     public static StreamOptions DEFAULT = StreamOptions.builder()
-            .ignoreTrimmed(false)
             .cacheEntries(true)
             .build();
-
-    /**
-     * Ignore trimmed exceptions encountered while syncing
-     */
-    @Getter
-    @Builder.Default
-    private final boolean ignoreTrimmed = false;
 
     /**
      * Cache this stream's entries

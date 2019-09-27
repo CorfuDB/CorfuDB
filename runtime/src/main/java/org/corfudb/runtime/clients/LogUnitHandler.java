@@ -18,7 +18,6 @@ import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 
 
@@ -57,20 +56,6 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @ClientHandler(type = CorfuMsgType.WRITE_OK)
     private static Object handleOk(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         return true;
-    }
-
-    /**
-     * Handle an ERROR_TRIMMED message.
-     *
-     * @param msg Incoming Message
-     * @param ctx Context
-     * @param r   Router
-     * @throws Exception Throws TrimmedException if address has already been trimmed.
-     */
-    @ClientHandler(type = CorfuMsgType.ERROR_TRIMMED)
-    private static Object handleTrimmed(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception {
-        throw new TrimmedException();
     }
 
     /**

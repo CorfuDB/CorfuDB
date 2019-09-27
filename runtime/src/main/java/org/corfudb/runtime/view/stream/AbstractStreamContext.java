@@ -4,7 +4,6 @@ import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 

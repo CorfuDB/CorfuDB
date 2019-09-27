@@ -27,13 +27,10 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.RetryExhaustedException;
-
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
@@ -71,14 +68,12 @@ public class AddressSpaceView extends AbstractView {
 
     private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
-    private final static boolean NO_THROW = false;
 
     /**
      * A cache for read results.
      */
     private final Cache<Long, ILogData> readCache;
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
-            .ignoreTrim(false)
             .waitForHole(true)
             .clientCacheable(true)
             .serverCacheable(true)
@@ -165,13 +160,7 @@ public class AddressSpaceView extends AbstractView {
      * @param address
      */
     private void validateStateOfWrittenEntry(long address, @Nonnull ILogData ld) {
-        ILogData logData;
-        try {
-            logData = read(address);
-        } catch (TrimmedException te) {
-            // We cannot know if the write went through or not
-            throw new UnrecoverableCorfuError("We cannot determine state of an update because of a trim.");
-        }
+        ILogData logData = read(address);
 
         if (!logData.equals(ld)){
             throw new OverwriteException(OverwriteCause.DIFF_DATA);
@@ -506,22 +495,13 @@ public class AddressSpaceView extends AbstractView {
                 Sets.newHashSet(addresses), cachedData.keySet());
 
         final Map<Long, ILogData> uncachedData = fetchAll(addressesToFetch, options);
-        final List<Long> trimmedAddresses = filterTrimmedAddresses(uncachedData);
-        trimmedAddresses.forEach(uncachedData::remove);
+        final List<Long> compactedAddresses = filterCompactedAddresses(uncachedData);
+        compactedAddresses.forEach(uncachedData::remove);
 
         final Map<Long, ILogData> result = uncachedData.entrySet().stream()
                 .collect(Collectors.toMap(Entry::getKey, entry ->
                         cacheLoadAndGet(readCache, entry.getKey(), entry.getValue(), options)));
         result.putAll(cachedData);
-
-        if (!trimmedAddresses.isEmpty()) {
-            if (!options.isIgnoreTrim()) {
-                throw new TrimmedException(trimmedAddresses);
-            }
-
-            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
-        }
-
 
         return result;
     }
@@ -702,38 +682,30 @@ public class AddressSpaceView extends AbstractView {
      * Given the input data, deduce which addresses have been trimmed.
      *
      * @param allData data on which the operation will be performed
-     *
-     * @return the list of addresses that have been trimmed.
+     * @return the list of addresses that have been compacted
      */
-    private List<Long> filterTrimmedAddresses(Map<Long, ILogData> allData) {
+    private List<Long> filterCompactedAddresses(Map<Long, ILogData> allData) {
         return allData.entrySet().stream()
-                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue(), NO_THROW))
+                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue()))
                 .map(Entry::getKey).collect(Collectors.toList());
     }
 
     /**
-     * Checks whether a log entry is valid or not. If a read
-     * returns null, Empty, or trimmed an exception will be
-     * thrown.
+     * Checks whether a log entry is valid and un-compacted. If a read
+     * result is null or Empty, an exception will be thrown, if a read
+     * result is a compacted entry, return false.
      *
      * @param address the address being checked
      * @param logData the ILogData at the address being checked
-     * @return true if valid data, false if address is trimmed.
+     * @return true if valid data, false if address is compacted.
      */
-    private boolean isLogDataValid(long address, ILogData logData, boolean throwException) {
+    private boolean isLogDataValid(long address, ILogData logData) {
         if (logData == null || logData.getType() == DataType.EMPTY) {
             throw new RuntimeException("Unexpected return of empty data at address "
                     + address + " on read");
         }
 
-        if (logData.isTrimmed()) {
-            if (throwException) {
-                throw new TrimmedException(String.format("Trimmed address %s", address));
-            }
-            return false;
-        }
-
-        return true;
+        return logData.getType() != DataType.COMPACTED;
     }
 
     /**
@@ -749,7 +721,7 @@ public class AddressSpaceView extends AbstractView {
                 .read(e, address)
         );
 
-        checkLogDataThrowException(address, result);
+        isLogDataValid(address, result);
 
         return result;
     }
@@ -796,10 +768,6 @@ public class AddressSpaceView extends AbstractView {
                     map1.putAll(map2);
                     return map1;
                 });
-    }
-
-    private void checkLogDataThrowException(long address, ILogData result) {
-        isLogDataValid(address, result, true);
     }
 
     @VisibleForTesting
