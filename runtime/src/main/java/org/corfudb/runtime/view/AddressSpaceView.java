@@ -507,37 +507,6 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Get the first address in the address space.
-     */
-    public Token getTrimMark() {
-        return layoutHelper(
-                e -> {
-                    long trimMark = e.getLayout().segments.stream()
-                            .flatMap(seg -> seg.getStripes().stream())
-                            .flatMap(stripe -> stripe.getLogServers().stream())
-                            .map(e::getLogUnitClient)
-                            .map(LogUnitClient::getTrimMark)
-                            .map(future -> {
-                                // This doesn't look nice, but its required to trigger
-                                // the retry mechanism in AbstractView. Also, getUninterruptibly
-                                // can't be used here because it throws a UnrecoverableCorfuInterruptedError
-                                try {
-                                    return future.join();
-                                } catch (CompletionException ex) {
-                                    Throwable cause = ex.getCause();
-                                    if (cause instanceof RuntimeException) {
-                                        throw (RuntimeException) cause;
-                                    } else {
-                                        throw new RuntimeException(cause);
-                                    }
-                                }
-                            })
-                            .max(Comparator.naturalOrder()).get();
-                    return new Token(e.getLayout().getEpoch(), trimMark);
-                });
-    }
-
-    /**
      * Get the log's tail, i.e., last address in the address space.
      */
     public Long getLogTail() {
@@ -562,60 +531,6 @@ public class AddressSpaceView extends AbstractView {
     public StreamsAddressResponse getLogAddressSpace() {
         return layoutHelper(
                 e -> Utils.getLogAddressSpace(e.getLayout(), runtime));
-    }
-
-    /**
-     * Prefix trim the address space.
-     *
-     * <p>At the end of a prefix trim, all addresses equal to or
-     * less than the address given will be marked for trimming,
-     * which means that they may return either the original
-     * data, or a trimmed exception.</p>
-     *
-     * @param address log address
-     */
-    public void prefixTrim(final Token address) {
-        log.info("PrefixTrim[{}]", address);
-        final int numRetries = 3;
-
-        for (int x = 0; x < numRetries; x++) {
-            try {
-                // By changing the order of the trimming operations, i.e., signal the
-                // sequencer about a trim before actually trimming the log unit, we prevent a race condition,
-                // in which a client could attempt to read a trimmed address over and over again, as signal
-                // has not reached the sequencer. The problem with this is that we have a retry limit of 2, so
-                // if the race is present on just one cycle we will abort due to trimmed exception.
-                // In this case we avoid this case, and even if the log unit trim fails,
-                // this data is checkpointed so there is no actual correctness implication.
-                // TODO(Maithem): trimCache should be epoch aware?
-                runtime.getSequencerView().trimCache(address.getSequence());
-
-                layoutHelper(e -> {
-                            e.getLayout().getPrefixSegments(address.getSequence()).stream()
-                                    .flatMap(seg -> seg.getStripes().stream())
-                                    .flatMap(stripe -> stripe.getLogServers().stream())
-                                    .map(e::getLogUnitClient)
-                                    .map(client -> client.prefixTrim(address))
-                                    .forEach(cf -> {CFUtils.getUninterruptibly(cf,
-                                            NetworkException.class, TimeoutException.class,
-                                            WrongEpochException.class);
-                                    });
-                            return null;
-                }, true);
-                break;
-            } catch (NetworkException | TimeoutException e) {
-                log.warn("prefixTrim: encountered a network error on try {}", x, e);
-                Duration retryRate = runtime.getParameters().getConnectionRetryRate();
-                Sleep.sleepUninterruptibly(retryRate);
-            } catch (WrongEpochException wee) {
-                long serverEpoch = wee.getCorrectEpoch();
-                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, while server is in epoch {}. "
-                                + "Invalidate layout for this client and retry, attempt: {}/{}",
-                        address, runtimeEpoch, serverEpoch, x + 1, numRetries);
-                runtime.invalidateLayout();
-            }
-        }
     }
 
     /**

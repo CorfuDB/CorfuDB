@@ -88,11 +88,10 @@ public interface ICorfuPayload<T> {
                             new StreamAddressRange(new UUID(buffer.readLong(), buffer.readLong()),
                                     buffer.readLong(), buffer.readLong()))
                     .put(StreamAddressSpace.class, buffer -> {
-                        long trimMark = buffer.readLong();
                         Roaring64NavigableMap map = new Roaring64NavigableMap();
                         try (ByteBufInputStream inputStream = new ByteBufInputStream(buffer)) {
                             map.deserialize(inputStream);
-                            return new StreamAddressSpace(trimMark, map);
+                            return new StreamAddressSpace(map);
                         } catch (IOException ioe) {
                             throw new SerializerException("Exception when attempting to " +
                                     "deserialize stream address space.", ioe);
@@ -374,7 +373,6 @@ public interface ICorfuPayload<T> {
             buffer.writeByte(((PriorityLevel) payload).asByte());
         } else if (payload instanceof StreamAddressSpace) {
             StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
-            buffer.writeLong(streamAddressSpace.getTrimMark());
             serialize(buffer, streamAddressSpace.getAddressMap());
         } else if (payload instanceof StreamAddressRange) {
             StreamAddressRange streamRange = (StreamAddressRange) payload;

@@ -73,10 +73,6 @@ public class SequencerClient extends AbstractClient {
                 new TokenRequest(numTokens, streamIDs, conflictInfo)));
     }
 
-    public CompletableFuture<Void> trimCache(Long address) {
-        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));
-    }
-
     /**
      * Resets the sequencer with the specified initialToken
      *
