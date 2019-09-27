@@ -15,12 +15,6 @@ import lombok.Getter;
 @Builder(toBuilder=true)
 @Data
 public class ReadOptions {
-    /**
-     * Ignore trimmed exceptions encountered while syncing
-     */
-    @Getter
-    @Builder.Default
-    final boolean ignoreTrim = false;
 
     /**
      * The readers behavior when a hole is encountered

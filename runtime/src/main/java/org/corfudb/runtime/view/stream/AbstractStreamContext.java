@@ -2,10 +2,8 @@ package org.corfudb.runtime.view.stream;
 
 import java.util.UUID;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 

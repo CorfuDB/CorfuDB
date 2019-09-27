@@ -20,7 +20,6 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -292,9 +291,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         public int compare(ReadResponse o1, ReadResponse o2) {
             LogData ld1 = o1.getAddresses().get(logPosition);
             LogData ld2 = o2.getAddresses().get(logPosition);
-            if(ld1.isTrimmed() || ld2.isTrimmed()) {
-                throw new TrimmedException();
-            }
+
             IMetadata.DataRank rank1 = ld1.getRank();
             IMetadata.DataRank rank2 = ld2.getRank();
             if (rank1 == null) {

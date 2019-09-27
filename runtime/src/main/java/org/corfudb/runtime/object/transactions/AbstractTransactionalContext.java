@@ -197,33 +197,25 @@ public abstract class AbstractTransactionalContext implements
                                     Token snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Runnable optimisticStreamSetter) {
-        for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
-            try {
-                if (optimisticStreamSetter != null) {
-                    // Swap ourselves to be the active optimistic stream.
-                    // Inside setAsOptimisticStream, if there are
-                    // currently optimistic updates on the object, we
-                    // roll them back.  Then, we set this context as  the
-                    // object's new optimistic context.
-                    optimisticStreamSetter.run();
-                }
-                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
-                break;
-            } catch (TrimmedException te) {
-                // If a trim is encountered, we must reset the object
-                vlo.resetUnsafe();
-                if (!te.isRetriable()
-                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {
-                    // abort the transaction
-                    TransactionAbortedException tae =
-                            new TransactionAbortedException(
-                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
-                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
-                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);
-                    abortTransaction(tae);
-                    throw tae;
-                }
+        try {
+            if (optimisticStreamSetter != null) {
+                // Swap ourselves to be the active optimistic stream.
+                // Inside setAsOptimisticStream, if there are
+                // currently optimistic updates on the object, we
+                // roll them back.  Then, we set this context as  the
+                // object's new optimistic context.
+                optimisticStreamSetter.run();
             }
+            vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
+        } catch (TrimmedException te) {
+            // abort the transaction
+            TransactionAbortedException tae =
+                    new TransactionAbortedException(
+                            new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
+                            TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
+                            Address.NON_ADDRESS, AbortCause.TRIM, te, this);
+            abortTransaction(tae);
+            throw tae;
         }
     }
 
