@@ -139,12 +139,6 @@ public class StreamLogFiles implements StreamLog {
         logMetadata = new LogMetadata();
         initializeLogMetadata();
 
-        // This can happen if a prefix trim happens on
-        // addresses that haven't been written
-        if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
-            syncTailSegment(getTrimMark() - 1);
-        }
-
         compactor = new StreamLogCompactor(logParams, getCompactionPolicy(),
                 segmentManager, dataStore, logMetadata);
     }
@@ -236,8 +230,8 @@ public class StreamLogFiles implements StreamLog {
         }
 
         long end = System.currentTimeMillis();
-        log.info("initializeLogMetadata: took {} ms to load log metadata, log start: {}, " +
-                "global tail: {}", end - start, getTrimMark(), logMetadata.getGlobalTail());
+        log.info("initializeLogMetadata: took {} ms to load log metadata," +
+                "global tail: {}", end - start, logMetadata.getGlobalTail());
     }
 
     /**
@@ -322,11 +316,6 @@ public class StreamLogFiles implements StreamLog {
         dataStore.updateTailSegment(newTailSegment);
     }
 
-    @Override
-    public void prefixTrim(long address) {
-        // No-op for now, might be used for data migration.
-    }
-
     private void verifyLogs() {
         String[] extension = {"log"};
         File dir = logDir.toFile();
@@ -387,11 +376,6 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public void startCompactor() {
         compactor.start();
-    }
-
-    @Override
-    public long getTrimMark() {
-        return dataStore.getStartingAddress();
     }
 
     /**
