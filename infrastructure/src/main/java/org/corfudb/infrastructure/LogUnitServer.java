@@ -30,7 +30,6 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -38,7 +37,6 @@ import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -204,8 +202,6 @@ public class LogUnitServer extends AbstractServer {
         } else if (ex.getCause() instanceof ValueAdoptedException) {
             ValueAdoptedException vae = (ValueAdoptedException) ex.getCause();
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(vae.getReadResponse()));
-        } else if (ex.getCause() instanceof TrimmedException) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } else {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
             throw new LogUnitException(ex);

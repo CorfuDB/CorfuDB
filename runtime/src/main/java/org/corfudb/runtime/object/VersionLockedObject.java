@@ -182,23 +182,6 @@ public class VersionLockedObject<T> {
     }
 
     /**
-     * Run gc on this object. Since the stream that backs this object is not thread-safe:
-     * synchronization between gc and external object access is needed.
-     */
-    public void gc(long trimMark) {
-        long ts = 0;
-
-        try (Timer.Context vloGcDuration = VloMetricsHelper.getVloGcContext()) {
-            ts = lock.writeLock();
-            pendingUpcalls.removeIf(e -> e < trimMark);
-            upcallResults.entrySet().removeIf(e -> e.getKey() < trimMark);
-            smrStream.gc(trimMark);
-        } finally {
-            lock.unlock(ts);
-        }
-    }
-
-    /**
      * Access the internal state of the object, trying first to optimistically access
      * the object, then obtaining a write lock the optimistic access fails.
      *
