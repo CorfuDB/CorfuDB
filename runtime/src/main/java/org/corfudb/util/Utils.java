@@ -198,9 +198,7 @@ public class Utils {
                                                                    Map<UUID, StreamAddressSpace> aggregated) {
         for (Map.Entry<UUID, StreamAddressSpace> stream : streamAddressSpaceMap.entrySet()) {
             if (aggregated.containsKey(stream.getKey())) {
-                long currentTrimMark = aggregated.get(stream.getKey()).getTrimMark();
                 aggregated.get(stream.getKey()).getAddressMap().or(stream.getValue().getAddressMap());
-                aggregated.get(stream.getKey()).setTrimMark(Math.max(currentTrimMark, stream.getValue().getTrimMark()));
             } else {
                 aggregated.put(stream.getKey(), stream.getValue());
             }
