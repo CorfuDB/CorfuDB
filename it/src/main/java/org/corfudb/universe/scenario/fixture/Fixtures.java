@@ -9,6 +9,7 @@ import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
+import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
 import org.corfudb.universe.node.server.ServerUtil;
 import org.corfudb.universe.node.server.SupportServerParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,7 +71,10 @@ public interface Fixtures {
                 return data;
             }
 
-            this.servers = FixtureUtil.buildMultipleServers(numNodes, corfuCluster.getName());
+            this.servers = FixtureUtil.buildMultipleServers(
+                    corfuServerVersion, numNodes, corfuCluster.getName()
+            );
+
             servers.forEach(corfuCluster::add);
             data = UniverseParams.universeBuilder()
                     .build()
@@ -143,6 +148,7 @@ public interface Fixtures {
     @Data
     @Accessors(chain = true)
     abstract class AbstractUniverseFixture<T extends UniverseParams> implements Fixture<T> {
+        protected String corfuServerVersion;
         protected int numNodes;
         protected Set<Integer> metricsPorts;
         protected ClientParams client;
@@ -164,7 +170,8 @@ public interface Fixtures {
             // prevent instantiation of this class
         }
 
-        static ImmutableList<CorfuServerParams> buildMultipleServers(int numNodes, String clusterName) {
+        static ImmutableList<CorfuServerParams> buildMultipleServers(
+                String corfuServerVersion, int numNodes, String clusterName) {
 
             List<CorfuServerParams> serversParams = IntStream
                     .rangeClosed(1, numNodes)
@@ -174,6 +181,8 @@ public interface Fixtures {
                     .map(port -> CorfuServerParams.serverParamsBuilder()
                             .port(port)
                             .clusterName(clusterName)
+                            //.containerResources(Optional.of(ContainerResources.builder().build()))
+                            .serverVersion(corfuServerVersion)
                             .build()
                     )
                     .collect(Collectors.toList());

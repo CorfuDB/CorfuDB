@@ -9,7 +9,7 @@ import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.group.cluster.docker.DockerCorfuCluster;
 import org.corfudb.universe.group.cluster.docker.DockerSupportCluster;
 import org.corfudb.universe.logging.LoggingParams;
-import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Represents Docker implementation of a {@link Universe}.
  */
 @Slf4j
-public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniverseParams> {
+public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams> {
     /**
      * Docker parameter --network=host doesn't work in mac machines,
      * FakeDns is used to solve the issue, it resolves a dns record (which is a node name) to loopback address always.
@@ -95,7 +95,7 @@ public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniversePa
     }
 
     @Override
-    protected Cluster buildGroup(GroupParams<Node.NodeParams> groupParams) {
+    protected Cluster buildGroup(GroupParams<NodeParams> groupParams) {
 
         switch (groupParams.getType()) {
 

@@ -9,7 +9,6 @@ import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.universe.node.stress.Stress;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.IpTablesUtil;
@@ -22,21 +21,23 @@ import java.util.List;
  */
 @Slf4j
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
-    private static final String CORFU_INFRASTRUCTURE_JAR = String.format(
-            "./target/corfu/infrastructure-%s-shaded.jar", getAppVersion()
-    );
+
+    private final String infrastructureJarTemplate = "./target/corfu/infrastructure-%s-shaded.jar";
 
     @NonNull
     private final VirtualMachine vm;
     @NonNull
     private final String ipAddress;
+    @NonNull
     private final RemoteOperationHelper commandHelper;
     @NonNull
     private final VmStress stress;
 
     @Builder
-    public VmCorfuServer(VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams, VmStress stress) {
-        super(params, universeParams);
+    public VmCorfuServer(
+            VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams,
+            VmStress stress, String version) {
+        super(params, universeParams, version);
         this.vm = vm;
         this.ipAddress = getIpAddress();
         this.stress = stress;
@@ -57,7 +58,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
                 ipAddress,
                 universeParams.getVmUserName(),
                 universeParams.getVmPassword(),
-                CORFU_INFRASTRUCTURE_JAR,
+                String.format(infrastructureJarTemplate, version),
                 "./" + params.getName() + "/corfu-server.jar"
         );
 
