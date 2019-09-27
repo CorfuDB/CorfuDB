@@ -25,35 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class SequencerServerCacheTest extends AbstractObjectTest {
-
-    @Test
-    public void testSequencerCacheTrim() {
-
-        getDefaultRuntime();
-
-        Map<Integer, Integer> map = getDefaultRuntime()
-                .getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {
-                })
-                .setStreamName("test")
-                .open();
-
-        final int numTxn = 500;
-        final Token trimAddress = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), 250);
-        for (int x = 0; x < numTxn; x++) {
-            getRuntime().getObjectsView().TXBegin();
-            map.put(x, x);
-            getRuntime().getObjectsView().TXEnd();
-        }
-
-        SequencerServer sequencerServer = getSequencer(0);
-        SequencerServerCache cache = sequencerServer.getCache();
-        assertThat(cache.size()).isEqualTo(numTxn);
-        getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);
-        assertThat(cache.size()).isEqualTo((int) trimAddress.getSequence());
-    }
-
     /**
      * Check cache eviction algorithm (it must be atomic operation).
      * Check cache invalidation

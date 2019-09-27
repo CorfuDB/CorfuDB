@@ -28,16 +28,10 @@ public class StreamAddressSpace {
 
     private static final int NO_ADDRESSES = 0;
 
-    // Holds the last trimmed address for this stream.
-    // Note: keeping the last trimmed address is required in order to properly set the stream tail on sequencer resets
-    // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
-    private long trimMark;
-
     // Holds the complete map of addresses for this stream.
     private final Roaring64NavigableMap addressMap;
 
-    public StreamAddressSpace(long trimMark, Roaring64NavigableMap addressMap) {
-        this.trimMark = trimMark;
+    public StreamAddressSpace(Roaring64NavigableMap addressMap) {
         this.addressMap = addressMap;
     }
 
@@ -78,7 +72,7 @@ public class StreamAddressSpace {
     public Long getTail() {
         // If no address is present for this stream, the tail is given by the trim mark (last trimmed address)
         if (addressMap.getLongCardinality() == NO_ADDRESSES) {
-            return trimMark;
+            return (long) NO_ADDRESSES;
         }
 
         // The stream tail is the max address present in the stream's address map
@@ -106,40 +100,6 @@ public class StreamAddressSpace {
     }
 
     /**
-     * Trim all addresses lower or equal to trimMark and set new trim mark.
-     *
-     * @param trimMark upper limit of addresses to trim
-     */
-    public void trim(Long trimMark) {
-        if (!Address.isAddress(trimMark)) {
-            // If not valid address return and do not attempt to trim.
-            return;
-        }
-
-        // Note: if a negative value is passed to this API the cardinality
-        // of the bitmap is returned, which would be incorrect as we would
-        // be removing all addresses upon an invalid trim mark.
-        long numAddressesToTrim = addressMap.rankLong(trimMark);
-
-        if (numAddressesToTrim <= NO_ADDRESSES) {
-            return;
-        }
-
-        List<Long> addressesToTrim = new ArrayList<>();
-        LongIterator it = addressMap.getLongIterator();
-        for (int i = 0; i < numAddressesToTrim; i++) {
-            addressesToTrim.add(it.next());
-        }
-
-        log.trace("trim: Remove {} addresses for trim mark {}", addressesToTrim.size(), trimMark);
-
-        // Remove and set trim mark
-        if (!addressesToTrim.isEmpty()) {
-            removeAddresses(addressesToTrim);
-        }
-    }
-
-    /**
      * Get addresses in range (end, start], where start > end.
      *
      * @return Bitmap with addresses in this range.
@@ -161,14 +121,6 @@ public class StreamAddressSpace {
 
         return addressesInRange;
     }
-
-    public void setTrimMark(long trimMark) {
-        this.trimMark = trimMark;
-    }
-
-    public long getTrimMark() {
-       return trimMark;
-    }
     
     public long getLowestAddress() {
         if (addressMap.isEmpty()) {
@@ -188,6 +140,6 @@ public class StreamAddressSpace {
 
     @Override
     public String toString() {
-        return String.format("[%s, %s]@%s", getLowestAddress(), getHighestAddress(), trimMark);
+        return String.format("[%s, %s]", getLowestAddress(), getHighestAddress());
     }
 }
