@@ -19,6 +19,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
+        <module>benchmarks</module>
     </modules>
 
 

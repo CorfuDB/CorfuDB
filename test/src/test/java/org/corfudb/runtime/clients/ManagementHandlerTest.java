@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableSet;
 
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LayoutServer;
@@ -53,7 +52,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 // Required for management server to fetch the latest layout and connect runtime.
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
-                .add(new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-runtime", metricRegistry)))
+                .add(new SequencerServer(serverContext))
                 .add(new LogUnitServer(serverContext))
                 .add(new BaseServer(serverContext))
                 .build();
