@@ -19,7 +19,6 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ISMRStream;
@@ -469,8 +468,6 @@ public class FastObjectLoader {
                 break;
             case HOLE:
                 break;
-            case TRIMMED:
-                break;
             case EMPTY:
                 log.warn("applyForEachAddress[address={}] is empty");
                 break;
@@ -531,7 +528,7 @@ public class FastObjectLoader {
 
                 invokeNecromancer(range, logDataProcessor);
 
-            } catch (TrimmedException ex) {
+            } catch (Exception ex) {
                 log.warn("Error loading data", ex);
                 handleRetry();
             }
