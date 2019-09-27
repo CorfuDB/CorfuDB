@@ -9,6 +9,7 @@ import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
+import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
@@ -27,10 +28,8 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 
 import org.corfudb.util.CFUtils;
@@ -80,7 +79,6 @@ public class AddressSpaceView extends AbstractView {
     final private long defaultMaxCacheEntries = 5000;
 
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
-            .ignoreTrim(false)
             .waitForHole(true)
             .clientCacheable(true)
             .serverCacheable(true)
@@ -166,13 +164,7 @@ public class AddressSpaceView extends AbstractView {
      * @param address
      */
     private void validateStateOfWrittenEntry(long address, @Nonnull ILogData ld) {
-        ILogData logData;
-        try {
-            logData = read(address);
-        } catch (TrimmedException te) {
-            // We cannot know if the write went through or not
-            throw new UnrecoverableCorfuError("We cannot determine state of an update because of a trim.");
-        }
+        ILogData logData = read(address);
 
         if (!logData.equals(ld)){
             throw new OverwriteException(OverwriteCause.DIFF_DATA);
@@ -530,14 +522,14 @@ public class AddressSpaceView extends AbstractView {
             // resulted in a cache miss and need to be fetched
             if (!addressesToFetch.isEmpty()) {
                 Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, options);
-                result.putAll(checkForTrimmedAddresses(fetchedAddresses, options));
+                result.putAll(checkForCompactedAddresses(fetchedAddresses, options));
             }
 
             return result;
         }
 
         Map<Long, ILogData> readAddresses = fetchAll(addresses, options);
-        return checkForTrimmedAddresses(readAddresses, options);
+        return checkForCompactedAddresses(readAddresses, options);
 
     }
 
@@ -711,20 +703,14 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Check list of returned data for trimmed data.
-     *
-     * @param result list of read data
-     *
-     * @return map with valid data (not trimmed) or TrimmedException is thrown is data is trimmed and
-     * flag is not set.
+     * Cache list of returned data with given cache options.
      */
-    private Map<Long, ILogData> checkForTrimmedAddresses(Map<Long, ILogData> result, ReadOptions options) {
-        List<Long> trimmedAddresses = new ArrayList<>();
-
+    private Map<Long, ILogData> checkForCompactedAddresses(Map<Long, ILogData> result, ReadOptions options) {
+        Collection<Long> compactedAddressses = new ArrayList<>();
         for (Map.Entry<Long, ILogData> entry : result.entrySet()) {
-            // Add trimmed addresses to list
-            if (!checkLogData(entry.getKey(), entry.getValue(), false)) {
-                trimmedAddresses.add(entry.getKey());
+            // Add compacted addresses to list
+            if (!checkLogData(entry.getKey(), entry.getValue())) {
+                compactedAddressses.add(entry.getKey());
             } else {
                 if (options.isClientCacheable()) {
                     // After fetching a value, we need to insert it in the cache.
@@ -736,40 +722,27 @@ public class AddressSpaceView extends AbstractView {
             }
         }
 
-        if (!trimmedAddresses.isEmpty()) {
-            if (!options.isIgnoreTrim()) {
-                throw new TrimmedException(trimmedAddresses);
-            }
-
-            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
-        }
+        result.keySet().removeAll(compactedAddressses);
 
         return result;
     }
 
     /**
      * Checks whether a log entry is valid or not. If a read
-     * returns null, Empty, or trimmed an exception will be
+     * returns null, Empty, an exception will be
      * thrown.
      *
      * @param address the address being checked
      * @param logData the ILogData at the address being checked
-     * @return true if valid data, false if address is trimmed.
+     * @return true if valid data, false if address is compacted.
      */
-    private boolean checkLogData(long address, ILogData logData, boolean throwException) {
+    private boolean checkLogData(long address, ILogData logData) {
         if (logData == null || logData.getType() == DataType.EMPTY) {
             throw new RuntimeException("Unexpected return of empty data at address "
                     + address + " on read");
         }
 
-        if (logData.isTrimmed()) {
-            if (throwException) {
-                throw new TrimmedException(String.format("Trimmed address %s", address));
-            }
-            return false;
-        }
-
-        return true;
+        return logData.getType() != DataType.COMPACTED;
     }
 
     /**
@@ -785,7 +758,7 @@ public class AddressSpaceView extends AbstractView {
                 .read(e, address)
         );
 
-        checkLogDataThrowException(address, result);
+        checkLogData(address, result);
 
         return result;
     }
@@ -832,10 +805,6 @@ public class AddressSpaceView extends AbstractView {
                     map1.putAll(map2);
                     return map1;
                 });
-    }
-
-    private void checkLogDataThrowException(long address, ILogData result) {
-        checkLogData(address, result, true);
     }
 
     @VisibleForTesting
