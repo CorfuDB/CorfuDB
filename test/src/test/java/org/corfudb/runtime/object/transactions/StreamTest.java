@@ -101,40 +101,6 @@ public class StreamTest extends AbstractTransactionsTest {
     }
 
     @Test
-    public void sequencerTrimTest() {
-
-        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
-        final int numEntries = 10;
-        TXBegin();
-        map.get("a");
-        t2(() -> {
-            TXBegin();
-            for (int x = 0; x < numEntries; x++) {
-                map.put(Integer.toString(x), Integer.toString(x));
-            }
-            TXEnd();
-        });
-
-        Token token = new Token(getRuntime().getLayoutView().getLayout().getEpoch(), 1);
-        getRuntime().getAddressSpaceView().prefixTrim(token);
-
-        for (int x = 0; x < numEntries; x++) {
-            map.put(Integer.toString(x), Integer.toString(x));
-        }
-
-        boolean abortException = false;
-
-        try {
-            TXEnd();
-        } catch (TransactionAbortedException tae) {
-            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_TRIM);
-            abortException = true;
-        }
-
-        assertThat(abortException).isTrue();
-    }
-
-    @Test
     public void sequencerOverflowTest() {
 
         SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");

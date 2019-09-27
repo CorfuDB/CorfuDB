@@ -24,7 +24,6 @@ public class SnapshotTxOperation extends Operation {
     @Override
     public void execute() {
         try {
-            Token trimMark = state.getTrimMark();
             Random rand = new Random();
             long delta = (long) rand.nextInt(10) + 1;
 

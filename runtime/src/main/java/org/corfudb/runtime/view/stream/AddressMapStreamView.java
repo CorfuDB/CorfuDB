@@ -145,7 +145,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // if this address is already resolved locally do not request the stream map to the sequencer as new
             // updates are not required to be synced (this benefits single runtime writers).
             if(isAddressToBackpointerResolved(startAddress, streamId)) {
-                return new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+                return new StreamAddressSpace(Roaring64NavigableMap.bitmapOf(startAddress));
             }
 
             log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.",
@@ -156,7 +156,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
         // Start and stop address are consecutive addresses, no need to request the address map for this stream,
         // the only address to include is startAddress (stopAddress is already resolved - not included in the lookup).
-        return new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+        return new StreamAddressSpace(Roaring64NavigableMap.bitmapOf(startAddress));
     }
 
     private boolean isAddressToBackpointerResolved(long startAddress, UUID streamId) {

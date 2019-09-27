@@ -190,18 +190,6 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     }
 
     /**
-     * Handle a HEAD_RESPONSE message
-     * @param msg   Incoming Message
-     * @param ctx   Context
-     * @param r     Router
-     */
-    @ClientHandler(type=CorfuMsgType.TRIM_MARK_RESPONSE)
-    private static Object handleTrimMarkResponse(CorfuPayloadMsg<Long> msg,
-                                             ChannelHandlerContext ctx, IClientRouter r) {
-        return msg.getPayload();
-    }
-
-    /**
      * Handle a KNOWN_ADDRESS_RESPONSE message.
      *
      * @param msg Incoming Message

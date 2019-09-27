@@ -153,10 +153,6 @@ public class BatchProcessor implements AutoCloseable {
                 } else {
                     try {
                         switch (currOp.getType()) {
-                            case PREFIX_TRIM:
-                                TrimRequest prefixTrim = (TrimRequest) currOp.getMsg().getPayload();
-                                streamLog.prefixTrim(prefixTrim.getAddress().getSequence());
-                                break;
                             case WRITE:
                                 WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
                                 streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
@@ -200,8 +196,8 @@ public class BatchProcessor implements AutoCloseable {
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
-                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}].",
-                                operationsQueue.size(), streamLog.getTrimMark(), e);
+                        log.error("Stream log error. Batch [queue size={}].",
+                                operationsQueue.size(), e);
                         currOp.getFutureResult().completeExceptionally(e);
                     }
                     res.add(currOp);
