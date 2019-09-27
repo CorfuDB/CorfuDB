@@ -69,12 +69,9 @@ public class ReconfigurationEventHandler {
      */
     private static Duration getStateTransferTimeoutEstimate(CorfuRuntime runtime) {
 
-        // Try to estimate a reasonable timeout to rebuild the logging unit
-        Token trimMark = runtime.getAddressSpaceView().getTrimMark();
-
         long tail = runtime.getAddressSpaceView().getLogTail();
 
-        long rangeToReplicate = tail - trimMark.getSequence();
+        long rangeToReplicate = tail - 0L;
         // Since the orchestrator client and the fault detector client use
         // the same configuration its reasonable to use these arguments.
         // TODO(Maithem): AddNode should use a similar mechanism to set the timeout

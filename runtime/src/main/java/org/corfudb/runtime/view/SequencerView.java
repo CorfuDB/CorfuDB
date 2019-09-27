@@ -172,10 +172,4 @@ public class SequencerView extends AbstractView {
                     .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
         }
     }
-
-    public void trimCache(long address) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerTrimCache)){
-            runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
-        }
-    }
 }

@@ -77,7 +77,7 @@ public class LogMetadata {
             if (addressSpace == null) {
                 Roaring64NavigableMap addressMap = new Roaring64NavigableMap();
                 addressMap.addLong(address);
-                return new StreamAddressSpace(Address.NON_EXIST, addressMap);
+                return new StreamAddressSpace(addressMap);
             }
             addressSpace.addAddress(address);
             return addressSpace;
@@ -106,14 +106,5 @@ public class LogMetadata {
 
     void updateGlobalTail(long newTail) {
         globalTail = Math.max(globalTail, newTail);
-    }
-
-    public void prefixTrim(long address) {
-        log.info("prefixTrim: trim stream address maps up to address {}", address);
-        for (Map.Entry<UUID, StreamAddressSpace> streamAddressMap : streamsAddressSpaceMap.entrySet()) {
-            log.trace("prefixTrim: trim address space for stream {} up to trim mark {}",
-                    streamAddressMap.getKey(), address);
-            streamAddressMap.getValue().trim(address);
-        }
     }
 }
