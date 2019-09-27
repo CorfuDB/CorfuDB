@@ -135,14 +135,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
-     * Return true if and only if the entry represents a trimmed address.
-     */
-    default boolean isTrimmed() {
-        return getType() == DataType.TRIMMED;
-    }
-
-    /**
-     * Return true if this LogData contains data
+     * Return true if this LogData contains data.
      */
     default boolean isData() { return  getType() == DataType.DATA; }
 

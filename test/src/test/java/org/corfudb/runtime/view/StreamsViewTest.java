@@ -30,16 +30,4 @@ public class StreamsViewTest extends AbstractViewTest {
         getRuntime().getStreamsView().clear();
         assertThat(getRuntime().getStreamsView().getOpenedStreams()).isEmpty();
     }
-
-    @Test
-    public void testConcurrentOpenGC() throws Exception {
-        StreamsView streamsView = getDefaultRuntime().getStreamsView();
-        final long trimMark = 1;
-        final int numIter = 100;
-        final int parallelNum = 3;
-
-        scheduleConcurrently(numIter, t -> streamsView.get(UUID.randomUUID()));
-        scheduleConcurrently(numIter, t -> streamsView.gc(trimMark));
-        executeScheduled(parallelNum, PARAMETERS.TIMEOUT_NORMAL);
-    }
 }
