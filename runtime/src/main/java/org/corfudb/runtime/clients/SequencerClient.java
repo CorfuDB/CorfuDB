@@ -19,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 /**
  * A sequencer client.
