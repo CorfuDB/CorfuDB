@@ -54,11 +54,6 @@ public class StreamViewSMRAdapter implements ISMRStream {
         return updates;
     }
 
-    @Override
-    public void gc(long trimMark) {
-        streamView.gc(trimMark);
-    }
-
     /**
      * Returns all entries remaining upto the specified the global address specified.
      *
