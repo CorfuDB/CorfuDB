@@ -72,19 +72,8 @@ public class StateTransfer {
         IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
 
             try {
-
-                long trimMark = setTrimOnNewLogUnit(layout, runtime, endpoint);
-
-                if (trimMark > segment.getEnd()) {
-                    log.info("stateTransfer: Nothing to transfer, trimMark {}"
-                                    + "greater than end of segment {}",
-                            trimMark, segment.getEnd());
-                    return true;
-                }
-
-                // State transfer should start from segment start address or trim mark
-                // whichever is higher.
-                final long segmentStart = Math.max(trimMark, segment.getStart());
+                // State transfer should start from segment start address
+                final long segmentStart = segment.getStart();
                 final long segmentEnd = segment.getEnd() - 1;
                 log.info("stateTransfer: Total address range to transfer: [{}-{}] to node {}",
                         segmentStart, segmentEnd, endpoint);
@@ -118,32 +107,6 @@ public class StateTransfer {
             retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);
             retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);
         }).run();
-    }
-
-    /**
-     * Send the trimMark to the new/healing nodes.
-     * If this times out or fails, the Action performing the stateTransfer
-     * fails and retries.
-     * TrimMark is the first address present on the log unit server.
-     * Perform the prefix trim on the preceding address = (trimMark - 1).
-     * Since the LU will reject trim decisions made from older epochs, we
-     * need to adjust the new trim mark to have the new layout's epoch.
-     *
-     * @param layout   Current layout.
-     * @param runtime  Corfu runtime instance.
-     * @param endpoint Endpoint ot transfer data to.
-     * @return Trim Address.
-     */
-    private static long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
-                                            String endpoint) {
-
-        long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
-
-        Token prefixToken = new Token(layout.getEpoch(), trimMark - 1);
-        CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
-                .getLogUnitClient(endpoint)
-                .prefixTrim(prefixToken));
-        return trimMark;
     }
 
     /**
