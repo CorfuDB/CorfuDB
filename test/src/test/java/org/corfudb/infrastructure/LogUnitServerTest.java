@@ -344,7 +344,6 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Retrieve address space from current log unit server (write path)
         StreamAddressSpace addressSpace = logUnitServer.getStreamAddressSpace(streamID);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
 
         // Instantiate new log unit server (restarts) so the log is read and address maps are rebuilt.
@@ -355,7 +354,6 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Retrieve address space from new initialized log unit server (bootstrap path)
         addressSpace = newServer.getStreamAddressSpace(streamID);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
 
         newServer.getBatchWriter().stopProcessor();

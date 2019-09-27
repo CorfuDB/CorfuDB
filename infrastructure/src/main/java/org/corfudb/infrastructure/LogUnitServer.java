@@ -24,7 +24,6 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
@@ -48,7 +47,6 @@ import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.MULTI_GARBAGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
@@ -177,15 +175,6 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Service an incoming request to retrieve the starting address of this logging unit.
-     */
-    @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
-    public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleTrimMarkRequest: received a trim mark request {}", msg);
-        r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
-    }
-
-    /**
      * A helper function that maps an exception to the appropriate response message.
      */
     void handleException(Throwable ex, ChannelHandlerContext ctx, CorfuPayloadMsg msg, IServerRouter r) {
@@ -261,25 +250,6 @@ public class LogUnitServer extends AbstractServer {
 
         batchWriter.addTask(MULTI_GARBAGE_WRITE, msg)
                 .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
-                .exceptionally(ex -> {
-                    handleException(ex, ctx, msg, r);
-                    return null;
-                });
-    }
-
-    /**
-     * Perform a prefix trim.
-     * Here the token is not used to perform the trim as the epoch at which the checkpoint was completed
-     * might be old. Hence, we use the msg epoch to perform the trim. This should be safe provided that the
-     * trim is performed only on the token provided by the CheckpointWriter which ensures that the checkpoint
-     * was persisted. Using any other address to perform a trim can cause data loss.
-     */
-    @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
-    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-                            IServerRouter r) {
-        log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
-        batchWriter.addTask(PREFIX_TRIM, msg)
-                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
