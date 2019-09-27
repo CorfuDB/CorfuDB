@@ -1,10 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
@@ -14,7 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 11/11/16.

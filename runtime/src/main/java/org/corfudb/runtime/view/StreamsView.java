@@ -105,18 +105,6 @@ public class StreamsView extends AbstractView {
     }
 
     /**
-     * Run garbage collection on all opened streams. Note that opened
-     * unsafe streams will be excluded (because its unsafe for the garbage
-     * collector thread to operate on them while being used by a different
-     * thread).
-     */
-    public void gc(long trimMark) {
-        for (IStreamView streamView : openedStreams) {
-            streamView.gc(trimMark);
-        }
-    }
-
-    /**
      * Append to multiple streams simultaneously, possibly providing
      * information on how to resolve conflicts.
      *

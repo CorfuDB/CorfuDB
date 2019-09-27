@@ -38,8 +38,6 @@ public interface ISMRStream {
 
     void seek(long globalAddress);
 
-    void gc(long trimMark);
-
     Stream<SMRRecord> stream();
 
     Stream<SMRRecord> streamUpTo(long maxGlobal);
