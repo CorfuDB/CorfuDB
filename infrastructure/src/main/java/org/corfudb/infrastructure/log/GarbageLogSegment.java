@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.Token;
 
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
@@ -17,7 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
@@ -31,10 +29,6 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
  */
 @Slf4j
 public class GarbageLogSegment extends AbstractLogSegment {
-
-    // A file lock for all GarbageLogSegment instances.
-    @Getter
-    static final MultiReadWriteLock segmentLock = new MultiReadWriteLock();
 
     @Getter
     @Setter
@@ -81,7 +75,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
                 entry.resetPayload(uniqueGarbageEntry);
             }
 
-            writeRecord(address, entry, segmentLock);
+            writeRecord(address, entry);
             mergeGarbageEntry(address, uniqueGarbageEntry);
             compactionMetaData.updateGarbageSize(Collections.singletonList(uniqueGarbageEntry));
             log.trace("append[{}]: Written one garbage entry to disk.", address);
@@ -133,7 +127,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
                 uniqueGarbageLogData.add(entry);
             }
 
-            writeRecords(uniqueGarbageLogData, segmentLock);
+            writeRecords(uniqueGarbageLogData);
             uniqueGarbageEntries.forEach(this::mergeGarbageEntry);
             compactionMetaData.updateGarbageSize(uniqueGarbageEntries.values());
 
@@ -146,6 +140,20 @@ public class GarbageLogSegment extends AbstractLogSegment {
         } finally {
             release();
         }
+    }
+
+    /**
+     * Append list of possibly compacted entries to the log segment
+     * file, which ignores the global committed tail.
+     * <p>
+     * For garbage log, the implementation is same as {@link this#append(List)}
+     * since OverwriteException is never thrown.
+     *
+     * @param entries entries to append to the file
+     */
+    @Override
+    public void appendCompacted(List<LogData> entries) {
+        append(entries);
     }
 
     /**

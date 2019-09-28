@@ -58,7 +58,10 @@ public enum CorfuMsgType {
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
     MULTIPLE_READ_REQUEST(33, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
-    MULTIPLE_GARBAGE_REQUEST(37, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
+    PREFIX_TRIM(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
+    INSPECT_ADDRESSES_REQUEST(35, new TypeToken<CorfuPayloadMsg<InspectAddressesRequest>>() {}),
+    INSPECT_ADDRESSES_RESPONSE(36, new TypeToken<CorfuPayloadMsg<InspectAddressesResponse>>() {}),
+    MULTIPLE_GARBAGE_REQUEST(37, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
     MULTIPLE_GARBAGE_WRITE(38, new TypeToken<CorfuPayloadMsg<RangeWriteMsg>>() {}),
     TAIL_REQUEST(41, new TypeToken<CorfuPayloadMsg<TailsRequest>>(){}),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
@@ -83,6 +86,9 @@ public enum CorfuMsgType {
     LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true),
     RESTART(62, TypeToken.of(CorfuMsg.class), true),
     KEEP_ALIVE(63, TypeToken.of(CorfuMsg.class), true),
+    COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
+    COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),
 
     // Management Messages
     MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true),
@@ -109,7 +115,6 @@ public enum CorfuMsgType {
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
     ;
-
 
     public final int type;
     public final TypeToken<? extends CorfuMsg> messageType;

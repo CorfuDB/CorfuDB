@@ -325,11 +325,17 @@ public class SegmentManager {
             return Collections.emptyList();
         }
 
+        // Ordinal of the last compactible segment, rounded by committed tail.
+        long lastOrdinal = getSegmentOrdinal(dataStore.getCommittedTail()) - 1;
+        if (lastOrdinal < 0) {
+            return Collections.emptyList();
+        }
+
         return metaDataMapCopy
                 .values()
                 .stream()
-                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal))
-                .limit(metaDataMapCopy.size() - logParams.protectedSegments)
+                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal).reversed())
+                .skip(logParams.protectedSegments)
                 .collect(Collectors.toList());
     }
 

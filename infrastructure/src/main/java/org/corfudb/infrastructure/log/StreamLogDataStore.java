@@ -4,25 +4,15 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.KvDataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.apache.commons.io.IOUtils;
-import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Address;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiPredicate;
 
 /**
  * Data access layer for StreamLog.
- * Keeps stream log related meta information: starting address,
+ * Keeps stream log related meta information: head segment,
  * tail segment and global compaction mark.
  * Provides access to the stream log related meta information.
  */
@@ -31,25 +21,29 @@ public class StreamLogDataStore {
     private static final String TAIL_SEGMENT_PREFIX = "TAIL_SEGMENT";
     private static final String TAIL_SEGMENT_KEY = "CURRENT";
 
-    private static final String STARTING_ADDRESS_PREFIX = "STARTING_ADDRESS";
-    private static final String STARTING_ADDRESS_KEY = "CURRENT";
+    private static final String HEAD_SEGMENT_PREFIX = "HEAD_SEGMENT";
+    private static final String HEAD_SEGMENT_KEY = "CURRENT";
 
     private static final String COMPACTION_MARK_PREFIX = "COMPACTION_MARK";
     private static final String COMPACTION_MARK_KEY = "CURRENT";
 
-    private static final String COMPACTED_ADDRESSES_PREFIX = "COMPACTED_ADDRESSES";
+    private static final String COMMITTED_TAIL_PREFIX = "COMMITTED_TAIL";
+    private static final String COMMITTED_TAIL_KEY = "CURRENT";
 
     private static final KvRecord<Long> TAIL_SEGMENT_RECORD = new KvRecord<>(
             TAIL_SEGMENT_PREFIX, TAIL_SEGMENT_KEY, Long.class
     );
 
-    private static final KvRecord<Long> STARTING_ADDRESS_RECORD = new KvRecord<>(
-            STARTING_ADDRESS_PREFIX, STARTING_ADDRESS_KEY, Long.class
+    private static final KvRecord<Long> HEAD_SEGMENT_RECORD = new KvRecord<>(
+            HEAD_SEGMENT_PREFIX, HEAD_SEGMENT_KEY, Long.class
     );
 
     private static final KvRecord<Long> COMPACTION_MARK_RECORD = new KvRecord<>(
             COMPACTION_MARK_PREFIX, COMPACTION_MARK_KEY, Long.class
     );
+
+    private static final KvRecord<Long> COMMITTED_TAIL_RECORD = new KvRecord<>(
+            COMMITTED_TAIL_PREFIX, COMMITTED_TAIL_KEY, Long.class);
 
     private static final long ZERO_ADDRESS = 0L;
 
@@ -59,7 +53,7 @@ public class StreamLogDataStore {
     /**
      * Cached starting address.
      */
-    private final AtomicLong startingAddress;
+    private final AtomicLong headSegment;
 
     /**
      * Cached tail segment.
@@ -72,15 +66,21 @@ public class StreamLogDataStore {
      */
     private final AtomicLong globalCompactionMark;
 
+    /**
+     * Cached committed log tail, up to which the log is consolidated.
+     */
+    private final AtomicLong committedTail;
 
     public StreamLogDataStore(KvDataStore dataStore) {
         this.dataStore = dataStore;
-        this.startingAddress =
-                new AtomicLong(dataStore.get(STARTING_ADDRESS_RECORD, ZERO_ADDRESS));
+        this.headSegment =
+                new AtomicLong(dataStore.get(HEAD_SEGMENT_RECORD, Address.MAX));
         this.tailSegment =
                 new AtomicLong(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
         this.globalCompactionMark =
                 new AtomicLong(dataStore.get(COMPACTION_MARK_RECORD, Address.NON_ADDRESS));
+        this.committedTail =
+                new AtomicLong(dataStore.get(COMMITTED_TAIL_RECORD, Address.NON_ADDRESS));
     }
 
     /**
@@ -98,10 +98,10 @@ public class StreamLogDataStore {
      * @param newTailSegment new tail segment to update
      */
     void updateTailSegment(long newTailSegment) {
-        if (updateIfGreater(tailSegment, newTailSegment, TAIL_SEGMENT_RECORD)) {
+        if (update(TAIL_SEGMENT_RECORD, tailSegment, newTailSegment, (curr, next) -> next > curr)) {
             log.debug("Updated tail segment to: {}", newTailSegment);
         } else {
-            log.trace("New tail segment not greater than current, ignore.");
+            log.trace("New tail segment {} not greater than current, ignore.", newTailSegment);
         }
     }
 
@@ -117,40 +117,40 @@ public class StreamLogDataStore {
     }
 
     /**
-     * Return the current starting address.
+     * Return the current head segment.
      *
      * @return the starting address
      */
-    long getStartingAddress() {
-        return startingAddress.get();
+    long getHeadSegment() {
+        return headSegment.get();
     }
 
     /**
-     * Update current starting address in the data store.
+     * Update current head segment in the data store.
      *
-     * @param newStartingAddress updated starting address
+     * @param newHeadSegment new head segment to update
      */
-    void updateStartingAddress(long newStartingAddress) {
-        if (updateIfGreater(startingAddress, newStartingAddress, STARTING_ADDRESS_RECORD)) {
-            log.debug("Updated starting address to: {}", newStartingAddress);
+    void updateHeadSegment(long newHeadSegment) {
+        if (update(HEAD_SEGMENT_RECORD, headSegment, newHeadSegment, (curr, next) -> next < curr)) {
+            log.debug("Updated head segment to: {}", newHeadSegment);
         } else {
-            log.trace("New starting address not greater than current, ignore.");
+            log.trace("New head segment {} not smaller than current, ignore.", newHeadSegment);
         }
     }
 
     /**
-     * Reset starting address.
+     * Reset head segment.
      */
-    void resetStartingAddress() {
-        log.info("Resetting starting address. Current address: {}", startingAddress.get());
-        startingAddress.updateAndGet(addr -> {
-            dataStore.put(STARTING_ADDRESS_RECORD, ZERO_ADDRESS);
-            return ZERO_ADDRESS;
+    void resetHeadSegment() {
+        log.info("Resetting head segment. Current head segment: {}", headSegment.get());
+        headSegment.updateAndGet(addr -> {
+            dataStore.put(HEAD_SEGMENT_RECORD, Address.MAX);
+            return Address.MAX;
         });
     }
 
     /**
-     * Return the current global compaction marks.
+     * Return the current global compaction mark.
      */
     long getGlobalCompactionMark() {
         return globalCompactionMark.get();
@@ -162,10 +162,10 @@ public class StreamLogDataStore {
      * @param newCompactionMark a new address to update current global compaction mark
      */
     void updateGlobalCompactionMark(long newCompactionMark) {
-        if (updateIfGreater(globalCompactionMark, newCompactionMark, COMPACTION_MARK_RECORD)) {
+        if (update(COMPACTION_MARK_RECORD, globalCompactionMark, newCompactionMark, (curr, next) -> next > curr)) {
             log.debug("Updated global compaction mark to: {}", newCompactionMark);
         } else {
-            log.trace("New global compaction mark not greater than current, ignore.");
+            log.trace("New global compaction mark {} not greater than current, ignore.", newCompactionMark);
         }
     }
 
@@ -181,76 +181,48 @@ public class StreamLogDataStore {
     }
 
     /**
-     * Set the compacted addresses bitmap.
-     *
-     * @param newBitmap new compacted addresses bitmap.
+     * Return the current committed log tail.
      */
-    void updateCompactedAddresses(long segment, Roaring64NavigableMap newBitmap) {
-        Roaring64NavigableMap currBitmap = getCompactedAddresses(segment);
-        newBitmap.or(currBitmap);
+    long getCommittedTail() {
+        return committedTail.get();
+    }
 
-        newBitmap.runOptimize();
-        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-        DataOutput output = new DataOutputStream(byteStream);
-
-        try {
-            newBitmap.serialize(output);
-            ByteBuffer buffer = ByteBuffer.wrap(byteStream.toByteArray());
-            dataStore.put(getCompactedAddressesRecord(segment), buffer);
-        } catch (IOException ioe) {
-            throw new RuntimeException("Exception when attempting to " +
-                    "serialize compacted addresses bitmap", ioe);
-        } finally {
-            IOUtils.closeQuietly(byteStream);
+    /**
+     * Update the current committed log tail if the provided tail is greater.
+     *
+     * @param newCommittedTail a new address to update current global committed tail
+     */
+    void updateCommittedTail(long newCommittedTail) {
+        if (update(COMMITTED_TAIL_RECORD, committedTail, newCommittedTail, (curr, next) -> next > curr)) {
+            log.debug("Updated committed log tail to: {}", newCommittedTail);
+        } else {
+            log.trace("New committed log tail {} not greater than current, ignore.", newCommittedTail);
         }
     }
 
     /**
-     * Get the current compacted addresses bitmap.
-     * Caching is done on upper layer.
+     * Reset committed log tail.
      */
-    Roaring64NavigableMap getCompactedAddresses(long segment) {
-        ByteBuffer buf = dataStore.get(getCompactedAddressesRecord(segment));
-        if (buf == null) {
-            return new Roaring64NavigableMap();
-        }
-
-        // Cannot use flip() in case the buf is cached since flip() would
-        // change limit to position, but position is 0 if cached.
-        buf.rewind();
-        ByteArrayInputStream byteStream = new ByteArrayInputStream(
-                buf.array(), buf.position(), buf.remaining());
-        DataInput input = new DataInputStream(byteStream);
-
-        try {
-            Roaring64NavigableMap bitmap = new Roaring64NavigableMap();
-            bitmap.deserialize(input);
-            return bitmap;
-        } catch (IOException ioe) {
-            throw new SerializerException("Exception when attempting to " +
-                    "deserialize compacted addresses bitmap.", ioe);
-        } finally {
-            IOUtils.closeQuietly(byteStream);
-        }
+    void resetCommittedTail() {
+        log.info("Resetting committed log tail. Current: {}", committedTail.get());
+        committedTail.updateAndGet(addr -> {
+            dataStore.put(COMMITTED_TAIL_RECORD, Address.NON_ADDRESS);
+            return Address.NON_ADDRESS;
+        });
     }
 
-    void resetAllCompactedAddresses() {
-        dataStore.deleteFiles(file -> file.getName().startsWith(COMPACTED_ADDRESSES_PREFIX));
-    }
-
-    private KvRecord<ByteBuffer> getCompactedAddressesRecord(long segment) {
-        return new KvRecord<>(COMPACTED_ADDRESSES_PREFIX, String.valueOf(segment), ByteBuffer.class);
-    }
-
-    private boolean updateIfGreater(AtomicLong target, long newAddress, KvRecord<Long> key) {
+    private boolean update(KvRecord<Long> key,
+                           AtomicLong current, long newValue,
+                           BiPredicate<Long, Long> predicate) {
         AtomicBoolean updated = new AtomicBoolean(false);
-        target.updateAndGet(curr -> {
-            if (newAddress <= curr) {
+
+        current.updateAndGet(curr -> {
+            if (!predicate.test(curr, newValue)) {
                 return curr;
             }
             updated.set(true);
-            dataStore.put(key, newAddress);
-            return newAddress;
+            dataStore.put(key, newValue);
+            return newValue;
         });
 
         return updated.get();

@@ -49,6 +49,14 @@ public interface StreamLog {
     LogData read(long address);
 
     /**
+     * Inspect if the stream log contains the entry at given address.
+     *
+     * @param address the address to inspect
+     * @return true if stream log contains the entry at the address, false otherwise
+     */
+    boolean contains(long address);
+
+    /**
      * Given an address, read the corresponding garbage log entry.
      *
      * @param address address to read from the log
@@ -82,6 +90,16 @@ public interface StreamLog {
      * Get global and all stream tails.
      */
     TailsResponse getAllTails();
+
+    /**
+     * Get the committed log tail.
+     */
+    long getCommittedTail();
+
+    /**
+     * Update the committed log tail.
+     */
+    void updateCommittedTail(long committedTail);
 
     /**
      * Get the address space for every stream.

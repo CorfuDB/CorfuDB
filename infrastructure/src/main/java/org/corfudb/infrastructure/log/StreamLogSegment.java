@@ -10,7 +10,6 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -35,17 +34,10 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 @Getter
 class StreamLogSegment extends AbstractLogSegment {
 
-    // A lock for all StreamLogSegment instances.
-    @Getter
-    private static final MultiReadWriteLock segmentLock = new MultiReadWriteLock();
-
     private final StreamLogDataStore dataStore;
 
     // Entry index map of the global logical address to physical offset in this file.
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
-
-    // A bitmap contains the addresses whose corresponding LogData was entirely compacted.
-    private Roaring64NavigableMap compactedAddresses = new Roaring64NavigableMap();
 
     StreamLogSegment(long ordinal, StreamLogParams logParams,
                      String filePath, ResourceQuota logSizeQuota,
@@ -65,7 +57,16 @@ class StreamLogSegment extends AbstractLogSegment {
     @Override
     public LogData read(long address) {
         try {
-            return readRecord(address);
+            if (!contains(address)) {
+                return null;
+            }
+
+            AddressMetaData metaData = knownAddresses.get(address);
+            if (metaData == null) {
+                return LogData.getCompacted(address);
+            }
+
+            return readRecord(metaData);
         } catch (ClosedChannelException cce) {
             log.warn("Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
             throw new ClosedSegmentException(cce);
@@ -80,17 +81,10 @@ class StreamLogSegment extends AbstractLogSegment {
     /**
      * Read a log entry in a file.
      *
-     * @param address the address of the entry to read
+     * @param metaData the AddressMetaData that contains the file index
      * @return the log unit entry at that address, or NULL if there is no entry
      */
-    private LogData readRecord(long address) throws IOException {
-        AddressMetaData metaData = knownAddresses.get(address);
-        if (metaData == null && !compactedAddresses.contains(address)) {
-            return null;
-        } else if (metaData == null) {
-            return LogData.getCompacted(address);
-        }
-
+    private LogData readRecord(AddressMetaData metaData) throws IOException {
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
             readChannel.read(entryBuf, metaData.offset);
@@ -112,11 +106,11 @@ class StreamLogSegment extends AbstractLogSegment {
     public void append(long address, LogData entry) {
         try {
             // Check if the entry exists.
-            if (entryExists(address)) {
+            if (contains(address)) {
                 processOverwriteEntry(address, entry);
             }
 
-            AddressMetaData addressMetaData = writeRecord(address, entry, segmentLock);
+            AddressMetaData addressMetaData = writeRecord(address, entry);
             knownAddresses.put(address, addressMetaData);
             compactionMetaData.updateTotalPayloadSize(Collections.singletonList(entry));
             log.trace("append[{}]: Written one entry to disk.", address);
@@ -147,12 +141,12 @@ class StreamLogSegment extends AbstractLogSegment {
             }
 
             // Check if any entry exists.
-            if (anyEntryExists(entries)) {
+            if (containsAny(entries, false)) {
                 log.debug("append: Overwritten exception, entries: {}", entries);
                 throw new OverwriteException(OverwriteCause.SAME_DATA);
             }
 
-            Map<Long, AddressMetaData> addressMetaData = writeRecords(entries, segmentLock);
+            Map<Long, AddressMetaData> addressMetaData = writeRecords(entries);
             knownAddresses.putAll(addressMetaData);
             compactionMetaData.updateTotalPayloadSize(entries);
             log.trace("append: Written entries to disk: {}", entries);
@@ -168,12 +162,55 @@ class StreamLogSegment extends AbstractLogSegment {
         }
     }
 
-    private boolean entryExists(long address) {
-        return knownAddresses.containsKey(address) || compactedAddresses.contains(address);
+    /**
+     * Append list of possibly compacted entries to the log segment
+     * file, which ignores the global committed tail.
+     *
+     * @param entries entries to append to the file
+     */
+    @Override
+    public void appendCompacted(List<LogData> entries) {
+        try {
+            if (entries.isEmpty()) {
+                return;
+            }
+
+            // Check if any entry exists, this only checks the current local index,
+            // ignoring the global committed tail.
+            if (containsAny(entries, true)) {
+                log.debug("appendCompacted: Overwritten exception, entries: {}", entries);
+                throw new OverwriteException(OverwriteCause.SAME_DATA);
+            }
+
+            Map<Long, AddressMetaData> addressMetaData = writeRecords(entries);
+            knownAddresses.putAll(addressMetaData);
+            compactionMetaData.updateTotalPayloadSize(entries);
+            log.trace("appendCompacted: Written entries to disk: {}", entries);
+        } catch (IOException ioe) {
+            log.error("appendCompacted: IOException when writing entries: {}", entries, ioe);
+            throw new RuntimeException(ioe);
+        }
     }
 
-    private boolean anyEntryExists(List<LogData> entries) {
-        return entries.stream().anyMatch(entry -> entryExists(entry.getGlobalAddress()));
+    /**
+     * Check if the entry exists (not a hole) in this segment, including compacted.
+     */
+    boolean contains(long address) {
+        // Addresses less than or equal to committedTail are consolidated and could be
+        // compacted, if an address is not in index, then it is a hole if and only if
+        // it is greater than committedTail.
+        return knownAddresses.containsKey(address) || address <= dataStore.getCommittedTail();
+    }
+
+    /**
+     * Check if any entry in a list exists (not a hole) in this segment, including compacted.
+     */
+    private boolean containsAny(List<LogData> entries, boolean ignoreCommitted) {
+        // Assume the entries are ordered by address, which is checked in upper layer.
+        if (!ignoreCommitted && entries.get(entries.size() - 1).getGlobalAddress() <= dataStore.getCommittedTail()) {
+            return true;
+        }
+        return entries.stream().anyMatch(entry -> knownAddresses.containsKey(entry.getGlobalAddress()));
     }
 
     private void processOverwriteEntry(long address, LogData entry) {
@@ -207,6 +244,5 @@ class StreamLogSegment extends AbstractLogSegment {
             LogData logData = getLogData(indexedEntry.logEntry);
             compactionMetaData.updateTotalPayloadSize(Collections.singletonList(logData));
         }
-        compactedAddresses = dataStore.getCompactedAddresses(ordinal);
     }
 }

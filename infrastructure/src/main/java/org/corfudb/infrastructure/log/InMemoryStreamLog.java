@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.log.StreamLog.assertAppendPermittedUnsafe;
 import static org.corfudb.infrastructure.log.StreamLog.getOverwriteCauseForAddress;
@@ -31,6 +32,7 @@ public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
     private volatile LogMetadata logMetadata;
+    private AtomicLong committedTail;
 
     /**
      * Returns an object that stores a stream log in memory.
@@ -38,6 +40,7 @@ public class InMemoryStreamLog implements StreamLog {
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap<>();
         logMetadata = new LogMetadata();
+        committedTail = new AtomicLong(Address.NON_ADDRESS);
     }
 
     @Override
@@ -85,6 +88,21 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
+    public long getCommittedTail() {
+        return committedTail.get();
+    }
+
+    @Override
+    public synchronized void updateCommittedTail(long newCommittedTail) {
+        committedTail.updateAndGet(curr -> {
+            if (newCommittedTail <= curr) {
+                return curr;
+            }
+            return newCommittedTail;
+        });
+    }
+
+    @Override
     public synchronized StreamsAddressResponse getStreamsAddressSpace() {
         return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
     }
@@ -124,6 +142,11 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public LogData read(long address) {
         return logCache.get(address);
+    }
+
+    @Override
+    public boolean contains(long address) {
+        return logCache.containsKey(address);
     }
 
     @Override

@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure.log;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.AbstractLogSegment.IndexedLogEntry;
-import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
@@ -11,11 +11,8 @@ import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import javax.annotation.Nullable;
-import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -91,6 +88,7 @@ public class StreamLogCompactor {
                 logParams.compactionInitialDelayMin, logParams.compactionPeriodMin, TimeUnit.MINUTES);
     }
 
+    @VisibleForTesting
     public void compact() {
         try {
             // Get the segments that should be compacted according to compaction policy.
@@ -144,18 +142,11 @@ public class StreamLogCompactor {
             CompactionFeedback compactionFeedback = compactStreamSegment(
                     inputStreamSegment, outputStreamSegment, inputGarbageSegment);
 
-            // We do not lock in the previous step to minimize the waiting time of hole fill writers.
-            try (AutoCloseableLock ignored =
-                         StreamLogSegment.getSegmentLock().acquireWriteLock(ordinal)) {
-                // Sync the delta updates during the initial compaction.
-                syncSegmentUpdate(inputStreamSegment, outputStreamSegment);
-                // Update global compaction mark before remapping to ensure following
-                // reads can return the most up-to-date compaction mark.
-                dataStore.updateGlobalCompactionMark(compactionFeedback.segmentCompactionMark);
-                dataStore.updateCompactedAddresses(ordinal, compactionFeedback.compactedAddresses);
-                logMetadata.pruneStreamSpace(compactionFeedback.addressesToPrune);
-                segmentManager.remapCompactedSegment(inputStreamSegment, outputStreamSegment);
-            }
+            // Update global compaction mark before remapping to ensure following
+            // reads can return the most up-to-date compaction mark.
+            dataStore.updateGlobalCompactionMark(compactionFeedback.segmentCompactionMark);
+            logMetadata.pruneStreamSpace(compactionFeedback.addressesToPrune);
+            segmentManager.remapCompactedSegment(inputStreamSegment, outputStreamSegment);
 
             // Close input and output stream segment channels.
             closeSegments(inputStreamSegment, outputStreamSegment);
@@ -164,17 +155,8 @@ public class StreamLogCompactor {
 
             log.debug("Started compacting garbage log segment: {}", inputStreamSegment.getFilePath());
             startTime = System.currentTimeMillis();
-            // Initial compaction of the GarbageLogSegment.
-            compactGarbageSegment(inputGarbageSegment,
-                    outputGarbageSegment, compactionFeedback.garbageEntriesToPrune);
-
-            // We do not lock in the previous step to minimize the waiting time of garbage writers.
-            try (AutoCloseableLock ignored =
-                         GarbageLogSegment.getSegmentLock().acquireWriteLock(ordinal)) {
-                // Sync the delta updates during the initial compaction.
-                syncSegmentUpdate(inputGarbageSegment, outputGarbageSegment);
-                segmentManager.remapCompactedSegment(inputGarbageSegment, outputGarbageSegment);
-            }
+            compactGarbageSegment(inputGarbageSegment, outputGarbageSegment, compactionFeedback.garbageEntriesToPrune);
+            segmentManager.remapCompactedSegment(inputGarbageSegment, outputGarbageSegment);
 
             // Close input and output garbage segment channels.
             closeSegments(inputGarbageSegment, outputGarbageSegment);
@@ -224,7 +206,6 @@ public class StreamLogCompactor {
         // If it's a hole, return null but add to the compacted address because
         // a hole might be the global tail and we don't want to regress it.
         if (logData.getType() == DataType.HOLE) {
-            compactionFeedback.addCompactedAddress(address);
             return null;
         }
 
@@ -301,7 +282,6 @@ public class StreamLogCompactor {
 
         // If no stream updates in this entry after compaction, return null.
         if (compactedEntry.getStreams().isEmpty()) {
-            compactionFeedback.addCompactedAddress(address);
             compactionFeedback.addGarbageRecordToPrune(address);
             return null;
         }
@@ -309,32 +289,6 @@ public class StreamLogCompactor {
         // Reset the logData payload with the compacted entry.
         logData.resetPayload(compactedEntry);
         return logData;
-    }
-
-    /**
-     * Sync the delta updates from the {@code inputSegment} to {@code outputSegment}.
-     */
-    private void syncSegmentUpdate(AbstractLogSegment inputSegment,
-                                   AbstractLogSegment outputSegment) {
-        try {
-            log.debug("Syncing delta update for segment: {}", inputSegment.getFilePath());
-            FileChannel inputChannel = inputSegment.getWriteChannel();
-            FileChannel outputChannel = outputSegment.getWriteChannel();
-            long position = inputChannel.position();
-            long count = inputChannel.size() - position;
-
-            while (count > 0) {
-                // transferTo may not transfer all requested bytes.
-                long transferred = inputChannel.transferTo(position, count, outputChannel);
-                position += transferred;
-                count -= transferred;
-            }
-            outputSegment.sync();
-
-        } catch (IOException e) {
-            log.error("syncSegmentUpdate: Encountered IO exception.", e);
-            throw new RuntimeException(e);
-        }
     }
 
     private void compactGarbageSegment(GarbageLogSegment inputGarbageSegment,
@@ -373,7 +327,7 @@ public class StreamLogCompactor {
                                              int batchSize, int flushBatchCount,
                                              AbstractLogSegment compactionOutput) {
         if (batch.size() >= batchSize) {
-            compactionOutput.append(batch);
+            compactionOutput.appendCompacted(batch);
             flushBatchCount += batch.size();
             batch.clear();
 
@@ -389,7 +343,7 @@ public class StreamLogCompactor {
 
     private void writeBatchToCompactionOutput(List<LogData> batch,
                                              AbstractLogSegment compactionOutput) {
-        compactionOutput.append(batch);
+        compactionOutput.appendCompacted(batch);
         compactionOutput.sync();
     }
 
@@ -418,8 +372,6 @@ public class StreamLogCompactor {
         private Map<Long, Map<UUID, List<Integer>>> garbageEntriesToPrune = new HashMap<>();
         // Used to prune stream address bitmap.
         private Map<UUID, List<Long>> addressesToPrune = new HashMap<>();
-        // Used to book-keep the address whose corresponding LogData was entirely compacted.
-        private Roaring64NavigableMap compactedAddresses = new Roaring64NavigableMap();
         // Used to update global compaction mark.
         private long segmentCompactionMark = Address.NON_ADDRESS;
 
@@ -449,10 +401,6 @@ public class StreamLogCompactor {
 
         private void updateSegmentCompactionMark(long address) {
             segmentCompactionMark = Math.max(address, segmentCompactionMark);
-        }
-
-        private void addCompactedAddress(long address) {
-            compactedAddresses.addLong(address);
         }
     }
 }

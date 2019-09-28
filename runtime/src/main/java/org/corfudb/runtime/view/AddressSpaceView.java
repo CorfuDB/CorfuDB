@@ -6,7 +6,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Range;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
 
@@ -354,6 +357,33 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Commit the addresses in the range by first inspecting the addresses
+     * and if data not exist in log, hole fill the address.
+     *
+     * @param start start of address range, inclusive
+     * @param end   end of address range, inclusive
+     */
+    public void commit(long start, long end) {
+        if (start >= end) {
+            return;
+        }
+
+        ContiguousSet<Long> range = ContiguousSet.create(
+                Range.closed(start, end), DiscreteDomain.longs());
+
+        // Commit the addresses and update all log unit servers with the
+        // new committed tail, which is the end of range. Exceptions are
+        // are handled at the upper layer.
+        layoutHelper(e -> {
+            e.getLayout().getReplicationMode(start)
+                    .getReplicationProtocol(runtime)
+                    .commitAll(e, range);
+            Utils.updateCommittedTail(e.getLayout(), runtime, end);
+            return null;
+        }, true);
+    }
+
+    /**
      * Perform a single read with the default read options
      */
     public @NonNull ILogData read(long address) {
@@ -553,6 +583,14 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Get the minimum committed log tail from all log units.
+     */
+    public long getCommittedTail() {
+        return layoutHelper(
+                e -> Utils.getMinCommittedTail(e.getLayout(), runtime));
+    }
+
+    /**
      * Get log address space, which includes:
      *     1. Addresses belonging to each stream.
      *     2. Log Tail.
@@ -706,9 +744,6 @@ public class AddressSpaceView extends AbstractView {
         Map<String, List<Long>> serverToAddressMap = new HashMap<>();
         for (Long address : addresses) {
             List<String> logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();
-
-            // garbage info is fetched from the last log unit server in the strip.
-            // TODO(xin): add more comments to explain why reading from last log unit.
             String logServer = logServers.get(logServers.size() - 1);
             List<Long> addressList = serverToAddressMap.computeIfAbsent(logServer, s -> new ArrayList<>());
             addressList.add(address);

@@ -14,6 +14,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
@@ -157,6 +159,26 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Service an incoming query for the committed tail on this log unit server.
+     */
+    @ServerHandler(type = CorfuMsgType.COMMITTED_TAIL_REQUEST)
+    public void handleCommittedTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("handleCommittedTailRequest: received a committed log tail request {}", msg);
+        r.sendResponse(ctx, msg, CorfuMsgType.COMMITTED_TAIL_RESPONSE.payloadMsg(streamLog.getCommittedTail()));
+    }
+
+    /**
+     * Service an incoming request to update the current committed tail.
+     */
+    @ServerHandler(type = CorfuMsgType.UPDATE_COMMITTED_TAIL)
+    public void updateCommittedTail(CorfuPayloadMsg<Long> msg,
+                                    ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("updateCommittedTail: received request to update committed tail {}", msg);
+        streamLog.updateCommittedTail(msg.getPayload());
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
      * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
      * This is used on sequencer bootstrap to provide the address maps for initialization.
      */
@@ -285,7 +307,7 @@ public class LogUnitServer extends AbstractServer {
 
         ReadResponse rr = new ReadResponse();
         try {
-            for (Long address : msg.getPayload().getAddresses()) {
+            for (long address : msg.getPayload().getAddresses()) {
                 ILogData logData = dataCache.get(address, cacheable);
                 if (logData == null) {
                     rr.put(address, LogData.getEmpty(address));
@@ -295,6 +317,21 @@ public class LogUnitServer extends AbstractServer {
             }
             rr.setCompactionMark(streamLog.getGlobalCompactionMark());
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+        } catch (DataCorruptionException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+        }
+    }
+
+    @ServerHandler(type = CorfuMsgType.INSPECT_ADDRESSES_REQUEST)
+    public void inspectAddresses(CorfuPayloadMsg<InspectAddressesRequest> msg,
+                                 ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("inspectAddresses: {}", msg.getPayload().getAddresses());
+        InspectAddressesResponse inspectResponse = new InspectAddressesResponse();
+        try {
+            for (long address : msg.getPayload().getAddresses()) {
+                inspectResponse.put(address, streamLog.contains(address));
+            }
+            r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }
