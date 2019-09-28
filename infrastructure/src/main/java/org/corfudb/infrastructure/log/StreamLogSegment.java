@@ -18,9 +18,7 @@ import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.StreamLog.assertAppendPermittedUnsafe;
 import static org.corfudb.infrastructure.log.StreamLog.getOverwriteCauseForAddress;
@@ -122,7 +120,8 @@ class StreamLogSegment extends AbstractLogSegment {
             log.trace("append[{}]: Written one entry to disk.", address);
 
         } catch (ClosedChannelException cce) {
-            log.warn("Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("append[{}]: Segment channel closed. Segment: {}, file: {}",
+                    entry, ordinal, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("append[{}]: IOException when writing an entry.", address, ioe);
@@ -145,20 +144,20 @@ class StreamLogSegment extends AbstractLogSegment {
 
             // Check if any entry exists.
             if (anyEntryExists(entries)) {
-                log.debug("append[{}]: Overwritten exception", entries);
+                log.debug("append: Overwritten exception, entries: {}", entries);
                 throw new OverwriteException(OverwriteCause.SAME_DATA);
             }
 
             Map<Long, AddressMetaData> addressMetaData = writeRecords(entries, segmentLock);
             knownAddresses.putAll(addressMetaData);
             compactionMetaData.updateTotalPayloadSize(entries);
-            log.trace("append[{}]: Written entries to disk.", entries);
+            log.trace("append: Written entries to disk: {}", entries);
 
         } catch (ClosedChannelException cce) {
-            log.warn("Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("append: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
-            log.error("append[{}]: IOException when writing entries.", entries, ioe);
+            log.error("append: IOException when writing entries: {}", entries, ioe);
             throw new RuntimeException(ioe);
         }
     }
