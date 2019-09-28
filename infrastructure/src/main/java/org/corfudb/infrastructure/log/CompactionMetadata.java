@@ -50,8 +50,8 @@ class CompactionMetadata {
     static volatile long nextCompactionUpperBound = Address.MAX;
 
     // A guarantee set by compaction policy implementation that ensures
-    // specific entries will not be trimmed in current compaction cycle
-    // if, after being trimmed, would move their stream's compaction mark
+    // specific entries will not be compacted in current compaction cycle
+    // if, after being compacted, would move their stream's compaction mark
     // greater than this value.
     @Getter
     @Setter

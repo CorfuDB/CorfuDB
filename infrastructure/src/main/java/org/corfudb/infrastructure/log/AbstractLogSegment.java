@@ -207,7 +207,9 @@ public abstract class AbstractLogSegment implements AutoCloseable,
      */
     public void sync() {
         try {
-            writeChannel.force(true);
+            if (writeChannel.isOpen()) {
+                writeChannel.force(true);
+            }
         } catch (ClosedChannelException cce) {
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
@@ -221,7 +223,9 @@ public abstract class AbstractLogSegment implements AutoCloseable,
      */
     public void close() {
         try {
-            writeChannel.force(true);
+            if (writeChannel.isOpen()) {
+                writeChannel.force(true);
+            }
         } catch (IOException ioe) {
             log.debug("Can't force updates write channel for file: {}", filePath, ioe);
         } finally {
