@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
@@ -47,15 +46,11 @@ public class SegmentManager {
 
     private final StreamLogDataStore dataStore;
 
-    @Getter
     private final Map<Long, StreamLogSegment> streamLogSegments = new ConcurrentHashMap<>();
 
-    @Getter
     private final Map<Long, GarbageLogSegment> garbageLogSegments = new ConcurrentHashMap<>();
 
-    // TODO: replace the old CompactionMetadata when compaction finishes.
     // A CompactionMetadata is not removed for the whole life time of log unit.
-    @Getter
     private final Map<Long, CompactionMetadata> segmentCompactionMetadata = new ConcurrentHashMap<>();
 
     long getSegmentOrdinal(long globalAddress) {
@@ -315,9 +310,13 @@ public class SegmentManager {
             Path oldPath = Paths.get(oldSegment.getFilePath());
             Path newPath = Paths.get(newSegment.getFilePath());
             try {
+                long oldFileSize = Files.size(oldPath);
                 // Rename and replace the old file with the new file.
                 Files.move(newPath, oldPath, StandardCopyOption.ATOMIC_MOVE,
                         StandardCopyOption.REPLACE_EXISTING);
+                // Update log size quota to remove the space taken by the old file.
+                logSizeQuota.release(oldFileSize);
+
             } catch (IOException e) {
                 log.error("remapCompactedSegment: exception when renaming file " +
                         "{} to {}", newPath, oldPath, e);

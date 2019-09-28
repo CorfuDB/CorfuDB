@@ -123,6 +123,8 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
         }
         log.sync(true);
 
+        long initialQuotaAvailable = log.getLogSizeQuota().getAvailable();
+
         // Fist compact() will only set compaction upper bound if using SnapshotLengthFirstPolicy.
         log.getCompactor().compact();
         log.getCompactor().compact();
@@ -153,6 +155,8 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
                 assertThat(log.read(i).getType()).isEqualTo(DataType.DATA);
             }
         }
+
+        assertThat(log.getLogSizeQuota().getAvailable()).isGreaterThan(initialQuotaAvailable);
     }
 
     @Test
@@ -331,7 +335,7 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
         final long uncompactedAddress = 25L;
         final long uncompactedMarkerAddress = StreamLogParams.RECORDS_PER_SEGMENT / 2 + 1;
         final long maxCompactionMarkAddress = 75;
-        final long maxCompactionMark = StreamLogParams.RECORDS_PER_SEGMENT / 2 - 1;
+        final long maxCompactionMark = maxCompactionMarkAddress + 1;
 
         List<LogData> streamEntries = new ArrayList<>();
         List<LogData> garbageEntries = new ArrayList<>();
