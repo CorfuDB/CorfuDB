@@ -121,8 +121,12 @@ public class SMRGarbageEntry extends LogEntry {
      * @param index    per-stream index of the SMREntry in the associated log data.
      */
     public void remove(UUID streamId, int index) {
-        if (streamIdToGarbageMap.containsKey(streamId)) {
-            streamIdToGarbageMap.get(streamId).remove(index);
+        Map<Integer, SMRGarbageRecord> recordMap = streamIdToGarbageMap.get(streamId);
+        if (recordMap != null) {
+            recordMap.remove(index);
+            if (recordMap.isEmpty()) {
+                streamIdToGarbageMap.remove(streamId);
+            }
         }
     }
 

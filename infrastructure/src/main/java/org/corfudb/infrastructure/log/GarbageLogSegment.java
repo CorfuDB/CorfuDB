@@ -86,7 +86,8 @@ public class GarbageLogSegment extends AbstractLogSegment {
             log.trace("append[{}]: Written one garbage entry to disk.", address);
 
         } catch (ClosedChannelException cce) {
-            log.warn("Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("append[{}]: Segment channel closed. Segment: {}, file: {}",
+                    entry, ordinal, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("append[{}]: IOException when writing a garbage entry.", address, ioe);
@@ -133,10 +134,10 @@ public class GarbageLogSegment extends AbstractLogSegment {
             compactionMetaData.updateGarbageSize(uniqueGarbageEntries);
 
         } catch (ClosedChannelException cce) {
-            log.warn("Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("append: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
-            log.error("append[{}]: IOException when writing entries.", entries, ioe);
+            log.error("append: IOException when writing entries: {}", entries, ioe);
             throw new RuntimeException(ioe);
         }
     }

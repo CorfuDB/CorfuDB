@@ -96,8 +96,13 @@ public class StreamLogCompactor {
             // Get the segments that should be compacted according to compaction policy.
             List<Long> segmentOrdinals = compactionPolicy
                     .getSegmentsToCompact(segmentManager.getCompactibleSegments());
-            log.info("Segments to compact: {}", segmentOrdinals);
 
+            if (segmentOrdinals.isEmpty()) {
+                log.info("No segments to compact, skip");
+                return;
+            }
+
+            log.info("Segments to compact: {}", segmentOrdinals);
             // Prepare the compaction tasks.
             List<Callable<Object>> tasks = segmentOrdinals
                     .stream()
@@ -105,9 +110,11 @@ public class StreamLogCompactor {
                     .collect(Collectors.toList());
 
             // Get the results when all tasks are finished, ignoring failures.
-            log.info("Started compaction tasks.");
+            log.info("Launched compaction tasks, compacting {} segments.", tasks.size());
+            long startTime = System.currentTimeMillis();
             compactionWorker.invokeAll(tasks);
-            log.info("Finished all compaction tasks in this cycle.");
+            long span = System.currentTimeMillis() - startTime;
+            log.info("Compaction tasks finished, took {} ms to compact {} segments", span, tasks.size());
 
         } catch (Throwable t) {
             // Suppress exceptions to avoid scheduling being terminated.
@@ -131,6 +138,8 @@ public class StreamLogCompactor {
             inputGarbageSegment = segmentManager.newCompactionInputGarbageSegment(ordinal);
             outputGarbageSegment = segmentManager.newCompactionOutputGarbageSegment(ordinal, compactionMetaData);
 
+            log.debug("Started compacting stream log segment: {}", inputStreamSegment.getFilePath());
+            long startTime = System.currentTimeMillis();
             // Initial compaction of the StreamLogSegment.
             CompactionFeedback compactionFeedback = compactStreamSegment(
                     inputStreamSegment, outputStreamSegment, inputGarbageSegment);
@@ -150,8 +159,11 @@ public class StreamLogCompactor {
 
             // Close input and output stream segment channels.
             closeSegments(inputStreamSegment, outputStreamSegment);
-            log.info("Finished compacting stream segment: {}", inputStreamSegment.getFilePath());
+            long span = System.currentTimeMillis() - startTime;
+            log.debug("Compacted stream log segment: {}, took {} ms", inputStreamSegment.getFilePath(), span);
 
+            log.debug("Started compacting garbage log segment: {}", inputStreamSegment.getFilePath());
+            startTime = System.currentTimeMillis();
             // Initial compaction of the GarbageLogSegment.
             compactGarbageSegment(inputGarbageSegment,
                     outputGarbageSegment, compactionFeedback.garbageEntriesToPrune);
@@ -166,7 +178,8 @@ public class StreamLogCompactor {
 
             // Close input and output garbage segment channels.
             closeSegments(inputGarbageSegment, outputGarbageSegment);
-            log.info("Finished compacting garbage segment: {}", inputGarbageSegment.getFilePath());
+            span = System.currentTimeMillis() - startTime;
+            log.debug("Compacted garbage log segment: {}, took {} ms", inputGarbageSegment.getFilePath(), span);
 
         } catch (Throwable t) {
             log.error("compactSegment: encountered an exception, " +
@@ -179,7 +192,6 @@ public class StreamLogCompactor {
     private CompactionFeedback compactStreamSegment(StreamLogSegment inputStreamSegment,
                                                     StreamLogSegment outputStreamSegment,
                                                     GarbageLogSegment inputGarbageSegment) {
-        log.info("Compacting stream log segment: {}", inputStreamSegment.getFilePath());
         int flushBatchCount = 0;
         List<LogData> batch = new ArrayList<>();
         Map<Long, SMRGarbageEntry> garbageInfoMap = inputGarbageSegment.getGarbageEntryMap();
@@ -328,7 +340,6 @@ public class StreamLogCompactor {
     private void compactGarbageSegment(GarbageLogSegment inputGarbageSegment,
                                        GarbageLogSegment outputGarbageSegment,
                                        Map<Long, Map<UUID, List<Integer>>> entriesToPrune) {
-        log.info("Compacting stream log segment: {}", inputGarbageSegment.getFilePath());
         int flushBatchCount = 0;
         List<LogData> batch = new ArrayList<>();
 
