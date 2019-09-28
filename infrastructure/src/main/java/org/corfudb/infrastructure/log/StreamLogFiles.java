@@ -100,6 +100,7 @@ public class StreamLogFiles implements StreamLog {
     private final long logSizeLimit;
     // Resource quota to track the log size, which acts as an efficient
     // estimation and may not reflect the real disk usage.
+    @Getter
     private ResourceQuota logSizeQuota;
 
     /**
@@ -147,8 +148,10 @@ public class StreamLogFiles implements StreamLog {
         CompactionPolicyType policyType = logParams.compactionPolicyType;
 
         if (policyType == CompactionPolicyType.GARBAGE_SIZE_FIRST) {
+            log.info("getCompactionPolicy: using {} compaction policy", policyType);
             return new GarbageSizeFirstPolicy(logParams, logSizeQuota, fileStore);
         } else if (policyType == CompactionPolicyType.SNAPSHOT_LENGTH_FIRST) {
+            log.info("getCompactionPolicy: using {} compaction policy", policyType);
             return new SnapshotLengthFirstPolicy(logParams, logSizeQuota, fileStore, logMetadata);
         } else {
             throw new IllegalArgumentException("Compaction policy not found.");
@@ -309,16 +312,6 @@ public class StreamLogFiles implements StreamLog {
     public TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
-    }
-
-    private void syncTailSegment(long address) {
-        // TODO(Maithem) since writing a record and setting the tail segment is not
-        // an atomic operation, it is possible to set an incorrect tail segment. In
-        // that case we will need to scan more than one segment
-        logMetadata.updateGlobalTail(address);
-        long newTailSegment = segmentManager.getSegmentOrdinal(address);
-
-        dataStore.updateTailSegment(newTailSegment);
     }
 
     private void verifyLogs() {
@@ -508,10 +501,14 @@ public class StreamLogFiles implements StreamLog {
 
     private void updateGlobalMetaData(long lastAddress, List<LogData> entries,
                                       AbstractLogSegment segmentToSync) {
+        // TODO(Maithem) since writing a record and setting the tail segment is not
+        // an atomic operation, it is possible to set an incorrect tail segment. In
+        // that case we will need to scan more than one segment.
         segmentsToSync.add(segmentToSync);
         if (segmentToSync instanceof StreamLogSegment) {
-            syncTailSegment(lastAddress);
+            logMetadata.updateGlobalTail(lastAddress);
             logMetadata.update(entries);
+            dataStore.updateTailSegment(segmentToSync.getOrdinal());
         }
     }
 
@@ -566,7 +563,6 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public void reset() {
         // Trim all segments
-        compactor.shutdown();
         long endSegment = segmentManager.getSegmentOrdinal(Math.max(logMetadata.getGlobalTail(), 0L));
         log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
