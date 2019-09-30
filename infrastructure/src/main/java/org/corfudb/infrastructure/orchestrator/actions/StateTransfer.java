@@ -28,6 +28,7 @@ import org.corfudb.util.retry.RetryNeededException;
  * Created by zlokhandwala on 2019-02-06.
  */
 @Slf4j
+@Deprecated
 public class StateTransfer {
 
     private StateTransfer() {

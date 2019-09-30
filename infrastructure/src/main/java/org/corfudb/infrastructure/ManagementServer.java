@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.infrastructure.management.FailureDetector;
@@ -119,7 +120,7 @@ public class ManagementServer extends AbstractServer {
      *
      * @param serverContext context object providing parameters and objects
      */
-    public ManagementServer(ServerContext serverContext) {
+    public ManagementServer(ServerContext serverContext, StreamLog streamLog) {
         this.serverContext = serverContext;
 
         this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
@@ -149,7 +150,7 @@ public class ManagementServer extends AbstractServer {
                 corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
         );
 
-        orchestrator = new Orchestrator(corfuRuntime, serverContext);
+        orchestrator = new Orchestrator(corfuRuntime, serverContext, streamLog);
     }
 
     /**

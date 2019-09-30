@@ -5,6 +5,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -14,6 +15,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 9/15/15.
@@ -143,6 +146,43 @@ public final class CFUtils {
     public static <T> CompletableFuture<Void> allOf(Collection<CompletableFuture<T>> futures) {
         CompletableFuture<T>[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);
         return CompletableFuture.allOf(futuresArr);
+    }
+
+    /**
+     * Takes a list of completable futures and returns a CompletableFuture of a list.
+     *
+     * @param futures A list of completable futures, perhaps a result of a map function.
+     * @param <T>     A return type of the future.
+     * @return A completable future, which completes with a list of the results.
+     */
+    public static <T> CompletableFuture<List<T>> sequence(List<CompletableFuture<T>> futures) {
+        return CompletableFuture
+                .allOf(futures.toArray(new CompletableFuture<?>[futures.size()]))
+                .thenApply(x -> futures.stream()
+                        .map(CompletableFuture::join)
+                        .collect(Collectors.toList()));
+    }
+
+    /**
+     * Schedule the future to execute with a delay.
+     *
+     * @param executor ScheduledExecutorService instance to schedule a task.
+     * @param command  A supplier of future that represents an executable task.
+     * @param delay Delay before the task is executed.
+     * @param unit  The units of the delay.
+     * @param <T> A return type of the future.
+     * @return A completable future, which completes after the delay units.
+     */
+    public static <T> CompletableFuture<T> delayFuture(
+            ScheduledExecutorService executor,
+            Supplier<CompletableFuture<T>> command,
+            long delay,
+            TimeUnit unit
+    ) {
+
+        CompletableFuture<T> future = new CompletableFuture<>();
+        executor.schedule(() -> future.complete(command.get().join()), delay, unit);
+        return future;
     }
 
     /**

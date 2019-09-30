@@ -422,8 +422,17 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
         int segmentsCount = layout.getSegments().size();
+        String localEndpoint = serverContext.getLocalEndpoint();
+        boolean nodePresentInAllSegments = layout
+                .getSegments()
+                .stream()
+                .allMatch(segment ->
+                        segment
+                                .getFirstStripe()
+                                .getLogServers()
+                                .contains(localEndpoint));
 
-        if (segmentsCount == 1) {
+        if (segmentsCount == 1 || nodePresentInAllSegments) {
             log.debug("No segments to merge. Skipping step.");
             return DetectorTask.SKIPPED;
         } else if (!mergeSegmentsTask.isDone()) {

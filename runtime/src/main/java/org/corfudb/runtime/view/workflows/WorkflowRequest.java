@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
@@ -46,8 +47,16 @@ public abstract class WorkflowRequest {
     protected abstract UUID sendRequest(ManagementClient client) throws TimeoutException;
 
     /**
-     * Select an orchestrator that responds to pings and is not on the
-     * same node affected by the workflow. The layout might not reflect the state
+     * Predicate that selects a node for the orchestrator
+     *
+     * @return a predicate that depends on the implemented condition
+     */
+    protected abstract Predicate<String> orchestratorSelector();
+
+    /**
+     * Select an orchestrator on the node that responds to pings.
+     * The selection of a node depends on the type of the current workflow request.
+     * The layout might not reflect the state
      * of the responsive servers, so we ping the endpoint before we select it.
      * An example of this would be a 3 node cluster, with two nodes that
      * die immediately, the layout won't have those two nodes as unresponsive
@@ -59,7 +68,7 @@ public abstract class WorkflowRequest {
      */
     protected ManagementClient getOrchestrator(@NonNull Layout layout) {
         List<String> availableLayoutServers = layout.getLayoutServers().stream()
-                .filter(s -> !s.equals(nodeForWorkflow))
+                .filter(orchestratorSelector())
                 .collect(Collectors.toList());
 
         if (availableLayoutServers.isEmpty()) {

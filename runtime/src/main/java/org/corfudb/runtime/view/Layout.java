@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -546,6 +547,7 @@ public class Layout {
     @Data
     @Getter
     @Setter
+    @EqualsAndHashCode
     public static class LayoutSegment {
         /**
          * The replication mode of the segment.

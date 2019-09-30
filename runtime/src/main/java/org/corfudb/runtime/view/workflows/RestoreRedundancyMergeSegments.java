@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.workflows;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +55,11 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
         return resp.getWorkflowId();
+    }
+
+    @Override
+    protected Predicate<String> orchestratorSelector() {
+        return node -> node.equals(nodeForWorkflow);
     }
 
     /**

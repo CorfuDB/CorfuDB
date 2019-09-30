@@ -31,6 +31,10 @@ import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
+import org.corfudb.infrastructure.log.InMemoryStreamLog;
+import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -38,6 +42,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Utils;
 import org.corfudb.util.Version;
 
 
@@ -67,15 +72,35 @@ public class CorfuServerNode implements AutoCloseable {
      * @param serverContext Initialized Server Context.
      */
     public CorfuServerNode(@Nonnull ServerContext serverContext) {
-        this(serverContext,
-                ImmutableMap.<Class, AbstractServer>builder()
-                        .put(BaseServer.class, new BaseServer(serverContext))
-                        .put(SequencerServer.class, new SequencerServer(serverContext))
-                        .put(LayoutServer.class, new LayoutServer(serverContext))
-                        .put(LogUnitServer.class, new LogUnitServer(serverContext))
-                        .put(ManagementServer.class, new ManagementServer(serverContext))
-                        .build()
-        );
+
+        LogUnitServerConfig config = LogUnitServerConfig.parse(serverContext.getServerConfig());
+        StreamLog streamLog;
+        if (config.isMemoryMode()) {
+            log.warn("Log unit opened in-memory mode (Maximum size={}). "
+                    + "This should be run for testing purposes only. "
+                    + "If you exceed the maximum size of the unit, old entries will be "
+                    + "AUTOMATICALLY trimmed. "
+                    + "The unit WILL LOSE ALL DATA if it exits.", Utils
+                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
+            streamLog = new InMemoryStreamLog();
+        }
+        else{
+            streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
+        }
+
+        ImmutableMap<Class, AbstractServer> servers = ImmutableMap.<Class, AbstractServer>builder()
+                .put(BaseServer.class, new BaseServer(serverContext))
+                .put(SequencerServer.class, new SequencerServer(serverContext))
+                .put(LayoutServer.class, new LayoutServer(serverContext))
+                .put(LogUnitServer.class, new LogUnitServer(serverContext, streamLog))
+                .put(ManagementServer.class, new ManagementServer(serverContext, streamLog))
+                .build();
+
+        this.serverContext = serverContext;
+        this.serverMap = servers;
+        router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
+        this.serverContext.setServerRouter(router);
+        this.close = new AtomicBoolean(false);
     }
 
     /**

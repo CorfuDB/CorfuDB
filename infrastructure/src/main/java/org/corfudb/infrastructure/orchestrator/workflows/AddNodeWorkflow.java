@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
+import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
@@ -53,7 +54,7 @@ public class AddNodeWorkflow implements IWorkflow {
         this.request = request;
         actions = ImmutableList.of(new BootstrapNode(),
                 new AddNodeToLayout(),
-                new RestoreRedundancy());
+                new RestoreRedundancyMergeSegments(request.getEndpoint()));
     }
 
     @Override
@@ -105,55 +106,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
             runtime.invalidateLayout();
             newLayout = new Layout(runtime.getLayoutView().getLayout());
-        }
-    }
-
-    /**
-     * The new server is caught up with all data.
-     * This server is then added to all the segments to mark it open to all reads and writes.
-     */
-    protected class RestoreRedundancy extends Action {
-        @Nonnull
-        @Override
-        public String getName() {
-            return "RestoreRedundancy";
-        }
-
-        @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            runtime.invalidateLayout();
-            newLayout = runtime.getLayoutView().getLayout();
-
-            // A newly added node can be marked as unresponsive by the fault detector by the
-            // time this action is executed. There are 2 cases following this:
-
-            // Case 1. The node remains unresponsive.
-            //      State transfer fails.
-            // Case 2. The node is marked responsive again.
-            //      In this case, the node was removed from all segments and was wiped clean.
-            //      So either the healing workflow or the add node workflow will attempt
-            //      to catchup the new node.
-            if (newLayout.getAllActiveServers().contains(request.endpoint)) {
-                // Transfer only till the second last segment as the last segment is unbounded.
-                // The new server is already a part of the last segment. This is based on an
-                // assumption that the newly added node is not removed from the layout.
-                for (int i = 0; i < newLayout.getSegments().size() - 1; i++) {
-                    transfer(newLayout,
-                            request.getEndpoint(),
-                            runtime,
-                            newLayout.getSegments().get(i));
-                }
-
-                final int stripeIndex = 0;
-                runtime.getLayoutManagementView()
-                        .addLogUnitReplica(
-                                new Layout(newLayout), request.getEndpoint(), stripeIndex);
-                runtime.invalidateLayout();
-                newLayout = runtime.getLayoutView().getLayout();
-            } else {
-                throw new IllegalStateException("RestoreRedundancy: "
-                        + "Node to be added marked unresponsive.");
-            }
         }
     }
 }

@@ -335,7 +335,7 @@ public class LayoutManagementView extends AbstractView {
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
      * @throws OutrankedException if consensus is outranked.
      */
-    private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
+    public void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
             throws OutrankedException {
 
