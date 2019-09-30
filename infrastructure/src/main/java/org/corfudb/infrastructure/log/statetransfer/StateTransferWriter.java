@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.TransferBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
 import org.corfudb.runtime.CorfuRuntime;
@@ -30,7 +30,7 @@ public class StateTransferWriter {
 
     @Getter
     @NonNull
-    private TransferBatchProcessor batchProcessor;
+    private RegularBatchProcessor batchProcessor;
 
     @Getter
     @NonNull

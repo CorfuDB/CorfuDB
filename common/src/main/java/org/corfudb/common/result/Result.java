@@ -24,7 +24,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
         this(null, Objects.requireNonNull(error));
     }
 
-    protected Result(T value, E error) {
+    public Result(T value, E error) {
         // Exactly one value/error is non-null based on constructors calling this constructor.
         this.value = value;
         this.error = error;

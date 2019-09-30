@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
@@ -443,12 +444,24 @@ public class RemoteMonitoringService implements MonitoringService {
         log.debug("Number of segments present: {}. Spawning task to merge segments.", segmentsCount);
 
         Supplier<Boolean> redundancyAction = () ->
-                ReconfigurationEventHandler.handleMergeSegments(
-                        getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+                handleMergeSegments(
+                        runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
                 );
         mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
 
         return DetectorTask.COMPLETED;
+    }
+
+
+    @VisibleForTesting
+    public DetectorTask restoreRedundancy(Layout layout){
+        return restoreRedundancyAndMergeSegments(layout);
+    }
+
+    boolean handleMergeSegments(SingletonResource<CorfuRuntime> runtimeSingletonResource, Layout layout, Duration retryQueryTimeout){
+        return ReconfigurationEventHandler.handleMergeSegments(
+                runtimeSingletonResource.get(), layout, retryQueryTimeout
+        );
     }
 
     /**

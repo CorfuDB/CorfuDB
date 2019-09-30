@@ -13,7 +13,6 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.TransferBatchProcessor;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -126,13 +125,11 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         // Create a helper class to perform state calculations.
         RedundancyCalculator redundancyCalculator = new PrefixTrimRedundancyCalculator(currentNode, runtime);
 
-        // Create a transfer batch processor to initiate a transfer manager.
-        TransferBatchProcessor transferBatchProcessor = new RegularBatchProcessor(streamLog);
+        // Create a transfer manager instance.
+        RegularBatchProcessor transferBatchProcessor = new RegularBatchProcessor(streamLog);
 
         StateTransferWriter stateTransferWriter = StateTransferWriter
-                .builder()
-                .batchProcessor(transferBatchProcessor)
-                .build();
+                .builder().batchProcessor(transferBatchProcessor).build();
 
         StateTransferManager transferManager =
                 builder().stateTransferWriter(stateTransferWriter).streamLog(streamLog).build();
