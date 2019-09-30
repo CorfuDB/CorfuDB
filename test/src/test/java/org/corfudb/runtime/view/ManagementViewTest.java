@@ -1029,7 +1029,7 @@ public class ManagementViewTest extends AbstractViewTest {
             ServerContext sc1 = new ServerContextBuilder()
                     .setSingle(false)
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
-                    .setPort(Integer.toString(SERVERS.PORT_1))
+                    .setPort(SERVERS.PORT_1)
                     .build();
             addServer(SERVERS.PORT_1, sc1);
 

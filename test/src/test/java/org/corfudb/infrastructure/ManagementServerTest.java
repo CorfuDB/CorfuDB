@@ -31,7 +31,7 @@ public class ManagementServerTest extends AbstractServerTest {
         // Adding layout server for management server runtime to connect to.
         ServerContext serverContext = new ServerContextBuilder()
                 .setSingle(false)
-                .setPort(Integer.toString(SERVERS.PORT_0))
+                .setPort(SERVERS.PORT_0)
                 .setServerRouter(getRouter())
                 .build();
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();

@@ -36,7 +36,7 @@ public class ServerContextBuilder {
 
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
-    String port = "9000";
+    int port = 9000;
     String seqCache = "1000";
     String logSizeLimitPercentage = "100.0";
     String batchSize = "100";
@@ -88,7 +88,7 @@ public class ServerContextBuilder {
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
-                 .put("<port>", port);
+                 .put("<port>", Integer.toString(port));
 
         // Set the prefix to the port number
         if (prefix.equals("")) {
@@ -114,7 +114,7 @@ public class ServerContextBuilder {
      */
     public static ServerContext defaultTestContext(int port) {
         ServerContext sc = new ServerContextBuilder()
-            .setPort(Integer.toString(port)).build();
+            .setPort(port).build();
         sc.setServerRouter(new TestServerRouter());
         return sc;
     }
@@ -126,7 +126,7 @@ public class ServerContextBuilder {
      */
     public static ServerContext defaultContext(int port) {
         ServerContext sc = new ServerContextBuilder()
-            .setPort(Integer.toString(port))
+            .setPort(port)
             .setImplementation("auto")
             .build();
         return sc;

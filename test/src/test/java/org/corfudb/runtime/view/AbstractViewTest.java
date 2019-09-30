@@ -226,7 +226,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public void addServer(int port) {
         new TestServer(new ServerContextBuilder().setSingle(false)
             .setServerRouter(new TestServerRouter(port))
-            .setPort(Integer.toString(port)).build())
+            .setPort(port).build())
             .addToTest(port, this);
     }
 

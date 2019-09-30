@@ -97,7 +97,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .setKeystorePasswordFile("src/test/resources/security/storepass")
                         .setTruststore("src/test/resources/security/s1.jks")
                         .setTruststorePasswordFile("src/test/resources/security/storepass")
-                        .setPort(Integer.toString(port))
+                        .setPort(port)
                         .build()
                 );
                 return d;
@@ -132,7 +132,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setTlsMutualAuthEnabled(true)
-                    .setPort(Integer.toString(port))
+                    .setPort(port)
                     .build());
                 return d;
             },
@@ -167,7 +167,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(false)
-                    .setPort(Integer.toString(port))
+                    .setPort(port)
                     .build());
                 return d;
             },
@@ -202,7 +202,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust2.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setTlsMutualAuthEnabled(true)
-                    .setPort(Integer.toString(port))
+                    .setPort(port)
                     .build());
                 return d;
             },
@@ -236,7 +236,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setKeystorePasswordFile("src/test/resources/security/storepass")
                     .setTruststore("src/test/resources/security/trust2.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
-                    .setPort(Integer.toString(port))
+                    .setPort(port)
                     .build());
                 return d;
             },
@@ -273,7 +273,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(true)
-                    .setPort(Integer.toString(port))
+                    .setPort(port)
                     .build());
                 return d;
             },
@@ -378,7 +378,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(true)
-                    .setPort(Integer.toString(port))
+                    .setPort(port)
                     .build());
                 return d;
             },
@@ -448,7 +448,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .setTruststore(serverTrustFile.getAbsolutePath())
                 .setTruststorePasswordFile("src/test/resources/security/reload/password")
                 .setTlsMutualAuthEnabled(true)
-                .setPort(Integer.toString(port))
+                .setPort(port)
                 .build()
         );
         serverData.bootstrapServer();

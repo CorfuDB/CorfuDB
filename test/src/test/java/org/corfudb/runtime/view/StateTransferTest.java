@@ -423,7 +423,7 @@ public class StateTransferTest extends AbstractViewTest {
         ServerContext sc1 = new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
-                .setPort(Integer.toString(SERVERS.PORT_0)).build();
+                .setPort(SERVERS.PORT_0).build();
         addServer(SERVERS.PORT_0, sc1);
 
         ServerContext sc2 = new ServerContextBuilder()
@@ -431,7 +431,7 @@ public class StateTransferTest extends AbstractViewTest {
                 .setSingle(false)
                 .setLogPath(PARAMETERS.TEST_TEMP_DIR)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
-                .setPort(Integer.toString(SERVERS.PORT_1)).build();
+                .setPort(SERVERS.PORT_1).build();
         addServer(SERVERS.PORT_1, sc2);
 
         getManagementServer(SERVERS.PORT_0).shutdown();
@@ -551,7 +551,7 @@ public class StateTransferTest extends AbstractViewTest {
         ServerContext sc1 = new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
-                .setPort(Integer.toString(SERVERS.PORT_0)).build();
+                .setPort(SERVERS.PORT_0).build();
         addServer(SERVERS.PORT_0, sc1);
 
         ServerContext sc2 = new ServerContextBuilder()
@@ -559,7 +559,7 @@ public class StateTransferTest extends AbstractViewTest {
                 .setSingle(false)
                 .setLogPath(PARAMETERS.TEST_TEMP_DIR)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
-                .setPort(Integer.toString(SERVERS.PORT_1)).build();
+                .setPort(SERVERS.PORT_1).build();
         addServer(SERVERS.PORT_1, sc2);
 
         getManagementServer(SERVERS.PORT_0).shutdown();
