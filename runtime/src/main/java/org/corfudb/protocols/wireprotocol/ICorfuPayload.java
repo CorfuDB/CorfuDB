@@ -11,12 +11,14 @@ import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.JsonUtils;
+import org.corfudb.util.serializer.Serializers;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.DataOutputStream;
@@ -104,6 +106,11 @@ public interface ICorfuPayload<T> {
      * A lookup representing the context we'll use to do lookups.
      */
     Lookup lookup = MethodHandles.lookup();
+
+    static <T> T fromBuffer(byte[] data, Class<T> cls) {
+        ByteBuf buffer = Unpooled.wrappedBuffer(data);
+        return fromBuffer(buffer, cls);
+    }
 
     /**
      * Build payload from Buffer
