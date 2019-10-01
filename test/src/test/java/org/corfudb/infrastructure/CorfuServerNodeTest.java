@@ -27,8 +27,7 @@ public class CorfuServerNodeTest extends AbstractCorfuTest {
         // Start the Corfu Server
         ServerContext context = new ServerContextBuilder()
             .setAddress(hostname).setImplementation("auto").build();
-        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-        CorfuServerNode serverNode = new CorfuServerNode(context, metricRegistry);
+        CorfuServerNode serverNode = new CorfuServerNode(context);
         serverNode.start();
 
         // Create CorfuRuntime and connect to the server
