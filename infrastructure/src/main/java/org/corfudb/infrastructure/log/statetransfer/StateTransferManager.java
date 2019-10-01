@@ -48,6 +48,8 @@ public class StateTransferManager {
 
     @AllArgsConstructor
     @Getter
+    @ToString
+    @EqualsAndHashCode
     public static class CurrentTransferSegmentStatus {
         private SegmentState segmentStateTransferState;
         private long lastTransferredAddress;
