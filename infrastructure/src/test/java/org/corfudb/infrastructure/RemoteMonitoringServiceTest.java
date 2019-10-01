@@ -25,16 +25,8 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
-public class RemoteMonitoringServiceTest {
-    private static String servers = "A|B|C";
+public class RemoteMonitoringServiceTest extends LayoutBasedTest{
 
-    private Layout createTestLayout(List<LayoutSegment> segments){
-
-        List<String> s = Arrays.stream(servers.split("|")).collect(Collectors.toList());
-        long epoch = 0L;
-        UUID uuid = UUID.randomUUID();
-        return new Layout(s, s, segments, new ArrayList<>(), epoch, uuid);
-    }
     @Test
     public void testRestoreRedundancyTrigger(){
         ServerContext serverContext = Mockito.mock(ServerContext.class);

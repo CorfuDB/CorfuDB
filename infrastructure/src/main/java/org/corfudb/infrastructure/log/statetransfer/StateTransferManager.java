@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
 import java.util.AbstractMap.SimpleEntry;
@@ -34,6 +35,7 @@ public class StateTransferManager {
     @AllArgsConstructor
     @EqualsAndHashCode
     @Getter
+    @ToString
     public static class CurrentTransferSegment implements Comparable<CurrentTransferSegment> {
         private final long startAddress;
         private final long endAddress;

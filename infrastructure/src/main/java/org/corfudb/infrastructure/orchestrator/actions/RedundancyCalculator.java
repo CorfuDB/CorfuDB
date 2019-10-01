@@ -7,6 +7,9 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
+
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,25 +52,31 @@ public class RedundancyCalculator {
     }
 
 
-    public boolean segmentContainsServer(Layout.LayoutSegment segment) {
-        // Because we restore the node to the first stripe.
+    boolean segmentContainsServer(LayoutSegment segment) {
         return segment.getFirstStripe().getLogServers().contains(server);
     }
 
-    private Layout restoreRedundancyForSegment(CurrentTransferSegment mapSegment, Layout layout) {
-        List<Layout.LayoutSegment> segments = layout.getSegments().stream().map(layoutSegment -> {
-            if (layoutSegment.getStart() == mapSegment.getStartAddress() &&
-                    layoutSegment.getEnd() == mapSegment.getEndAddress()) {
-                List<Layout.LayoutStripe> newStripes = layoutSegment.getStripes().stream().map(stripe -> {
-                    List<String> logServers = new ArrayList<>(stripe.getLogServers());
-                    logServers.add(getServer());
-                    return new Layout.LayoutStripe(logServers);
+    Layout restoreRedundancyForSegment(CurrentTransferSegment transferSegment, Layout layout) {
+        List<LayoutSegment> segments = layout.getSegments().stream().map(layoutSegment -> {
+            if (layoutSegment.getStart() == transferSegment.getStartAddress() &&
+                    layoutSegment.getEnd() == transferSegment.getEndAddress() + 1) {
+
+                List<LayoutStripe> newStripes = layoutSegment.getStripes().stream().map(stripe -> {
+
+                    if(layoutSegment.getFirstStripe().equals(stripe)){
+                        ArrayList<String> servers = new ArrayList<>(stripe.getLogServers());
+                        servers.add(server);
+                        return new LayoutStripe(servers);
+                    }
+
+                    return stripe;
+
                 }).collect(Collectors.toList());
 
-                return new Layout.LayoutSegment(layoutSegment.getReplicationMode(),
+                return new LayoutSegment(layoutSegment.getReplicationMode(),
                         layoutSegment.getStart(), layoutSegment.getEnd(), newStripes);
             } else {
-                return new Layout.LayoutSegment(layoutSegment.getReplicationMode(),
+                return new LayoutSegment(layoutSegment.getReplicationMode(),
                         layoutSegment.getStart(), layoutSegment.getEnd(), layoutSegment.getStripes());
             }
         }).collect(Collectors.toList());

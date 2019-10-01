@@ -10,6 +10,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -614,8 +615,9 @@ public class Layout {
         }
     }
 
-    @Data
     @Getter
+    @EqualsAndHashCode
+    @ToString
     public static class LayoutStripe {
         final List<String> logServers;
 
