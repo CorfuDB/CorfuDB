@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
-import static org.corfudb.infrastructure.orchestrator.actions.StateTransfer.transfer;
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 import com.google.common.collect.ImmutableList;
