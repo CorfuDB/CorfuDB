@@ -31,13 +31,14 @@ import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutManagementView;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.ManagementView;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
@@ -525,6 +526,9 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
+
+    @Getter(lazy = true)
+    private final TableRegistry tableRegistry = new TableRegistry(this);
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
