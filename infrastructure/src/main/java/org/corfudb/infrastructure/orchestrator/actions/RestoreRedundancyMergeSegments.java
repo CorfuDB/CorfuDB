@@ -123,7 +123,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         Layout layout = runtime.getLayoutView().getLayout();
 
         // Create a helper class to perform state calculations.
-        RedundancyCalculator redundancyCalculator = new PrefixTrimRedundancyCalculator(currentNode, runtime);
+        PrefixTrimRedundancyCalculator redundancyCalculator = new PrefixTrimRedundancyCalculator(currentNode, runtime);
 
         // Create a transfer manager instance.
         RegularBatchProcessor transferBatchProcessor = new RegularBatchProcessor(streamLog);

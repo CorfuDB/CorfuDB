@@ -85,8 +85,6 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
         assertThat(SegmentState.RESTORED)
                 .isEqualTo(presentSegmentStatus.getSegmentStateTransferState());
 
-
-
         CurrentTransferSegmentStatus nonPresentSegmentStatus = stateMap.get(nonPresentSegment)
                 .join();
 
@@ -204,6 +202,9 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
                 new CurrentTransferSegmentStatus(TRANSFERRED, 10L)));
 
         assertThat(calculator.redundancyIsRestored(map)).isFalse();
+
+        // if map is empty redundancy is restored
+        assertThat(calculator.redundancyIsRestored(new HashMap<>())).isTrue();
 
     }
 

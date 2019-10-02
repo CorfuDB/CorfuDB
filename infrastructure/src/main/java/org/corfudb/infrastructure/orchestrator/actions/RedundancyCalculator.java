@@ -40,12 +40,12 @@ public class RedundancyCalculator {
                         CompletableFuture
                                 .completedFuture(new
                                         CurrentTransferSegmentStatus(RESTORED,
-                                        segment.getEnd())));
+                                        segment.getEnd() - 1)));
             } else {
                 return new SimpleEntry<>(statusSegment,
                         CompletableFuture.completedFuture(new
                                 CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                segment.getStart())));
+                                -1L)));
             }
         }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
         return ImmutableMap.copyOf(map);
@@ -100,6 +100,9 @@ public class RedundancyCalculator {
      * @return True if every segment is transferred and false otherwise.
      */
     public boolean redundancyIsRestored(Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map) {
+        if(map.isEmpty()){
+            return true;
+        }
         return map.values().stream().allMatch(state -> {
             if (!state.isDone()) {
                 return false;

@@ -26,7 +26,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         this.runtime = runtime;
     }
 
-    private long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
+    long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
                                      String endpoint) {
 
         long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
@@ -57,13 +57,13 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                         CompletableFuture
                                                 .completedFuture(new
                                                         CurrentTransferSegmentStatus(RESTORED,
-                                                        segment.getEnd())));
+                                                        segmentEnd)));
                             } else {
                                 return new SimpleEntry<>(transferSegment,
                                         CompletableFuture
                                                 .completedFuture(new
                                                         CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                        segment.getEnd())));
+                                                        -1L)));
                             }
                         }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
         return ImmutableMap.copyOf(map);
