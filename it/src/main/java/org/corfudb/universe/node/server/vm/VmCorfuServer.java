@@ -22,7 +22,8 @@ import java.util.List;
 @Slf4j
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
 
-    private final String infrastructureJarTemplate = "./target/corfu/infrastructure-%s-shaded.jar";
+    private static final String INFRASTRUCTURE_JAR_TEMPLATE =
+            "infrastructure/target/infrastructure-%s-shaded.jar";
 
     @NonNull
     private final VirtualMachine vm;
@@ -58,7 +59,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
                 ipAddress,
                 universeParams.getVmUserName(),
                 universeParams.getVmPassword(),
-                String.format(infrastructureJarTemplate, version),
+                String.format(INFRASTRUCTURE_JAR_TEMPLATE, version),
                 "./" + params.getName() + "/corfu-server.jar"
         );
 

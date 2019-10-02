@@ -1,7 +1,27 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CheckpointWriter;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.collections.StringMultiIndexer;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.test.CorfuServerRunner;
+import org.corfudb.util.CFUtils;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -25,25 +45,6 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CheckpointWriter;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.collections.StringIndexer;
-import org.corfudb.runtime.collections.StringMultiIndexer;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.CFUtils;
-import org.junit.Before;
-import org.junit.Test;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -76,7 +77,7 @@ public class ServerRestartIT extends AbstractIT {
         return new CorfuServerRunner()
                 .setHost(corfuSingleNodeHost)
                 .setPort(corfuSingleNodePort)
-                .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuSingleNodePort))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(corfuSingleNodeHost, corfuSingleNodePort))
                 .runServer();
     }
 
@@ -445,7 +446,7 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        restartServer(runtime, DEFAULT_ENDPOINT);
+        CorfuServerRunner.restartServer(runtime, DEFAULT_ENDPOINT);
 
         TokenResponse tokenResponseA = runtime.getSequencerView().next(streamNameA);
         TokenResponse tokenResponseB = runtime.getSequencerView().next(streamNameB);

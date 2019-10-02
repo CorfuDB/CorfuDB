@@ -57,9 +57,8 @@ public class UniverseFactory {
     }
 
     public ProcessUniverse buildProcessUniverse(UniverseParams universeParams) {
-        throw new UnsupportedOperationException();
+        return ProcessUniverse.builder()
+                .universeParams(universeParams)
+                .build();
     }
-
-
 }
-

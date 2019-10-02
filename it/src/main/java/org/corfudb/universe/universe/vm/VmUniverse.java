@@ -1,12 +1,18 @@
 package org.corfudb.universe.universe.vm;
 
+import static org.corfudb.universe.node.Node.NodeType.CORFU_CLIENT;
+import static org.corfudb.universe.node.Node.NodeType.CORFU_SERVER;
+
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.group.cluster.Cluster;
+import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
 import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.AbstractUniverse;
@@ -26,8 +32,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group} gracefully within the provided timeout
  */
 @Slf4j
-public class VmUniverse extends AbstractUniverse<Node.NodeParams, VmUniverseParams> {
+public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
+
     private final AtomicBoolean destroyed = new AtomicBoolean(false);
+
     @NonNull
     private final ApplianceManager applianceManager;
 
@@ -59,15 +67,15 @@ public class VmUniverse extends AbstractUniverse<Node.NodeParams, VmUniversePara
      */
     @Override
     protected Group buildGroup(GroupParams groupParams) {
-        if (groupParams instanceof CorfuServerParams) {
+        if (groupParams.getType() == ClusterType.CORFU_CLUSTER) {
             return VmCorfuCluster.builder()
                     .universeParams(universeParams)
                     .corfuClusterParams(ClassUtils.cast(groupParams))
                     .vms(applianceManager.getVms())
                     .build();
-        } else {
-            throw new UniverseException("Unknown node type");
         }
+
+        throw new UniverseException("Unknown node type");
     }
 
     /**

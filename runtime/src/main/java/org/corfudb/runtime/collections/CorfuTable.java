@@ -4,7 +4,17 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.ConflictParameter;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.DontInstrument;
+import org.corfudb.annotations.Mutator;
+import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.util.ImmuableListSetWrapper;
 
+import javax.annotation.Nonnull;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,19 +35,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import javax.annotation.Nonnull;
-
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.ConflictParameter;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.DontInstrument;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.annotations.TransactionalMethod;
-import org.corfudb.util.ImmuableListSetWrapper;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -186,9 +183,9 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param <V>           Value type
      * @return              A type token to pass to the builder.
      */
-    static <K, V> TypeToken<CorfuTable<K, V>>
-        getMapType() {
-            return new TypeToken<CorfuTable<K, V>>() {};
+    public static <K, V> TypeToken<CorfuTable<K, V>> getMapType() {
+        return new TypeToken<CorfuTable<K, V>>() {
+        };
     }
 
     /** Helper function to get a Corfu Table.
@@ -197,10 +194,9 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param <V>                   Value type
      * @return                      A type token to pass to the builder.
      */
-    static <K, V>
-    TypeToken<CorfuTable<K, V>>
-        getTableType() {
-            return new TypeToken<CorfuTable<K, V>>() {};
+    public static <K, V> TypeToken<CorfuTable<K, V>> getTableType() {
+        return new TypeToken<CorfuTable<K, V>>() {
+        };
     }
 
     /**

@@ -1,5 +1,7 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -8,7 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.Sleep;
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -20,8 +22,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * This test exercises the transaction stream functionality. It starts multiple writers

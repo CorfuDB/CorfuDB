@@ -1,15 +1,18 @@
 package org.corfudb.integration;
 
+import static junit.framework.TestCase.fail;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -30,6 +33,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.test.CorfuServerRunner;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
@@ -52,11 +56,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import static junit.framework.TestCase.fail;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ClusterReconfigIT extends AbstractIT {
 
@@ -149,7 +148,7 @@ public class ClusterReconfigIT extends AbstractIT {
         return new CorfuServerRunner()
                 .setHost(address)
                 .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(address, port))
                 .setSingle(singleNode)
                 .runServer();
     }

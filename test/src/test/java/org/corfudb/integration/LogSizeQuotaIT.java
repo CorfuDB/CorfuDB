@@ -1,5 +1,8 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
@@ -11,6 +14,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.Test;
 
 import java.nio.file.FileStore;
@@ -20,15 +24,12 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 public class LogSizeQuotaIT extends AbstractIT {
 
     final int payloadSize = 1000;
 
     private Process runServerWithQuota(int port, long quota, boolean singleNode) throws Exception {
-        String logPath = getCorfuServerLogPath(DEFAULT_HOST, port);
+        String logPath = CorfuServerRunner.getCorfuServerLogPath(DEFAULT_HOST, port);
         FileStore corfuDirBackend = Files.getFileStore(Paths.get(CORFU_LOG_PATH));
         long fsSize = corfuDirBackend.getTotalSpace();
         final double HUNDRED = 100.0;

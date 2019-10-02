@@ -6,6 +6,7 @@ import com.codahale.metrics.Gauge;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.integration.AbstractIT;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -30,10 +31,10 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
     /* A helper method that takes host and port specification, start a single server and
      *  returns a process. */
     private Process runSinglePersistentServer(String host, int port) throws IOException {
-        return new AbstractIT.CorfuServerRunner()
+        return new CorfuServerRunner()
                 .setHost(host)
                 .setPort(port)
-                .setLogPath(getCorfuServerLogPath(host, port))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(host, port))
                 .setSingle(true)
                 .runServer();
     }

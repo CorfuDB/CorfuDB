@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.test.CorfuServerRunner;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,7 +39,7 @@ public class SecurityIT extends AbstractIT {
 
     /* A helper method that start a single TLS enabled server and returns a process. */
     private Process runSinglePersistentServerTls() throws IOException {
-        return new AbstractIT.CorfuServerRunner()
+        return new CorfuServerRunner()
                 .setHost(corfuSingleNodeHost)
                 .setPort(corfuStringNodePort)
                 .setTlsEnabled(tlsEnabled)
@@ -46,7 +47,7 @@ public class SecurityIT extends AbstractIT {
                 .setKeyStorePassword(serverPathToKeyStorePassword)
                 .setTrustStore(serverPathToTrustStore)
                 .setTrustStorePassword(serverPathToTrustStorePassword)
-                .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuStringNodePort))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(corfuSingleNodeHost, corfuStringNodePort))
                 .setSingle(true)
                 .runServer();
     }

@@ -1,6 +1,6 @@
 package org.corfudb.integration.cluster.Harness;
 
-import org.corfudb.integration.AbstractIT;
+import org.corfudb.test.CorfuServerRunner;
 
 /**
  * An action that starts a node
@@ -14,7 +14,7 @@ public class StartAction extends Action {
     }
 
     public void run() throws Exception {
-        new AbstractIT.CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(node.getAddress().split(":")[0])
                 .setPort(Integer.valueOf(node.getAddress().split(":")[1]))
                 .setLogPath(node.getLogPath())

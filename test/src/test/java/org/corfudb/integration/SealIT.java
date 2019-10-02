@@ -1,13 +1,14 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by rmichoud on 2/12/17.

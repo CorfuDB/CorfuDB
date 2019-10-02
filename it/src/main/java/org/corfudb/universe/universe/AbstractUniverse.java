@@ -5,19 +5,18 @@ import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
-import org.corfudb.common.util.ClassUtils;
-import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
-public abstract class AbstractUniverse<
-        N extends Node.NodeParams,
-        P extends UniverseParams> implements Universe {
+public abstract class AbstractUniverse<N extends NodeParams, P extends UniverseParams>
+        implements Universe {
     @Getter
     @NonNull
     protected final P universeParams;

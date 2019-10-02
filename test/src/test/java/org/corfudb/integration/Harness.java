@@ -2,7 +2,6 @@ package org.corfudb.integration;
 
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 import static org.corfudb.integration.AbstractIT.PROPERTIES;
-import static org.corfudb.integration.AbstractIT.getCorfuServerLogPath;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -11,6 +10,7 @@ import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.test.CorfuServerRunner;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -181,7 +181,12 @@ public class Harness {
         for (int i = 0; i < n; i++) {
             int port = corfuPort + i;
             Process proc = runServerOnPort(port);
-            nodes.add(new Node(getAddressForNode(port), conn, getCorfuServerLogPath(corfuHost, port)));
+            Node node = new Node(
+                    getAddressForNode(port),
+                    conn,
+                    CorfuServerRunner.getCorfuServerLogPath(corfuHost, port)
+            );
+            nodes.add(node);
         }
 
         final Layout layout = getLayoutForNodes(n);
@@ -231,7 +236,7 @@ public class Harness {
      * @throws IOException
      */
     private Process runServerOnPort(int port) throws IOException {
-        return new AbstractIT.CorfuServerRunner()
+        return new CorfuServerRunner()
                 .setHost(corfuHost)
                 .setPort(port)
                 .setTlsEnabled(tlsEnabled)
@@ -239,7 +244,7 @@ public class Harness {
                 .setKeyStorePassword(serverPathToKeyStorePassword)
                 .setTrustStore(serverPathToTrustStore)
                 .setTrustStorePassword(serverPathToTrustStorePassword)
-                .setLogPath(getCorfuServerLogPath(corfuHost, port))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(corfuHost, port))
                 .setSingle(false)
                 .runServer();
     }
@@ -254,7 +259,7 @@ public class Harness {
     public Node deployUnbootstrappedNode(int port) throws IOException {
 
         Process proc = runServerOnPort(port);
-        return new Node(getAddressForNode(port), getCorfuServerLogPath(corfuHost, port));
+        return new Node(getAddressForNode(port), CorfuServerRunner.getCorfuServerLogPath(corfuHost, port));
     }
 
     /**

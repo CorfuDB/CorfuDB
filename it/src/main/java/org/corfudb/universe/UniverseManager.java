@@ -96,6 +96,20 @@ public class UniverseManager {
         return Scenario.with(universeFixture);
     }
 
+    public Scenario getProcessScenario(int numNodes) {
+        UniverseFixture universeFixture = new UniverseFixture();
+        universeFixture.setNumNodes(numNodes);
+        universeFixture.setCorfuServerVersion(corfuServerVersion);
+
+        //Assign universe variable before deploy prevents resources leaks
+        universe = UNIVERSE_FACTORY.buildProcessUniverse(universeFixture.data());
+
+        universe.deploy();
+
+        return Scenario.with(universeFixture);
+    }
+
+
     public Scenario<UniverseParams, AbstractUniverseFixture<UniverseParams>> getScenario() {
         final int defaultNumNodes = 3;
         return getScenario(defaultNumNodes, ImmutableSet.of());
@@ -115,7 +129,7 @@ public class UniverseManager {
             case VM:
                 return getVmScenario(numNodes);
             case PROCESS:
-                throw new UnsupportedOperationException("Not implemented");
+                return getProcessScenario(numNodes);
             default:
                 throw new UnsupportedOperationException("Not implemented");
         }

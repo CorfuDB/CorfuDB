@@ -16,7 +16,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.universe.UniverseManager;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
-import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.universe.Universe.UniverseMode;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.Param;
@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+@Slf4j
 public class ClusterBenchmark {
 
     public static void main(String[] args) throws RunnerException {
@@ -47,16 +48,21 @@ public class ClusterBenchmark {
 
         int warmUpIterations = 0;
 
-        int measurementIterations = 3;
-        TimeValue measurementTime = TimeValue.seconds(30);
+        int measurementIterations = 1;
+        TimeValue measurementTime = TimeValue.seconds(60);
 
-        int threads = 1;
+        int threads = 4;
         int forks = 1;
 
         String[] dataSizes = Stream
-                .of(KB.toBytes(4), KB.toBytes(512), MB.toBytes(2), MB.toBytes(20))
+                .of(KB.toBytes(4), MB.toBytes(2))
                 .map(String::valueOf)
                 .toArray(String[]::new);
+
+        String[] numRuntime = {"1", "4", "8"};
+        String[] numTables = {"1", "4", "8"};
+
+        String[] numServers = {"1", "3"};
 
         Options opt = new OptionsBuilder()
                 .include(benchmarkName)
@@ -70,8 +76,9 @@ public class ClusterBenchmark {
                 .measurementTime(measurementTime)
 
                 .param("dataSize", dataSizes)
-                .param("numRuntime", "1", "4", "8")
-                .param("numTables", "32", "128", "512")
+                .param("numRuntime", numRuntime)
+                .param("numTables", numTables)
+                .param("numServers", numServers)
 
                 .threads(threads)
                 .forks(forks)
@@ -104,7 +111,10 @@ public class ClusterBenchmark {
         @Param({})
         public int numTables;
 
-        private String data = DataGenerator.generateDataString(dataSize);
+        @Param({})
+        public int numServers;
+
+        private String data;
 
         public final List<CorfuClient> corfuClients = new ArrayList<>();
         public final List<CorfuTable<String, String>> tables = new ArrayList<>();
@@ -113,15 +123,17 @@ public class ClusterBenchmark {
         @Setup
         public void init() throws DockerCertificateException {
 
+            data = DataGenerator.generateDataString(dataSize);
+
             universeManager = UniverseManager.builder()
                     .docker(DefaultDockerClient.fromEnv().build())
                     .enableLogging(false)
                     .testName("corfu_cluster_benchmark")
-                    .universeMode(Universe.UniverseMode.DOCKER)
+                    .universeMode(UniverseMode.PROCESS)
                     .corfuServerVersion(getAppVersion())
                     .build();
 
-            universeManager.getScenario().describe((fixture, testCase) -> {
+            universeManager.getScenario(numServers).describe((fixture, testCase) -> {
                 CorfuCluster corfuCluster = universeManager
                         .getUniverse()
                         .getGroup(fixture.getCorfuCluster().getName());
@@ -149,6 +161,7 @@ public class ClusterBenchmark {
 
         @TearDown
         public void tearDown() {
+
             for (CorfuClient corfuClient : corfuClients) {
                 corfuClient.shutdown();
             }
@@ -178,7 +191,7 @@ public class ClusterBenchmark {
 
     @Benchmark
     public void clusterBenchmark(ClusterBenchmarkState state) {
-        String key = String.valueOf(state.counter.incrementAndGet());
+        String key = String.valueOf(state.counter.getAndIncrement());
         CorfuTable<String, String> table = state.getRandomTable();
         table.put(key, state.data);
     }

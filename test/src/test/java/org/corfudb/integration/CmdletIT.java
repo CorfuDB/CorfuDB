@@ -1,11 +1,13 @@
 package org.corfudb.integration;
 
-import java.util.UUID;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -14,8 +16,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.util.Collections;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import java.util.UUID;
 
 /**
  * Tests for clojure cmdlets.
@@ -121,7 +122,7 @@ public class CmdletIT extends AbstractIT {
 
         corfuServerProcess = new CorfuServerRunner()
                 .setPort(PORT)
-                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .runServer();
 
         final String command = CORFU_PROJECT_DIR + "bin/corfu_query " + ENDPOINT;
@@ -129,7 +130,7 @@ public class CmdletIT extends AbstractIT {
         final String expectedInitialToken = "--initial-token=-1";
         final String expectedStartupArgs = new CorfuServerRunner()
                 .setPort(PORT)
-                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .getOptionsString();
         String output = runCmdletGetOutput(command);
         assertThat(output.contains(expectedLogPath)).isTrue();

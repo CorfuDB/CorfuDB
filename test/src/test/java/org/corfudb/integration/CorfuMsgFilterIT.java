@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -32,10 +33,10 @@ public class CorfuMsgFilterIT extends AbstractIT {
 
     // Helper method to run a single persistent server for provided address and port
     private Process runSinglePersistentServer(String address, int port) throws IOException {
-        return new AbstractIT.CorfuServerRunner()
+        return new CorfuServerRunner()
                 .setHost(address)
                 .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
+                .setLogPath(CorfuServerRunner.getCorfuServerLogPath(address, port))
                 .setSingle(true)
                 .runServer();
     }

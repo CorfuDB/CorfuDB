@@ -150,7 +150,7 @@ public interface Fixtures {
     abstract class AbstractUniverseFixture<T extends UniverseParams> implements Fixture<T> {
         protected String corfuServerVersion;
         protected int numNodes;
-        protected Set<Integer> metricsPorts;
+        protected Set<Integer> metricsPorts = new HashSet<>();
         protected ClientParams client;
         protected CorfuClusterParams corfuCluster;
         protected SupportClusterParams monitoringCluster;
