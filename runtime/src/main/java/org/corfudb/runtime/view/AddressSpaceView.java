@@ -29,6 +29,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
@@ -69,6 +70,8 @@ public class AddressSpaceView extends AbstractView {
     final private long cacheKeySize = MetricsUtils.sizeOf.deepSizeOf(new Long(0));
 
     final private long defaultMaxCacheEntries = 5000;
+
+    final private static int MAX_RETRIES = 10; // max number of retries for read while interrupted.
 
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
             .ignoreTrim(false)
@@ -275,14 +278,35 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Read the given object from an address and streams.
-     *
+     * It is a wrapper of readNative to handle InterruptedException.
      * @param address An address to read from.
      * @param options Read options for this particular write (i.e. configure caching behavior)
      * @return A result, which be cached.
      */
     public @Nonnull
     ILogData read(long address, @NonNull ReadOptions options) {
+        int count = 0;
+        while (true) {
+            try {
+                return readNative (address, options);
+            } catch (InterruptedException e) {
+                if (++count == MAX_RETRIES) {
+                    log.error ("It has retried {} times, throw an exception {}", MAX_RETRIES, e);
+                    throw new UnrecoverableCorfuInterruptedError (e);
+                }
+            }
+        }
+    }
 
+    /**
+     * Read the given object from an address and streams.
+     *
+     * @param address An address to read from.
+     * @param options Read options for this particular write (i.e. configure caching behavior)
+     * @return A result, which be cached.
+     */
+    public @Nonnull
+    ILogData readNative(long address, @NonNull ReadOptions options) throws InterruptedException {
         if (cacheReadRequest(options)) {
             // The VersionLockedObject and the Transaction layer will generate
             // undoRecord(s) during a transaction commit, or object sync. These
