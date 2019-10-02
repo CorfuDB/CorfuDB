@@ -43,13 +43,13 @@ public class BenchmarkTest {
 
     protected CorfuTables corfuTables;
     private final BlockingQueue<Operation> operationQueue;
-    //private final ExecutorService taskProducer;
+    private final ExecutorService taskProducer;
     private final ExecutorService workers;
     final ScheduledExecutorService producerScheduler;
 
     private final long DURATION_IN_MS = 1000;
     static final int APPLICATION_TIMEOUT_IN_MS = 10000000;
-    static final int QUEUE_CAPACITY = 1000;
+    static final int QUEUE_CAPACITY = 1000000;
 
     BenchmarkTest(ParseArgs parseArgs) {
         setArgs(parseArgs);
@@ -59,7 +59,7 @@ public class BenchmarkTest {
         corfuTables = new CorfuTables(numStreams, openObjects());
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-        //taskProducer = Executors.newSingleThreadExecutor();
+        taskProducer = Executors.newSingleThreadExecutor();
         workers = Executors.newFixedThreadPool(numThreads);
         producerScheduler = Executors.newScheduledThreadPool(1);
     }
@@ -103,7 +103,8 @@ public class BenchmarkTest {
                 log.error("operation error", e);
             }
         };
-        producerScheduler.scheduleAtFixedRate(task, 100, 10, TimeUnit.MILLISECONDS);
+        taskProducer.execute(task);
+        //producerScheduler.scheduleAtFixedRate(task, 100, 10, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -113,11 +114,11 @@ public class BenchmarkTest {
         for (int i = 0; i < numThreads; i++) {
             workers.execute(() -> {
                 try {
-                    long start = System.nanoTime();
+                    long start = System.currentTimeMillis();
                     Operation op = operationQueue.take();
                     op.execute();
-                    long latency = System.nanoTime() - start;
-                    log.info("nextToken request latency: " + latency);
+                    long latency = System.currentTimeMillis() - start;
+                    log.info("operation latency(milliseconds): " + latency);
                 } catch (Exception e) {
                     log.error("Operation failed with", e);
                 }

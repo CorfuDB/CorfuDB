@@ -76,6 +76,7 @@ public class CorfuTableOperations extends Operation {
     private void putTable() {
         String key = keyValueManager.generateKey();
         String value = keyValueManager.generateValue();
+        //System.out.println(value);
         try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTablePutTimer)) {
             corfuTable.put(key, value);
         }

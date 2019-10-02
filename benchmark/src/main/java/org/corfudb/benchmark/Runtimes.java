@@ -1,6 +1,5 @@
 package org.corfudb.benchmark;
 
-import org.corfudb.generator.distributions.DataSet;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;

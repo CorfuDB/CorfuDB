@@ -24,7 +24,7 @@ public class SequencerBenchmarkTest extends BenchmarkTest {
 
     private void runTest() {
         runProducer();
-        runConsumers();
+        //runConsumers();
         waitForAppToFinish();
     }
 
