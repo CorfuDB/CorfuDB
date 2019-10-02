@@ -1,5 +1,8 @@
 package org.corfudb.benchmark;
 
+import org.apache.commons.lang3.RandomStringUtils;
+import org.corfudb.util.MetricsUtils;
+
 import java.util.*;
 
 public class KeyValueManager {//1 char = 2B
@@ -7,6 +10,7 @@ public class KeyValueManager {//1 char = 2B
     List<String> keySet;
     Random random;
     int valueSize;
+    int index;
     private final static int SEEDSIZE = 26;
 
     KeyValueManager(int keyNum, int valueSize) {
@@ -17,10 +21,14 @@ public class KeyValueManager {//1 char = 2B
     }
 
     String generateKey() {
-        int index = random.nextInt(this.keyNum);
-        String key = "key_" + index;
-        keySet.add(key);
-        return key;
+        if (index < keyNum) {
+            String key = "key_" + index;
+            index++;
+            keySet.add(key);
+            return key;
+        } else {
+            return getKey();
+        }
     }
 
     String getKey() {
@@ -28,16 +36,12 @@ public class KeyValueManager {//1 char = 2B
     }
 
     String generateValue() {
-        StringBuilder stringBuilder = new StringBuilder(valueSize);
-        for (int i = 0; i < valueSize / 2; i++) {
-            int seed = random.nextInt(SEEDSIZE);
-            char ch = (char) ('a' + seed);
-            stringBuilder.append(ch);
-        }
-        return stringBuilder.toString();
+        return RandomStringUtils.random(valueSize, true, true);
     }
+
 //    public static void main(String[] args) {
-//        KeyValueManager keyValueManager = new KeyValueManager(10);
+//        KeyValueManager keyValueManager = new KeyValueManager(10, 1700);
 //        System.out.println(MetricsUtils.sizeOf.deepSizeOf(keyValueManager.generateValue()));
+//        System.out.println(MetricsUtils.sizeOf.deepSizeOf(keyValueManager.generateKey()));
 //    }
 }
