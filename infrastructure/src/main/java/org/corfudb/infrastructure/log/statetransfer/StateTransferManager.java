@@ -19,7 +19,7 @@ import java.util.stream.LongStream;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
 
 @Slf4j
-@Builder
+@AllArgsConstructor
 /**
  * This class is responsible for managing a state transfer on the current node.
  */
@@ -57,11 +57,15 @@ public class StateTransferManager {
 
     @Getter
     @NonNull
-    private StreamLog streamLog;
+    private final StreamLog streamLog;
 
     @Getter
     @NonNull
-    private StateTransferWriter stateTransferWriter;
+    private final StateTransferWriter stateTransferWriter;
+
+    @Getter
+    @NonNull
+    private final int batchSize;
 
     private List<Long> getUnknownAddressesInRange(long rangeStart, long rangeEnd) {
 
@@ -106,7 +110,7 @@ public class StateTransferManager {
                     else{
                         CompletableFuture<CurrentTransferSegmentStatus> segmentStatusFuture =
                                 stateTransferWriter
-                                        .stateTransfer(unknownAddressesInRange)
+                                        .stateTransfer(unknownAddressesInRange, batchSize)
                                         .thenApply(r -> {
                                             if (r.isValue() && r.get().equals(segment.getEndAddress())) {
                                                 return new CurrentTransferSegmentStatus(TRANSFERRED, r.get());

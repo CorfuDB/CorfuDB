@@ -12,7 +12,7 @@ import lombok.NonNull;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -123,16 +123,20 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         Layout layout = runtime.getLayoutView().getLayout();
 
         // Create a helper class to perform state calculations.
-        PrefixTrimRedundancyCalculator redundancyCalculator = new PrefixTrimRedundancyCalculator(currentNode, runtime);
+        PrefixTrimRedundancyCalculator redundancyCalculator =
+                new PrefixTrimRedundancyCalculator(currentNode, runtime);
 
         // Create a transfer manager instance.
-        RegularBatchProcessor transferBatchProcessor = new RegularBatchProcessor(streamLog);
+        RegularBatchProcessor transferBatchProcessor =
+                new RegularBatchProcessor(streamLog, runtime.getAddressSpaceView());
 
-        StateTransferWriter stateTransferWriter = StateTransferWriter
-                .builder().batchProcessor(transferBatchProcessor).build();
+        StateTransferWriter stateTransferWriter =
+                new StateTransferWriter(transferBatchProcessor);
 
         StateTransferManager transferManager =
-                builder().stateTransferWriter(stateTransferWriter).streamLog(streamLog).build();
+                new StateTransferManager(streamLog,
+                        stateTransferWriter,
+                        runtime.getParameters().getBulkReadSize());
 
         // Create an initial state map.
         ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> stateMap =

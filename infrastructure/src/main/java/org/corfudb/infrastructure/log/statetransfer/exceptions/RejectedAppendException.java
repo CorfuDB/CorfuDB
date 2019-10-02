@@ -7,7 +7,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import java.util.List;
 
 /**
- * An exception that represents a failed write of garbage or data entries.
+ * An exception that represents a failed write of data entries.
  */
 @AllArgsConstructor
 public class RejectedAppendException extends StateTransferException {

@@ -1,5 +1,7 @@
 package org.corfudb.common.result;
 
+import lombok.ToString;
+
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -9,7 +11,7 @@ import java.util.function.Supplier;
 /**
  * Container type for encapsulating function result and propagating errors.
  *
- * @author jameschang, xnull
+ * @author jameschang, xnull, pzaytsev
  */
 public class Result<T, E extends RuntimeException> implements Supplier<T> {
 
