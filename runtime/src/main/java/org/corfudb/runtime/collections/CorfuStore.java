@@ -137,4 +137,18 @@ public class CorfuStore {
                 this.runtime.getTableRegistry(),
                 namespace);
     }
+
+    /**
+     * Provides a query interface.
+     *
+     * @param namespace Namespace within which the queries are executed.
+     * @return Query implementation.
+     */
+    @Nonnull
+    public Query query(@Nonnull final String namespace) {
+        return new Query(
+                this.runtime.getTableRegistry(),
+                this.runtime.getObjectsView(),
+                namespace);
+    }
 }

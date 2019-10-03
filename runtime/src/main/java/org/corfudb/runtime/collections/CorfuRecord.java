@@ -2,9 +2,8 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
-
-import java.util.Objects;
 
 /**
  * Encapsulates the payload/value and metadata into one object.
@@ -15,28 +14,23 @@ import java.util.Objects;
  * modifications.
  *
  */
+@EqualsAndHashCode
 public class CorfuRecord<V extends Message, M extends Message> {
+    /**
+     * V encapsulates the user's Value payload - this is the main protobuf message that defines the schema
+     */
     @Getter
     private final V payload;
+
+    /**
+     * M encapsulates the user's metadata - this can be something like auto-incrementing versions, other
+     * services provided by the database for metadata fields.
+     */
     @Getter
     private final M metadata;
 
     public CorfuRecord(V payload, M metadata) {
         this.payload = payload;
         this.metadata = metadata;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        CorfuRecord<?, ?> that = (CorfuRecord<?, ?>) o;
-        return Objects.equals(getPayload(), that.getPayload()) &&
-                Objects.equals(getMetadata(), that.getMetadata());
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(getPayload(), getMetadata());
     }
 }
