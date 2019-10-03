@@ -1,6 +1,8 @@
 package org.corfudb.integration;
 
 
+import static org.corfudb.test.CorfuServerRunner.getCorfuServerLogPath;
+
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
@@ -12,6 +14,7 @@ import java.util.UUID;
 
 import org.apache.commons.io.FileUtils;
 
+import org.corfudb.test.CorfuServerRunner;
 import org.junit.jupiter.api.Test;
 
 import org.corfudb.runtime.CorfuRuntime;
