@@ -23,7 +23,19 @@
     </properties>
 
     <build>
-        <sourceDirectory>src/jmh/java, src/main/java</sourceDirectory>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>src/jmh/java</include>
+                        <include>src/main/java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+        </plugins>
+
     </build>
 
     <dependencies>
