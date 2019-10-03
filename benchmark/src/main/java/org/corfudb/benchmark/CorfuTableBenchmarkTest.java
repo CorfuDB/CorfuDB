@@ -13,10 +13,10 @@ import java.util.UUID;
  */
 @Slf4j
 public class CorfuTableBenchmarkTest extends BenchmarkTest {
-    double ratio;
-    String operationName;
-    int keyNum;
-    int valueSize;
+    private final double ratio;
+    private final String operationName;
+    private final int keyNum;
+    private final int valueSize;
 
     CorfuTableBenchmarkTest(ParseArgs parseArgs) {
         super(parseArgs);
@@ -47,6 +47,5 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         ParseArgs parseArgs = new ParseArgs(args);
         CorfuTableBenchmarkTest corfuTableBenchmarkTest = new CorfuTableBenchmarkTest(parseArgs);
         corfuTableBenchmarkTest.runTest();
-
     }
 }
