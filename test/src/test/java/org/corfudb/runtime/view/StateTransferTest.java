@@ -77,6 +77,43 @@ public class StateTransferTest extends AbstractViewTest {
                 .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
     }
 
+
+    @Test
+    /**
+     * 1. Segment 1: 0 -> 3: Node 0, Node 1
+     * 2. Add node Node 2
+     */
+    public void verifyAddNode(){
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        final long writtenAddressesBatch1 = 3L;
+        Layout l1 = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(writtenAddressesBatch1)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        bootstrapAllServers(l1);
+        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        testStream.append("testPayload".getBytes());
+        testStream.append("testPayload".getBytes());
+        testStream.append("testPayload".getBytes());
+
+
+    }
+
     /**
      * The test first creates a layout with 2 segments.
      * Segment 1: 0 -> 3 (exclusive) Node 0

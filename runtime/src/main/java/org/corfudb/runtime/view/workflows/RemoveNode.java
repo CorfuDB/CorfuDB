@@ -32,11 +32,6 @@ public class RemoveNode extends WorkflowRequest {
     }
 
     @Override
-    protected Predicate<String> orchestratorSelector() {
-        return node -> !node.equals(nodeForWorkflow);
-    }
-
-    @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         // Send an remove node request to an orchestrator that is not on the node
         // to be removed

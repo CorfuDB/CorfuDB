@@ -2,6 +2,7 @@ package org.corfudb.runtime.view.workflows;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
@@ -47,28 +48,23 @@ public abstract class WorkflowRequest {
     protected abstract UUID sendRequest(ManagementClient client) throws TimeoutException;
 
     /**
-     * Predicate that selects a node for the orchestrator
-     *
-     * @return a predicate that depends on the implemented condition
-     */
-    protected abstract Predicate<String> orchestratorSelector();
-
-    /**
      * Select an orchestrator on the node that responds to pings.
-     * The selection of a node depends on the type of the current workflow request.
      * The layout might not reflect the state
      * of the responsive servers, so we ping the endpoint before we select it.
      * An example of this would be a 3 node cluster, with two nodes that
      * die immediately, the layout won't have those two nodes as unresponsive
      * because it can't commit to a quorum.
      *
-     * @param layout the layout that is used to select an orchestrator
      * @return a management client that is connected to the selected
      * orchestrator
      */
-    protected ManagementClient getOrchestrator(@NonNull Layout layout) {
+    protected Optional<ManagementClient> getOrchestrator() {
+
+        runtime.invalidateLayout();
+        Layout layout = new Layout(runtime.getLayoutView().getLayout());
+
         List<String> availableLayoutServers = layout.getLayoutServers().stream()
-                .filter(orchestratorSelector())
+                .filter(s -> !s.equals(nodeForWorkflow))
                 .collect(Collectors.toList());
 
         if (availableLayoutServers.isEmpty()) {
@@ -76,18 +72,17 @@ public abstract class WorkflowRequest {
         }
 
         // Select an available orchestrator
-        ManagementClient managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
-                .getManagementClient(availableLayoutServers.get(0));
+        Optional<ManagementClient> managementClient = Optional.empty();
 
         for (String endpoint : availableLayoutServers) {
             BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout)
                     .getBaseClient(endpoint);
             if (client.pingSync()) {
                 log.info("getOrchestrator: orchestrator selected {}, layout {}", endpoint, layout);
-                managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
-                        .getManagementClient(endpoint);
-                break;
+                managementClient = Optional.of(runtime.getLayoutView().getRuntimeLayout(layout)
+                        .getManagementClient(endpoint));
             }
+
         }
 
         return managementClient;
@@ -138,12 +133,16 @@ public abstract class WorkflowRequest {
     public void invoke() {
         for (int x = 0; x < retry; x++) {
             try {
-                runtime.invalidateLayout();
-                Layout requestLayout = new Layout(runtime.getLayoutView().getLayout());
-                ManagementClient orchestrator = getOrchestrator(requestLayout);
-                UUID workflowId = sendRequest(orchestrator);
-                waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);
-            } catch (NetworkException | TimeoutException e) {
+                Optional<ManagementClient> orchestrator = getOrchestrator();
+                if(orchestrator.isPresent()){
+                    UUID workflowId = sendRequest(orchestrator.get());
+                    waitForWorkflow(workflowId, orchestrator.get(), timeout, pollPeriod);
+                }
+                else{
+                    throw new IllegalStateException("Orchestrator can not be selected");
+                }
+
+            } catch (NetworkException | TimeoutException | IllegalStateException e) {
                 log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);
             }
 

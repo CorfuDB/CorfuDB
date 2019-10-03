@@ -5,6 +5,7 @@ import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import lombok.Getter;
@@ -34,17 +35,28 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         this.currentNode = currentNode;
     }
 
-
     /**
-     * Try restore redundancy for all the transferred segments.
+     * Restore redundancy with backoff.
      * @param stateMap A map that holds state for every segment.
      * @param runtime An instance of a runtime.
-     * @throws OutrankedException if the consensus on the new layout can not be reached.
+     */
+    private void restoreRedundancyWithBackOff(Map<CurrentTransferSegment,
+            CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
+                                              CorfuRuntime runtime){
+        Runnable tryRestoreRedundancyAction =
+                () -> tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
+
+        RestorationExponentialBackOff.execute(tryRestoreRedundancyAction);
+    }
+
+    /**
+     * Try restore redundancy for all the currently transferred segments.
+     * @param stateMap A map that holds state for every segment.
+     * @param runtime An instance of a runtime.
      */
     private void tryRestoreRedundancyAndMergeSegments(Map<CurrentTransferSegment,
             CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
-                                                      CorfuRuntime runtime)
-            throws OutrankedException {
+                                                      CorfuRuntime runtime) {
 
         // Filter all the transfers that has been completed.
         List<Map.Entry<CurrentTransferSegment, CurrentTransferSegmentStatus>> completedEntries
@@ -95,7 +107,6 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 runtime.getLayoutManagementView()
                         .runLayoutReconfiguration(oldLayout, newLayout, false);
             }
-
         }
     }
 
@@ -139,7 +150,8 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
 
             // Try restore redundancy for the segments that are restored.
             // If possible, also merge segments.
-            tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
+            // Utilize backoff, in case multiple transfers happen.
+            restoreRedundancyWithBackOff(stateMap, runtime);
 
             // Invalidate the layout.
             runtime.invalidateLayout();

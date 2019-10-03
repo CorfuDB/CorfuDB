@@ -201,7 +201,8 @@ public class RegularBatchProcessor {
             }).run();
             // Map to unrecoverable error if an interrupt has occurred or retries occurred.
         } catch (InterruptedException | RetryExhaustedException ie) {
-            return CompletableFuture.completedFuture(Result.error(new StateTransferFailure("Retries exhausted or interrupted")));
+            return CompletableFuture.completedFuture(
+                    Result.error(new StateTransferFailure("Retries exhausted or interrupted")));
         }
     }
 

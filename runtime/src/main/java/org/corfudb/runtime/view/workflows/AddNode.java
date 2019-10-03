@@ -4,10 +4,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
@@ -20,7 +22,7 @@ import java.util.function.Predicate;
  * Created by Maithem on 1/19/18.
  */
 @Slf4j
-public class AddNode extends WorkflowRequest {
+public class AddNode extends WorkflowRequest{
 
     public AddNode(@NonNull String endpointToAdd, @NonNull CorfuRuntime runtime,
                    int retry, @NonNull Duration timeout,
@@ -30,11 +32,6 @@ public class AddNode extends WorkflowRequest {
         this.retry = retry;
         this.timeout = timeout;
         this.pollPeriod = pollPeriod;
-    }
-
-    @Override
-    protected Predicate<String> orchestratorSelector() {
-        return node -> node.equals(nodeForWorkflow);
     }
 
     @Override
@@ -60,5 +57,18 @@ public class AddNode extends WorkflowRequest {
     @Override
     public String toString() {
         return this.getClass().getSimpleName() + " " + nodeForWorkflow;
+    }
+
+    @Override
+    protected Optional<ManagementClient> getOrchestrator(){
+
+        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout().getBaseClient(nodeForWorkflow);
+        if(baseClient.pingSync()){
+            return Optional.of(runtime.getLayoutView()
+                    .getRuntimeLayout().getManagementClient(nodeForWorkflow));
+        }
+        else{
+            return Optional.empty();
+        }
     }
 }

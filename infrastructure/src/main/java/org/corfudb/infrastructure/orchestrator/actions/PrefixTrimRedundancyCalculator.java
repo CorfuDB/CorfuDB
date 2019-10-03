@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
@@ -63,7 +64,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                         CompletableFuture
                                                 .completedFuture(new
                                                         CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                        -1L)));
+                                                        Address.NON_ADDRESS)));
                             }
                         }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
         return ImmutableMap.copyOf(map);
