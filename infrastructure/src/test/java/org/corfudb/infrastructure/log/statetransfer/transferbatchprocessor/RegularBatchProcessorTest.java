@@ -16,7 +16,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.junit.Test;
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;

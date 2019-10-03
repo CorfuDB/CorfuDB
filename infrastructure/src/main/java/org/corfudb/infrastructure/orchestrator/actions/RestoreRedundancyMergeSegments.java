@@ -22,10 +22,8 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
 
 /**
- * This action attempts to restore redundancy for all servers across all segments
- * starting from the oldest segment. It then collapses the segments once the set of
- * servers in the 2 oldest subsequent segments are equal.
- * Created by Zeeshan on 2019-02-06.
+ * This action attempts to restore the redundancy for the segments, for which the current node is
+ * missing. It transfers multiple seconds at once and open the segments that are transferred.
  */
 public class RestoreRedundancyMergeSegments extends RestoreAction {
 
@@ -77,16 +75,20 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 .collect(Collectors.toList());
 
         if (!transferredSegments.isEmpty()) {
+
+            // If there are transferred segments, invalidate
             runtime.invalidateLayout();
 
             Layout oldLayout = runtime.getLayoutView().getLayout();
 
             RedundancyCalculator calculator = new RedundancyCalculator(currentNode);
 
+            // Create a new layout after the segments are transferred
             Layout newLayout =
                     calculator.updateLayoutAfterRedundancyRestoration(
                             transferredSegments, oldLayout);
 
+            // If segments can be merged, merge, if not, just reconfigure.
             if (RedundancyCalculator.canMergeSegments(newLayout)) {
                 runtime.getLayoutManagementView().mergeSegments(newLayout);
             } else {

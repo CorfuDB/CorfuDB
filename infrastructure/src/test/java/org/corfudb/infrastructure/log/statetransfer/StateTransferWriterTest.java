@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
-import org.apache.commons.lang.math.LongRange;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.IncompleteDataReadException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.RejectedDataException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
@@ -33,7 +30,6 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
 
 public class StateTransferWriterTest extends  DataTest{
 

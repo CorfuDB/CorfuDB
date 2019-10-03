@@ -8,6 +8,7 @@ import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +68,7 @@ public class StateTransferManager {
     @NonNull
     private final int batchSize;
 
-    private List<Long> getUnknownAddressesInRange(long rangeStart, long rangeEnd) {
+    List<Long> getUnknownAddressesInRange(long rangeStart, long rangeEnd) {
 
         Set<Long> knownAddresses = streamLog
                 .getKnownAddressesInRange(rangeStart, rangeEnd);
@@ -84,43 +85,47 @@ public class StateTransferManager {
         return statusMap.entrySet().stream().map(entry -> {
             CurrentTransferSegment segment = entry.getKey();
             CompletableFuture<CurrentTransferSegmentStatus> status = entry.getValue();
-            if(status.isCompletedExceptionally()){
+            if (status.isCompletedExceptionally()) {
                 // If a future failed exceptionally, mark as failed.
                 return new SimpleEntry<>(segment, CompletableFuture
                         .completedFuture(new CurrentTransferSegmentStatus(FAILED,
                                 -1L)));
-            }
-            else if(!status.isDone()){
+            } else if (!status.isDone()) {
                 // It's still in progress.
                 return new SimpleEntry<>(segment, status);
-            }
-            else{ // Future is completed -> NOT_TRANSFERRED or RESTORED
+            } else {
+                //  - NOT_TRANSFERRED
                 CurrentTransferSegmentStatus statusJoin = status.join();
                 SimpleEntry<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> result;
                 if (statusJoin.getSegmentStateTransferState().equals(NOT_TRANSFERRED)) {
                     List<Long> unknownAddressesInRange =
                             getUnknownAddressesInRange(segment.getStartAddress(), segment.getEndAddress());
 
-                    if(unknownAddressesInRange.isEmpty()){
+                    if (unknownAddressesInRange.isEmpty()) {
                         // no addresses to transfer - all done
                         CurrentTransferSegmentStatus currentTransferSegmentStatus =
                                 new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress());
                         result = new SimpleEntry<>(segment, CompletableFuture.completedFuture(currentTransferSegmentStatus));
-                    }
-                    else{
+                    } else {
+                        Long lastAddressToTransfer =
+                                unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
+
                         CompletableFuture<CurrentTransferSegmentStatus> segmentStatusFuture =
                                 stateTransferWriter
                                         .stateTransfer(unknownAddressesInRange, batchSize)
-                                        .thenApply(r -> {
-                                            if (r.isValue() && r.get().equals(segment.getEndAddress())) {
-                                                return new CurrentTransferSegmentStatus(TRANSFERRED, r.get());
+                                        .thenApply(lastTransferredAddressResult -> {
+                                            if (lastTransferredAddressResult.isValue() &&
+                                                    lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
+                                                long lastTransferredAddress = lastTransferredAddressResult.get();
+                                                return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
                                             } else {
-                                                return new CurrentTransferSegmentStatus(FAILED, segment.startAddress);
+                                                return new CurrentTransferSegmentStatus(FAILED, -1L);
                                             }
                                         });
                         result = new SimpleEntry<>(segment, segmentStatusFuture);
                     }
                 }
+                //  - RESTORED
                 else {
 
                     result = new SimpleEntry<>(segment, CompletableFuture.completedFuture(statusJoin));
