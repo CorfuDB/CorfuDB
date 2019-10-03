@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.transferbatchprocessor;
+package org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor;
 
 import com.google.common.collect.Ordering;
 import org.corfudb.common.result.Result;
@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.log.statetransfer.exceptions.IncompleteDataRea
 import org.corfudb.infrastructure.log.statetransfer.exceptions.RejectedDataException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
-import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.RegularBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -31,6 +30,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 public class RegularBatchProcessorTest {
 
@@ -183,8 +183,6 @@ public class RegularBatchProcessorTest {
         StreamLogFiles streamLogFiles = mock(StreamLogFiles.class);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
 
-
-
         RegularBatchProcessor regularBatchProcessor =
                 new RegularBatchProcessor(streamLogFiles, addressSpaceView);
 
@@ -250,6 +248,21 @@ public class RegularBatchProcessorTest {
 
         assertThat(result.isError()).isTrue();
         assertThat(result.getError()).isInstanceOf(RejectedDataException.class);
+
+        // Case 5: pipeline completes exceptionally
+        RegularBatchProcessor spy = spy(regularBatchProcessor);
+
+        CompletableFuture<Result<Long, StateTransferException>> failedPipeLine =
+                CompletableFuture.supplyAsync(() -> {
+            throw new IllegalArgumentException("Error occurred.");
+        });
+
+        Supplier<CompletableFuture<Result<Long, StateTransferException>>> fxn = () -> failedPipeLine;
+        doReturn(fxn).when(spy).getErrorHandlingPipeline(incompleteDataReadException);
+
+        result = spy.tryHandleIncompleteRead(incompleteDataReadException,
+                new AtomicInteger(3)).join();
+        assertThat(result.getError()).isInstanceOf(StateTransferFailure.class);
 
     }
 

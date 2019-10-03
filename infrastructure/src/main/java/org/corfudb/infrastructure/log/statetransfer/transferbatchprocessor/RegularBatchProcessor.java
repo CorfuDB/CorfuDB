@@ -46,7 +46,6 @@ public class RegularBatchProcessor {
 
 
     public static final int MAX_RETRIES = 3;
-    public static final int MAX_WRITE_MILLISECONDS_TIMEOUT = 1000;
     public static final Duration MAX_RETRY_TIMEOUT = Duration.ofSeconds(10);
     public static final float RANDOM_FACTOR_BACKOFF = 0.5f;
 
@@ -76,7 +75,7 @@ public class RegularBatchProcessor {
      * @return A function that produces a future that handles the errors depending on their type.
      */
 
-    public Supplier<CompletableFuture<Result<Long, StateTransferException>>> getErrorHandlingPipeline(StateTransferException exception) {
+    Supplier<CompletableFuture<Result<Long, StateTransferException>>> getErrorHandlingPipeline(StateTransferException exception) {
         if (exception instanceof IncompleteReadException) {
             IncompleteReadException incompleteReadException = (IncompleteDataReadException) exception;
             List<Long> missingAddresses =
@@ -139,13 +138,15 @@ public class RegularBatchProcessor {
         }
     }
 
+
+
     /**
      * Handle possible read errors. Exponential backoff policy is utilized.
      * @param incompleteReadException Exception that occurred during the read.
      * @param readRetries Configurable number of retries for the current batch.
      * @return Future of the result of the retry.
      */
-    public CompletableFuture<Result<Long, StateTransferException>> tryHandleIncompleteRead
+    CompletableFuture<Result<Long, StateTransferException>> tryHandleIncompleteRead
     (IncompleteReadException incompleteReadException, AtomicInteger readRetries) {
 
         try {
@@ -155,7 +156,18 @@ public class RegularBatchProcessor {
                         Supplier<CompletableFuture<Result<Long, StateTransferException>>> pipeline =
                                 getErrorHandlingPipeline(incompleteReadException);
                         // Extract the result.
-                        Result<Long, StateTransferException> joinResult = pipeline.get().join();
+
+                CompletableFuture<Result<Long, StateTransferException>> pipelineFuture =
+                        pipeline.get().handle((result, exception) -> {
+                                    if(Optional.ofNullable(exception).isPresent()){
+                                        return Result.error(new StateTransferFailure(exception));
+                                    }
+                                    else{
+                                        return result;
+                                    }
+                                });
+
+                Result<Long, StateTransferException> joinResult = pipelineFuture.join();
                         if (joinResult.isError()) {
                             // If an error occurred, increment retries.
                             readRetries.incrementAndGet();
@@ -185,7 +197,7 @@ public class RegularBatchProcessor {
                     }).run();
             // Map to unrecoverable error if an interrupt has occurred or retries occurred.
         } catch (InterruptedException | RetryExhaustedException ie) {
-            return CompletableFuture.completedFuture(Result.error(new StateTransferFailure()));
+            return CompletableFuture.completedFuture(Result.error(new StateTransferFailure("Retries exhausted or interrupted")));
         }
     }
 
@@ -196,7 +208,7 @@ public class RegularBatchProcessor {
      * @param readResult A result of the read.
      * @return A result containing either exception or data.
      */
-    public static Result<List<LogData>, IncompleteReadException> handleRead(List<Long> addresses,
+    static Result<List<LogData>, IncompleteReadException> handleRead(List<Long> addresses,
                                                                             Map<Long, ILogData> readResult) {
         List<Long> transferredAddresses =
                 addresses.stream().filter(readResult::containsKey)
@@ -220,7 +232,7 @@ public class RegularBatchProcessor {
      * @param dataEntries The list of entries (data or garbage).
      * @return A result of a record append, containing the max written address.
      */
-    public Result<Long, StateTransferException> writeRecords(List<LogData> dataEntries) {
+    Result<Long, StateTransferException> writeRecords(List<LogData> dataEntries) {
 
         Result<Long, RuntimeException> result = Result.of(() -> {
             streamLog.append(dataEntries);
@@ -256,7 +268,7 @@ public class RegularBatchProcessor {
      * @param addresses     The list of addresses.
      * @return A result of reading records.
      */
-    public Result<List<LogData>, StateTransferException> readRecords(List<Long> addresses) {
+    Result<List<LogData>, StateTransferException> readRecords(List<Long> addresses) {
         log.trace("Reading data for addresses: {}", addresses);
 
         Map<Long, ILogData> readResult = addressSpaceView.read(addresses, readOptions);

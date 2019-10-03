@@ -13,5 +13,11 @@ public class StateTransferFailure extends StateTransferException {
         super(msg);
     }
 
+    public StateTransferFailure(Throwable throwable){
+        super(throwable);
+    }
+
+
+
 
 }

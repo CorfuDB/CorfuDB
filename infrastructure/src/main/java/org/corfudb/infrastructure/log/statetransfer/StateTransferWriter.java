@@ -45,7 +45,7 @@ public class StateTransferWriter {
         return coalesceResults(listOfFutureResults);
     }
 
-    private static CompletableFuture<Result<Long, StateTransferException>> coalesceResults
+    CompletableFuture<Result<Long, StateTransferException>> coalesceResults
             (List<CompletableFuture<Result<Long, StateTransferException>>> allResults) {
         CompletableFuture<List<Result<Long, StateTransferException>>> futureOfListResults =
                 CFUtils.sequence(allResults);
@@ -54,14 +54,14 @@ public class StateTransferWriter {
                 .thenApply(multipleResults ->
                         multipleResults
                                 .stream()
-                                .reduce(StateTransferWriter::mergeBatchResults));
+                                .reduce(this::mergeBatchResults));
 
         return possibleSingleResult.thenApply(result -> result.orElseGet(() ->
                 new Result<>(-1L, new StateTransferFailure("Coalesced transfer batch result is empty."))));
 
     }
 
-    private static Result<Long, StateTransferException> mergeBatchResults(Result<Long, StateTransferException> firstResult,
+    Result<Long, StateTransferException> mergeBatchResults(Result<Long, StateTransferException> firstResult,
                                                                           Result<Long, StateTransferException> secondResult){
         return firstResult.flatMap(firstMaxAddressTransferred ->
                 secondResult.map(secondMaxAddressTransferred ->
