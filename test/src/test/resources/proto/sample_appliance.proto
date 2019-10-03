@@ -1,0 +1,10 @@
+syntax = "proto2";
+
+package org.corfudb.test;
+option java_package = "org.corfudb.test";
+
+import "corfu_options.proto";
+
+message Appliance {
+    optional string endpoint = 1;
+}
