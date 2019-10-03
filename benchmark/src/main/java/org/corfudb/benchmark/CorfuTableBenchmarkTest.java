@@ -1,11 +1,11 @@
 package org.corfudb.benchmark;
 
-import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.UUID;
 
 /**
@@ -13,17 +13,41 @@ import java.util.UUID;
  */
 @Slf4j
 public class CorfuTableBenchmarkTest extends BenchmarkTest {
+    private final int numStreams;
+    private final int numRequests;
     private final double ratio;
     private final String operationName;
     private final int keyNum;
     private final int valueSize;
+    protected Streams streams;
+    protected CorfuTables corfuTables;
 
-    CorfuTableBenchmarkTest(ParseArgs parseArgs) {
+    CorfuTableBenchmarkTest(CorfuTableParseArgs parseArgs) {
         super(parseArgs);
         ratio = parseArgs.getRatio();
         operationName = parseArgs.getOp();
         keyNum = parseArgs.getKeyNum();
         valueSize = parseArgs.getValueSize();
+        numStreams = parseArgs.getNumStreams();
+        numRequests = parseArgs.getNumRequests();
+        streams = new Streams(numStreams);
+        corfuTables = new CorfuTables(numStreams, openObjects());
+    }
+
+    private HashMap<UUID, CorfuTable> openObjects() {
+        HashMap<UUID, CorfuTable> tempMaps = new HashMap<>();
+        for (int i = 0; i < numStreams; i++) {
+            CorfuRuntime runtime = runtimes.getRuntime(i);
+            UUID uuid = streams.getStreamID(i);
+            CorfuTable<String, String> map = runtime.getObjectsView()
+                    .build()
+                    .setStreamID(uuid)
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .open();
+
+            tempMaps.put(uuid, map);
+        }
+        return tempMaps;
     }
 
     private void runProducer() {
@@ -44,7 +68,7 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
     }
 
     public static void main(String[] args) {
-        ParseArgs parseArgs = new ParseArgs(args);
+        CorfuTableParseArgs parseArgs = new CorfuTableParseArgs(args);
         CorfuTableBenchmarkTest corfuTableBenchmarkTest = new CorfuTableBenchmarkTest(parseArgs);
         corfuTableBenchmarkTest.runTest();
     }

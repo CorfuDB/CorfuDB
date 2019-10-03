@@ -2,7 +2,6 @@ package org.corfudb.benchmark;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -19,29 +18,11 @@ import java.util.concurrent.*;
 @Slf4j
 public class BenchmarkTest {
     /**
-     * Number of clients
-     */
-    protected int numRuntimes;
-    /**
      * Number of threads per client.
      */
     protected int numThreads;
-    /**
-     * Number of requests per thread.
-     */
-    protected int numRequests;
-    /**
-     * Server endpoint.
-     */
-    protected int numStreams;
-
-    private String endpoint;
-
     protected Runtimes runtimes;
 
-    protected Streams streams;
-
-    protected CorfuTables corfuTables;
     private final BlockingQueue<Operation> operationQueue;
     private final ExecutorService taskProducer;
     private final ExecutorService workers;
@@ -52,40 +33,14 @@ public class BenchmarkTest {
     static final int QUEUE_CAPACITY = 1000000;
 
     BenchmarkTest(ParseArgs parseArgs) {
-        setArgs(parseArgs);
-        runtimes = new Runtimes(numRuntimes, endpoint);
-        log.info("Connected {} runtimes...", numRuntimes);
-        streams = new Streams(numStreams);
-        corfuTables = new CorfuTables(numStreams, openObjects());
+        runtimes = new Runtimes(parseArgs.getNumRuntimes(), parseArgs.getEndpoint());
+        log.info("Connected {} runtimes...", parseArgs.getNumRuntimes());
+        numThreads = parseArgs.getNumThreads();
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         taskProducer = Executors.newSingleThreadExecutor();
         workers = Executors.newFixedThreadPool(numThreads);
         producerScheduler = Executors.newScheduledThreadPool(1);
-    }
-
-    private void setArgs(ParseArgs parseArgs) {
-        numRuntimes = parseArgs.getNumRuntimes();
-        numThreads = parseArgs.getNumThreads();
-        numRequests = parseArgs.getNumRequests();
-        endpoint = parseArgs.getEndpoint();
-        numStreams = parseArgs.getNumStreams();
-    }
-
-    private HashMap<UUID, CorfuTable> openObjects() {
-        HashMap<UUID, CorfuTable> tempMaps = new HashMap<>();
-        for (int i = 0; i < numStreams; i++) {
-            CorfuRuntime runtime = runtimes.getRuntime(i);
-            UUID uuid = streams.getStreamID(i);
-            CorfuTable<String, String> map = runtime.getObjectsView()
-                    .build()
-                    .setStreamID(uuid)
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                    .open();
-
-            tempMaps.put(uuid, map);
-        }
-        return tempMaps;
     }
 
     /**

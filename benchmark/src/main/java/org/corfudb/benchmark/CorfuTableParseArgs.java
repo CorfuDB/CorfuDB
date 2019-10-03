@@ -5,54 +5,40 @@ import com.beust.jcommander.Parameter;
 import lombok.Getter;
 import lombok.NonNull;
 
-public class ParseArgs {
-    /**
-     * Number of runtimes
-     */
-    @Getter
-    protected int numRuntimes;
-
-    /**
-     *
-     */
-    @Getter
-    protected int numThreads;
-
+@Getter
+public class CorfuTableParseArgs extends ParseArgs{
     /**
      * Number of requests per thread.
      */
-    @Getter
     protected int numRequests;
 
-    @Getter
-    protected int numStreams;
     /**
-     * Server endpoint.
+     * Number of streams.
      */
-    @Getter
-    @NonNull
-    protected String endpoint;
+    protected int numStreams;
 
     /**
      * ratio of CorfuTable put operation.
      */
-    @Getter
     protected double ratio;
 
     /**
      * operation name.
      */
-    @Getter
     @NonNull
     protected String op;
 
-    @Getter
+    /**
+     * Number of key.
+     */
     protected int keyNum;
 
-    @Getter
+    /**
+     * Size of value.
+     */
     protected int valueSize;
 
-    ParseArgs(String[] args) {
+    CorfuTableParseArgs(String[] args) {
         Args cmdArgs = new Args();
         JCommander jc = JCommander.newBuilder()
                 .addObject(cmdArgs)
@@ -108,16 +94,16 @@ public class ParseArgs {
         @Parameter(names = {"--num-streams"}, description = "Number of streams", required = true)
         int numStreams;
 
-        @Parameter(names = {"--ratio"}, description = "num of put operations / num of requests", required = false)
+        @Parameter(names = {"--ratio"}, description = "num of put operations / num of requests", required = true)
         double ratio;
 
         @Parameter(names = {"--op"}, description = "operation you want to test", required = true)
         String op;
 
-        @Parameter(names = {"--key-num"}, description = "maximum number of keys you want to store", required = false)
+        @Parameter(names = {"--key-num"}, description = "maximum number of keys you want to store", required = true)
         int keyNum;
 
-        @Parameter(names = {"--value-size"}, description = "maximum number of keys you want to store", required = false)
+        @Parameter(names = {"--value-size"}, description = "maximum number of keys you want to store", required = true)
         int valueSize;
     }
 }

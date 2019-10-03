@@ -44,7 +44,6 @@ public class SequencerOperations extends Operation {
                 "benchmark-tx-token");
         getStreamSpaceTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
                 "benchmark-getstreamspace-token");
-
     }
 
     private void tokenQuery() {

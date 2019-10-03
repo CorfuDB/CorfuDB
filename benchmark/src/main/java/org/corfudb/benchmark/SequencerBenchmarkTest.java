@@ -7,11 +7,14 @@ import org.corfudb.runtime.CorfuRuntime;
  * operationName can be: query, raw, multistream, tx, getstreamaddr,
  * each name maps to a kind of token request and API in Sequencer Server.
  */
-public class SequencerBenchmarkTest extends BenchmarkTest {
-    String operationName = null;
-    SequencerBenchmarkTest(ParseArgs parseArgs) {
-        super(parseArgs);
-        operationName = parseArgs.getOp();
+public class SequencerBenchmarkTest extends BenchmarkTest{
+    private int numRequests;
+    String operationName;
+
+    SequencerBenchmarkTest(SequencerParseArgs sequencerParseArgs) {
+        super(sequencerParseArgs);
+        numRequests = sequencerParseArgs.getNumRequests();
+        operationName = sequencerParseArgs.getOp();
     }
 
     private void runProducer() {
@@ -24,12 +27,12 @@ public class SequencerBenchmarkTest extends BenchmarkTest {
 
     private void runTest() {
         runProducer();
-        //runConsumers();
+        runConsumers();
         waitForAppToFinish();
     }
 
     public static void main(String[] args) {
-        ParseArgs parseArgs = new ParseArgs(args);
+        SequencerParseArgs parseArgs = new SequencerParseArgs(args);
         SequencerBenchmarkTest sequencerBenchmarkTest = new SequencerBenchmarkTest(parseArgs);
         sequencerBenchmarkTest.runTest();
     }
