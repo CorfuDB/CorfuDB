@@ -4,6 +4,7 @@ import com.google.common.collect.Ordering;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.statetransfer.DataTest;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.IncompleteDataReadException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.RejectedDataException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
@@ -32,22 +33,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
-public class RegularBatchProcessorTest {
-
-    private LogData createStubRecord(long address){
-        LogData data = mock(LogData.class);
-        doReturn(address).when(data).getGlobalAddress();
-        return data;
-    }
-
-    private List<LogData> createStubList(List<Long> addresses){
-        return addresses.stream().map(this::createStubRecord).collect(Collectors.toList());
-    }
-
-    private Map<Long, ILogData> createStubMap(List<Long> addresses){
-        return addresses.stream().map(addr -> new SimpleEntry<>(addr, createStubRecord(addr)))
-                .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
-    }
+public class RegularBatchProcessorTest extends DataTest {
 
     @Test
     public void testReadRecordsSuccessful(){

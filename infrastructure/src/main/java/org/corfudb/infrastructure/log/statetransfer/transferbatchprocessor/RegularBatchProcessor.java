@@ -91,7 +91,7 @@ public class RegularBatchProcessor {
     /**
      * Read data -> write data.
      *
-     * @param addresses     A batch of consecutive addresses.
+     * @param addresses A batch of consecutive addresses.
      * @return Result of an empty value if a pipeline executes correctly;
      * a result containing the first encountered error otherwise.
      */
@@ -103,8 +103,9 @@ public class RegularBatchProcessor {
 
     /**
      * Handle errors that resulted during the transfer.
+     *
      * @param transferResult Result of the transfer with a maximum transferred address or an exception.
-     * @param retries Number of retries during the error handling.
+     * @param retries        Number of retries during the error handling.
      * @return Future of the result of the transfer, containing maximum transferred address or
      * an exception.
      */
@@ -112,8 +113,10 @@ public class RegularBatchProcessor {
     (Result<Long, StateTransferException> transferResult, AtomicInteger retries) {
         if (transferResult.isError()) {
             StateTransferException error = transferResult.getError();
+
             if (error instanceof IncompleteReadException) {
                 IncompleteReadException incompleteReadException = (IncompleteReadException) error;
+
                 return handlePossibleTransferFailures(tryHandleIncompleteRead(incompleteReadException, retries)
                         .join(), retries);
 
@@ -139,11 +142,11 @@ public class RegularBatchProcessor {
     }
 
 
-
     /**
      * Handle possible read errors. Exponential backoff policy is utilized.
+     *
      * @param incompleteReadException Exception that occurred during the read.
-     * @param readRetries Configurable number of retries for the current batch.
+     * @param readRetries             Configurable number of retries for the current batch.
      * @return Future of the result of the retry.
      */
     CompletableFuture<Result<Long, StateTransferException>> tryHandleIncompleteRead
@@ -152,49 +155,48 @@ public class RegularBatchProcessor {
         try {
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
 
-                        // Get a pipeline function.
-                        Supplier<CompletableFuture<Result<Long, StateTransferException>>> pipeline =
-                                getErrorHandlingPipeline(incompleteReadException);
-                        // Extract the result.
+                // Get a pipeline function.
+                Supplier<CompletableFuture<Result<Long, StateTransferException>>> pipeline =
+                        getErrorHandlingPipeline(incompleteReadException);
 
+                // If a pipeline completed exceptionally, than return the error.
                 CompletableFuture<Result<Long, StateTransferException>> pipelineFuture =
                         pipeline.get().handle((result, exception) -> {
-                                    if(Optional.ofNullable(exception).isPresent()){
-                                        return Result.error(new StateTransferFailure(exception));
-                                    }
-                                    else{
-                                        return result;
-                                    }
-                                });
-
-                Result<Long, StateTransferException> joinResult = pipelineFuture.join();
-                        if (joinResult.isError()) {
-                            // If an error occurred, increment retries.
-                            readRetries.incrementAndGet();
-
-                            // If the instance of an error is the same, retry with exp. backoff
-                            // if possible.
-                            if (joinResult.getError() instanceof IncompleteReadException) {
-                                if (readRetries.get() >= MAX_RETRIES) {
-                                    throw new RetryExhaustedException("Read retries are exhausted");
-                                } else {
-                                    log.warn("Retried {} times", readRetries.get());
-                                    throw new RetryNeededException();
-                                }
+                            if (Optional.ofNullable(exception).isPresent()) {
+                                return Result.error(new StateTransferFailure(exception));
                             } else {
-                                // Unhandled error, return.
-                                return CompletableFuture.completedFuture(joinResult);
+                                return result;
                             }
+                        });
+
+                // Join the result.
+                Result<Long, StateTransferException> joinResult = pipelineFuture.join();
+                if (joinResult.isError()) {
+                    // If an error occurred, increment retries.
+                    readRetries.incrementAndGet();
+
+                    // If the instance of an error is the incomplete read, retry with exp. backoff
+                    // if possible.
+                    if (joinResult.getError() instanceof IncompleteReadException) {
+                        if (readRetries.get() >= MAX_RETRIES) {
+                            throw new RetryExhaustedException("Read retries are exhausted");
                         } else {
-                            // If the result is not an error, return.
-
-                            return CompletableFuture.completedFuture(joinResult);
+                            log.warn("Retried {} times", readRetries.get());
+                            throw new RetryNeededException();
                         }
+                    } else {
+                        // Unhandled error, return.
+                        return CompletableFuture.completedFuture(joinResult);
+                    }
+                } else {
+                    // If the result is not an error, return.
+                    return CompletableFuture.completedFuture(joinResult);
+                }
 
-                    }).setOptions(retry -> {
-                        retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);
-                        retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);
-                    }).run();
+            }).setOptions(retry -> {
+                retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);
+                retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);
+            }).run();
             // Map to unrecoverable error if an interrupt has occurred or retries occurred.
         } catch (InterruptedException | RetryExhaustedException ie) {
             return CompletableFuture.completedFuture(Result.error(new StateTransferFailure("Retries exhausted or interrupted")));
@@ -204,19 +206,20 @@ public class RegularBatchProcessor {
     /**
      * Sanity check after the read is performed. If the number of records is not equal to the
      * intended one, return an incomplete read exception.
-     * @param addresses Addresses that were read.
+     *
+     * @param addresses  Addresses that were read.
      * @param readResult A result of the read.
      * @return A result containing either exception or data.
      */
     static Result<List<LogData>, IncompleteReadException> handleRead(List<Long> addresses,
-                                                                            Map<Long, ILogData> readResult) {
+                                                                     Map<Long, ILogData> readResult) {
         List<Long> transferredAddresses =
                 addresses.stream().filter(readResult::containsKey)
                         .collect(Collectors.toList());
         if (transferredAddresses.equals(addresses)) {
             return Result.of(() -> readResult.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> (LogData)entry.getValue()).collect(Collectors.toList()));
+                    .map(entry -> (LogData) entry.getValue()).collect(Collectors.toList()));
         } else {
             HashSet<Long> transferredSet = new HashSet<>(transferredAddresses);
             HashSet<Long> entireSet = new HashSet<>(addresses);
@@ -246,15 +249,14 @@ public class RegularBatchProcessor {
 
         // If it's an overwrite exception with the same data cause, map to RejectedDataException,
         // otherwise map to StateTransferFailure.
-        if(result.isError()){
+        if (result.isError()) {
             RuntimeException error = result.getError();
 
-            if(error instanceof OverwriteException &&
-                    ((OverwriteException) error).getOverWriteCause().equals(SAME_DATA)){
+            if (error instanceof OverwriteException &&
+                    ((OverwriteException) error).getOverWriteCause().equals(SAME_DATA)) {
 
                 return result.mapError(x -> new RejectedDataException(dataEntries));
-            }
-            else{
+            } else {
                 return result.mapError(x -> new StateTransferFailure(x.getMessage()));
             }
         }
@@ -265,7 +267,7 @@ public class RegularBatchProcessor {
     /**
      * Reads data entries by utilizing the replication protocol.
      *
-     * @param addresses     The list of addresses.
+     * @param addresses The list of addresses.
      * @return A result of reading records.
      */
     Result<List<LogData>, StateTransferException> readRecords(List<Long> addresses) {

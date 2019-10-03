@@ -37,8 +37,8 @@ public class StateTransferWriter {
     public CompletableFuture<Result<Long, StateTransferException>> stateTransfer(List<Long> addresses,
                                                                                  int readSize) {
         List<CompletableFuture<Result<Long, StateTransferException>>> listOfFutureResults =
-                Lists.partition(addresses, readSize).stream().map(batch -> batchProcessor
-                        .transfer(batch)
+                Lists.partition(addresses, readSize).stream().map(batch ->
+                        batchProcessor.transfer(batch)
                         .thenCompose(transferResult ->
                                 batchProcessor.handlePossibleTransferFailures(transferResult,
                                         new AtomicInteger()))).collect(Collectors.toList());
