@@ -110,18 +110,19 @@ public class SequencerOperations extends Operation {
 
     @Override
     public void execute() {
-        if (shortName.equals("query")) {
-            tokenQuery();
-        } else if (shortName.equals("raw")) {
-            tokenRaw();
-        } else if (shortName.equals("multistream")) {
-            tokenMultiStream();
-        } else if (shortName.equals("tx")) {
-            tokenTx();
-        } else if (shortName.equals("getstreamaddr")) {
-            getStreamAddress();
-        } else {
-            log.error("no such operation for sequencer.");
+        switch (shortName) {
+            case "query":
+                tokenQuery();
+            case "raw":
+                tokenRaw();
+            case "multistream":
+                tokenMultiStream();
+            case "tx":
+                tokenTx();
+            case "getstreamaddr":
+                getStreamAddress();
+            default:
+                log.error("no such operation for sequencer.");
         }
     }
 }

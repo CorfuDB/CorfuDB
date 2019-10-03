@@ -143,16 +143,21 @@ public class CorfuTableOperations extends Operation {
 
     @Override
     public void execute() {
-        if (shortName.equals("build")) {
-            corfuTableBuild();
-        } else if (shortName.equals("put")) {
-            corfuTablePut();
-        } else if (shortName.equals("get")) {
-            corfuTableGet();
-        } else if (shortName.equals("putget")) {
-            corfuTablePutGet();
-        } else {
-            log.error("no such operation for CorfuTable.");
+        switch (shortName) {
+            case "build":
+                corfuTableBuild();
+                break;
+            case "put":
+                corfuTablePut();
+                break;
+            case "get":
+                corfuTableGet();
+                break;
+            case "putget":
+                corfuTablePutGet();
+                break;
+            default:
+                log.error("no such operation for CorfuTable.");
         }
     }
 }
