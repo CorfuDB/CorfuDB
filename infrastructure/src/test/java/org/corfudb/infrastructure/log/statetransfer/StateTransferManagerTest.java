@@ -11,7 +11,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -29,43 +28,49 @@ import static org.mockito.Mockito.spy;
 public class StateTransferManagerTest {
     // completed exceptionally -> failed
     @Test
+
     public void handleTransferCompletedExceptionally(){
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
         ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> failed =
-                ImmutableMap.of(new CurrentTransferSegment(0L, 5L), CompletableFuture.supplyAsync(() -> {
+                ImmutableMap.of(segment, CompletableFuture.supplyAsync(() -> {
             throw new RuntimeException("failure");
         }));
 
         StateTransferManager stateTransferManager = new StateTransferManager(mock(StreamLog.class),
                 mock(StateTransferWriter.class), 10);
-        List<SimpleEntry<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>> entries
-                = stateTransferManager.handleTransfer(failed);
 
-        assertThat(entries.get(0).getValue().join().getSegmentStateTransferState()).isEqualTo(FAILED);
+        assertThat(stateTransferManager.handleTransfer(failed)
+                .get(segment).join()
+                .getSegmentStateTransferState()).isEqualTo(FAILED);
 
     }
 
     // in progress -> leave it
     @Test
     public void handleTransferInProgress(){
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
+
         ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> inProgress =
-                ImmutableMap.of(new CurrentTransferSegment(0L, 5L), CompletableFuture.supplyAsync(() -> {
+                ImmutableMap.of(segment, CompletableFuture.supplyAsync(() -> {
                     Sleep.sleepUninterruptibly(Duration.ofMillis(2000));
                     return new CurrentTransferSegmentStatus(TRANSFERRED, 5L);
                 }));
+
         StateTransferManager stateTransferManager = new StateTransferManager(mock(StreamLog.class),
                 mock(StateTransferWriter.class), 10);
-        List<SimpleEntry<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>> entries
-                = stateTransferManager.handleTransfer(inProgress);
 
-        assertThat(entries.get(0).getValue().isDone()).isFalse();
+        assertThat(stateTransferManager.handleTransfer(inProgress)
+                .get(segment).isDone()).isFalse();
     }
 
     // not transferred -> state transfer
     @Test
     public void handleTransferNotTransferred(){
         // Case 1: Entire range is not present
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
+
         ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> notPresent =
-                ImmutableMap.of(new CurrentTransferSegment(0L, 5L),
+                ImmutableMap.of(segment,
                         CompletableFuture.supplyAsync(() ->
                                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L)));
 
@@ -89,16 +94,13 @@ public class StateTransferManagerTest {
         doReturn(missingRange)
                 .when(spy).getUnknownAddressesInRange(0L, 5L);
 
-        List<SimpleEntry<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>> entries
-                = spy.handleTransfer(notPresent);
-
-        CurrentTransferSegmentStatus status = entries.get(0).getValue().join();
+        CurrentTransferSegmentStatus status = spy.handleTransfer(notPresent).get(segment).join();
         assertThat(status.getSegmentStateTransferState()).isEqualTo(TRANSFERRED);
         assertThat(status.getLastTransferredAddress()).isEqualTo(5L);
 
         // Case 2: Range is partially present
         ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> partPresent =
-                ImmutableMap.of(new CurrentTransferSegment(0L, 5L),
+                ImmutableMap.of(segment,
                         CompletableFuture.supplyAsync(() ->
                                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L)));
 
@@ -115,9 +117,7 @@ public class StateTransferManagerTest {
         doReturn(missingRange)
                 .when(spy).getUnknownAddressesInRange(0L, 5L);
 
-        entries = spy.handleTransfer(partPresent);
-
-        status = entries.get(0).getValue().join();
+        status = spy.handleTransfer(partPresent).get(segment).join();
 
         assertThat(status.getSegmentStateTransferState()).isEqualTo(TRANSFERRED);
 
@@ -130,9 +130,7 @@ public class StateTransferManagerTest {
         doReturn(missingRange)
                 .when(spy).getUnknownAddressesInRange(0L, 5L);
 
-        entries = spy.handleTransfer(partPresent);
-
-        status = entries.get(0).getValue().join();
+        status = spy.handleTransfer(partPresent).get(segment).join();
 
         assertThat(status.getSegmentStateTransferState()).isEqualTo(TRANSFERRED);
 
@@ -159,7 +157,7 @@ public class StateTransferManagerTest {
 
 
         CurrentTransferSegmentStatus status
-                = stateTransferManager.handleTransfer(restored).get(0).getValue().join();
+                = stateTransferManager.handleTransfer(restored).get(segment).join();
 
         assertThat(status).isEqualTo(restored.get(segment).join());
     }

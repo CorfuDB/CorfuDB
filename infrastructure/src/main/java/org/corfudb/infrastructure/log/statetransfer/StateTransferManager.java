@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
+import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -8,7 +9,9 @@ import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.runtime.view.Address;
 
+import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +21,7 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
+import static org.corfudb.runtime.view.Address.*;
 
 @Slf4j
 @AllArgsConstructor
@@ -79,17 +83,16 @@ public class StateTransferManager {
                 .collect(Collectors.toList());
     }
 
-
-    public List<SimpleEntry<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>>
+    public ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
     handleTransfer(Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> statusMap) {
-        return statusMap.entrySet().stream().map(entry -> {
+        return ImmutableMap.copyOf(statusMap.entrySet().stream().map(entry -> {
             CurrentTransferSegment segment = entry.getKey();
             CompletableFuture<CurrentTransferSegmentStatus> status = entry.getValue();
             if (status.isCompletedExceptionally()) {
                 // If a future failed exceptionally, mark as failed.
                 return new SimpleEntry<>(segment, CompletableFuture
                         .completedFuture(new CurrentTransferSegmentStatus(FAILED,
-                                -1L)));
+                                NON_ADDRESS)));
             } else if (!status.isDone()) {
                 // It's still in progress.
                 return new SimpleEntry<>(segment, status);
@@ -106,7 +109,7 @@ public class StateTransferManager {
                         CurrentTransferSegmentStatus currentTransferSegmentStatus =
                                 new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress());
                         result = new SimpleEntry<>(segment, CompletableFuture.completedFuture(currentTransferSegmentStatus));
-                    } else {
+                    } else { // transfer whatever is not transferred
                         Long lastAddressToTransfer =
                                 unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
 
@@ -119,7 +122,7 @@ public class StateTransferManager {
                                                 long lastTransferredAddress = lastTransferredAddressResult.get();
                                                 return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
                                             } else {
-                                                return new CurrentTransferSegmentStatus(FAILED, -1L);
+                                                return new CurrentTransferSegmentStatus(FAILED, NON_ADDRESS);
                                             }
                                         });
                         result = new SimpleEntry<>(segment, segmentStatusFuture);
@@ -133,9 +136,7 @@ public class StateTransferManager {
                 return result;
 
             }
-
-
-        }).collect(Collectors.toList());
+        }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue)));
 
     }
 }

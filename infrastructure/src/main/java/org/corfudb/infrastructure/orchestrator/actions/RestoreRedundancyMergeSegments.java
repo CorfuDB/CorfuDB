@@ -105,18 +105,6 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         return "RestoreRedundancyAndMergeSegments";
     }
 
-    private ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
-    initTransferAndUpdateMap
-            (Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
-             StateTransferManager manager) {
-
-        Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newStateMap =
-                manager.handleTransfer(stateMap).stream()
-                        .collect(Collectors.toMap(AbstractMap.SimpleEntry::getKey, AbstractMap.SimpleEntry::getValue));
-
-        return ImmutableMap.copyOf(newStateMap);
-    }
-
     @Override
     public void impl(@Nonnull CorfuRuntime runtime, @NonNull StreamLog streamLog) throws Exception {
 
@@ -147,7 +135,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
 
         while(!redundancyCalculator.redundancyIsRestored(stateMap)){
             // Initialize a transfer for each segment and update the map.
-            stateMap = initTransferAndUpdateMap(stateMap, transferManager);
+            stateMap = transferManager.handleTransfer(stateMap);
 
             // Try restore redundancy for the segments that are restored.
             // If possible, also merge segments.
@@ -159,7 +147,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             // Get a new layout after the consensus.
             layout = runtime.getLayoutView().getLayout();
 
-            // Get the new map from the layout.
+            // Create a new map from the layout.
             ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
                     newLayoutStateMap =
                     redundancyCalculator.createStateMap(layout);

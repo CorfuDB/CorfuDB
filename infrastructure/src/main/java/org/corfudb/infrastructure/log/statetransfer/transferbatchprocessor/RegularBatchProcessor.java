@@ -19,6 +19,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.runtime.view.RuntimeLayout;
@@ -40,6 +41,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.exceptions.OverwriteCause.*;
+import static org.corfudb.runtime.view.Address.*;
 
 @Slf4j
 public class RegularBatchProcessor {
@@ -130,7 +132,7 @@ public class RegularBatchProcessor {
                                 .max(Comparator.comparing(Long::valueOf));
 
                 return CompletableFuture.completedFuture
-                        (Result.ok(maxWrittenAddress.orElse(-1L)));
+                        (Result.ok(maxWrittenAddress.orElse(NON_ADDRESS)));
             } else {
                 Result<Long, StateTransferException> stateTransferFailureResult =
                         transferResult.mapError(e -> new StateTransferFailure());
@@ -244,7 +246,7 @@ public class RegularBatchProcessor {
                             .map(IMetadata::getGlobalAddress)
                             .max(Comparator.comparing(Long::valueOf));
             // Should be present as we've checked it during the previous stages.
-            return maxWrittenAddress.orElse(-1L);
+            return maxWrittenAddress.orElse(NON_ADDRESS);
         });
 
         // If it's an overwrite exception with the same data cause, map to RejectedDataException,
