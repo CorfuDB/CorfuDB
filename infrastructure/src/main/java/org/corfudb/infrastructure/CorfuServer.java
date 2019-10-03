@@ -10,12 +10,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
@@ -54,6 +57,7 @@ public class CorfuServer {
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[--metrics] [--metrics-port <metrics_port>]"
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -167,6 +171,10 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the logunit server.\n"
                     + "                                                                          "
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
+                    + " --metrics                                                                "
+                    + "              Enable metrics provider.\n                                  "
+                    + " --metrics-port=<metrics_port>                                            "
+                    + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -230,6 +238,7 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
+                setupMetrics(opts);
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {
@@ -379,5 +388,16 @@ public class CorfuServer {
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);
+    }
+
+    /**
+     * Generate metrics server config and start server.
+     *
+     * @param opts Command line parameters.
+     */
+    private static void setupMetrics(Map<String, Object> opts) {
+        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
+        MetricsServer server = new PrometheusMetricsServer(config, ServerContext.getMetrics());
+        server.start();
     }
 }

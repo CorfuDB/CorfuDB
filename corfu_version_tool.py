@@ -14,8 +14,8 @@ from subprocess import check_call, check_output
 import sys
 
 
-PATTERN_POM = r"<version>([0-9.]+)</version>"
-PATTERN_TANUKI = r"/usr/share/corfu/lib/cmdlets-([0-9.]+)-shaded.jar"
+PATTERN_POM = r"<version>([0-9A-Z.]+)</version>"
+PATTERN_TANUKI = r"/usr/share/corfu/lib/cmdlets-([0-9A-Z.]+)-shaded.jar"
 
 
 def update_version_number(base_version=None):

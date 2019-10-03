@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.3.0.20190904204706.4302</version>
+    <version>0.3.0.20191003002541.158</version>
 
     <modules>
         <module>infrastructure</module>
@@ -19,6 +19,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
+        <module>benchmarks</module>
     </modules>
 
 

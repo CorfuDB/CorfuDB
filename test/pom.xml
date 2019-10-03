@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.3.0.20190904204706.4302</version>
+        <version>0.3.0.20191003002541.158</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -16,6 +16,13 @@
     </properties>
 
     <dependencies>
+        <!-- external dependencies -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>format</artifactId>
@@ -50,6 +57,35 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.7.0.1</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeDirectories>
+                                <includeDirectory>../runtime/proto</includeDirectory>
+                                <includeDirectory>src/test/resources/proto</includeDirectory>
+                            </includeDirectories>
+                            <inputDirectories>
+                                <include>../runtime/proto</include>
+                                <include>src/test/resources/proto</include>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
