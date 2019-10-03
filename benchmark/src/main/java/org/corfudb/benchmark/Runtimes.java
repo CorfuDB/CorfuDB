@@ -16,7 +16,7 @@ public class Runtimes {
         runtimes = new ArrayList<>();
         for (int i = 0; i < numRuntimes; i++) {
             CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
-            parameters.setPrometheusMetricsPort(1234);
+            parameters.setPrometheusMetricsPort(1000+i);
             CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
             runtime.addLayoutServer(endPoint);
             runtime.connect();
