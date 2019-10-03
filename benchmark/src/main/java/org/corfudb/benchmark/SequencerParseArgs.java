@@ -1,4 +1,4 @@
 package org.corfudb.benchmark;
 
-public class ParseArgs {
+public class SequencerParseArgs {
 }
