@@ -21,5 +21,4 @@ public class ParseArgs {
     @Getter
     @NonNull
     protected String endpoint;
-
 }

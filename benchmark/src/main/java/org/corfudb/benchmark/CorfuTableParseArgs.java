@@ -37,6 +37,8 @@ public class CorfuTableParseArgs extends ParseArgs{
      * Size of value.
      */
     protected int valueSize;
+    @Getter
+    public int shareTable;
 
     CorfuTableParseArgs(String[] args) {
         Args cmdArgs = new Args();
@@ -58,6 +60,7 @@ public class CorfuTableParseArgs extends ParseArgs{
         op = cmdArgs.op;
         keyNum = cmdArgs.keyNum;
         valueSize = cmdArgs.valueSize;
+        shareTable = cmdArgs.shareTable;
     }
 
     @Override
@@ -70,6 +73,7 @@ public class CorfuTableParseArgs extends ParseArgs{
                 .append(", endpoint=").append(endpoint)
                 .append(", ratio=").append(ratio)
                 .append(", operation=").append(op)
+                .append(", shareTable=").append(shareTable)
                 .append(", keyNum=").append(keyNum)
                 .append(", valueSize=").append(valueSize);
         return stringBuilder.toString();
@@ -103,7 +107,10 @@ public class CorfuTableParseArgs extends ParseArgs{
         @Parameter(names = {"--key-num"}, description = "maximum number of keys you want to store", required = true)
         int keyNum;
 
-        @Parameter(names = {"--value-size"}, description = "maximum number of keys you want to store", required = true)
+        @Parameter(names = {"--value-size"}, description = "value size you want to store", required = true)
         int valueSize;
+
+        @Parameter(names = {"--share-table"}, description = "whether threads share tables(0 share, 1 not share)", required = true)
+        int shareTable;
     }
 }

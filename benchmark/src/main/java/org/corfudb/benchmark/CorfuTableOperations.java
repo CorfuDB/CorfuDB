@@ -23,6 +23,7 @@ public class CorfuTableOperations extends Operation {
     private Timer corfuTableBuildTimer;
     private Timer corfuTableGetTimer;
     private Timer corfuTablePutTimer;
+    private Timer corfuTableInsertTimer;
     public static final double THRESHOULD = 50000.38;
 
     CorfuTableOperations(String name, CorfuRuntime runtime, CorfuTable corfuTable, int numRequest, double ratio, int keyNum, int valueSize) {
@@ -49,7 +50,7 @@ public class CorfuTableOperations extends Operation {
         corfuTableBuildTimer = metricRegistry.timer(CorfuComponent.OBJECT +
                 "corfutable-build");
         corfuTableGetTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-get");
-        //corfuTableBuildCachedTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-build-cached");
+        corfuTableInsertTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-insert");
         corfuTablePutTimer = metricRegistry.timer(CorfuComponent.OBJECT + "corfutable-put");
         //corfuTableSizeGauge = MetricsUtils.addMemoryMeasurerFor(metricRegistry, corfuTable);
     }
@@ -81,6 +82,15 @@ public class CorfuTableOperations extends Operation {
         }
     }
 
+    private void insertTable() {
+        String key = keyValueManager.generateKey();
+        String value = keyValueManager.generateValue();
+        //System.out.println(value);
+        try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTableInsertTimer)) {
+            corfuTable.insert(key, value);
+        }
+    }
+
     private void getTable() {
         String key = keyValueManager.getKey();
         log.info("get value for key: " + key);
@@ -100,6 +110,15 @@ public class CorfuTableOperations extends Operation {
     private void corfuTablePut() {
         for (int i = 0; i < numRequest; i++) {
             putTable();
+        }
+    }
+
+    /**
+     * Benchmark Tests for put operation.
+     */
+    private void corfuTableInsert() {
+        for (int i = 0; i < numRequest; i++) {
+            insertTable();
         }
     }
 
@@ -154,6 +173,9 @@ public class CorfuTableOperations extends Operation {
                 break;
             case "putget":
                 corfuTablePutGet();
+                break;
+            case "insert":
+                corfuTableInsert();
                 break;
             default:
                 log.error("no such operation for CorfuTable.");
