@@ -554,7 +554,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                     serverContext,
                     nsr,
                     address,
-                    serverContext.getServerConfig(Integer.class, "<port>"));
+                    Integer.parseInt((String)serverContext
+                        .getServerConfig().get("<port>")));
         }
 
         void shutdownServer() {

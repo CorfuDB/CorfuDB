@@ -1,0 +1,38 @@
+syntax = "proto2";
+
+package org.corfudb.test;
+option java_package = "org.corfudb.test";
+
+import "corfu_options.proto";
+import "sample_appliance.proto";
+
+message FirewallRule {
+    optional int64 rule_id = 1 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional string rule_name = 2 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional org.corfudb.test.Appliance input = 3;
+    optional org.corfudb.test.Appliance output = 4;
+}
+
+message LogicalSwitch {
+    optional int64 switch_id = 1 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional org.corfudb.test.Appliance input = 2;
+    repeated int64 aray = 3 [(org.corfudb.runtime.schema).secondary_key = true];
+}
+
+message ManagedResources {
+    optional string create_user = 1;
+    optional int64 version = 2 [(org.corfudb.runtime.schema).version = true];
+}
+
+message EventInfo {
+    optional uint32 id = 1;
+    optional string name = 2;
+    optional uint32 port = 3;
+    optional int64 event_time = 4 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional uint32 frequency = 5;
+}
+
+message Uuid {
+    optional uint64 msb = 1;
+    optional uint64 lsb = 2;
+}

@@ -102,8 +102,8 @@ public class CorfuServerNode implements AutoCloseable {
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
-                (String) serverContext.getServerConfig().get("--address"),
-                Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
+                (String)serverContext.getServerConfig().get("--address"),
+                Integer.parseInt((String)serverContext.getServerConfig().get("<port>")));
 
         return bindFuture.syncUninterruptibly();
     }
