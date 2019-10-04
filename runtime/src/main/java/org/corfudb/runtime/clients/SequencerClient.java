@@ -36,10 +36,10 @@ public class SequencerClient extends AbstractClient {
     private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     public SequencerClient(IClientRouter router, long epoch) {
         super(router, epoch);
-        nextTokenTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "next-token");
-        nextTokenTxTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "next-tx-token");
-        getStreamSpaceTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "get-stream-space");
-        bootstrapTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "bootstrap");
+        nextTokenTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "client_next-token");
+        nextTokenTxTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "client_next-tx-token");
+        getStreamSpaceTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "client_get-stream-space");
+        bootstrapTimer = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER + "client_bootstrap");
     }
 
     /**
