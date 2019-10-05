@@ -33,9 +33,11 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -197,7 +199,6 @@ public class Orchestrator {
         } else {
             // Create a new workflow for this endpoint and return a new workflow id
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
-
             executor.execute(() -> run(workflow, ACTION_RETRY));
 
             OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
@@ -214,11 +215,11 @@ public class Orchestrator {
      * @param actionRetry the number of times to retry an action before failing the workflow.
      */
     void run(@Nonnull IWorkflow workflow, int actionRetry) {
+
         CorfuRuntime rt = null;
         try {
             getRuntime.get().invalidateLayout();
             Layout currLayout = getRuntime.get().getLayoutView().getLayout();
-
             List<NodeLocator> servers = currLayout.getAllActiveServers().stream()
                     .map(NodeLocator::parseString)
                     .collect(Collectors.toList());
@@ -240,14 +241,13 @@ public class Orchestrator {
 
                 log.debug("run: Started action {} for workflow {}", action.getName(), workflow.getId());
                 long actionStart = System.currentTimeMillis();
-                action.execute(rt, actionRetry);
-                long actionEnd = System.currentTimeMillis();
                 if(action instanceof RestoreAction){
                     ((RestoreAction) action).execute(rt, streamLog, actionRetry);
                 }
                 else{
                     action.execute(rt, actionRetry);
                 }
+                long actionEnd = System.currentTimeMillis();
                 log.info("run: finished action {} for workflow {} in {} ms",
                         action.getName(), workflow.getId(), actionEnd - actionStart);
 

@@ -41,14 +41,9 @@ public class StateTransferManager {
     @EqualsAndHashCode
     @Getter
     @ToString
-    public static class CurrentTransferSegment implements Comparable<CurrentTransferSegment> {
+    public static class CurrentTransferSegment {
         private final long startAddress;
         private final long endAddress;
-
-        @Override
-        public int compareTo(CurrentTransferSegment other) {
-            return (int) (this.startAddress - other.endAddress);
-        }
     }
 
     @AllArgsConstructor

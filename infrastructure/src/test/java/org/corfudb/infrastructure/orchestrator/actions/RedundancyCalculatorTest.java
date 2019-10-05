@@ -2,10 +2,12 @@ package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import lombok.ToString;
 import org.corfudb.infrastructure.LayoutBasedTest;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.Sleep;
@@ -209,45 +211,242 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
     }
 
     @Test
-    public void testMergeMaps(){
+    public void testMergeSegmentsMatchFailed(){
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
 
+        // old map had a failed transfer, segments match completely -> preserve
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
+
+        CompletableFuture<CurrentTransferSegmentStatus> failed =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(FAILED,
+                                -1L));
+
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> oldMap =
+                ImmutableMap.of(segment, failed);
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap =
+                ImmutableMap.of(segment, notTransferred);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(segment).join().getSegmentStateTransferState())
+                .isEqualTo(FAILED);
+    }
+
+    @Test
+    public void testMergeSegmentsMatchInProgress(){
 
         RedundancyCalculator calculator = new RedundancyCalculator("localhost");
 
-        HashMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> oldMap
-                = new HashMap<>();
-
-        oldMap.put(new CurrentTransferSegment(0L, 5L),
-                CompletableFuture.completedFuture(
-                        new CurrentTransferSegmentStatus(FAILED, 0L)));
-
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> immutableOldMap
-                = ImmutableMap.copyOf(oldMap);
-
-        HashMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap
-                = new HashMap<>();
-
-        newMap.put(new CurrentTransferSegment(0L, 5L),
-                CompletableFuture.completedFuture(
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)));
-
-        newMap.put(new CurrentTransferSegment(6L, 10L),
-                CompletableFuture.completedFuture(
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 6L)));
+        // old map had a failed transfer, segments match completely -> preserve
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
 
 
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> immutableNewMap
-                = ImmutableMap.copyOf(newMap);
+        // old map had a running transfer, segments match -> preserve
+        CompletableFuture<CurrentTransferSegmentStatus> inProgress =
+                CompletableFuture.supplyAsync(() -> {
+                    Sleep.sleepUninterruptibly(Duration.ofMillis(2000));
+                    return new CurrentTransferSegmentStatus(FAILED,
+                            -1L);
+                });
 
-        // old segments should be preserved, new segments should be added
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> mergedMap
-                = calculator.mergeMaps(immutableOldMap, immutableNewMap);
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
 
-        assertThat(mergedMap.get(new CurrentTransferSegment(0L, 5L)).join())
-                .isEqualTo(new CurrentTransferSegmentStatus(FAILED, 0L));
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap =
+                ImmutableMap.of(segment, notTransferred);
 
-        assertThat(mergedMap.get(new CurrentTransferSegment(6L, 10L)).join())
-                .isEqualTo(new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 6L));
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>oldMap
+                = ImmutableMap.of(segment, inProgress);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(segment).isDone()).isFalse();
+    }
+
+    @Test
+    public void testMergeSegmentsMatchExceptional(){
+
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+
+        // old map had a failed transfer, segments match completely -> preserve
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
+
+
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+
+        // old map had an exceptionally failed transfer, segments match -> preserve
+        CompletableFuture<CurrentTransferSegmentStatus> exceptional =
+                CompletableFuture.supplyAsync(() -> {
+                    throw new RuntimeException();
+                });
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap =
+                ImmutableMap.of(segment, notTransferred);
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(segment, exceptional);
+
+        Sleep.sleepUninterruptibly(Duration.ofMillis(200));
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(segment).isCompletedExceptionally())
+                .isTrue();
+    }
+
+    @Test
+    public void testMergeMapsMatchRestored(){
+
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
+
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+
+        // new segment is restored, segments match -> update
+        CompletableFuture<CurrentTransferSegmentStatus> restored =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(RESTORED,
+                                -1L));
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(segment, notTransferred);
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                newMap = ImmutableMap.of(segment, restored);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap)
+                .get(segment)
+                .join()
+                .getSegmentStateTransferState()).isEqualTo(RESTORED);
+
+    }
+
+    @Test
+    public void testMergeMapsNonOverlap(){
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        CurrentTransferSegment segment1 = new CurrentTransferSegment(0L, 5L);
+        CurrentTransferSegment segment2 = new CurrentTransferSegment(6L, 10L);
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(segment1, notTransferred);
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                newMap = ImmutableMap.of(segment2, notTransferred);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap)).containsKey(segment1);
+        assertThat(calculator.mergeMaps(oldMap, newMap)).containsKey(segment2);
+
+    }
+
+    @Test
+    public void testMergeMapsNewIsSubset(){
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        CurrentTransferSegment oldSegment = new CurrentTransferSegment(0L, 5L);
+        CurrentTransferSegment newSegment = new CurrentTransferSegment(3L, 5L);
+
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+
+        CompletableFuture<CurrentTransferSegmentStatus> restored =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(RESTORED,
+                                -1L));
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(oldSegment, notTransferred);
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                newMap = ImmutableMap.of(newSegment, restored);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(newSegment)
+                .join().getSegmentStateTransferState()).isEqualTo(RESTORED);
+
+    }
+
+    @Test
+    public void testMergeMapsNewIsSuperSet(){
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        CurrentTransferSegment oldSegment = new CurrentTransferSegment(0L, 5L);
+        CurrentTransferSegment newSegment = new CurrentTransferSegment(0L, 15L);
+        // oldSegment is transferred and newsegment is restored
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+
+        CompletableFuture<CurrentTransferSegmentStatus> restored =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(RESTORED,
+                                -1L));
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(oldSegment, notTransferred);
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                newMap = ImmutableMap.of(newSegment, restored);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(newSegment)
+                .join().getSegmentStateTransferState()).isEqualTo(RESTORED);
+    }
+
+    @Test
+    public void testMergeMapsNewIsPrefixedAndMerged(){
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        CurrentTransferSegment oldSegment = new CurrentTransferSegment(0L, 5L);
+        CurrentTransferSegment newSegment = new CurrentTransferSegment(3L, 15L);
+        // oldSegment is transferred and newsegment is restored
+        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                -1L));
+
+        CompletableFuture<CurrentTransferSegmentStatus> restored =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(RESTORED,
+                                -1L));
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(oldSegment, notTransferred);
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                newMap = ImmutableMap.of(newSegment, restored);
+
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(newSegment)
+                .join().getSegmentStateTransferState()).isEqualTo(RESTORED);
+    }
+
+    @Test
+    public void testMergeMapsNewMapIsEmpty(){
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
+        CurrentTransferSegment oldSegment = new CurrentTransferSegment(0L, 5L);
+        // oldSegment is transferred and newsegment is restored
+        CompletableFuture<CurrentTransferSegmentStatus> transferred =
+                CompletableFuture.completedFuture
+                        (new CurrentTransferSegmentStatus(TRANSFERRED,
+                                -1L));
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                oldMap = ImmutableMap.of(oldSegment, transferred);
+
+        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
+                newMap = ImmutableMap.of();
+
+        assertThat(calculator.mergeMaps(oldMap, newMap).get(oldSegment)
+                .join().getSegmentStateTransferState()).isEqualTo(RESTORED);
+
+
 
     }
 

@@ -27,8 +27,8 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
     private Layout createNonPresentLayout(){
         LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
-        LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("B"));
-        LayoutStripe stripe3 = new LayoutStripe(Collections.singletonList("A"));
+        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("A", "B"));
+        LayoutStripe stripe3 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
 
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
                 Collections.singletonList(stripe1));
@@ -36,7 +36,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 2L, 4L,
                 Collections.singletonList(stripe2));
 
-        LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 4L, 6L,
+        LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 4L, -1L,
                 Collections.singletonList(stripe3));
 
         return createTestLayout(Arrays.asList(segment1, segment2, segment3));
@@ -45,7 +45,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
     private Layout createPresentLayout(){
 
         Layout layout = createNonPresentLayout();
-        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("localhost", "B"));
+        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
 
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 2L, 4L,
                 Collections.singletonList(stripe2));
@@ -67,7 +67,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
         Layout layout = createNonPresentLayout();
 
         // node is not present anywhere -> all segments should be scheduled.
-        doReturn(0L).when(spy)
+        doReturn(-1L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");
 
 
@@ -75,8 +75,6 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
                 new CurrentTransferSegment(0L, 1L),
                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L),
                 new CurrentTransferSegment(2L, 3L),
-                new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L),
-                new CurrentTransferSegment(4L, 5L),
                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L));
 
         Map<CurrentTransferSegment, CurrentTransferSegmentStatus> result = spy
@@ -92,11 +90,9 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
                 new CurrentTransferSegment(0L, 1L),
                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L),
                 new CurrentTransferSegment(2L, 3L),
-                new CurrentTransferSegmentStatus(RESTORED, 3L),
-                new CurrentTransferSegment(4L, 5L),
-                new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L));
+                new CurrentTransferSegmentStatus(RESTORED, 3L));
 
-        doReturn(0L).when(spy)
+        doReturn(-1L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");
 
         result = spy
@@ -125,8 +121,6 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         ImmutableMap<CurrentTransferSegment, CurrentTransferSegmentStatus> expected = ImmutableMap.of(
                 new CurrentTransferSegment(3L, 3L),
-                new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L),
-                new CurrentTransferSegment(4L, 5L),
                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L));
 
 
@@ -141,9 +135,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         expected = ImmutableMap.of(
                 new CurrentTransferSegment(3L, 3L),
-                new CurrentTransferSegmentStatus(RESTORED, 3L),
-                new CurrentTransferSegment(4L, 5L),
-                new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L));
+                new CurrentTransferSegmentStatus(RESTORED, 3L));
 
         doReturn(3L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");

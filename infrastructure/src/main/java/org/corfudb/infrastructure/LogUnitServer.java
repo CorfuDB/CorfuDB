@@ -96,6 +96,7 @@ public class LogUnitServer extends AbstractServer {
      * storage.
      */
     private final LogUnitServerCache dataCache;
+    @Getter
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
     private final BatchProcessor batchWriter;

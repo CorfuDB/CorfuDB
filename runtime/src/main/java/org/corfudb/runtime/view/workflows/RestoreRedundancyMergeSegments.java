@@ -81,6 +81,7 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
 
         BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout().getBaseClient(nodeForWorkflow);
         if(baseClient.pingSync()){
+            log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
             return Optional.of(runtime.getLayoutView()
                     .getRuntimeLayout().getManagementClient(nodeForWorkflow));
         }

@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
+import static org.corfudb.runtime.view.Address.*;
 
 public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
 
@@ -47,26 +48,32 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map =
                 layout.getSegments()
                         .stream()
-                        .filter(segment -> trimMark <= segment.getEnd())
+                        .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != -1L)
+                        // filter segments that end before the trim mark and the open segments.
                         .map(segment -> {
                             long segmentStart = Math.max(segment.getStart(), trimMark);
                             long segmentEnd = segment.getEnd() - 1;
+
                             CurrentTransferSegment transferSegment =
                                     new CurrentTransferSegment(segmentStart, segmentEnd);
-                            if (segmentContainsServer(segment)) {
+
+                            if(segmentContainsServer(segment)){
                                 return new SimpleEntry<>(transferSegment,
                                         CompletableFuture
                                                 .completedFuture(new
                                                         CurrentTransferSegmentStatus(RESTORED,
                                                         segmentEnd)));
-                            } else {
+                            }
+                            else{
                                 return new SimpleEntry<>(transferSegment,
                                         CompletableFuture
                                                 .completedFuture(new
                                                         CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                        Address.NON_ADDRESS)));
+                                                        NON_ADDRESS)));
                             }
-                        }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
+
+                        })
+                        .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
         return ImmutableMap.copyOf(map);
     }
 

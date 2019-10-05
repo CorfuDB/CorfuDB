@@ -97,18 +97,16 @@ public class LayoutManagementView extends AbstractView {
      * Bootstraps the new node with the current layout.
      * This action is invoked as a part of the add node workflow which requires the new node
      * to be added to the cluster to be bootstrapped with the existing layout of this cluster.
-     * This bootstraps the Layout and the Management server with the existing layout which
-     * initiates failure handling capabilities on the management server.
+     * This bootstraps the Layout server with the existing layout.
      *
      * @param endpoint New node endpoint.
-     * @return Completable Future which completes when the node's layout and management servers are bootstrapped.
+     * @return Completable Future which completes when the node's layout is bootstrapped.
      */
     public CompletableFuture<Boolean> bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         return runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout)
-                .thenCompose(result -> runtime.getManagementView().bootstrapManagementServer(endpoint, layout))
                 .thenApply(result -> {
                     log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
                     return true;

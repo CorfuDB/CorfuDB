@@ -24,18 +24,18 @@ public class RestorationExponentialBackOff {
                     QuorumUnreachableException.class,
                     OutrankedException.class);
 
-    public static void execute(Runnable restoreRedundancyAction){
+    public static boolean execute(Supplier<Boolean> restoreRedundancyAction){
         for (int num : sequence) {
 
-            Result<Void, RuntimeException> runResult = Result.of(() -> {
-                restoreRedundancyAction.run();
-                return null;
-            });
+            Result<Boolean, RuntimeException> runResult = Result.of(restoreRedundancyAction);
 
             if (runResult.isError() && expectedErrors.contains(runResult.getError().getClass())) {
                 log.error("Handling {}, waiting for {} seconds.", runResult
                         .getError().getMessage(), num);
                 doWait(1000 * num);
+            }
+            else{
+                return runResult.get();
             }
         }
 

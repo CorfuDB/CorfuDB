@@ -7,10 +7,12 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 
@@ -36,7 +38,12 @@ public class AddNode extends WorkflowRequest{
 
     @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
-        // Select the current tail node and send an add node request to the orchestrator
+        // Bootstrap a management server first.
+        Layout layout = new Layout(runtime.getLayoutView().getLayout());
+        CompletableFuture<Boolean> bootStrapFuture = runtime.getManagementView()
+                .bootstrapManagementServer(nodeForWorkflow, layout);
+        CFUtils.getUninterruptibly(bootStrapFuture, TimeoutException.class);
+        // Send the add node request to the node's orchestrator.
         CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
         log.info("sendRequest: requested to add {} on orchestrator {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
@@ -64,6 +71,7 @@ public class AddNode extends WorkflowRequest{
 
         BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout().getBaseClient(nodeForWorkflow);
         if(baseClient.pingSync()){
+            log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
             return Optional.of(runtime.getLayoutView()
                     .getRuntimeLayout().getManagementClient(nodeForWorkflow));
         }

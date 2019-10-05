@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,6 +26,7 @@ import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests the Management client.
@@ -45,7 +47,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setServerRouter(serverRouter)
                 .setPort(SERVERS.PORT_0)
                 .build();
-        server = new ManagementServer(serverContext);
+        server = new ManagementServer(serverContext, mock(StreamLog.class));
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
