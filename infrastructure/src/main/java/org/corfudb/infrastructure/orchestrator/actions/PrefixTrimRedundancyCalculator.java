@@ -48,7 +48,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map =
                 layout.getSegments()
                         .stream()
-                        .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != -1L)
+                        .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != NON_ADDRESS)
                         // filter segments that end before the trim mark and the open segments.
                         .map(segment -> {
                             long segmentStart = Math.max(segment.getStart(), trimMark);

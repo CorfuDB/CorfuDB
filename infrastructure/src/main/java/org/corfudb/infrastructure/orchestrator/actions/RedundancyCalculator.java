@@ -3,10 +3,12 @@ package org.corfudb.infrastructure.orchestrator.actions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import groovy.lang.IntRange;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.apache.commons.lang.math.LongRange;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -24,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static java.util.Map.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
@@ -160,13 +163,18 @@ public class RedundancyCalculator {
         });
     }
 
-    public static boolean canMergeSegments(Layout layout) {
+    public static boolean canMergeSegments(Layout layout, String server) {
         if (layout.getSegments().size() == 1) {
             return false;
         } else {
-            return Sets.difference(
-                    layout.getSegments().get(1).getAllLogServers(),
-                    layout.getSegments().get(0).getAllLogServers()).isEmpty();
+            int firstSegmentIndex = 0;
+            int secondSegmentIndex = 1;
+            boolean serverPresent = IntStream
+                    .range(firstSegmentIndex, secondSegmentIndex + 1).boxed().allMatch(index ->
+                    layout.getSegments().get(index).getFirstStripe().getLogServers().contains(server));
+            return serverPresent && Sets.difference(
+                    layout.getSegments().get(secondSegmentIndex).getAllLogServers(),
+                    layout.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
         }
     }
 

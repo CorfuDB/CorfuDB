@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
 import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
 import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
@@ -139,7 +140,6 @@ public class StateTransferTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        corfuRuntime.getLayoutView().getLayout();
        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
        long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_0, lastAddress);
@@ -152,9 +152,9 @@ public class StateTransferTest extends AbstractViewTest {
     /**
      * 1. Segment 1: 0 -> 3: Node 0, Node 1
      * 2. Segment 2: 3 -> infinity: Node 0, Node 1, Node 2
-     * 2. Node 2 notices its needs to restore, restores itself to layout and merges segments
+     * 2. Node 2 eventually restores itself to the layout and merges segments
      */
-    public void verifyRedundancyRestoration(){
+    public void verifyRedundancyRestoration() throws Exception{
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -163,8 +163,10 @@ public class StateTransferTest extends AbstractViewTest {
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
                 .addSequencer(SERVERS.PORT_0)
                 .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
                 .setStart(0L)
                 .setEnd(writtenAddressesBatch1)
@@ -179,11 +181,57 @@ public class StateTransferTest extends AbstractViewTest {
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
 
+        bootstrapAllServers(l1);
 
+        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        testStream.append("testPayload".getBytes());
+        testStream.append("testPayload".getBytes());
+        testStream.append("testPayload".getBytes());
+
+        ClusterStatusReport clusterStatus = null;
+        for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++){
+            clusterStatus = corfuRuntime.getManagementView().getClusterStatus();
+            if(clusterStatus.getClusterStatus().equals(ClusterStatus.DB_SYNCING)){
+                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            }
+            else{
+                break;
+            }
+        }
+
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(STABLE);
+        corfuRuntime.invalidateLayout();
+        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_0, lastAddress);
+        Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_2, lastAddress);
+
+        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
 
     }
 
@@ -246,10 +294,12 @@ public class StateTransferTest extends AbstractViewTest {
         final int addNodeRetries = 3;
         corfuRuntime.getManagementView()
                 .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+
         corfuRuntime.invalidateLayout();
-        final long epochAfterAdd = 3L;
-        Layout expectedLayout = new TestLayoutBuilder()
-                .setEpoch(epochAfterAdd)
+        final long finalEpochAfterAdd = 3L;
+
+        Layout expectedLayout1 = new TestLayoutBuilder()
+                .setEpoch(finalEpochAfterAdd)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
                 .addLayoutServer(SERVERS.PORT_2)
@@ -296,7 +346,10 @@ public class StateTransferTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.DB_SYNCING);
         assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReliability.STRONG_QUORUM);
-        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        // If both of the segments were restored in the same window concurrently it's 3, otherwise its 4.
+        assertThat(corfuRuntime.getLayoutView().getLayout().equals(expectedLayout1)
+        || corfuRuntime.getLayoutView().getLayout()
+                .equals(new LayoutBuilder(expectedLayout1).setEpoch(finalEpochAfterAdd + 1).build())).isTrue();
 
         long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
 

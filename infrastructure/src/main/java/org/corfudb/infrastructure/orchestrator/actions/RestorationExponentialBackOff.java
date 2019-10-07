@@ -28,7 +28,9 @@ public class RestorationExponentialBackOff {
         for (int num : sequence) {
 
             Result<Boolean, RuntimeException> runResult = Result.of(restoreRedundancyAction);
-
+            if(runResult.isError()){
+                System.out.println("Error: " + runResult.getError() + "\n\n\n");
+            }
             if (runResult.isError() && expectedErrors.contains(runResult.getError().getClass())) {
                 log.error("Handling {}, waiting for {} seconds.", runResult
                         .getError().getMessage(), num);

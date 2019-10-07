@@ -20,6 +20,8 @@ import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.Regul
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutBuilder;
+
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
@@ -104,9 +106,12 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             log.info("State transfer on {}: New layout: {}.", currentNode, newLayout);
 
             // If segments can be merged, merge, if not, just reconfigure.
-            if (RedundancyCalculator.canMergeSegments(newLayout)) {
+            if (RedundancyCalculator.canMergeSegments(newLayout, currentNode)) {
                 runtime.getLayoutManagementView().mergeSegments(newLayout);
             } else {
+                // Since we seal with a new epoch, we also need to bump the epoch of the new layout.
+                LayoutBuilder builder = new LayoutBuilder(newLayout);
+                newLayout = builder.setEpoch(oldLayout.getEpoch() + 1).build();
                 runtime.getLayoutManagementView()
                         .runLayoutReconfiguration(oldLayout, newLayout, false);
             }
@@ -149,11 +154,11 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> stateMap =
                 redundancyCalculator.createStateMap(layout);
 
+        log.info("State transfer on {}: Initial state map: {}", currentNode, stateMap);
         while(!redundancyCalculator.redundancyIsRestored(stateMap)){
             // Initialize a transfer for each segment and update the map.
 
             stateMap = transferManager.handleTransfer(stateMap);
-
             // Restore redundancy for the segments that are restored.
             // If possible, also merge the segments.
             // Utilize backoff, in case multiple transfers are happening in parallel.
@@ -174,7 +179,6 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                         redundancyCalculator.createStateMap(layout);
                 // Merge the new and the old map into the current map.
                 stateMap = redundancyCalculator.mergeMaps(stateMap, newLayoutStateMap);
-                log.info("State transfer on {}: New status map: {}", currentNode, stateMap);
             }
 
         }
