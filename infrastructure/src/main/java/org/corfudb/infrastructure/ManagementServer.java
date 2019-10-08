@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -90,6 +91,7 @@ public class ManagementServer extends AbstractServer {
      * defaulted to 1 second in the Runtime parameters. This gives the Runtime a total of 1 minute
      * to make progress. Else the ongoing task is aborted.
      */
+    @Setter
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     private final ExecutorService executor;

@@ -68,7 +68,9 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
     @Override
     protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} in {}", this, layout);
-        return layout.getSegments().size() == 1;
+        return layout.getAllServers().contains(nodeForWorkflow)
+                && layout.getSegmentsForEndpoint(nodeForWorkflow).size()
+                == layout.getSegments().size();
     }
 
     @Override

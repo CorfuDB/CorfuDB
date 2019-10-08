@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableMap;
-import java.util.AbstractMap;
+
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
@@ -78,8 +78,9 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                                 .equals(FAILED))
                         .collect(Collectors.toList());
 
+        // Throw the first failure.
         if (!failedEntries.isEmpty()) {
-            throw new IllegalStateException("State transfer on {}: Transfer failed for one or more segments.");
+            throw failedEntries.get(0).getValue().getCauseOfFailure();
         }
 
         // Filter all the segments that have been transferred.
@@ -89,13 +90,15 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                         .equals(TRANSFERRED)).map(Entry::getKey)
                 .collect(Collectors.toList());
 
+        // If there are transferred segments, invalidate.
+        runtime.invalidateLayout();
+
+        Layout oldLayout = runtime.getLayoutView().getLayout();
+
+        // Case 1: The transferred has occurred -> Create a new layout with restored node, merge if possible.
         if (!transferredSegments.isEmpty()) {
 
             log.info("State transfer on {}: Transferred segments: {}.", currentNode, transferredSegments);
-            // If there are transferred segments, invalidate
-            runtime.invalidateLayout();
-
-            Layout oldLayout = runtime.getLayoutView().getLayout();
 
             RedundancyCalculator calculator = new RedundancyCalculator(currentNode);
 
@@ -107,6 +110,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
 
             // If segments can be merged, merge, if not, just reconfigure.
             if (RedundancyCalculator.canMergeSegments(newLayout, currentNode)) {
+                log.info("State transfer on: {}: Can merge segments.", currentNode);
                 runtime.getLayoutManagementView().mergeSegments(newLayout);
             } else {
                 // Since we seal with a new epoch, we also need to bump the epoch of the new layout.
@@ -115,10 +119,20 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 runtime.getLayoutManagementView()
                         .runLayoutReconfiguration(oldLayout, newLayout, false);
             }
-            log.info("State transfer on {}: Reconfiguration successful.", currentNode);
+            log.info("State transfer on {}: Reconfiguration is successful.", currentNode);
             return true;
         }
-        return false;
+        // Case 2: The transfer has not occurred but the segments can still be merged.
+        else if(RedundancyCalculator.canMergeSegments(oldLayout, currentNode)){
+            log.info("State transfer on: {}: Can merge segments.", currentNode);
+            runtime.getLayoutManagementView().mergeSegments(oldLayout);
+            return true;
+        }
+        // Case 3: Nothing to do.
+        else{
+            return false;
+        }
+
     }
 
     @Nonnull
@@ -155,7 +169,8 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 redundancyCalculator.createStateMap(layout);
 
         log.info("State transfer on {}: Initial state map: {}", currentNode, stateMap);
-        while(!redundancyCalculator.redundancyIsRestored(stateMap)){
+
+        while(RedundancyCalculator.requiresRedundancyRestoration(layout, currentNode)){
             // Initialize a transfer for each segment and update the map.
 
             stateMap = transferManager.handleTransfer(stateMap);
@@ -177,6 +192,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
                         newLayoutStateMap =
                         redundancyCalculator.createStateMap(layout);
+
                 // Merge the new and the old map into the current map.
                 stateMap = redundancyCalculator.mergeMaps(stateMap, newLayoutStateMap);
             }

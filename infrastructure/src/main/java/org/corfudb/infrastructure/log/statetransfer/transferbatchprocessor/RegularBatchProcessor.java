@@ -135,7 +135,7 @@ public class RegularBatchProcessor {
                         (Result.ok(maxWrittenAddress.orElse(NON_ADDRESS)));
             } else {
                 Result<Long, StateTransferException> stateTransferFailureResult =
-                        transferResult.mapError(e -> new StateTransferFailure());
+                        transferResult.mapError(StateTransferFailure::new);
                 return CompletableFuture.completedFuture(stateTransferFailureResult);
             }
         } else {
@@ -214,7 +214,7 @@ public class RegularBatchProcessor {
      * @param readResult A result of the read.
      * @return A result containing either exception or data.
      */
-    static Result<List<LogData>, IncompleteReadException> handleRead(List<Long> addresses,
+    Result<List<LogData>, IncompleteReadException> handleRead(List<Long> addresses,
                                                                      Map<Long, ILogData> readResult) {
         List<Long> transferredAddresses =
                 addresses.stream().filter(readResult::containsKey)
@@ -274,10 +274,14 @@ public class RegularBatchProcessor {
      * @return A result of reading records.
      */
     Result<List<LogData>, StateTransferException> readRecords(List<Long> addresses) {
-        log.trace("Reading data for addresses: {}", addresses);
+        log.info("Reading data for addresses: {}", addresses);
 
-        Map<Long, ILogData> readResult = addressSpaceView.read(addresses, readOptions);
-        return handleRead(addresses, readResult)
-                .mapError(e -> new IncompleteDataReadException(e.getMissingAddresses()));
+        // Catch all possible unexpected failures.
+        Result<Map<Long, ILogData>, StateTransferException> readResult =
+                Result.of(() -> addressSpaceView.read(addresses, readOptions))
+                .mapError(StateTransferFailure::new);
+        return readResult.flatMap(result ->
+                handleRead(addresses, result)
+                        .mapError(e -> new IncompleteDataReadException(e.getMissingAddresses())));
     }
 }

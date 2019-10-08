@@ -10,9 +10,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.Sets;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -224,10 +226,25 @@ public class LayoutManagementView extends AbstractView {
 
             sealEpoch(currentLayout);
 
-            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-            newLayout = layoutBuilder
-                    .mergePreviousSegment(1)
-                    .build();
+            Predicate<Layout> shouldMergeSegments = layout -> {
+                if(layout.getSegments().size() > 1){
+                    return Sets.difference(
+                            layout.getSegments().get(1).getAllLogServers(),
+                            layout.getSegments().get(0).getAllLogServers()).isEmpty();
+                }
+                return false;
+            };
+
+
+            while(shouldMergeSegments.test(currentLayout)){
+                LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+                currentLayout = layoutBuilder
+                        .mergePreviousSegment(1)
+                        .build();
+            }
+
+            newLayout = currentLayout;
+
             attemptConsensus(newLayout);
         } else {
             log.info("mergeSegments: skipping, no segments to merge {}", currentLayout);

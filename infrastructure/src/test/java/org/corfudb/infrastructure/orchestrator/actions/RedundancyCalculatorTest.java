@@ -45,12 +45,12 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
         RedundancyCalculator calculator = new RedundancyCalculator("localhost");
 
-        Assert.assertTrue(calculator.segmentContainsServer(segment));
+        Assert.assertTrue(calculator.segmentContainsServer(segment, "localhost"));
 
         stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
         segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(stripe1, stripe2, stripe3));
-        Assert.assertFalse(calculator.segmentContainsServer(segment));
+        Assert.assertFalse(calculator.segmentContainsServer(segment, "localhost"));
     }
 
     @Test

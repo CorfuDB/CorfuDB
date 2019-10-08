@@ -9,12 +9,15 @@ import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
 import org.corfudb.runtime.view.Address;
 
 import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -46,13 +49,27 @@ public class StateTransferManager {
         private final long endAddress;
     }
 
-    @AllArgsConstructor
     @Getter
     @ToString
     @EqualsAndHashCode
     public static class CurrentTransferSegmentStatus {
         private SegmentState segmentStateTransferState;
         private long lastTransferredAddress;
+        private StateTransferFailure causeOfFailure = null;
+
+        public CurrentTransferSegmentStatus(SegmentState segmentStateTransferState,
+                                            long lastTransferredAddress){
+            this.segmentStateTransferState = segmentStateTransferState;
+            this.lastTransferredAddress = lastTransferredAddress;
+        }
+
+        public CurrentTransferSegmentStatus(SegmentState segmentStateTransferState,
+                                            long lastTransferredAddress,
+                                            StateTransferFailure causeOfFailure){
+            this.segmentStateTransferState = segmentStateTransferState;
+            this.lastTransferredAddress = lastTransferredAddress;
+            this.causeOfFailure = causeOfFailure;
+        }
     }
 
     @Getter
@@ -107,7 +124,6 @@ public class StateTransferManager {
                     } else { // transfer whatever is not transferred
                         Long lastAddressToTransfer =
                                 unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
-
                         CompletableFuture<CurrentTransferSegmentStatus> segmentStatusFuture =
                                 stateTransferWriter
                                         .stateTransfer(unknownAddressesInRange, batchSize)
@@ -115,9 +131,16 @@ public class StateTransferManager {
                                             if (lastTransferredAddressResult.isValue() &&
                                                     lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
                                                 long lastTransferredAddress = lastTransferredAddressResult.get();
+                                                log.info("State transfer segment success, transferred up to: {}.",
+                                                        lastTransferredAddress);
                                                 return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
                                             } else {
-                                                return new CurrentTransferSegmentStatus(FAILED, NON_ADDRESS);
+                                                log.error("State transfer failure occurred: ",
+                                                        lastTransferredAddressResult.getError().getCause());
+                                                return new CurrentTransferSegmentStatus(
+                                                        FAILED,
+                                                        NON_ADDRESS,
+                                                        (StateTransferFailure) lastTransferredAddressResult.getError());
                                             }
                                         });
                         result = new SimpleEntry<>(segment, segmentStatusFuture);

@@ -426,23 +426,22 @@ public class RemoteMonitoringService implements MonitoringService {
         int segmentsCount = layout.getSegments().size();
         String localEndpoint = serverContext.getLocalEndpoint();
 
-        if (RedundancyCalculator.canMergeSegments(layout, localEndpoint)) {
-            log.debug("No segments to merge. Skipping step.");
-            return DetectorTask.SKIPPED;
+        if (RedundancyCalculator.requiresRedundancyRestoration(layout, localEndpoint)) {
+            log.info("Number of segments present: {}. Spawning task to merge segments on {}.",
+                    segmentsCount, localEndpoint);
+            Supplier<Boolean> redundancyAction = () ->
+                    handleMergeSegments(
+                            runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+                    );
+            mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
+
+            return DetectorTask.COMPLETED;
         } else if (!mergeSegmentsTask.isDone()) {
             log.debug("Merge segments task already in progress. Skipping spawning another task.");
             return DetectorTask.SKIPPED;
         }
-
-        log.debug("Number of segments present: {}. Spawning task to merge segments.", segmentsCount);
-
-        Supplier<Boolean> redundancyAction = () ->
-                handleMergeSegments(
-                        runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
-                );
-        mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
-
-        return DetectorTask.COMPLETED;
+        log.debug("No segments to merge. Skipping step.");
+        return DetectorTask.SKIPPED;
     }
 
 

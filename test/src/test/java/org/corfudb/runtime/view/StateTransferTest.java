@@ -8,8 +8,10 @@ import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-
+import static org.mockito.Mockito.doReturn;
+import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -46,6 +49,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import lombok.Getter;
+import org.mockito.Mock;
+import org.mockito.Mockito;
 
 /**
  * Created by zlokhandwala on 2019-06-06.
@@ -346,7 +351,8 @@ public class StateTransferTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.DB_SYNCING);
         assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReliability.STRONG_QUORUM);
-        // If both of the segments were restored in the same window concurrently it's 3, otherwise its 4.
+        // If both of the segments were restored within the same epoch change concurrently, epoch's 3,
+        // otherwise its 4.
         assertThat(corfuRuntime.getLayoutView().getLayout().equals(expectedLayout1)
         || corfuRuntime.getLayoutView().getLayout()
                 .equals(new LayoutBuilder(expectedLayout1).setEpoch(finalEpochAfterAdd + 1).build())).isTrue();
@@ -504,7 +510,7 @@ public class StateTransferTest extends AbstractViewTest {
 
     /**
      * This test verifies that if the adjacent segments have same number of servers,
-     * state transfer is not happened, while merge segments can succeed.
+     * state transfer should not happen, while merge segments can succeed.
      *
      * The test first creates a layout with 3 segments.
      *
@@ -581,84 +587,89 @@ public class StateTransferTest extends AbstractViewTest {
      * We then trigger the state transfer and force the transfer to fail on the last range write.
      * Another transfer is then triggered and verified that only the remaining data is transferred.
      */
-//    @Test
-//    public void verifyPartialStateTransferCompletionOnRetry() throws Exception {
-//
-//        ServerContext sc1 = new ServerContextBuilder()
-//                .setSingle(false)
-//                .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
-//                .setPort(SERVERS.PORT_0).build();
-//        addServer(SERVERS.PORT_0, sc1);
-//
-//        ServerContext sc2 = new ServerContextBuilder()
-//                .setMemory(false)
-//                .setSingle(false)
-//                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
-//                .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
-//                .setPort(SERVERS.PORT_1).build();
-//        addServer(SERVERS.PORT_1, sc2);
-//
-//        getManagementServer(SERVERS.PORT_0).shutdown();
-//        getManagementServer(SERVERS.PORT_1).shutdown();
-//
-//        final long writtenAddressesBatch1 = 11_000L;
-//        final long writtenAddressesBatch2 = 1_000L;
-//
-//        Layout layout = new TestLayoutBuilder()
-//                .setEpoch(1L)
-//                .addLayoutServer(SERVERS.PORT_0)
-//                .addLayoutServer(SERVERS.PORT_1)
-//                .addSequencer(SERVERS.PORT_0)
-//                .addSequencer(SERVERS.PORT_1)
-//                .buildSegment()
-//                .setStart(0L)
-//                .setEnd(writtenAddressesBatch1)
-//                .buildStripe()
-//                .addLogUnit(SERVERS.PORT_0)
-//                .addToSegment()
-//                .addToLayout()
-//                .buildSegment()
-//                .setStart(writtenAddressesBatch1)
-//                .setEnd(-1)
-//                .buildStripe()
-//                .addLogUnit(SERVERS.PORT_0)
-//                .addLogUnit(SERVERS.PORT_1)
-//                .addToSegment()
-//                .addToLayout()
-//                .build();
-//        bootstrapAllServers(layout);
-//
-//        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
-//
-//        setAggressiveTimeouts(layout, corfuRuntime);
-//
-//        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
-//        // Writes to address spaces 0 to 11_000 (inclusive) go to SERVER 0 only.
-//        // Writes to address spaces 11_000 to 12_000 (inclusive) go to SERVERS 0 & 1.
-//        for (int i = 0; i < (writtenAddressesBatch1 + writtenAddressesBatch2); i++) {
-//            testStream.append("testPayload".getBytes());
-//        }
-//
-//        final int rangeWriteCount = (int) writtenAddressesBatch1 / runtime.getParameters().getBulkReadSize();
-//        AtomicInteger allowedWrites = new AtomicInteger(rangeWriteCount - 1);
-//
-//        // STEP 1.
-//        // Rule added to fail the state transfer on the last range write.
-//        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
-//                corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)
-//                        && allowedWrites.decrementAndGet() < 0)
-//                .drop());
-//
-//        // Everything until addresses 10_990 should be filled.
-//        // A timeout Exception before that should just be retried in this test.
-//        final long startAddress = 10_980;
-//        final long endAddress = 10_989;
-//        Set<Long> addressesInSecondToLastRange = Collections.emptySet();
-//
+    @Test
+    public void verifyPartialStateTransferCompletionOnRetry() throws Exception {
+
+        ServerContext sc1 = new ServerContextBuilder()
+                .setSingle(false)
+                .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
+                .setPort(SERVERS.PORT_0).build();
+        addServer(SERVERS.PORT_0, sc1);
+
+        ServerContext sc2 = new ServerContextBuilder()
+                // .setMemory(false)
+                .setSingle(false)
+                // .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                .setPort(SERVERS.PORT_1).build();
+        addServer(SERVERS.PORT_1, sc2);
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+
+        final long writtenAddressesBatch1 = 100;
+        final long writtenAddressesBatch2 = 5;
+
+        Layout layout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(writtenAddressesBatch1)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(writtenAddressesBatch1)
+                .setEnd(-1)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(layout);
+
+        corfuRuntime = getNewRuntime(getDefaultNode());
+        corfuRuntime.getParameters().setSystemDownHandlerTriggerLimit(0);
+        corfuRuntime.connect();
+
+        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        // Writes to address spaces 0 to 11_000 (inclusive) go to SERVER 0 only.
+        // Writes to address spaces 11_000 to 12_000 (inclusive) go to SERVERS 0 & 1.
+        for (int i = 0; i < (writtenAddressesBatch1 + writtenAddressesBatch2); i++) {
+            testStream.append("testPayload".getBytes());
+        }
+
+        AtomicInteger allowedWrites = new AtomicInteger(9);
+
+        // STEP 1.
+        // Rule added to fail the state transfer on the last range read.
+        addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().matches(
+                corfuMsg -> {
+
+                    allowedWrites.getAndDecrement();
+                    return corfuMsg.getMsgType().equals(CorfuMsgType.MULTIPLE_READ_REQUEST)
+                            && allowedWrites.get() < 0;
+
+                })
+                .drop());
+
+        // Everything until addresses 10_990 should be filled.
+        // A timeout Exception before that should just be retried in this test.
+        final long startAddress = 10_980;
+        final long endAddress = 10_989;
+        Set<Long> addressesInSecondToLastRange = Collections.emptySet();
+
+        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
+        action1.impl(corfuRuntime, getLogUnit(SERVERS.PORT_1).getStreamLog());
 //        while (addressesInSecondToLastRange.isEmpty()) {
-//
-//            final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments();
-//            // Assert that the state transfer fails with a timeout exception.
+            // Assert that the state transfer fails with a timeout exception.
+//            Sleep.sleepUninterruptibly(Duration.ofMillis(5000));
 //            assertThatThrownBy(() -> action1.impl(corfuRuntime))
 //                    .isInstanceOf(RuntimeException.class)
 //                    .hasRootCauseInstanceOf(TimeoutException.class);
@@ -671,7 +682,7 @@ public class StateTransferTest extends AbstractViewTest {
 //        }
 //
 //        clearClientRules(corfuRuntime);
-//
+
 //        // STEP 2.
 //        // Rule added to fail the state transfer on the last range write.
 //        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
@@ -699,8 +710,8 @@ public class StateTransferTest extends AbstractViewTest {
 //
 //        final int expectedRemainingRangeWrites = 1;
 //        assertThat(rangeWrites.get()).isEqualTo(expectedRemainingRangeWrites);
-//
-//    }
+
+    }
 
     /**
      * This test verifies that partial state transfers when retried only transfer the delta

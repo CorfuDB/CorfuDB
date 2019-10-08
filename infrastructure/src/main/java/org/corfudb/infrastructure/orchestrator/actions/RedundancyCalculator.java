@@ -1,14 +1,11 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
-import groovy.lang.IntRange;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
-import org.apache.commons.lang.math.LongRange;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -17,13 +14,10 @@ import org.corfudb.runtime.view.Layout.LayoutStripe;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -83,7 +77,7 @@ public class RedundancyCalculator {
             CurrentTransferSegment statusSegment =
                     new CurrentTransferSegment(segment.getStart(), segment.getEnd() - 1);
 
-            if (segmentContainsServer(segment)) {
+            if (segmentContainsServer(segment, server)) {
                 return new SimpleEntry<>(statusSegment,
                         CompletableFuture
                                 .completedFuture(new
@@ -100,7 +94,7 @@ public class RedundancyCalculator {
     }
 
 
-    boolean segmentContainsServer(LayoutSegment segment) {
+    static boolean segmentContainsServer(LayoutSegment segment, String server) {
         return segment.getFirstStripe().getLogServers().contains(server);
     }
 
@@ -163,6 +157,18 @@ public class RedundancyCalculator {
         });
     }
 
+    /**
+     * Returns true if the segments can be merged or if the node is not present in all the segments.
+     * @param layout Current layout.
+     * @param server The current node.
+     * @return True is there is a need for redundancy restoration, merge of segments or both.
+     */
+    public static boolean requiresRedundancyRestoration(Layout layout, String server){
+        return canMergeSegments(layout, server) ||
+                !layout.getSegments().stream().allMatch(segment -> segmentContainsServer(segment,
+                        server));
+    }
+
     public static boolean canMergeSegments(Layout layout, String server) {
         if (layout.getSegments().size() == 1) {
             return false;
@@ -183,7 +189,7 @@ public class RedundancyCalculator {
     mergeMaps(ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> oldMap,
               ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap) {
 
-       // If map is empty -> Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
+       // If a new map is empty -> Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
        if(newMap.isEmpty()){
            return ImmutableMap.copyOf(oldMap.entrySet().stream().map(entry -> {
                CurrentTransferSegment segment = entry.getKey();
