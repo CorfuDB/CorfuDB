@@ -10,6 +10,8 @@ import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -30,6 +32,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -38,6 +41,7 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -646,14 +650,35 @@ public class StateTransferTest extends AbstractViewTest {
         for (int i = 0; i < (writtenAddressesBatch1 + writtenAddressesBatch2); i++) {
             testStream.append("testPayload".getBytes());
         }
+        List<List<LogData>> data =
+                Lists.partition(testStream
+                        .streamUpTo(writtenAddressesBatch1)
+                        .map(x -> (LogData) x)
+                        .collect(Collectors.toList()), corfuRuntime.getParameters().getBulkReadSize());
+
+        List<List<LogData>> remainingData =
+                Lists.partition(testStream
+                        .streamUpTo(writtenAddressesBatch1)
+                        .map(x -> (LogData) x)
+                        .collect(Collectors.toList()), corfuRuntime.getParameters().getBulkReadSize());
 
         Set<Long> addressesInSecondToLastRange = Collections.emptySet();
         final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
         StreamLog streamLog = getLogUnit(SERVERS.PORT_1).getStreamLog();
         StreamLog spy = spy(streamLog);
-        doThrow(new IllegalStateException("Exception")).when(spy).append();
-        action1.impl(corfuRuntime, );
-        System.out.println("Hey");
+
+        data.forEach(part -> {
+
+            if(part.get(0).getGlobalAddress() < 50L){
+                doNothing().when(spy).append(part);
+            }
+            else{
+                doThrow(new RuntimeException("Issue occurred")).when(spy).append(part);
+            }
+        });
+
+
+        action1.impl(corfuRuntime, spy);
 
 //        while (addressesInSecondToLastRange.isEmpty()) {
             // Assert that the state transfer fails with a timeout exception.
