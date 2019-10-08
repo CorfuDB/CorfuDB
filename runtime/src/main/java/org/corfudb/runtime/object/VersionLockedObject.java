@@ -764,7 +764,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                             record.setUpcallResult(res);
                         } else { // materialized log
                             if (pendingUpcalls.contains(record.getGlobalAddress())) {
-                                log.debug("Sync[{}] Upcall Result {}",
+                                log.trace("Sync[{}] Upcall Result {}",
                                         this, record.getGlobalAddress());
                                 upcallResults.put(record.getGlobalAddress(), res == null
                                         ? NullValue.NULL_VALUE : res);

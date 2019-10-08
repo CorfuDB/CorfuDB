@@ -5,12 +5,14 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -18,10 +20,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
+
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -188,8 +194,50 @@ public class BatchProcessor implements AutoCloseable {
                                 currOp.setResultValue(tails);
                                 break;
                             case LOG_ADDRESS_SPACE_QUERY:
-                                // Retrieve the address space for every stream in the log.
-                                currOp.setResultValue(streamLog.getStreamsAddressSpace());
+                                StreamsAddressRequest streamsAddressRequest =
+                                        (StreamsAddressRequest)currOp.getMsg().getPayload();
+                                StreamsAddressResponse streamsAddressResponse;
+
+                                // Currently, only servers for address space requests for sequencer bootstrap or
+                                // sequencer address space trim.
+                                switch (streamsAddressRequest.getReqType()) {
+                                    // servers for sequencer address space trim
+                                    case StreamsAddressRequest.STREAMS:
+                                        List<StreamAddressRange> streamsRanges =
+                                                streamsAddressRequest.getStreamsRanges();
+                                        long committedTail = streamLog.getCommittedTail();
+                                        long compactionMark = streamLog.getGlobalCompactionMark();
+
+                                        List<StreamAddressRange> requestRanges = streamsRanges.stream().map(range -> {
+                                            UUID streamId = range.getStreamID();
+
+                                            StreamAddressRange streamAddressRange;
+                                            if (!streamsAddressRequest.isForSequencerTrim()) {
+                                                streamAddressRange =
+                                                        new StreamAddressRange(streamId, Long.MAX_VALUE, -1);
+                                            } else {
+                                                // only requests for address space before both committedTail (which
+                                                // prevents sequencer regression) and compactionMark (which prevents
+                                                // unnecessary data transfer).
+                                                streamAddressRange = new StreamAddressRange(streamId,
+                                                        Long.min(committedTail, compactionMark), -1);
+                                            }
+
+                                            return streamAddressRange;
+                                        }).collect(Collectors.toList());
+
+                                        streamsAddressResponse = streamLog.getStreamsAddressSpace(requestRanges);
+                                        break;
+                                    // servers for sequencer bootstrap
+                                    default:
+                                        if (streamsAddressRequest.isForSequencerTrim()) {
+                                            throw new UnsupportedOperationException();
+                                        }
+                                        // Retrieve the address space for every stream in the log.	                                StreamsAddressRequest streamsAddressRequest =
+                                        streamsAddressResponse = streamLog.getStreamsAddressSpace();
+                                }
+
+                                currOp.setResultValue(streamsAddressResponse);
                                 break;
                             default:
                                 log.warn("Unknown BatchWriterOperation {}", currOp);

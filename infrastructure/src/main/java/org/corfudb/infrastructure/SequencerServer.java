@@ -9,23 +9,25 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
-import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.StreamsIdResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.roaringbitmap.longlong.LongIterator;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
+import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CorfuComponent;
@@ -33,6 +35,7 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -472,6 +475,50 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
+     * Service an incoming request to replace address space view of streams.
+     * This function is used to trim the compacted addresses at sequencer
+     * address space view by replacing streams address view with compacted one
+     * from LogUnit servers.
+     *
+     * This function does NOT cause race condition in which address space view
+     * access and modification happen concurrently because sequencerServer is
+     * single-threaded.
+     */
+    @ServerHandler(type = CorfuMsgType.STREAMS_ADDRESS_REPLACE)
+    public void streamsAddressSpaceReplace(CorfuPayloadMsg<StreamsAddressResponse> msg,
+                            ChannelHandlerContext ctx, IServerRouter r) {
+        Map<UUID, StreamAddressSpace> addressMap = msg.getPayload().getAddressMap();
+        addressMap.forEach(this::addressSpaceReplaceUnsafe);
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
+     * Replace address space view of one single stream. It is not thread-safe.
+     * This function does NOT replace the entire address space, but only replaces ranges of the new address space.
+     *
+     * @param streamId Id of the stream in interest.
+     * @param addressSpace new address space view to replace old one.
+     */
+    private void addressSpaceReplaceUnsafe(UUID streamId, StreamAddressSpace addressSpace) {
+        // Sanity check. This situation should not happen. If the situation happens, it reveals bugs in the system.
+        if (!streamsAddressMap.containsKey(streamId)) {
+            log.error("addressSpaceReplaceUnsafe: {} not exists in sequencer.", streamId);
+            return;
+        }
+
+        long upperBound = addressSpace.getTail();
+        StreamAddressRange range = new StreamAddressRange(streamId, Long.MAX_VALUE, upperBound);
+        Roaring64NavigableMap suffix = streamsAddressMap.get(streamId).getAddressesInRange(range);
+        LongIterator iterator = suffix.getLongIterator();
+
+        while (iterator.hasNext()) {
+            addressSpace.addAddress(iterator.next());
+        }
+        
+        streamsAddressMap.put(streamId, addressSpace);
+    }
+
+    /**
      * Return a timer based on the type of request. It will take the name from the cache
      * initialized at construction of the sequencer server to avoid String concatenation.
      *
@@ -625,7 +672,7 @@ public class SequencerServer extends AbstractServer {
 
         switch (req.getReqType()) {
             case StreamsAddressRequest.STREAMS:
-                streamsAddressMap = getStreamsAddresses(req.getStreamsRanges());
+                streamsAddressMap = Utils.getStreamsAddresses(this.streamsAddressMap, req.getStreamsRanges());
                 break;
 
             default:
@@ -641,29 +688,13 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
-     * Return the address space for each stream in the requested ranges.
-     *
-     * @param addressRanges list of requested a stream and ranges.
-     * @return map of stream to address space.
+     * Serves an incoming request for IDs of streams.
      */
-    private Map<UUID, StreamAddressSpace> getStreamsAddresses(List<StreamAddressRange> addressRanges) {
-        Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
-        Roaring64NavigableMap addressMap;
-
-        for (StreamAddressRange streamAddressRange : addressRanges) {
-            UUID streamId = streamAddressRange.getStreamID();
-            // Get all addresses in the requested range
-            if (streamsAddressMap.containsKey(streamId)) {
-                addressMap = streamsAddressMap.get(streamId).getAddressesInRange(streamAddressRange);
-                requestedAddressSpaces.put(streamId,
-                        new StreamAddressSpace(addressMap));
-            } else {
-                log.warn("handleStreamsAddressRequest: address space map is not present for stream {}. " +
-                        "Verify this is a valid stream.", streamId);
-            }
-        }
-
-        return requestedAddressSpaces;
+    @ServerHandler(type = CorfuMsgType.STREAMS_ID_REQUEST)
+    private void handleStreamsIdRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("Serving for one request for IDs of streams.");
+        List<UUID> streamIds = new ArrayList<>(this.streamsAddressMap.keySet());
+        r.sendResponse(ctx, msg, CorfuMsgType.STREAMS_ID_RESPONSE.payloadMsg(new StreamsIdResponse(streamIds)));
     }
 
     /**

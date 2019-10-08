@@ -66,7 +66,7 @@ public class AutoCommitService implements ManagementService {
     }
 
     @VisibleForTesting
-    void runAutoCommit() {
+    public void runAutoCommit() {
         log.debug("runAutoCommit: start committing addresses.");
 
         // Deterministically do auto commit if the current node is primary sequencer.

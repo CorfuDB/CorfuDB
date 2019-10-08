@@ -4,14 +4,26 @@ import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+
+import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.text.DecimalFormat;
+
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -251,28 +263,49 @@ public class Utils {
      *
      * @param layout latest layout.
      * @param runtime current runtime.
-     * @return response with all streams addresses and global log tail.
+     * @param request steams in interest.
+     * @return response with streams addresses in interest and global log tail.
      */
-    public static StreamsAddressResponse getLogAddressSpace(Layout layout, CorfuRuntime runtime) {
-        Set<StreamsAddressResponse> luResponses = new HashSet<>();
-
+    public static StreamsAddressResponse getLogAddressSpace(Layout layout, CorfuRuntime runtime,
+                                                            StreamsAddressRequest request) {
+        List<CompletableFuture<StreamsAddressResponse>> futures = new ArrayList<>();
         Layout.LayoutSegment segment = layout.getLatestSegment();
 
         // Query the head log unit in every stripe.
         if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
 
-                StreamsAddressResponse res = CFUtils.getUninterruptibly(
+                CompletableFuture<StreamsAddressResponse> future =
                         runtime.getLayoutView().getRuntimeLayout(layout)
                                 .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                                .getLogAddressSpace());
-                luResponses.add(res);
+                                .getLogAddressSpace(request);
+                futures.add(future);
             }
         } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
             throw new UnsupportedOperationException();
         }
 
-        return aggregateLogAddressSpace(luResponses);
+        Set<StreamsAddressResponse> responses =
+                futures.stream().map(CFUtils::getUninterruptibly).collect(Collectors.toSet());
+        return aggregateLogAddressSpace(responses);
+    }
+
+    /**
+     * Gets address space of streams in interest.
+     *
+     * @param runtimeLayout Corfu RuntimeLayout.
+     * @param streamIds streams in interest.
+     * @return Get log address space, which includes: 1. Addresses belonging to each stream. 2. Log Tail.
+     */
+    public static StreamsAddressResponse getLogAddressSpace(RuntimeLayout runtimeLayout, Collection<UUID> streamIds) {
+        List<StreamAddressRange> streamsRanges = new ArrayList<>();
+        for (UUID streamId : streamIds) {
+            streamsRanges.add(new StreamAddressRange(streamId, Long.MAX_VALUE, -1L));
+        }
+
+        return getLogAddressSpace(runtimeLayout.getLayout(), runtimeLayout.getRuntime(),
+                new StreamsAddressRequest(streamsRanges,
+                true));
     }
 
     static StreamsAddressResponse aggregateLogAddressSpace(Set<StreamsAddressResponse> responses) {
@@ -284,5 +317,32 @@ public class Utils {
             streamAddressSpace = aggregateStreamAddressMap(res.getAddressMap(), streamAddressSpace);
         }
         return new StreamsAddressResponse(logTail, streamAddressSpace);
+    }
+
+    /**
+     * Return the address space for each stream in the requested ranges.
+     *
+     * @param addressRanges list of requested a stream and ranges.
+     * @return map of stream to address space.
+     */
+    public static Map<UUID, StreamAddressSpace> getStreamsAddresses(Map<UUID, StreamAddressSpace> streamsAddressMap,
+                                                                    List<StreamAddressRange> addressRanges) {
+        Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
+        Roaring64NavigableMap addressMap;
+
+        for (StreamAddressRange streamAddressRange : addressRanges) {
+            UUID streamId = streamAddressRange.getStreamID();
+            // Get all addresses in the requested range
+            if (streamsAddressMap.containsKey(streamId)) {
+                addressMap = streamsAddressMap.get(streamId).getAddressesInRange(streamAddressRange);
+                requestedAddressSpaces.put(streamId,
+                        new StreamAddressSpace(addressMap));
+            } else {
+                log.warn("handleStreamsAddressRequest: address space map is not present for stream {}. " +
+                        "Verify this is a valid stream.", streamId);
+            }
+        }
+
+        return requestedAddressSpaces;
     }
 }

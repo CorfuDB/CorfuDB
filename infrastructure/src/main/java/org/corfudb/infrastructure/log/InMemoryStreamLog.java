@@ -2,11 +2,13 @@ package org.corfudb.infrastructure.log;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -110,6 +112,12 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public synchronized StreamsAddressResponse getStreamsAddressSpace() {
         return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
+    }
+
+    @Override
+    public synchronized StreamsAddressResponse getStreamsAddressSpace(List<StreamAddressRange> addressRanges) {
+        return new StreamsAddressResponse(logMetadata.getGlobalTail(),
+                Utils.getStreamsAddresses(logMetadata.getStreamsAddressSpaceMap(), addressRanges));
     }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {

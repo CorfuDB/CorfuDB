@@ -62,6 +62,15 @@ public class ManagementServerTest extends AbstractServerTest {
                 .getFailureDetectorWorker().isShutdown()).isTrue();
     }
 
+    @Test
+    public void checkSequencerTrimServiceStatus() {
+        assertThat(managementServer.getManagementAgent().getSequencerTrimService()
+                .getSequencerTrimScheduler().isShutdown()).isFalse();
+        managementServer.shutdown();
+        assertThat(managementServer.getManagementAgent().getSequencerTrimService()
+                .getSequencerTrimScheduler().isShutdown()).isTrue();
+    }
+
     /**
      * Bootstrapping the management server multiple times.
      */

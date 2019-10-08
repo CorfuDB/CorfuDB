@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.infrastructure.log.StreamLogParams;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -23,6 +24,7 @@ import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -187,17 +189,20 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
      * This is used on sequencer bootstrap to provide the address maps for initialization.
+     * Service an incoming request for log address space, i.e., the map of addresses for all or some streams in the
+     * log.
+     * This is used on sequencer bootstrap to provide the address maps for initialization -OR- is used for updating
+     * sequencer with compacted address space.
      */
     @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
-    public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
-        payloadMsg.copyBaseFields(msg);
+    public void handleLogAddressSpaceRequest(CorfuPayloadMsg<StreamsAddressRequest> msg, ChannelHandlerContext ctx,
+                                             IServerRouter r) {
         log.debug("handleLogAddressSpaceRequest: received a log address space request {}", msg);
-        batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
-                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+        batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, msg)
+                .thenAccept(addressSpace -> r.sendResponse(ctx, msg,
+                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(addressSpace)))
                 .exceptionally(ex -> {
-                    handleException(ex, ctx, payloadMsg, r);
+                    handleException(ex, ctx, msg, r);
                     return null;
                 });
     }
@@ -231,7 +236,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         LogData logData = (LogData) msg.getPayload().getData();
-        log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
+        log.trace("log write: type: {}, address: {}, streams: {}", logData.getType(),
                 logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
@@ -274,6 +279,10 @@ public class LogUnitServer extends AbstractServer {
                                    ChannelHandlerContext ctx, IServerRouter r) {
         List<LogData> garbageEntries = msg.getPayload().getEntries();
         log.debug("multiGarbageWrite: Writing {} garbage entries", garbageEntries.size());
+        for (ILogData data : garbageEntries) {
+            if (data.getGlobalAddress() % 10 == 0)
+                log.debug("LogUnit receive garbage at {}", data.getGlobalAddress());
+        }
 
         batchWriter.addTask(MULTI_GARBAGE_WRITE, msg)
                 .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))

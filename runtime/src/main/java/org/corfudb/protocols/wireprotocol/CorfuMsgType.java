@@ -48,10 +48,13 @@ public enum CorfuMsgType {
     TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
     BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerRecoveryMsg>>(){}),
-    SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),
-    SEQUENCER_METRICS_RESPONSE(25, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true),
-    STREAMS_ADDRESS_REQUEST(26, new TypeToken<CorfuPayloadMsg<StreamsAddressRequest>>(){}),
-    STREAMS_ADDRESS_RESPONSE(27, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
+    SEQUENCER_METRICS_REQUEST(23, TypeToken.of(CorfuMsg.class), true),
+    SEQUENCER_METRICS_RESPONSE(24, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true),
+    STREAMS_ADDRESS_REQUEST(25, new TypeToken<CorfuPayloadMsg<StreamsAddressRequest>>(){}),
+    STREAMS_ADDRESS_RESPONSE(26, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
+    STREAMS_ADDRESS_REPLACE(27, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
+    STREAMS_ID_REQUEST(28, TypeToken.of(CorfuMsg.class)),
+    STREAMS_ID_RESPONSE(29,new TypeToken<CorfuPayloadMsg<StreamsIdResponse>>(){}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
@@ -68,7 +71,7 @@ public enum CorfuMsgType {
     RUN_COMPACTION(43, TypeToken.of(CorfuMsg.class), true),
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
     RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
-    LOG_ADDRESS_SPACE_REQUEST(48, TypeToken.of(CorfuMsg.class)),
+    LOG_ADDRESS_SPACE_REQUEST(48, new TypeToken<CorfuPayloadMsg<StreamsAddressRequest>>(){}),
     LOG_ADDRESS_SPACE_RESPONSE(49, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),

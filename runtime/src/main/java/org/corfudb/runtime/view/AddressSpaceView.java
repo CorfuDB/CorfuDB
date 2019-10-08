@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -23,6 +24,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -598,14 +600,23 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Get log address space, which includes:
+     * Get log address space of all streams, which includes:
      *     1. Addresses belonging to each stream.
      *     2. Log Tail.
      * @return
      */
     public StreamsAddressResponse getLogAddressSpace() {
-        return layoutHelper(
-                e -> Utils.getLogAddressSpace(e.getLayout(), runtime));
+        return getLogAddressSpace(StreamsAddressRequest.TOTAL);
+    }
+
+    /**
+     * Gets address space of streams in interest
+     *
+     * @param request wrapper of streams in interest.
+     * @return Get log address space, which includes: 1. Addresses belonging to each stream. 2. Log Tail.
+     */
+    public StreamsAddressResponse getLogAddressSpace(StreamsAddressRequest request) {
+        return layoutHelper(e -> Utils.getLogAddressSpace(e.getLayout(), runtime, request));
     }
 
     /**

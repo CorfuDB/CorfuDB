@@ -348,12 +348,20 @@ public class StreamViewTest extends AbstractViewTest {
 
         final int entryNum = RECORDS_PER_SEGMENT + 1;
 
+        // garbage info
+        int smrEntrySize = 0;
+        final long garbageGlobalAddress = 1L;
+
         // writes data to global address
         for (int i = 0 ; i <= entryNum; ++i) {
             SMRRecord smrRecord = new SMRRecord("hi", new Object[]{("hello" + i)}, Serializers.JSON);
             SMRLogEntry smrLogEntry = new SMRLogEntry();
             smrLogEntry.addTo(streamId, Collections.singletonList(smrRecord));
             sv.append(smrLogEntry);
+
+            if (i == garbageGlobalAddress) {
+                smrEntrySize = smrRecord.getSerializedSize();
+            }
         }
 
         // Update committed tail so that compactor can run.
@@ -361,11 +369,11 @@ public class StreamViewTest extends AbstractViewTest {
 
         // write one synthesized garbage decision
         final long markerAddress = 3L;
-        final int smrEntrySize = 0;
+
         SMRGarbageRecord garbageRecord = new SMRGarbageRecord(markerAddress, smrEntrySize);
         SMRGarbageEntry smrGarbageEntry = new SMRGarbageEntry();
         smrGarbageEntry.add(streamId, 0, garbageRecord);
-        smrGarbageEntry.setGlobalAddress(1L);
+        smrGarbageEntry.setGlobalAddress(garbageGlobalAddress);
         GarbageInformer.GarbageBatch garbageBatch =
                 new GarbageInformer.GarbageBatch(Collections.singletonList(smrGarbageEntry));
         GarbageInformer garbageInformer = new GarbageInformer(r);

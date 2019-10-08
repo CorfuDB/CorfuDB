@@ -4,10 +4,10 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Lists;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.util.Utils.getLogAddressSpace;
 
 /**
  * Created by mwei on 12/10/15.
@@ -33,6 +35,7 @@ public class SequencerView extends AbstractView {
     private Timer sequencerDeprecatedNextOneStream;
     private Timer sequencerDeprecatedNextMultipleStream;
     private Timer sequencerTrimCache;
+    private Timer sequencerMutilpleStreamAddressSpace;
     private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
     public SequencerView(CorfuRuntime runtime) {
@@ -58,6 +61,8 @@ public class SequencerView extends AbstractView {
                 "deprecated-particular-next");
         sequencerDeprecatedNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
                 "deprecated-multiple-next");
+        sequencerMutilpleStreamAddressSpace = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
+                "multiple-stream-address-space");
     }
 
     /**
@@ -122,12 +127,47 @@ public class SequencerView extends AbstractView {
      * @return address space for each stream in the request.
      */
     public Map<UUID, StreamAddressSpace> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerMutilpleStreamAddressSpace)) {
             StreamsAddressResponse streamsAddressResponse = layoutHelper(e ->
                     CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                             .getStreamsAddressSpace(streamsAddressesRange)));
             return streamsAddressResponse.getAddressMap();
         }
+    }
+
+    /**
+     * Retrieve IDs of all steams.
+     * @return a list of stream IDs.
+     */
+    public List<UUID> getStreamsId() {
+        return layoutHelper(e ->
+                CFUtils.getUninterruptibly(e.getPrimarySequencerClient().getStreamsId()).getStreamIds()
+        );
+    }
+
+    /**
+     * Trim compacted addresses at address space view of specified streams.
+     * This function consists of two steps:
+     *
+     * 1. Fetch address space up to compaction mark of streams in interest from LogUnit servers.
+     * 2. Trim compacted addresses at the sequencer by replacing address space in range [0, compactionMark] with the
+     *    address space just fetched in step 1.
+     *
+     * @param batch IDs of streams in interest.
+     */
+    public void addressSpaceTrimInBatch(List<UUID> batch) {
+        // Relies on layoutHelper to handle exceptions.
+        layoutHelper(e -> {
+            StreamsAddressResponse streamsAddress = getLogAddressSpace(e, batch);
+            replaceStreamsAddressSpace(streamsAddress);
+            return null;
+        });
+    }
+
+    private void replaceStreamsAddressSpace(StreamsAddressResponse streamAddressSpaceMap) {
+        layoutHelper(e ->
+                CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                        .streamsAddressSpaceReplace(streamAddressSpaceMap)));
     }
 
     /**

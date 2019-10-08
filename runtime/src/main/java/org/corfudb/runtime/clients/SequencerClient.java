@@ -9,12 +9,13 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.StreamsIdResponse;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 /**
  * A sequencer client.
@@ -90,6 +91,20 @@ public class SequencerClient extends AbstractClient {
         return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
                 new SequencerRecoveryMsg(initialToken, streamAddressSpaceMap, readyStateEpoch,
                         bootstrapWithoutTailsUpdate)));
+    }
+
+    /**
+     * Retrieves from the sequencer the stream ids.
+     *
+     * @return A CompletableFuture which wraps stream IDs.
+     */
+    public CompletableFuture<StreamsIdResponse> getStreamsId() {
+        return sendMessageWithFuture(CorfuMsgType.STREAMS_ID_REQUEST.payloadMsg(
+                StreamsAddressRequest.TOTAL));
+    }
+
+    public CompletableFuture<Boolean> streamsAddressSpaceReplace(StreamsAddressResponse streamAddressSpaceMap) {
+        return sendMessageWithFuture(CorfuMsgType.STREAMS_ADDRESS_REPLACE.payloadMsg(streamAddressSpaceMap));
     }
 
     /**

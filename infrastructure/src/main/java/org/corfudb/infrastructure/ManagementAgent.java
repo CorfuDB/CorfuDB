@@ -91,6 +91,18 @@ public class ManagementAgent {
     private final AutoCommitService autoCommitService;
 
     /**
+     * Interval of executing all rounds of SequencerTrimService.
+     */
+    @Getter
+    private static final Duration SEQUENCER_TRIM_INTERVAL = Duration.ofHours(1);
+
+    /**
+     * sequencerTrimService periodically trims compacted addresses at address space view of sequencer.
+     */
+    @Getter
+    private final SequencerTrimService sequencerTrimService;
+
+    /**
      * Checks and restores if a layout is present in the local datastore to recover from.
      * Spawns an initialization task which recovers if required, and start monitoring services.
      *
@@ -135,6 +147,7 @@ public class ManagementAgent {
         );
 
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
+        this.sequencerTrimService = new SequencerTrimService(serverContext, runtimeSingletonResource);
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
@@ -205,6 +218,7 @@ public class ManagementAgent {
             localMonitoringService.start(METRICS_POLL_INTERVAL);
             remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
             autoCommitService.start(AUTO_COMMIT_INTERVAL);
+            sequencerTrimService.start(SEQUENCER_TRIM_INTERVAL);
         }
     }
 
@@ -235,6 +249,7 @@ public class ManagementAgent {
         remoteMonitoringService.shutdown();
         localMonitoringService.shutdown();
         autoCommitService.shutdown();
+        sequencerTrimService.shutdown();
 
         log.info("Management Agent shutting down.");
     }

@@ -493,6 +493,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         // run compaction on LogUnit servers
         logUnitServer.runCompaction();
+        logUnitServer.runCompaction();
+
         rt.getAddressSpaceView().resetCaches();
         rt.getAddressSpaceView().invalidateServerCaches();
     }

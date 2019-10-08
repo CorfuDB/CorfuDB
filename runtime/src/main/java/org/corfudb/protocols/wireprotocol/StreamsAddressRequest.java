@@ -18,23 +18,42 @@ import java.util.List;
 @CorfuPayload
 public class StreamsAddressRequest implements ICorfuPayload<StreamsAddressRequest>{
 
-    public static final byte STREAMS = 0; /*To request specific streams*/
+    // To request specific streams
+    public static final byte STREAMS = 0;
+    // To request all streams
+    public static final byte ALL_STREAMS = 1;
 
-    public static final byte ALL_STREAMS = 1; /*To request all streams*/
+    public static final StreamsAddressRequest TOTAL = new StreamsAddressRequest();
 
-    /** The type of request, one of the above. */
+    // The type of request, one of the above.
     final byte reqType;
+
+    // The request is used to spare trim compacted addresses on sequencer
+    final boolean forSequencerTrim;
 
     private final List<StreamAddressRange> streamsRanges;
 
-    public StreamsAddressRequest(@NonNull List<StreamAddressRange> streamsRanges) {
-        reqType = STREAMS;
-        this.streamsRanges = streamsRanges;
+    public StreamsAddressRequest() {
+        this.reqType = ALL_STREAMS;
+        this.streamsRanges = Collections.emptyList();
+        forSequencerTrim = false;
     }
+
+    public StreamsAddressRequest(@NonNull List<StreamAddressRange> streamsRanges, boolean forSequencerTrim) {
+        this.reqType = STREAMS;
+        this.streamsRanges = streamsRanges;
+        this.forSequencerTrim = forSequencerTrim;
+    }
+
+    public StreamsAddressRequest(@NonNull List<StreamAddressRange> streamsRanges) {
+        this(streamsRanges, false);
+    }
+
 
     public StreamsAddressRequest(Byte reqType) {
         this.reqType = reqType;
-        this.streamsRanges = Collections.EMPTY_LIST;
+        this.streamsRanges = Collections.emptyList();
+        this.forSequencerTrim = false;
     }
 
     /**
@@ -43,18 +62,20 @@ public class StreamsAddressRequest implements ICorfuPayload<StreamsAddressReques
      * @param buf The buffer to deserialize
      */
     public StreamsAddressRequest(ByteBuf buf) {
-        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);
-        if (reqType != ALL_STREAMS) {
-            streamsRanges = ICorfuPayload.listFromBuffer(buf, StreamAddressRange.class);
+        this.reqType = ICorfuPayload.fromBuffer(buf, Byte.class);
+        this.forSequencerTrim = ICorfuPayload.fromBuffer(buf, Boolean.class);
+        if (reqType == STREAMS) {
+            this.streamsRanges = ICorfuPayload.listFromBuffer(buf, StreamAddressRange.class);
         } else {
-            streamsRanges = Collections.EMPTY_LIST;
+            this.streamsRanges = Collections.emptyList();
         }
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, reqType);
-        if (reqType != ALL_STREAMS) {
+        ICorfuPayload.serialize(buf, forSequencerTrim);
+        if (reqType == STREAMS) {
             ICorfuPayload.serialize(buf, streamsRanges);
         }
     }

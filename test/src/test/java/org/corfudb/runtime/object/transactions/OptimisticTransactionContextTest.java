@@ -902,7 +902,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
     @Test
     public void snapshotReadBeforeCompactionMark() {
-        final int entryNum = RECORDS_PER_SEGMENT + 1;
+        final int entryNum = RECORDS_PER_SEGMENT + 10;
 
         t(1, () -> put("k" , "v0"));    // TS = 0
         t(1, () -> put("k" , "v1"));    // TS = 1

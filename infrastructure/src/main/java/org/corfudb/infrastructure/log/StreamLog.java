@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
@@ -112,6 +113,11 @@ public interface StreamLog {
      * Get the address space for every stream.
      */
     StreamsAddressResponse getStreamsAddressSpace();
+
+    /**
+     * Gets stream address space in range of some streams.
+     */
+    StreamsAddressResponse getStreamsAddressSpace(List<StreamAddressRange> addressRanges);
 
     /**
      * Returns the known addresses in this Log Unit in the specified consecutive
