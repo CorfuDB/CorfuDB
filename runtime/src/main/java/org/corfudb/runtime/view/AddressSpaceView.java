@@ -278,7 +278,7 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Read the given object from an address and streams.
-     * It is a wrapper of readNative to handle InterruptedException.
+     * It is a wrapper of readInner to handle InterruptedException.
      * @param address An address to read from.
      * @param options Read options for this particular write (i.e. configure caching behavior)
      * @return A result, which be cached.
@@ -288,10 +288,10 @@ public class AddressSpaceView extends AbstractView {
         int count = 0;
         while (true) {
             try {
-                return readNative (address, options);
+                return readInner (address, options);
             } catch (InterruptedException e) {
                 if (++count == MAX_RETRIES) {
-                    log.error ("It has retried {} times, throw an exception {}", MAX_RETRIES, e);
+                    log.error ("It has retried {} times, throw an exception ", MAX_RETRIES, e);
                     throw new UnrecoverableCorfuInterruptedError (e);
                 }
             }
@@ -306,7 +306,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public @Nonnull
-    ILogData readNative(long address, @NonNull ReadOptions options) throws InterruptedException {
+    ILogData readInner(long address, @NonNull ReadOptions options) throws InterruptedException {
         if (cacheReadRequest(options)) {
             // The VersionLockedObject and the Transaction layer will generate
             // undoRecord(s) during a transaction commit, or object sync. These
