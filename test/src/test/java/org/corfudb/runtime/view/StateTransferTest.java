@@ -11,6 +11,9 @@ import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
+
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -32,6 +35,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -49,6 +53,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import lombok.Getter;
+import org.junit.rules.Timeout;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 
@@ -634,39 +639,22 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(layout);
 
-        corfuRuntime = getNewRuntime(getDefaultNode());
-        corfuRuntime.getParameters().setSystemDownHandlerTriggerLimit(0);
-        corfuRuntime.connect();
+        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
-        // Writes to address spaces 0 to 11_000 (inclusive) go to SERVER 0 only.
-        // Writes to address spaces 11_000 to 12_000 (inclusive) go to SERVERS 0 & 1.
+
         for (int i = 0; i < (writtenAddressesBatch1 + writtenAddressesBatch2); i++) {
             testStream.append("testPayload".getBytes());
         }
 
-        AtomicInteger allowedWrites = new AtomicInteger(9);
-
-        // STEP 1.
-        // Rule added to fail the state transfer on the last range read.
-        addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().matches(
-                corfuMsg -> {
-
-                    allowedWrites.getAndDecrement();
-                    return corfuMsg.getMsgType().equals(CorfuMsgType.MULTIPLE_READ_REQUEST)
-                            && allowedWrites.get() < 0;
-
-                })
-                .drop());
-
-        // Everything until addresses 10_990 should be filled.
-        // A timeout Exception before that should just be retried in this test.
-        final long startAddress = 10_980;
-        final long endAddress = 10_989;
         Set<Long> addressesInSecondToLastRange = Collections.emptySet();
-
         final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
-        action1.impl(corfuRuntime, getLogUnit(SERVERS.PORT_1).getStreamLog());
+        StreamLog streamLog = getLogUnit(SERVERS.PORT_1).getStreamLog();
+        StreamLog spy = spy(streamLog);
+        doThrow(new IllegalStateException("Exception")).when(spy).append();
+        action1.impl(corfuRuntime, );
+        System.out.println("Hey");
+
 //        while (addressesInSecondToLastRange.isEmpty()) {
             // Assert that the state transfer fails with a timeout exception.
 //            Sleep.sleepUninterruptibly(Duration.ofMillis(5000));

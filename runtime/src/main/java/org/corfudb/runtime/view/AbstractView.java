@@ -171,6 +171,7 @@ public abstract class AbstractView {
             }
 
             runtime.invalidateLayout();
+            log.info("Sleeping for {}", retryRate);
             Sleep.sleepUninterruptibly(retryRate);
         }
     }
