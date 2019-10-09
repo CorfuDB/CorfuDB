@@ -466,7 +466,7 @@ public class StreamViewTest extends AbstractViewTest {
         Map<String, String> map = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         map.put("k1", "k1");
@@ -485,7 +485,7 @@ public class StreamViewTest extends AbstractViewTest {
         Map<String, String> mapCopy = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setOptions(Collections.singleton(ObjectOpenOptions.NO_CACHE))
                 .open();
 

@@ -38,7 +38,9 @@ import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.ImmuableListSetWrapper;
+import org.corfudb.runtime.object.ICorfuExecutionContext;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -59,7 +61,8 @@ import org.corfudb.util.ImmuableListSetWrapper;
  */
 @Slf4j
 @CorfuObject
-public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
+public class CorfuTable<K ,V>
+        implements ICorfuMap<K, V>, ICorfuSMR<CorfuTable<K ,V>>, AutoCloseable {
 
     /**
      * Denotes a function that supplies the unique name of an index registered to
@@ -99,7 +102,6 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
     public static class Index<K, V, I extends Comparable<?>> {
         private final CorfuTable.IndexName name;
         private final CorfuTable.MultiValueIndexFunction<K, V, I> indexFunction;
-
 
         public Index(CorfuTable.IndexName name, CorfuTable.IndexFunction<K, V, I> indexFunction) {
             this.name = name;
@@ -187,9 +189,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
      * @param <V>           Value type
      * @return              A type token to pass to the builder.
      */
-    static <K, V> TypeToken<CorfuTable<K, V>>
-        getMapType() {
-            return new TypeToken<CorfuTable<K, V>>() {};
+    static <K, V> TypeToken<CorfuTable<K, V>> getMapType() {
+        return new TypeToken<CorfuTable<K, V>>() {};
     }
 
     /** Helper function to get a Corfu Table.
@@ -198,45 +199,60 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
      * @param <V>                   Value type
      * @return                      A type token to pass to the builder.
      */
-    static <K, V>
-    TypeToken<CorfuTable<K, V>>
-        getTableType() {
-            return new TypeToken<CorfuTable<K, V>>() {};
+    static <K, V> TypeToken<CorfuTable<K, V>> getTableType() {
+        return new TypeToken<CorfuTable<K, V>>() {};
     }
 
     // The "main" map which contains the primary key-value mappings.
     private final StreamingMap<K,V> mainMap;
-    private final Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
-    private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
+    private final Set<Index<K, V, ? extends Comparable>> indexSpec;
+    private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
+    private final CorfuTable<K, V> optimisticTable;
 
+    public CorfuTable(StreamingMap<K,V> mainMap,
+                      Set<Index<K, V, ? extends Comparable>> indexSpec,
+                      Map<String, Map<Comparable, Map<K, V>>> secondaryIndexe,
+                      CorfuTable<K, V> optimisticTable) {
+        this.mainMap = mainMap;
+        this.indexSpec = indexSpec;
+        this.secondaryIndexes = secondaryIndexe;
+        this.optimisticTable = optimisticTable;
+    }
     /**
      * Generate a table with a given implementation for the {@link StreamingMap}.
      */
     public CorfuTable(IndexRegistry<K, V> indices,
                       Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+        this.indexSpec = new HashSet<>();
+        this.secondaryIndexes = new HashMap<>();
+        this.mainMap = streamingMapSupplier.get();
+
+        this.optimisticTable = new CorfuTable<>(this.mainMap.getOptimisticMap(), this.indexSpec,
+                this.secondaryIndexes, null);
+
         indices.forEach(index -> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
             indexSpec.add(index);
         });
+
         log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
                 secondaryIndexes.keySet());
-        mainMap = streamingMapSupplier.get();
     }
 
     /**
-     * Generate a table with the given set of indexes.
+     * Generate a table with a given implementation for the {@link StreamingMap}.
+     */
+    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+        this(IndexRegistry.empty(), streamingMapSupplier);
+    }
+
+    /**
+     * Generate a table with the given {@link IndexRegistry}.
      */
     public CorfuTable(IndexRegistry<K, V> indexRegistry) {
         this(indexRegistry, () -> new StreamingMapDecorator<>(new HashMap<>()));
     }
 
-    /**
-     * Generates a table with the given {@link Map} implementation and
-     * without any secondary indexes.
-     */
-    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier) {
-        this(IndexRegistry.empty(), streamingMapSupplier);
-    }
     /**
      * Default constructor. Generates a table without any secondary indexes.
      */
@@ -414,8 +430,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
      * @param undoRecord    The undo record generated by undoRemoveRecord
      */
     @DontInstrument
-     void undoPutAll(CorfuTable<K, V> table, Map<K,V> undoRecord,
-                            Map<? extends K, ? extends V> m) {
+    void undoPutAll(CorfuTable<K, V> table, Map<K,V> undoRecord,
+                    Map<? extends K, ? extends V> m) {
         undoRecord.entrySet().forEach(e -> {
                     if (e.getValue() == CorfuTable.UndoNullable.NULL) {
                         undoRemove(table, null, e.getKey());
@@ -466,7 +482,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
     /** {@inheritDoc} */
     @Override
     @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
-                                undoRecordFunction = "undoRemoveRecord")
+            undoRecordFunction = "undoRemoveRecord")
     @SuppressWarnings("unchecked")
     public V remove(@ConflictParameter Object key) {
         V previous =  mainMap.remove(key);
@@ -790,7 +806,29 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
      */
     @PassThrough
     @Override
+    public CorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
+        if (context == OPTIMISTIC) {
+            return optimisticTable;
+        } else {
+            return this;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @PassThrough
+    @Override
     public void close() {
+        this.mainMap.close();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @DontInstrument
+    @Override
+    public void closeWrapper() {
         this.mainMap.close();
     }
 }

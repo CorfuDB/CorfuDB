@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -308,7 +309,7 @@ public class AbstractIT extends AbstractCorfuTest {
         Map<String, Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
                 .open();
         return map;
     }

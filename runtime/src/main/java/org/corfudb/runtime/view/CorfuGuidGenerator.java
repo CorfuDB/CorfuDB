@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -118,7 +119,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private CorfuGuidGenerator(CorfuRuntime rt) {
         runtime = rt;
         distributedCounter = rt.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<Integer, Long>>() {})
                 .setStreamName(GUID_STREAM_NAME)
                 .setSerializer(Serializers.getDefaultSerializer())
                 .open();

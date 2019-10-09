@@ -8,7 +8,7 @@ import java.util.UUID;
  * @param <T> The type of the object to build.
  * Created by mwei on 11/12/16.
  */
-public interface IObjectBuilder<T> {
+public interface IObjectBuilder<T extends ICorfuSMR<T>> {
 
     /** Set the stream ID of the object.
      *
@@ -30,7 +30,8 @@ public interface IObjectBuilder<T> {
      * @param <R>   The type of the type token.
      * @return  A typed version of this object builder, to support chaining.
      */
-    <R> IObjectBuilder<R> setTypeToken(TypeToken<R> typeToken);
+    <R extends ICorfuSMR<R>> IObjectBuilder<R> setTypeToken(
+            TypeToken<R> typeToken);
 
     /** Set the type of this object, using a class.
      *
@@ -38,7 +39,7 @@ public interface IObjectBuilder<T> {
      * @param <R>   The type of the class.
      * @return  A typed version of this object builder, to support chaining.
      */
-    <R> IObjectBuilder<R> setType(Class<R> type);
+    <R extends ICorfuSMR<R>> IObjectBuilder<R> setType(Class<R> type);
 
     /** Open the object, using the parameters given to the builder.
      *
