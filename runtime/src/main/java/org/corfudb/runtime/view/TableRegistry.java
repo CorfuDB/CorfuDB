@@ -1,13 +1,15 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Message;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.Collection;
-import java.util.NoSuchElementException;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
@@ -44,8 +46,8 @@ public class TableRegistry {
      * This information is used to view and edit table using an offline tool without the dependency on the
      * application for the schemas.
      */
-    private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
-    private static final String REGISTRY_TABLE_NAME = "RegistryTable";
+    public static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
+    public static final String REGISTRY_TABLE_NAME = "RegistryTable";
 
     /**
      * Connected runtime instance.
@@ -113,7 +115,7 @@ public class TableRegistry {
      * @param namespace     Namespace of the table to be registered.
      * @param tableName     Table name of the table to be registered.
      * @param keyClass      Key class.
-     * @param payloadClass    Value class.
+     * @param payloadClass  Value class.
      * @param metadataClass Metadata class.
      * @param <K>           Type of Key.
      * @param <V>           Type of Value.
@@ -138,16 +140,17 @@ public class TableRegistry {
         K defaultKeyMessage = (K) keyClass.getMethod("getDefaultInstance").invoke(null);
         V defaultValueMessage = (V) payloadClass.getMethod("getDefaultInstance").invoke(null);
 
-        TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder()
-                .setKeyDescriptor(defaultKeyMessage.getDescriptorForType().toProto())
-                .setKeyClass(keyClass.getName())
-                .setValueDescriptor(defaultValueMessage.getDescriptorForType().toProto())
-                .setValueClass(payloadClass.getName());
+        TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder();
+
+        FileDescriptor keyFileDescriptor = defaultKeyMessage.getDescriptorForType().getFile();
+        insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, keyFileDescriptor);
+        FileDescriptor valueFileDescriptor = defaultValueMessage.getDescriptorForType().getFile();
+        insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, valueFileDescriptor);
+
         if (metadataClass != null) {
             M defaultMetadataMessage = (M) metadataClass.getMethod("getDefaultInstance").invoke(null);
-            tableDescriptorsBuilder
-                    .setMetadataDescriptor(defaultMetadataMessage.getDescriptorForType().toProto())
-                    .setMetadataClass(metadataClass.getName());
+            FileDescriptor metaFileDescriptor = defaultMetadataMessage.getDescriptorForType().getFile();
+            insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, metaFileDescriptor);
         }
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
 
@@ -161,13 +164,49 @@ public class TableRegistry {
     }
 
     /**
+     * Inserts the current file descriptor and then performs a depth first search to insert its depending file
+     * descriptors into the map in {@link TableDescriptors}.
+     *
+     * @param tableDescriptorsBuilder Builder instance.
+     * @param rootFileDescriptor      File descriptor to be added.
+     */
+    private void insertAllDependingFileDescriptorProtos(TableDescriptors.Builder tableDescriptorsBuilder,
+                                                        FileDescriptor rootFileDescriptor) {
+        Deque<FileDescriptor> fileDescriptorStack = new LinkedList<>();
+        fileDescriptorStack.push(rootFileDescriptor);
+
+        while (!fileDescriptorStack.isEmpty()) {
+            FileDescriptor fileDescriptor = fileDescriptorStack.pop();
+            FileDescriptorProto fileDescriptorProto = fileDescriptor.toProto();
+
+            // If the fileDescriptorProto has already been added then continue.
+            if (tableDescriptorsBuilder.getFileDescriptorsMap().containsKey(fileDescriptorProto.getName())) {
+                continue;
+            }
+
+            // Add the fileDescriptorProto into the tableDescriptor map.
+            tableDescriptorsBuilder.putFileDescriptors(fileDescriptorProto.getName(), fileDescriptorProto);
+
+            // Add all unvisited dependencies to the deque.
+            for (FileDescriptor dependingFileDescriptor : fileDescriptor.getDependencies()) {
+                FileDescriptorProto dependingFileDescriptorProto = dependingFileDescriptor.toProto();
+                if (!tableDescriptorsBuilder.getFileDescriptorsMap()
+                        .containsKey(dependingFileDescriptorProto.getName())) {
+
+                    fileDescriptorStack.push(dependingFileDescriptor);
+                }
+            }
+        }
+    }
+
+    /**
      * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
      * Note: This is same as used in Any.proto.
      *
      * @param descriptor Descriptor of the protobuf.
      * @return Type url string.
      */
-    private final static String getTypeUrl(Descriptor descriptor) {
+    public static String getTypeUrl(Descriptor descriptor) {
         return "type.googleapis.com/" + descriptor.getFullName();
     }
 
@@ -178,7 +217,7 @@ public class TableRegistry {
      * @param tableName Table name of the table.
      * @return Fully qualified table name.
      */
-    private String getFullyQualifiedTableName(String namespace, String tableName) {
+    public static String getFullyQualifiedTableName(String namespace, String tableName) {
         return namespace + "$" + tableName;
     }
 

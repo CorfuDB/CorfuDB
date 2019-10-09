@@ -78,7 +78,7 @@ public class CorfuStore {
                              @Nonnull final String tableName,
                              @Nonnull final Class<K> kClass,
                              @Nonnull final Class<V> vClass,
-                             @Nonnull final Class<M> mClass,
+                             @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
