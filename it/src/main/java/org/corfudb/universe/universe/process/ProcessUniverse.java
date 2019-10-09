@@ -5,12 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
-import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.process.ProcessCorfuCluster;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
-import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
@@ -26,7 +23,6 @@ public class ProcessUniverse extends AbstractUniverse<NodeParams, UniverseParams
     @Builder
     public ProcessUniverse(UniverseParams universeParams) {
         super(universeParams);
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
 
     @Override
@@ -52,6 +48,11 @@ public class ProcessUniverse extends AbstractUniverse<NodeParams, UniverseParams
 
     @Override
     public void shutdown() {
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
+
         if (destroyed.getAndSet(true)) {
             log.info("Can't shutdown `process` universe. Already destroyed");
             return;

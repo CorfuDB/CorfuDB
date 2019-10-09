@@ -10,7 +10,6 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.UniverseParams;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -22,46 +21,26 @@ import java.util.Optional;
  */
 @Slf4j
 public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, UniverseParams> {
-    private static final Path TMP_DIR = Paths.get(System.getProperty("java.io.tmpdir"));
-
-    @NonNull
-    private final Path infrastructureJar;
 
     @NonNull
     private final String ipAddress;
 
-    private final ExecutionHelper commandHelper = ExecutionHelper.getInstance();
+    @NonNull
+    private final CorfuProcessManager processManager;
 
-    private final Path corfuDir;
-    private final Path serverDir;
-    private final Path dbDir;
-    private final Path serverJar;
-    private final Path serverJarRelativePath;
+    private final ExecutionHelper commandHelper = ExecutionHelper.getInstance();
 
     @Builder
     public ProcessCorfuServer(
-            CorfuServerParams params, UniverseParams universeParams, String version) {
+            @NonNull CorfuServerParams params, @NonNull UniverseParams universeParams,
+            @NonNull String version) {
         super(params, universeParams, version);
         this.ipAddress = getIpAddress();
-        this.infrastructureJar = Paths.get(
-                "infrastructure",
-                "target",
-                String.format("infrastructure-%s-shaded.jar", version)
+
+        Path corfuDir = Paths.get(System.getProperty("user.home"), "corfu");
+        this.processManager = new CorfuProcessManager(
+                corfuDir, params, getNetworkInterface(), version
         );
-
-        try {
-            corfuDir = Files.createDirectories(TMP_DIR.resolve("corfu"));
-            serverDir = corfuDir.resolve(params.getName());
-            dbDir = corfuDir.resolve(params.getStreamLogDir());
-
-            serverJarRelativePath = Paths.get(params.getName(), "corfu-server.jar");
-            serverJar = corfuDir.resolve(serverJarRelativePath);
-
-            Files.createDirectories(serverDir);
-            Files.createDirectories(dbDir);
-        } catch (IOException e) {
-            throw new NodeException("Can't create directory", e);
-        }
     }
 
     /**
@@ -71,7 +50,13 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
      */
     @Override
     public CorfuServer deploy() {
-        commandHelper.copyFile(infrastructureJar, serverJar);
+        executeCommand(Optional.empty(), processManager.createServerDirCommand());
+        executeCommand(Optional.empty(), processManager.createStreamLogDirCommand());
+
+        commandHelper.copyFile(
+                processManager.getInfrastructureJar(),
+                processManager.getServerJar()
+        );
         start();
         return this;
     }
@@ -103,18 +88,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     public void pause() {
         log.info("Pausing the Corfu server: {}", params.getName());
 
-        StringBuilder cmd = new StringBuilder()
-                .append("ps -ef")
-                .append(" | ")
-                .append("grep -v grep")
-                .append(" | ")
-                .append(String.format("grep \"%s\"", params.getName()))
-                .append(" | ")
-                .append("awk '{print $2}'")
-                .append(" | ")
-                .append("xargs kill -STOP");
-
-        executeCommand(Optional.empty(), cmd.toString());
+        executeCommand(Optional.empty(), processManager.pauseCommand());
     }
 
     /**
@@ -122,21 +96,10 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
      */
     @Override
     public void start() {
-        Path corfuLog = corfuDir.resolve("corfu.log");
-
-        // Compose command line for starting Corfu
-        StringBuilder cmdLine = new StringBuilder();
-        cmdLine.append("java -cp ");
-        cmdLine.append(serverJarRelativePath);
-        cmdLine.append(" ");
-        cmdLine.append(org.corfudb.infrastructure.CorfuServer.class.getName());
-        cmdLine.append(" ");
-        cmdLine.append(getCommandLineParams());
-        cmdLine.append(" > ");
-        cmdLine.append(corfuLog);
-        cmdLine.append(" 2>&1 &");
-
-        executeCommand(Optional.of(corfuDir), cmdLine.toString());
+        executeCommand(
+                Optional.of(processManager.getCorfuDir()),
+                processManager.startCommand(getCommandLineParams())
+        );
     }
 
     /**
@@ -171,17 +134,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     public void resume() {
         log.info("Resuming the corfu server: {}", params.getName());
 
-        StringBuilder cmd = new StringBuilder()
-                .append("ps -ef")
-                .append(" | ")
-                .append("grep -v grep")
-                .append(" | ")
-                .append(String.format("grep \"%s\"", params.getName()))
-                .append(" | ")
-                .append("awk '{print $2}'")
-                .append(" | ")
-                .append("xargs kill -CONT");
-        executeCommand(Optional.empty(), cmd.toString());
+        executeCommand(Optional.empty(), processManager.resumeCommand());
     }
 
     /**
@@ -211,18 +164,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         log.info("Stop corfu server. Params: {}", params);
 
         try {
-            StringBuilder cmd = new StringBuilder()
-                    .append("ps -ef")
-                    .append(" | ")
-                    .append("grep -v grep")
-                    .append(" | ")
-                    .append(String.format("grep \"%s\"", params.getName()))
-                    .append(" | ")
-                    .append("awk '{print $2}'")
-                    .append(" | ")
-                    .append("xargs kill -15");
-
-            executeCommand(Optional.empty(), cmd.toString());
+            executeCommand(Optional.empty(), processManager.stopCommand());
         } catch (Exception e) {
             String err = String.format("Can't STOP corfu: %s. Process not found", params.getName());
             throw new NodeException(err, e);
@@ -236,18 +178,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     public void kill() {
         log.info("Kill the corfu server. Params: {}", params);
         try {
-            StringBuilder cmd = new StringBuilder()
-                    .append("ps -ef")
-                    .append(" | ")
-                    .append("grep -v grep")
-                    .append(" | ")
-                    .append(String.format("grep \"%s\"", params.getName()))
-                    .append(" | ")
-                    .append("awk '{print $2}'")
-                    .append(" | ")
-                    .append("xargs kill -9");
-
-            executeCommand(Optional.empty(), cmd.toString());
+            executeCommand(Optional.empty(), processManager.killCommand());
         } catch (Exception e) {
             String err = String.format("Can't KILL corfu: %s. Process not found, ip: %s",
                     params.getName(), ipAddress
@@ -278,7 +209,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
      * so on, whatever used by the application.
      */
     private void removeAppDir() {
-        executeCommand(Optional.empty(), String.format("rm -rf %s", serverDir));
+        executeCommand(Optional.empty(), processManager.removeServerDirCommand());
     }
 
     @Override

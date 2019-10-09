@@ -77,6 +77,7 @@ public interface Fixtures {
 
             servers.forEach(corfuCluster::add);
             data = UniverseParams.universeBuilder()
+                    .cleanUpEnabled(true)
                     .build()
                     .add(corfuCluster);
 
@@ -111,7 +112,9 @@ public interface Fixtures {
                 return data;
             }
 
-            this.servers = FixtureUtil.buildVmMultipleServers(numNodes, corfuCluster.getName(), VM_PREFIX);
+            this.servers = FixtureUtil.buildVmMultipleServers(
+                    corfuServerVersion, numNodes, corfuCluster.getName(), VM_PREFIX
+            );
             servers.forEach(corfuCluster::add);
 
             ConcurrentMap<String, String> vmIpAddresses = new ConcurrentHashMap<>();
@@ -131,7 +134,7 @@ public interface Fixtures {
                     .vSphereUsername(credentials.getProperty("vsphere.username"))
                     .vSpherePassword(credentials.getProperty("vsphere.password"))
                     .vSphereHost("10.172.208.208")
-                    .templateVMName("IntegTestVMTemplate")
+                    .templateVMName("corfu-server")
                     .vmUserName("vmware")
                     .vmPassword("vmware")
                     .vmIpAddresses(vmIpAddresses)
@@ -190,7 +193,8 @@ public interface Fixtures {
             return ImmutableList.copyOf(serversParams);
         }
 
-        static ImmutableList<CorfuServerParams> buildVmMultipleServers(int numNodes, String clusterName, String vmNamePrefix) {
+        static ImmutableList<CorfuServerParams> buildVmMultipleServers(
+                String corfuServerVersion, int numNodes, String clusterName, String vmNamePrefix) {
             List<CorfuServerParams> serversParams = new ArrayList<>();
 
             for (int i = 0; i < numNodes; i++) {
@@ -204,6 +208,7 @@ public interface Fixtures {
                         .persistence(CorfuServer.Persistence.DISK)
                         .port(port)
                         .stopTimeout(Duration.ofSeconds(1))
+                        .serverVersion(corfuServerVersion)
                         .build();
 
                 serversParams.add(serverParam);

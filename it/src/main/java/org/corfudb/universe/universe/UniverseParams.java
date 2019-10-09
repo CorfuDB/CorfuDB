@@ -25,9 +25,14 @@ public class UniverseParams {
     @Default
     @NonNull
     private final String networkName = NETWORK_PREFIX + UUID.randomUUID().toString();
+
     @Default
     @NonNull
     private final ConcurrentMap<String, GroupParams> groups = new ConcurrentHashMap<>();
+
+    @Getter
+    @Default
+    private final boolean cleanUpEnabled = true;
 
     /**
      * Returns the configuration of a particular service by the name

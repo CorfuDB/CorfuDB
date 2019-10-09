@@ -58,10 +58,12 @@ public class VmUniverseParams extends UniverseParams {
 
 
     @Builder
-    public VmUniverseParams(String vSphereUrl, String vSphereUsername, String vSpherePassword,
-                            String vSphereHost, String templateVMName, String vmUserName, String vmPassword,
-                            ConcurrentMap<String, String> vmIpAddresses, String networkName) {
-        super(networkName, new ConcurrentHashMap<>());
+    public VmUniverseParams(
+            String vSphereUrl, String vSphereUsername, String vSpherePassword, String vSphereHost,
+            String templateVMName, String vmUserName, String vmPassword,
+            ConcurrentMap<String, String> vmIpAddresses, String networkName,
+            boolean cleanUpEnabled) {
+        super(networkName, new ConcurrentHashMap<>(), cleanUpEnabled);
         this.vSphereUrl = vSphereUrl;
         this.vSphereUsername = vSphereUsername;
         this.vSpherePassword = vSpherePassword;

@@ -5,6 +5,8 @@ import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.optional.ssh.SSHExec;
 import org.apache.tools.ant.taskdefs.optional.ssh.Scp;
 
+import java.nio.file.Path;
+
 
 /**
  * Provides the helper functions that do operations (copy file/execute command) on a remote machine.
@@ -31,10 +33,11 @@ public class RemoteOperationHelper {
      * @param localFile   local file
      * @param remoteDir   remote directory
      */
-    public void copyFile(String vmIpAddress, String userName, String password, String localFile, String remoteDir) {
+    public void copyFile(
+            String vmIpAddress, String userName, String password, Path localFile, Path remoteDir) {
         Scp scp = new Scp();
 
-        scp.setLocalFile(localFile);
+        scp.setLocalFile(localFile.toString());
         scp.setTodir(userName + ":" + password + "@" + vmIpAddress + ":" + remoteDir);
         scp.setProject(PROJECT);
         scp.setTrust(true);
@@ -50,7 +53,8 @@ public class RemoteOperationHelper {
      * @param password    password
      * @param command     shell command
      */
-    public void executeCommand(String vmIpAddress, String userName, String password, String command) {
+    public void executeCommand(
+            String vmIpAddress, String userName, String password, String command) {
         SSHExec sshExec = new SSHExec();
 
         sshExec.setUsername(userName);
@@ -71,7 +75,11 @@ public class RemoteOperationHelper {
      * @param password    password
      * @param command     shell command
      */
-    public void executeSudoCommand(String vmIpAddress, String userName, String password, String command) {
-        executeCommand(vmIpAddress, userName, password, String.format("echo %s | sudo -S -p '' %s", password, command));
+    public void executeSudoCommand(
+            String vmIpAddress, String userName, String password, String command) {
+        executeCommand(
+                vmIpAddress, userName, password,
+                String.format("echo %s | sudo -S -p '' %s", password, command)
+        );
     }
 }

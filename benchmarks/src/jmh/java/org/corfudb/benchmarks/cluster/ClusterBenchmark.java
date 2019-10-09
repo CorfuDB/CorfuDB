@@ -13,6 +13,7 @@ import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.benchmarks.util.DataGenerator;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.universe.UniverseManager;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -49,7 +50,7 @@ public class ClusterBenchmark {
         int warmUpIterations = 0;
 
         int measurementIterations = 1;
-        TimeValue measurementTime = TimeValue.seconds(60);
+        TimeValue measurementTime = TimeValue.seconds(30);
 
         int threads = 4;
         int forks = 1;
@@ -59,8 +60,8 @@ public class ClusterBenchmark {
                 .map(String::valueOf)
                 .toArray(String[]::new);
 
-        String[] numRuntime = {"1", "4", "8"};
-        String[] numTables = {"1", "4", "8"};
+        String[] numRuntime = {"1"};
+        String[] numTables = {"4"};
 
         String[] numServers = {"1", "3"};
 

@@ -22,6 +22,42 @@
         <commons.lang.version>3.9</commons.lang.version>
     </properties>
 
+    <profiles>
+        <!-- mvn -pl benchmarks/ -Pinfrastructure dependency:copy -->
+        <profile>
+            <id>infrastructure</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>copy</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-dependencies</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.corfudb</groupId>
+                                    <artifactId>infrastructure</artifactId>
+                                    <type>jar</type>
+                                    <classifier>shaded</classifier>
+                                    <overWrite>false</overWrite>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <build>
         <plugins>
             <plugin>
@@ -36,6 +72,14 @@
             </plugin>
         </plugins>
 
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>src/jmh/resources</directory>
+            </resource>
+        </resources>
     </build>
 
     <dependencies>

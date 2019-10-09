@@ -4,6 +4,7 @@ import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.NetworkConfig;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.group.cluster.docker.DockerCorfuCluster;
@@ -14,7 +15,6 @@ import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
-import org.corfudb.common.util.ClassUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +43,6 @@ public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams>
         super(universeParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
 
     /**
@@ -71,6 +70,11 @@ public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams>
     @Override
     public void shutdown() {
         log.info("Shutdown docker universe: {}", universeId.toString());
+
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
 
         if (destroyed.getAndSet(true)) {
             log.warn("Docker universe already destroyed");

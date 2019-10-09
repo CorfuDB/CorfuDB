@@ -1,24 +1,17 @@
 package org.corfudb.universe.universe.vm;
 
-import static org.corfudb.universe.node.Node.NodeType.CORFU_CLIENT;
-import static org.corfudb.universe.node.Node.NodeType.CORFU_SERVER;
-
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
-import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
-import org.corfudb.universe.node.client.CorfuClient;
-import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
-import org.corfudb.common.util.ClassUtils;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -43,7 +36,6 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
     public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager) {
         super(universeParams);
         this.applianceManager = applianceManager;
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
 
     /**
@@ -83,6 +75,11 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
      */
     @Override
     public void shutdown() {
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
+
         if (destroyed.getAndSet(true)) {
             log.info("Can't shutdown vm universe. Already destroyed");
             return;

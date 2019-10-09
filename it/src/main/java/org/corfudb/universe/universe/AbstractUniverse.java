@@ -28,6 +28,10 @@ public abstract class AbstractUniverse<N extends NodeParams, P extends UniverseP
     protected AbstractUniverse(P universeParams) {
         this.universeParams = universeParams;
         this.universeId = UUID.randomUUID();
+
+        if (universeParams.isCleanUpEnabled()) {
+            Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+        }
     }
 
     protected void deployGroups() {
