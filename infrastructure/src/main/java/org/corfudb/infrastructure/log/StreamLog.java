@@ -102,6 +102,13 @@ public interface StreamLog {
     void updateCommittedTail(long committedTail);
 
     /**
+     * Set the requireStateTransfer flag to the given one.
+     *
+     * @param isRequired if state transfer is required.
+     */
+    void setRequireStateTransfer(boolean isRequired);
+
+    /**
      * Get the address space for every stream.
      */
     StreamsAddressResponse getStreamsAddressSpace();

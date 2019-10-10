@@ -57,10 +57,13 @@ class StreamLogSegment extends AbstractLogSegment {
     @Override
     public LogData read(long address) {
         try {
+            // Check if the entry exists.
             if (!contains(address)) {
                 return null;
             }
 
+            // If the address exists but not found in index,
+            // it means the entire address was compacted.
             AddressMetaData metaData = knownAddresses.get(address);
             if (metaData == null) {
                 return LogData.getCompacted(address);
@@ -140,8 +143,8 @@ class StreamLogSegment extends AbstractLogSegment {
                 return;
             }
 
-            // Check if any entry exists.
-            if (containsAny(entries, false)) {
+            // Check if the entry exists.
+            if (containsAny(entries)) {
                 log.debug("append: Overwritten exception, entries: {}", entries);
                 throw new OverwriteException(OverwriteCause.SAME_DATA);
             }
@@ -164,7 +167,8 @@ class StreamLogSegment extends AbstractLogSegment {
 
     /**
      * Append list of possibly compacted entries to the log segment
-     * file, which ignores the global committed tail.
+     * file, which does not check for overwrite as this is only being
+     * called during segment rewrite.
      *
      * @param entries entries to append to the file
      */
@@ -174,14 +178,6 @@ class StreamLogSegment extends AbstractLogSegment {
             if (entries.isEmpty()) {
                 return;
             }
-
-            // Check if any entry exists, this only checks the current local index,
-            // ignoring the global committed tail.
-            if (containsAny(entries, true)) {
-                log.debug("appendCompacted: Overwritten exception, entries: {}", entries);
-                throw new OverwriteException(OverwriteCause.SAME_DATA);
-            }
-
             Map<Long, AddressMetaData> addressMetaData = writeRecords(entries);
             knownAddresses.putAll(addressMetaData);
             compactionMetaData.updateTotalPayloadSize(entries);
@@ -205,9 +201,9 @@ class StreamLogSegment extends AbstractLogSegment {
     /**
      * Check if any entry in a list exists (not a hole) in this segment, including compacted.
      */
-    private boolean containsAny(List<LogData> entries, boolean ignoreCommitted) {
+    private boolean containsAny(List<LogData> entries) {
         // Assume the entries are ordered by address, which is checked in upper layer.
-        if (!ignoreCommitted && entries.get(entries.size() - 1).getGlobalAddress() <= dataStore.getCommittedTail()) {
+        if (entries.get(entries.size() - 1).getGlobalAddress() <= dataStore.getCommittedTail()) {
             return true;
         }
         return entries.stream().anyMatch(entry -> knownAddresses.containsKey(entry.getGlobalAddress()));

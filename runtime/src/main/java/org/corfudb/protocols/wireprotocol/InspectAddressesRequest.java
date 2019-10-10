@@ -7,6 +7,9 @@ import lombok.Getter;
 import java.util.List;
 
 /**
+ * A request message to inspect a list of addresses,
+ * which checks if any address in not committed.
+ *
  * Created by WenbinZhu on 9/25/19.
  */
 @Getter

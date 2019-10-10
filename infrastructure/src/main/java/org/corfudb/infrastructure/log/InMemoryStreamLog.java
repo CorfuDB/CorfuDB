@@ -103,6 +103,11 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
+    public void setRequireStateTransfer(boolean isRequired) {
+        // No-op
+    }
+
+    @Override
     public synchronized StreamsAddressResponse getStreamsAddressSpace() {
         return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
     }

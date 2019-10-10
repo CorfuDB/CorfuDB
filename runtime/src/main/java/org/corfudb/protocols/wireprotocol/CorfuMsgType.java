@@ -89,6 +89,7 @@ public enum CorfuMsgType {
     COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
     COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    INFORM_STATE_TRANSFER_FINISHED(67, TypeToken.of(CorfuMsg.class)),
 
     // Management Messages
     MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true),

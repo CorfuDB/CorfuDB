@@ -93,6 +93,20 @@ public class StateTransfer {
                     // Read and write in chunks of chunkSize.
                     transferChunk(layout, runtime, endpoint, chunk);
                 }
+
+                // Send the segment end as the committed tail to the new log unit.
+                // This is required to prevent loss of committed tail on new log unit
+                // after state transfer finishes and then all other log units failed
+                // and auto commit service is paused.
+                CFUtils.getUninterruptibly(runtime.getLayoutView()
+                        .getRuntimeLayout(layout)
+                        .getLogUnitClient(endpoint)
+                        .updateCommittedTail(segmentEnd));
+
+                // Inform the log unit it has finished state transfer (so its committedTail becomes valid).
+                CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
+                        .getLogUnitClient(endpoint).informStateTransferFinished());
+
             } catch (OverwriteException oe) {
 
                 log.error("stateTransfer: Overwrite Exception: retried: {} times",

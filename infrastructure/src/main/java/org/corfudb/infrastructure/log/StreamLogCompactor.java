@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.AbstractLogSegment.IndexedLogEntry;
+import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
@@ -155,8 +156,13 @@ public class StreamLogCompactor {
 
             log.debug("Started compacting garbage log segment: {}", inputStreamSegment.getFilePath());
             startTime = System.currentTimeMillis();
-            compactGarbageSegment(inputGarbageSegment, outputGarbageSegment, compactionFeedback.garbageEntriesToPrune);
-            segmentManager.remapCompactedSegment(inputGarbageSegment, outputGarbageSegment);
+            // This lock is need as garbage segment can be concurrently written while compacting.
+            // But the lock should not take long time as garbage segment is small (several MB).
+            try (AutoCloseableLock ignored = GarbageLogSegment.getSegmentLock().acquireWriteLock(ordinal)) {
+                compactGarbageSegment(inputGarbageSegment, outputGarbageSegment,
+                        compactionFeedback.garbageEntriesToPrune);
+                segmentManager.remapCompactedSegment(inputGarbageSegment, outputGarbageSegment);
+            }
 
             // Close input and output garbage segment channels.
             closeSegments(inputGarbageSegment, outputGarbageSegment);
@@ -203,8 +209,7 @@ public class StreamLogCompactor {
     private LogData compactStreamLogEntry(LogData logData, long address,
                                           SMRGarbageEntry garbageEntry,
                                           CompactionFeedback compactionFeedback) {
-        // If it's a hole, return null but add to the compacted address because
-        // a hole might be the global tail and we don't want to regress it.
+        // If it's a hole, return null, which will not be written to new output file.
         if (logData.getType() == DataType.HOLE) {
             return null;
         }
@@ -297,23 +302,22 @@ public class StreamLogCompactor {
         int flushBatchCount = 0;
         List<LogData> batch = new ArrayList<>();
 
-        for (IndexedLogEntry indexedEntry : inputGarbageSegment) {
-            LogData logData = getLogData(indexedEntry.logEntry);
-            long address = logData.getGlobalAddress();
-
-            SMRGarbageEntry payload = (SMRGarbageEntry) logData.getPayload(null);
+        for (Map.Entry<Long, SMRGarbageEntry> mapEntry :
+                inputGarbageSegment.getGarbageEntryMap().entrySet()) {
+            long address = mapEntry.getKey();
+            SMRGarbageEntry entry = mapEntry.getValue();
             Map<UUID, List<Integer>> entryToPrune = entriesToPrune.get(address);
 
             // If this entry was already used to compact stream entry, prune it.
-            payload.prune(entryToPrune);
+            entry.prune(entryToPrune);
             // If the entire stream entry was compacted, discard the entire garbage entry.
-            if (payload.getGarbageRecordCount() == 0) {
+            if (entry.getGarbageRecordCount() == 0) {
                 continue;
             }
 
             // Reset the logData payload with the prune garbage entry.
-            logData.resetPayload(payload);
-            batch.add(logData);
+            LogData newLogData = new LogData(DataType.GARBAGE, entry);
+            batch.add(newLogData);
 
             // Write batch to the output segment.
             flushBatchCount = writeBatchToCompactionOutput(batch,
@@ -342,7 +346,7 @@ public class StreamLogCompactor {
     }
 
     private void writeBatchToCompactionOutput(List<LogData> batch,
-                                             AbstractLogSegment compactionOutput) {
+                                              AbstractLogSegment compactionOutput) {
         compactionOutput.appendCompacted(batch);
         compactionOutput.sync();
     }

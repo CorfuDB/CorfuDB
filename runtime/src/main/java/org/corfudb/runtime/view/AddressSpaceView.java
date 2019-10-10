@@ -358,7 +358,8 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Commit the addresses in the range by first inspecting the addresses
-     * and if data not exist in log, hole fill the address.
+     * and if data does not exist in log, hole fill the address. This is
+     * used by management agent for log consolidation.
      *
      * @param start start of address range, inclusive
      * @param end   end of address range, inclusive
@@ -373,7 +374,7 @@ public class AddressSpaceView extends AbstractView {
 
         // Commit the addresses and update all log unit servers with the
         // new committed tail, which is the end of range. Exceptions are
-        // are handled at the upper layer.
+        // handled at the upper layer.
         layoutHelper(e -> {
             e.getLayout().getReplicationMode(start)
                     .getReplicationProtocol(runtime)
@@ -583,11 +584,11 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Get the minimum committed log tail from all log units.
+     * Get the maximum committed log tail from all log units.
      */
     public long getCommittedTail() {
         return layoutHelper(
-                e -> Utils.getMinCommittedTail(e.getLayout(), runtime));
+                e -> Utils.getCommittedTail(e.getLayout(), runtime), true);
     }
 
     /**

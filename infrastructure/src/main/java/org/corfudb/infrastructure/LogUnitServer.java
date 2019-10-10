@@ -179,6 +179,18 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Service an incoming message to inform state transfer finished.
+     */
+    @ServerHandler(type = CorfuMsgType.INFORM_STATE_TRANSFER_FINISHED)
+    public void handleInformStateTransferFinished(CorfuMsg msg,
+                                                  ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("handleInformStateTransferFinished: received a notice that " +
+                "state transfer has finished {}", msg);
+        streamLog.setRequireStateTransfer(false);
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
      * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
      * This is used on sequencer bootstrap to provide the address maps for initialization.
      */
@@ -329,7 +341,9 @@ public class LogUnitServer extends AbstractServer {
         InspectAddressesResponse inspectResponse = new InspectAddressesResponse();
         try {
             for (long address : msg.getPayload().getAddresses()) {
-                inspectResponse.put(address, streamLog.contains(address));
+                if (!streamLog.contains(address)) {
+                    inspectResponse.add(address);
+                }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
         } catch (DataCorruptionException e) {

@@ -200,23 +200,6 @@ public class Layout {
     }
 
     /**
-     * Get all the unique log unit servers who has complete state
-     * (i.e. present in all layout segments).
-     *
-     * @return a set of all log unit server endpoints
-     */
-    public Set<String> getLogServersWithCompleteState() {
-        if (segments.isEmpty()) {
-            return Collections.emptySet();
-        }
-
-        Set<String> logServers = segments.get(0).getAllLogServers();
-        segments.stream().skip(1).forEach(seg -> logServers.retainAll(seg.getAllLogServers()));
-
-        return logServers;
-    }
-
-    /**
      * Returns the primary sequencer.
      *
      * @return The primary sequencer.

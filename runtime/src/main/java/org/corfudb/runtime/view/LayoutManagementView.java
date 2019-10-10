@@ -140,6 +140,12 @@ public class LayoutManagementView extends AbstractView {
 
             sealEpoch(currentLayout);
 
+            // Reset log unit server. This would set the requireStateTransfer flag on log unit.
+            if (isLogUnitServer) {
+                CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
+                        .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
+            }
+
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             if (isLayoutServer) {
                 layoutBuilder.addLayoutServer(endpoint);
@@ -189,7 +195,7 @@ public class LayoutManagementView extends AbstractView {
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
                     .getBaseClient(endpoint).sealRemoteServer(currentLayout.getEpoch()));
 
-            // Reset the node to be healed.
+            // Reset the node to be healed. This would set the requireStateTransfer flag on log unit.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
                     .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
 

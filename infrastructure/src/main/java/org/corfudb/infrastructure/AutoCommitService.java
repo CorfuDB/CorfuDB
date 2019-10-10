@@ -26,13 +26,13 @@ import java.util.concurrent.TimeUnit;
 public class AutoCommitService implements ManagementService {
 
     private static final int COMMIT_BATCH_SIZE = 500;
-    private static final int COMMIT_RETRY_LIMIT = 5;
+    private static final int COMMIT_RETRY_LIMIT = 8;
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     private final ScheduledExecutorService autoCommitScheduler;
-    // The global log tail fetch at last auto commit cycle, which would be
-    // the commit upper bound in the current cycle.
+    // The global log tail fetch at last auto commit cycle, which
+    // would be the commit upper bound in the current cycle.
     private long lastLogTail = Address.NON_ADDRESS;
 
     AutoCommitService(@NonNull ServerContext serverContext,
@@ -67,7 +67,7 @@ public class AutoCommitService implements ManagementService {
 
     @VisibleForTesting
     void runAutoCommit() {
-        log.trace("runAutoCommit: start committing addresses.");
+        log.debug("runAutoCommit: start committing addresses.");
 
         // Deterministically do auto commit if the current node is primary sequencer.
         if (!isCurrentNodePrimarySequencer(updateLayoutAndGet())) {
@@ -82,29 +82,52 @@ public class AutoCommitService implements ManagementService {
             return;
         }
 
-        // Fetch the minimum committed tail from all the log units.
-        // This step is needed as this node might just be elected as the auto committer.
-        long committedTail = getCorfuRuntime().getAddressSpaceView().getCommittedTail();
-        log.info("runAutoCommit: trying to commit [{}, {}].", committedTail + 1, lastLogTail);
-
-        // Commit addresses in batches, retry limit is shared by all batches in this cycle.
         int retry = 0;
-        while (committedTail < lastLogTail) {
-            long commitStart = committedTail + 1;
-            long commitEnd = Math.min(committedTail + COMMIT_BATCH_SIZE, lastLogTail);
+        Long committedTail = null;
+        while (true) {
             try {
-                getCorfuRuntime().getAddressSpaceView().commit(commitStart, commitEnd);
-                log.trace("runAutoCommit: successfully committed [{}, {}]", committedTail, commitEnd);
-                committedTail = commitEnd;
+                // Fetch the minimum committed tail from all the log units.
+                // This step is needed as this node might just be elected as the auto committer.
+                if (committedTail == null) {
+                    committedTail = getCorfuRuntime().getAddressSpaceView().getCommittedTail();
+                }
+                log.debug("runAutoCommit: trying to commit [{}, {}].", committedTail + 1, lastLogTail);
+
+                // Commit addresses in batches, retry limit is shared by all batches in this cycle.
+                // NOTE: This implementation relies on the fact that state transfer invokes the
+                // read protocol and fill holes, otherwise the committedTail could be invalid.
+                // (e.g. 1. State transferred a hole at address 100 from A to B; 2. Commit address
+                // 100, which only goes to A as B is not in this address segment; 3. B finishes
+                // state transfer and segments merged; 4. Send a new committedTail to B which is
+                // invalid as 100 is still a hole on B.
+                while (committedTail < lastLogTail) {
+                    long commitStart = committedTail + 1;
+                    long commitEnd = Math.min(committedTail + COMMIT_BATCH_SIZE, lastLogTail);
+                    getCorfuRuntime().getAddressSpaceView().commit(commitStart, commitEnd);
+                    log.trace("runAutoCommit: successfully committed batch [{}, {}]", committedTail, commitEnd);
+                    committedTail = commitEnd;
+                }
+
+                log.debug("runAutoCommit: successfully finished auto commit cycle. " +
+                        "New committed tail: {}.", lastLogTail);
+                break;
             } catch (RuntimeException re) {
-                log.info("runAutoCommit: encountered an exception when trying to commit " +
-                        "[{}, {}] on retry {}, cause: {}", commitStart, commitEnd, retry, re.getCause());
+                // Check which stage failed, fetching committed tail or commit stage.
+                if (committedTail == null) {
+                    log.warn("runAutoCommit: encountered an exception when trying to fetch latest " +
+                            "committed tail on retry {}.", retry, re);
+                } else {
+                    log.warn("runAutoCommit: encountered an exception when trying to commit [{}, {}] " +
+                            "on retry {}.", committedTail, lastLogTail, retry, re);
+                }
+                // Break if retry exhausted.
                 if (++retry >= COMMIT_RETRY_LIMIT) {
-                    log.warn("runAutoCommit: retry exhausted, abort and wait for next cycle");
+                    log.info("runAutoCommit: retry exhausted, abort and wait for next cycle");
                     break;
                 }
-                // Invalidate runtime layout.
+                // Invalidate runtime layout and check if we are still primary sequencer.
                 if (!isCurrentNodePrimarySequencer(updateLayoutAndGet())) {
+                    log.info("runAutoCommit: primary sequencer changed, yield auto commit task.");
                     return;
                 }
                 Sleep.sleepUninterruptibly(getCorfuRuntime().getParameters().getConnectionRetryRate());

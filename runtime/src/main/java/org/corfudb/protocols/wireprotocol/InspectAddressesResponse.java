@@ -5,10 +5,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
+ * A response message containing a list of uncommitted addresses.
+ *
  * Created by WenbinZhu on 9/25/19.
  */
 @Data
@@ -16,22 +18,22 @@ import java.util.Map;
 public class InspectAddressesResponse implements ICorfuPayload<InspectAddressesResponse> {
 
     @Getter
-    Map<Long, Boolean> addresses;
+    List<Long> holeAddresses;
 
     public InspectAddressesResponse(ByteBuf buf) {
-        addresses = ICorfuPayload.mapFromBuffer(buf, Long.class, Boolean.class);
+        holeAddresses = ICorfuPayload.listFromBuffer(buf, Long.class);
     }
 
     public InspectAddressesResponse() {
-        addresses = new HashMap<>();
+        holeAddresses = new ArrayList<>();
     }
 
-    public void put(long address, boolean exists) {
-        addresses.put(address, exists);
+    public void add(long address) {
+        holeAddresses.add(address);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, addresses);
+        ICorfuPayload.serialize(buf, holeAddresses);
     }
 }

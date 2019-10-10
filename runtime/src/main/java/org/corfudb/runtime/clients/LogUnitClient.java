@@ -186,10 +186,11 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Check if addresses exist on log unit server.
+     * Check if addresses are committed on log unit server, which returns a future
+     * with uncommitted addresses (holes) on the server.
      *
      * @param addresses list of global addresses to inspect
-     * @return a completableFuture which returns a InspectResponse
+     * @return a completableFuture which returns an InspectAddressesResponse
      */
     public CompletableFuture<InspectAddressesResponse> inspectAddresses(List<Long> addresses) {
         return sendMessageWithFuture(CorfuMsgType.INSPECT_ADDRESSES_REQUEST
@@ -258,6 +259,15 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<Void> updateCommittedTail(long committedTail) {
         return sendMessageWithFuture(CorfuMsgType.UPDATE_COMMITTED_TAIL.payloadMsg(committedTail));
+    }
+
+    /**
+     * Inform the log unit server that the state transfer is finished.
+     *
+     * @return an empty completableFuture
+     */
+    public CompletableFuture<Void> informStateTransferFinished() {
+        return sendMessageWithFuture(CorfuMsgType.INFORM_STATE_TRANSFER_FINISHED.msg());
     }
 
     /**

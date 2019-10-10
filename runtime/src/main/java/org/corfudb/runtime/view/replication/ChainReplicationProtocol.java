@@ -140,7 +140,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         Map<String, List<Long>> serverAddressMap =
                 groupAddressByLogUnitTail(runtimeLayout.getLayout(), addresses);
 
-        // Send read requests to log unit servers in parallel.
+        // Send inspect addresses requests to log unit servers in parallel.
         List<CompletableFuture<InspectAddressesResponse>> futures = serverAddressMap
                 .entrySet()
                 .stream()
@@ -149,19 +149,12 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 .collect(Collectors.toList());
 
         // Merge the inspect responses from different log unit servers.
-        Map<Long, Boolean> inspectResult = futures.stream()
-                .map(future -> CFUtils.getUninterruptibly(future).getAddresses())
-                .reduce(new TreeMap<>(), (map1, map2) -> {
-                    map1.putAll(map2);
-                    return map1;
-                });
+        List<Long> holes = futures.stream()
+                .flatMap(future -> CFUtils.getUninterruptibly(future).getHoleAddresses().stream())
+                .collect(Collectors.toList());
 
-        // Hole fill the addresses that have corresponding value as false in inspectResult.
-        inspectResult.forEach((address, exists) -> {
-            if (!exists) {
-                holeFill(runtimeLayout, address);
-            }
-        });
+        // Fill all the holes.
+        holes.forEach(address -> holeFill(runtimeLayout, address));
     }
 
     private Map<String, List<Long>> groupAddressByLogUnitTail(Layout layout, Collection<Long> addresses) {

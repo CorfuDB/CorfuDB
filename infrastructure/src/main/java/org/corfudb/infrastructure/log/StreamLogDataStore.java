@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.runtime.view.Address;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
 
 /**
@@ -30,6 +30,9 @@ public class StreamLogDataStore {
     private static final String COMMITTED_TAIL_PREFIX = "COMMITTED_TAIL";
     private static final String COMMITTED_TAIL_KEY = "CURRENT";
 
+    private static final String REQUIRE_STATE_TRANSFER_PREFIX = "REQUIRE_STATE_TRANSFER_RECORD";
+    private static final String REQUIRE_STATE_TRANSFER_KEY = "CURRENT";
+
     private static final KvRecord<Long> TAIL_SEGMENT_RECORD = new KvRecord<>(
             TAIL_SEGMENT_PREFIX, TAIL_SEGMENT_KEY, Long.class
     );
@@ -45,6 +48,9 @@ public class StreamLogDataStore {
     private static final KvRecord<Long> COMMITTED_TAIL_RECORD = new KvRecord<>(
             COMMITTED_TAIL_PREFIX, COMMITTED_TAIL_KEY, Long.class);
 
+    private static final KvRecord<Boolean> REQUIRE_STATE_TRANSFER_RECORD = new KvRecord<>(
+            REQUIRE_STATE_TRANSFER_PREFIX, REQUIRE_STATE_TRANSFER_KEY, Boolean.class);
+
     private static final long ZERO_ADDRESS = 0L;
 
     @NonNull
@@ -53,34 +59,42 @@ public class StreamLogDataStore {
     /**
      * Cached starting address.
      */
-    private final AtomicLong headSegment;
+    private final AtomicReference<Long> headSegment;
 
     /**
      * Cached tail segment.
      */
-    private final AtomicLong tailSegment;
+    private final AtomicReference<Long> tailSegment;
 
     /**
      * Cached global compaction mark.
      * Any snapshot read before this may result in in-complete history.
      */
-    private final AtomicLong globalCompactionMark;
+    private final AtomicReference<Long> globalCompactionMark;
 
     /**
      * Cached committed log tail, up to which the log is consolidated.
      */
-    private final AtomicLong committedTail;
+    private final AtomicReference<Long> committedTail;
+
+    /**
+     * Cached flag to indicate if required state transfer (state is lost)
+     * possibly due to reset operation.
+     */
+    private final AtomicReference<Boolean> requireStateTransfer;
 
     public StreamLogDataStore(KvDataStore dataStore) {
         this.dataStore = dataStore;
         this.headSegment =
-                new AtomicLong(dataStore.get(HEAD_SEGMENT_RECORD, Address.MAX));
+                new AtomicReference<>(dataStore.get(HEAD_SEGMENT_RECORD, Address.MAX));
         this.tailSegment =
-                new AtomicLong(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
+                new AtomicReference<>(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
         this.globalCompactionMark =
-                new AtomicLong(dataStore.get(COMPACTION_MARK_RECORD, Address.NON_ADDRESS));
+                new AtomicReference<>(dataStore.get(COMPACTION_MARK_RECORD, Address.NON_ADDRESS));
         this.committedTail =
-                new AtomicLong(dataStore.get(COMMITTED_TAIL_RECORD, Address.NON_ADDRESS));
+                new AtomicReference<>(dataStore.get(COMMITTED_TAIL_RECORD, Address.NON_ADDRESS));
+        this.requireStateTransfer =
+                new AtomicReference<>(dataStore.get(REQUIRE_STATE_TRANSFER_RECORD, false));
     }
 
     /**
@@ -211,9 +225,41 @@ public class StreamLogDataStore {
         });
     }
 
-    private boolean update(KvRecord<Long> key,
-                           AtomicLong current, long newValue,
-                           BiPredicate<Long, Long> predicate) {
+    /**
+     * Return the current isStateLost flag.
+     */
+    boolean getRequireStateTransfer() {
+        return requireStateTransfer.get();
+    }
+
+    /**
+     * Set the requireStateTransfer flag to the given one.
+     *
+     * @param isRequired new flag to indicate if state transfer is required.
+     */
+    void setRequireStateTransfer(boolean isRequired) {
+        if (update(REQUIRE_STATE_TRANSFER_RECORD, requireStateTransfer, isRequired, Boolean::equals)) {
+            log.debug("Updated requireStateTransfer flag to {}", isRequired);
+        } else {
+            log.trace("New requireStateTransfer flag {} equal to current, ignore.", isRequired);
+        }
+    }
+
+    /**
+     * Reset all the managed meta information.
+     */
+    void reset() {
+        resetHeadSegment();
+        resetTailSegment();
+        resetGlobalCompactionMark();
+        resetCommittedTail();
+        // If a reset is called, the state
+        // is lost and need state transfer.
+        setRequireStateTransfer(true);
+    }
+
+    private <T> boolean update(KvRecord<T> key, AtomicReference<T> current,
+                               T newValue, BiPredicate<T, T> predicate) {
         AtomicBoolean updated = new AtomicBoolean(false);
 
         current.updateAndGet(curr -> {

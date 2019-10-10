@@ -524,16 +524,11 @@ public class Utils {
     }
 
     /**
-     * Get the minimum committed log tail from all log units.
+     * Attempt to get the maximum committed log tail from all log units.
      *
-     * - If a log unit responds with -1, we ignore it as that log unit will
-     * eventually get through state transfer and consolidate the prefix.
-     * - If all log units respond with -1, we return -1 as well, which means
-     * the cluster was just initialized and no address got committed yet.
-     *
-     * @return the minimal committed tail from all log units
+     * @return the maximum committed tail from all log units
      */
-    public static long getMinCommittedTail(Layout layout, CorfuRuntime runtime) {
+    public static long getCommittedTail(Layout layout, CorfuRuntime runtime) {
         // Send the requests to all log units in parallel to get the committed tails.
         Set<String> allLogUnits = layout.getAllLogServers();
         List<CompletableFuture<Long>> futures = allLogUnits.stream()
@@ -542,19 +537,17 @@ public class Utils {
                         .getCommittedTail())
                 .collect(Collectors.toList());
 
-        // Filter out the -1 responses and get the minimum of committed tail.
+        // Aggregate and get the maximum of committed tail.
         return futures.stream()
                 .map(CFUtils::getUninterruptibly)
-                .filter(Address::isAddress)
-                .reduce(Long::min)
-                .orElse(Address.NON_ADDRESS);
+                .reduce(Address.NON_ADDRESS, Long::max);
     }
 
     public static void updateCommittedTail(Layout layout, CorfuRuntime runtime,
                                            long newCommittedTail) {
         // Send the new committed tail to the log units that are present in
         // all the address segments since they have the complete state.
-        Set<String> logServers = layout.getLogServersWithCompleteState();
+        Set<String> logServers = layout.getAllLogServers();
         List<CompletableFuture<Void>> futures = logServers.stream()
                 .map(ls -> runtime.getLayoutView().getRuntimeLayout(layout)
                         .getLogUnitClient(ls)
