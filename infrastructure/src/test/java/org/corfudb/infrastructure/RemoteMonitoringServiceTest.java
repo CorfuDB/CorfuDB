@@ -49,7 +49,7 @@ public class RemoteMonitoringServiceTest extends LayoutBasedTest{
         Layout layout = createTestLayout(presentSegments);
         RemoteMonitoringService spy = spy(rms);
         doReturn(true).when(spy)
-                .handleMergeSegments(resource, layout, Duration.ofSeconds(1));
+                .handleMergeSegments("localhost", resource, layout, Duration.ofSeconds(1));
 
         // when node present in all segments, skipped.
         assertThat(rms.restoreRedundancy(layout)).isEqualTo(SKIPPED);

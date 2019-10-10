@@ -41,27 +41,13 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     }
 
     /**
-     * Restore redundancy with an exponential backoff.
-     * @param stateMap A map that holds state for every segment.
-     * @param runtime An instance of a runtime.
-     */
-    private boolean restoreRedundancyWithBackOff(Map<CurrentTransferSegment,
-            CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
-                                              CorfuRuntime runtime){
-        Supplier<Boolean> tryRestoreRedundancyAction =
-                () -> tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
-
-        return RestorationExponentialBackOff.execute(tryRestoreRedundancyAction);
-    }
-
-    /**
      * Try restore redundancy for all the currently transferred segments.
      * @param stateMap A map that holds state for every segment.
      * @param runtime An instance of a runtime.
      */
     private boolean tryRestoreRedundancyAndMergeSegments(Map<CurrentTransferSegment,
             CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
-                                                      CorfuRuntime runtime) {
+                                                      CorfuRuntime runtime)  {
 
         // Filter all the transfers that have been completed.
         List<Entry<CurrentTransferSegment, CurrentTransferSegmentStatus>> completedEntries
@@ -142,7 +128,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     }
 
     @Override
-    public void impl(@Nonnull CorfuRuntime runtime, @NonNull StreamLog streamLog) throws Exception {
+    public void impl(@Nonnull CorfuRuntime runtime, @NonNull StreamLog streamLog) throws Exception  {
 
         // Refresh layout.
         runtime.invalidateLayout();
@@ -176,8 +162,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             stateMap = transferManager.handleTransfer(stateMap);
             // Restore redundancy for the segments that are restored.
             // If possible, also merge the segments.
-            // Utilize backoff, in case multiple transfers are happening in parallel.
-            boolean restored = restoreRedundancyWithBackOff(stateMap, runtime);
+            boolean restored = tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
 
             // Invalidate the layout.
             if(restored){

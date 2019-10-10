@@ -85,7 +85,6 @@ public class StateTransferManager {
     private final int batchSize;
 
     List<Long> getUnknownAddressesInRange(long rangeStart, long rangeEnd) {
-
         Set<Long> knownAddresses = streamLog
                 .getKnownAddressesInRange(rangeStart, rangeEnd);
 
@@ -100,11 +99,15 @@ public class StateTransferManager {
         return ImmutableMap.copyOf(statusMap.entrySet().stream().map(entry -> {
             CurrentTransferSegment segment = entry.getKey();
             CompletableFuture<CurrentTransferSegmentStatus> status = entry.getValue();
+
             if (status.isCompletedExceptionally()) {
                 // If a future failed exceptionally, mark as failed.
-                return new SimpleEntry<>(segment, CompletableFuture
-                        .completedFuture(new CurrentTransferSegmentStatus(FAILED,
-                                NON_ADDRESS)));
+                CompletableFuture<CurrentTransferSegmentStatus> failedStatus =
+                        status.handle((value, exception) ->
+                        new CurrentTransferSegmentStatus(FAILED,
+                        NON_ADDRESS, new StateTransferFailure(exception)));
+
+                return new SimpleEntry<>(segment, failedStatus);
             } else if (!status.isDone()) {
                 // It's still in progress.
                 return new SimpleEntry<>(segment, status);
@@ -115,13 +118,13 @@ public class StateTransferManager {
                 if (statusJoin.getSegmentStateTransferState().equals(NOT_TRANSFERRED)) {
                     List<Long> unknownAddressesInRange =
                             getUnknownAddressesInRange(segment.getStartAddress(), segment.getEndAddress());
-
                     if (unknownAddressesInRange.isEmpty()) {
                         // no addresses to transfer - all done
                         CurrentTransferSegmentStatus currentTransferSegmentStatus =
                                 new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress());
                         result = new SimpleEntry<>(segment, CompletableFuture.completedFuture(currentTransferSegmentStatus));
                     } else { // transfer whatever is not transferred
+
                         Long lastAddressToTransfer =
                                 unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
                         CompletableFuture<CurrentTransferSegmentStatus> segmentStatusFuture =

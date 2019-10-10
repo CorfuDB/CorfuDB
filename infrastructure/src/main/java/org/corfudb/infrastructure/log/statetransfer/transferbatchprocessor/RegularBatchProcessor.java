@@ -241,9 +241,7 @@ public class RegularBatchProcessor {
     Result<Long, StateTransferException> writeRecords(List<LogData> dataEntries) {
 
         Result<Long, RuntimeException> result = Result.of(() -> {
-            log.info("{}", dataEntries);
             streamLog.append(dataEntries);
-            log.info("{}", streamLog);
             Optional<Long> maxWrittenAddress =
                     dataEntries.stream()
                             .map(IMetadata::getGlobalAddress)
@@ -262,12 +260,11 @@ public class RegularBatchProcessor {
 
                 return result.mapError(x -> new RejectedDataException(dataEntries));
             } else {
-                log.info("Issue: {}", dataEntries);
                 return result.mapError(StateTransferFailure::new);
             }
         }
 
-        return result.mapError(x -> new StateTransferException());
+        return result.mapError(StateTransferFailure::new);
     }
 
     /**
@@ -277,7 +274,6 @@ public class RegularBatchProcessor {
      * @return A result of reading records.
      */
     Result<List<LogData>, StateTransferException> readRecords(List<Long> addresses) {
-        log.info("Reading data for addresses: {}", addresses);
 
         // Catch all possible unexpected failures.
         Result<Map<Long, ILogData>, StateTransferException> readResult =

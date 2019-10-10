@@ -423,15 +423,15 @@ public class RemoteMonitoringService implements MonitoringService {
      * @return Detector task.
      */
     private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
-        int segmentsCount = layout.getSegments().size();
         String localEndpoint = serverContext.getLocalEndpoint();
 
-        if (RedundancyCalculator.requiresRedundancyRestoration(layout, localEndpoint)) {
-            log.info("Number of segments present: {}. Spawning task to merge segments on {}.",
-                    segmentsCount, localEndpoint);
+        if (RedundancyCalculator.requiresRedundancyRestoration(layout, localEndpoint) &&
+                !layout.getUnresponsiveServers().contains(localEndpoint)) {
+            log.info("Layout requires restoration: {}. Spawning task to merge segments on {}.",
+                    layout, localEndpoint);
             Supplier<Boolean> redundancyAction = () ->
                     handleMergeSegments(
-                            runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+                            localEndpoint, runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
                     );
             mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
 
@@ -450,8 +450,12 @@ public class RemoteMonitoringService implements MonitoringService {
         return restoreRedundancyAndMergeSegments(layout);
     }
 
-    boolean handleMergeSegments(SingletonResource<CorfuRuntime> runtimeSingletonResource, Layout layout, Duration retryQueryTimeout){
+    boolean handleMergeSegments(String localEndpoint,
+                                SingletonResource<CorfuRuntime> runtimeSingletonResource,
+                                Layout layout, Duration retryQueryTimeout
+    ){
         return ReconfigurationEventHandler.handleMergeSegments(
+                localEndpoint,
                 runtimeSingletonResource.get(), layout, retryQueryTimeout
         );
     }
