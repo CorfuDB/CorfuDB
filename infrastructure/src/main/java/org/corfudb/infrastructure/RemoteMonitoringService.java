@@ -425,7 +425,7 @@ public class RemoteMonitoringService implements MonitoringService {
     private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
         String localEndpoint = serverContext.getLocalEndpoint();
 
-        if (RedundancyCalculator.requiresRedundancyRestoration(layout, localEndpoint) &&
+        if (RedundancyCalculator.requiresMerge(layout, localEndpoint) &&
                 !layout.getUnresponsiveServers().contains(localEndpoint)) {
             log.info("Layout requires restoration: {}. Spawning task to merge segments on {}.",
                     layout, localEndpoint);

@@ -205,7 +205,8 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
 
         log.info("State transfer on {}: Initial state map: {}", currentNode, stateMap);
 
-        while(RedundancyCalculator.requiresRedundancyRestoration(layout, currentNode)){
+        while(RedundancyCalculator.requiresRedundancyRestoration(layout, currentNode) ||
+                RedundancyCalculator.requiresMerge(layout, currentNode)){
             // Initialize a transfer for each segment and update the map.
 
             stateMap = transferManager.handleTransfer(stateMap);

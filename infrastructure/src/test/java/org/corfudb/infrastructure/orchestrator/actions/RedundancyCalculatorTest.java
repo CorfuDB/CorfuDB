@@ -60,11 +60,14 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
     public void testRequiresRedundancyRestoration(){
         LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "localhost"));
         LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("A", "B", "localhost"));
+        LayoutStripe stripe3 = new LayoutStripe(Arrays.asList("A"));
 
         LayoutSegment segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
                 Collections.singletonList(stripe1));
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
                 Collections.singletonList(stripe2));
+        LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
+                Collections.singletonList(stripe3));
 
         // Different sets
         Layout layout = createTestLayout(Arrays.asList(segment, segment2));
@@ -74,41 +77,9 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
         layout = createTestLayout(Collections.singletonList(segment));
         assertThat(RedundancyCalculator.requiresRedundancyRestoration(layout, "localhost"))
                 .isFalse();
-        // Restoring server is not present
-        stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
-        stripe2 = new LayoutStripe(Arrays.asList("A", "B"));
-        segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
-                Collections.singletonList(stripe1));
-        segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
-                Collections.singletonList(stripe2));
-        layout = createTestLayout(Arrays.asList(segment, segment2));
-
+        layout = createTestLayout(Arrays.asList(segment2, segment3));
         assertThat(RedundancyCalculator.requiresRedundancyRestoration(layout, "localhost"))
                 .isTrue();
-
-        List<String> serverList = Arrays.asList("test:0", "test:1", "test:2");
-
-        stripe1 = new LayoutStripe(Arrays.asList("test:0", "test:2"));
-        stripe2 = new LayoutStripe(Arrays.asList("test:0",  "test:1", "test:2"));
-        LayoutStripe stripe3 = new LayoutStripe(Arrays.asList("test:0",  "test:1", "test:2"));
-        LayoutStripe stripe4 = new LayoutStripe(Arrays.asList("test:0",  "test:1", "test:2"));
-
-        segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 3L,
-                Collections.singletonList(stripe1));
-        segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
-                Collections.singletonList(stripe2));
-        LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 6L, 9L,
-                Collections.singletonList(stripe3));
-        LayoutSegment segment4 = new LayoutSegment(CHAIN_REPLICATION, 9L, -1L,
-                Collections.singletonList(stripe4));
-
-
-        layout = new Layout(serverList,
-                serverList,
-                Arrays.asList(segment, segment2, segment3, segment4),
-                0L, UUID.randomUUID());
-        assertThat(RedundancyCalculator.requiresRedundancyRestoration(layout, "test:2"))
-                .isFalse();
 
 
     }

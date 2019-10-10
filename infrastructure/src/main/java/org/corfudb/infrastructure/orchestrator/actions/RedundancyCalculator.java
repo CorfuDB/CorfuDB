@@ -157,16 +157,36 @@ public class RedundancyCalculator {
         });
     }
 
+    public static boolean requiresRedundancyRestoration(Layout layout, String server){
+        if(layout.getSegments().size() == 1){
+            return false;
+        }
+        else{
+            return layout.getSegments().stream().anyMatch(segment -> !segment.getAllLogServers()
+                    .contains(server));
+        }
+    }
+
     /**
-     * Returns true if the segments can be merged or if the node is not present in all the segments.
+     * Returns true if after adding itself to the first segment, the segments can be merged.
      * @param layout Current layout.
      * @param server The current node.
-     * @return True is there is a need for redundancy restoration, merge of segments or both.
+     * @return True is there is the redundancy restoration is needed.
      */
-    public static boolean requiresRedundancyRestoration(Layout layout, String server){
-        return canMergeSegments(layout, server) ||
-                !layout.getSegments().stream().allMatch(segment -> segmentContainsServer(segment,
-                        server));
+    public static boolean requiresMerge(Layout layout, String server){
+        if(layout.getSegments().size() == 1){
+            return false;
+        }
+        else{
+            int firstSegmentIndex = 0;
+            int secondSegmentIndex = 1;
+            Layout copy = new Layout(layout);
+            LayoutStripe firstStripe = copy.getSegments().get(0).getFirstStripe();
+            firstStripe.getLogServers().add(server);
+            return Sets.difference(
+                    copy.getSegments().get(secondSegmentIndex).getAllLogServers(),
+                    copy.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
+        }
     }
 
     public static boolean canMergeSegments(Layout layout, String server) {

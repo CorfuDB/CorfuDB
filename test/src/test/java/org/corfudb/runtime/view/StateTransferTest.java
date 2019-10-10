@@ -25,6 +25,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
+import org.apache.commons.lang.math.LongRange;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -124,9 +125,10 @@ public class StateTransferTest extends AbstractViewTest {
                 .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
 
         rt.invalidateLayout();
+        final long expectedEpoch = 3L;
 
         Layout expectedLayout = new TestLayoutBuilder()
-                .setEpoch(3L)
+                .setEpoch(expectedEpoch)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
                 .addLayoutServer(SERVERS.PORT_2)
@@ -652,9 +654,10 @@ public class StateTransferTest extends AbstractViewTest {
         StreamLog spy = spy(streamLog);
 
         // Throw time out on all the addresses after 50.
+        final long cutOffAddress = 50L;
         data.forEach(part -> {
 
-            if(part.get(0).getGlobalAddress() >= 50L){
+            if(part.get(0).getGlobalAddress() >= cutOffAddress){
                 doAnswer(invocation -> {
                     throw new TimeoutException("Illegal State");
                 }).when(spy).append(part);
@@ -674,8 +677,11 @@ public class StateTransferTest extends AbstractViewTest {
                 .get()
                 .getKnownAddresses());
 
-        List<Long> transferredRange = LongStream.range(0L, 50L).boxed().collect(Collectors.toList());
-        List<Long> openSegmentData = Arrays.asList(100L, 101L, 102L, 103L, 104L);
+        List<Long> transferredRange = LongStream.range(0L, cutOffAddress).boxed().collect(Collectors.toList());
+        final long start = 100L;
+        final long end = 105L;
+
+        List<Long> openSegmentData = LongStream.range(start, end).boxed().collect(Collectors.toList());
 
         transferredRange.addAll(openSegmentData);
         assertThat(knownAddresses).isEqualTo(transferredRange);
@@ -685,10 +691,10 @@ public class StateTransferTest extends AbstractViewTest {
         // If this method is called the known addresses should only be the one that were transferred.
         doAnswer(invocation -> {
             Set<Long> set = (Set<Long>) invocation.callRealMethod();
-            Set<Long> expected = LongStream.range(0L, 50L).boxed().collect(Collectors.toSet());
+            Set<Long> expected = LongStream.range(0L, cutOffAddress).boxed().collect(Collectors.toSet());
             assertThat(expected).isEqualTo(set);
             return set;
-        }).when(spy).getKnownAddressesInRange(0L, 99L);
+        }).when(spy).getKnownAddressesInRange(0L, start - 1);
 
         action1.impl(rt, spy);
 
