@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,13 +9,17 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections.ListUtils;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
+import org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator;
 import org.corfudb.runtime.view.Address;
 
 import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +27,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
 import static org.corfudb.runtime.view.Address.*;
@@ -47,26 +53,27 @@ public class StateTransferManager {
     public static class CurrentTransferSegment {
         private final long startAddress;
         private final long endAddress;
+        private final CompletableFuture<CurrentTransferSegmentStatus> status;
     }
 
     @Getter
     @ToString
     @EqualsAndHashCode
     public static class CurrentTransferSegmentStatus {
-        private SegmentState segmentStateTransferState;
+        private SegmentState segmentState;
         private long lastTransferredAddress;
         private StateTransferFailure causeOfFailure = null;
 
-        public CurrentTransferSegmentStatus(SegmentState segmentStateTransferState,
-                                            long lastTransferredAddress){
-            this.segmentStateTransferState = segmentStateTransferState;
+        public CurrentTransferSegmentStatus(SegmentState segmentState,
+                                            long lastTransferredAddress) {
+            this.segmentState = segmentState;
             this.lastTransferredAddress = lastTransferredAddress;
         }
 
-        public CurrentTransferSegmentStatus(SegmentState segmentStateTransferState,
+        public CurrentTransferSegmentStatus(SegmentState segmentState,
                                             long lastTransferredAddress,
-                                            StateTransferFailure causeOfFailure){
-            this.segmentStateTransferState = segmentStateTransferState;
+                                            StateTransferFailure causeOfFailure) {
+            this.segmentState = segmentState;
             this.lastTransferredAddress = lastTransferredAddress;
             this.causeOfFailure = causeOfFailure;
         }
@@ -94,81 +101,64 @@ public class StateTransferManager {
                 .collect(Collectors.toList());
     }
 
-    public ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
-    handleTransfer(Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> statusMap) {
-        return ImmutableMap.copyOf(statusMap.entrySet().stream().map(entry -> {
-            CurrentTransferSegment segment = entry.getKey();
-            CompletableFuture<CurrentTransferSegmentStatus> status = entry.getValue();
+    public ImmutableList<CurrentTransferSegment> handleTransfer(List<CurrentTransferSegment> stateList) {
 
-            if (status.isCompletedExceptionally()) {
-                // If a future failed exceptionally, mark as failed.
-                CompletableFuture<CurrentTransferSegmentStatus> failedStatus =
-                        status.handle((value, exception) ->
-                        new CurrentTransferSegmentStatus(FAILED,
-                        NON_ADDRESS, new StateTransferFailure(exception)));
-
-                return new SimpleEntry<>(segment, failedStatus);
-            } else if (!status.isDone()) {
-                // It's still in progress.
-                return new SimpleEntry<>(segment, status);
-            } else {
-                //  - NOT_TRANSFERRED
-                CurrentTransferSegmentStatus statusJoin = status.join();
-                SimpleEntry<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> result;
-                if (statusJoin.getSegmentStateTransferState().equals(NOT_TRANSFERRED)) {
-                    List<Long> unknownAddressesInRange =
-                            getUnknownAddressesInRange(segment.getStartAddress(), segment.getEndAddress());
-                    if (unknownAddressesInRange.isEmpty()) {
-                        // no addresses to transfer - all done
-                        CurrentTransferSegmentStatus currentTransferSegmentStatus =
-                                new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress());
-                        result = new SimpleEntry<>(segment, CompletableFuture.completedFuture(currentTransferSegmentStatus));
-                    } else { // transfer whatever is not transferred
-
-                        Long lastAddressToTransfer =
-                                unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
-                        CompletableFuture<CurrentTransferSegmentStatus> segmentStatusFuture =
-                                stateTransferWriter
-                                        .stateTransfer(unknownAddressesInRange, batchSize)
-                                        .thenApply(lastTransferredAddressResult -> {
-                                            if (lastTransferredAddressResult.isValue() &&
-                                                    lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
-                                                long lastTransferredAddress = lastTransferredAddressResult.get();
-                                                log.info("State transfer segment success, transferred up to: {}.",
-                                                        lastTransferredAddress);
-                                                return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
-                                            }
-                                            else if(lastTransferredAddressResult.isValue() &&
-                                                    !lastTransferredAddressResult.get().equals(lastAddressToTransfer)){
-                                                log.error("Incomplete transfer failure occurred, " +
-                                                        "expected last address to be: {}, but it's: {}",
-                                                        lastAddressToTransfer, lastTransferredAddressResult.get());
-                                                return new CurrentTransferSegmentStatus(FAILED,
-                                                        lastTransferredAddressResult.get(),
-                                                        new StateTransferFailure("Incomplete transfer failure."));
-                                            }
-
-                                            else {
-                                                log.error("State transfer failure occurred: ",
-                                                        lastTransferredAddressResult.getError().getCause());
-                                                return new CurrentTransferSegmentStatus(
-                                                        FAILED,
-                                                        NON_ADDRESS,
-                                                        (StateTransferFailure) lastTransferredAddressResult.getError());
-                                            }
-                                        });
-                        result = new SimpleEntry<>(segment, segmentStatusFuture);
-                    }
+        List<CurrentTransferSegment> finalList = stateList.stream().map(segment ->
+                {
+                    CompletableFuture<CurrentTransferSegmentStatus> newStatus = segment
+                            .getStatus()
+                            .thenCompose(status -> {
+                                // if not transferred -> transfer
+                                if (status.getSegmentState().equals(NOT_TRANSFERRED)) {
+                                    List<Long> unknownAddressesInRange =
+                                            getUnknownAddressesInRange(segment.getStartAddress(), segment.getEndAddress());
+                                    if (unknownAddressesInRange.isEmpty()) {
+                                        // no addresses to transfer - all done
+                                        return CompletableFuture.completedFuture(
+                                                new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress())
+                                        );
+                                    } else {
+                                        // transfer whatever is not transferred
+                                        Long lastAddressToTransfer =
+                                                unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
+                                        return stateTransferWriter
+                                                .stateTransfer(unknownAddressesInRange, batchSize)
+                                                .thenApply(lastTransferredAddressResult -> {
+                                                    if (lastTransferredAddressResult.isValue() &&
+                                                            lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
+                                                        long lastTransferredAddress = lastTransferredAddressResult.get();
+                                                        log.info("State transfer segment success, transferred up to: {}.",
+                                                                lastTransferredAddress);
+                                                        return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
+                                                    } else if (lastTransferredAddressResult.isValue() &&
+                                                            !lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
+                                                        log.error("Incomplete transfer failure occurred, " +
+                                                                        "expected last address to be: {}, but it's: {}",
+                                                                lastAddressToTransfer, lastTransferredAddressResult.get());
+                                                        return new CurrentTransferSegmentStatus(FAILED,
+                                                                lastTransferredAddressResult.get(),
+                                                                new StateTransferFailure("Incomplete transfer failure."));
+                                                    } else {
+                                                        log.error("State transfer failure occurred: ",
+                                                                lastTransferredAddressResult.getError().getCause());
+                                                        return new CurrentTransferSegmentStatus(
+                                                                FAILED,
+                                                                NON_ADDRESS,
+                                                                (StateTransferFailure) lastTransferredAddressResult.getError());
+                                                    }
+                                                });
+                                    }
+                                } else {
+                                    return CompletableFuture.completedFuture(status);
+                                }
+                            });
+                    return new CurrentTransferSegment(segment.getStartAddress(), segment.getEndAddress(), newStatus);
                 }
-                //  - RESTORED
-                else {
 
-                    result = new SimpleEntry<>(segment, CompletableFuture.completedFuture(statusJoin));
-                }
-                return result;
 
-            }
-        }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue)));
+        ).collect(Collectors.toList());
+
+        return ImmutableList.copyOf(finalList);
 
     }
 }

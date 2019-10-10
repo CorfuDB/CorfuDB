@@ -1,11 +1,14 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.apache.commons.collections.ListUtils;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -13,7 +16,9 @@ import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +26,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static java.util.Map.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
@@ -33,15 +39,6 @@ import static org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculat
 @AllArgsConstructor
 public class RedundancyCalculator {
 
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    public static class OverlappingSegments {
-        private final Optional<AgedSegment> oldSegment;
-        private final Optional<AgedSegment> newSegment;
-
-    }
-
     public enum SegmentAge {
         OLD_SEGMENT,
         NEW_SEGMENT
@@ -50,6 +47,7 @@ public class RedundancyCalculator {
     @AllArgsConstructor
     @Getter
     @ToString
+    @EqualsAndHashCode
     public static class AgedSegment implements Comparable<AgedSegment> {
         private final CurrentTransferSegment segment;
         private final SegmentAge age;
@@ -60,7 +58,7 @@ public class RedundancyCalculator {
                     other.getSegment().getStartAddress());
         }
 
-        public boolean overlapsWith(AgedSegment other) {
+        boolean overlapsWith(AgedSegment other) {
             return other.getSegment().getStartAddress() <= this.getSegment().getEndAddress();
         }
     }
@@ -69,30 +67,6 @@ public class RedundancyCalculator {
     @NonNull
     @Getter
     private final String server;
-
-    public ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
-    createStateMap(Layout layout) {
-        Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map
-                = layout.getSegments().stream().map(segment -> {
-            CurrentTransferSegment statusSegment =
-                    new CurrentTransferSegment(segment.getStart(), segment.getEnd() - 1);
-
-            if (segmentContainsServer(segment, server)) {
-                return new SimpleEntry<>(statusSegment,
-                        CompletableFuture
-                                .completedFuture(new
-                                        CurrentTransferSegmentStatus(RESTORED,
-                                        segment.getEnd() - 1)));
-            } else {
-                return new SimpleEntry<>(statusSegment,
-                        CompletableFuture.completedFuture(new
-                                CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                -1L)));
-            }
-        }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
-        return ImmutableMap.copyOf(map);
-    }
-
 
     static boolean segmentContainsServer(LayoutSegment segment, String server) {
         return segment.getFirstStripe().getLogServers().contains(server);
@@ -134,34 +108,10 @@ public class RedundancyCalculator {
                         (oldLayout, newLayout) -> newLayout);
     }
 
-    /**
-     * Check that the redundancy is restored.
-     *
-     * @param map The immutable map of segment statuses.
-     * @return True if every segment is transferred and false otherwise.
-     */
-    public boolean redundancyIsRestored(Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map) {
-        if (map.isEmpty()) {
-            return true;
-        }
-        return map.values().stream().allMatch(state -> {
-            if (!state.isDone()) {
-                return false;
-            } else if (state.isCompletedExceptionally()) {
-                return false;
-            } else {
-                CurrentTransferSegmentStatus currentTransferSegmentStatus = state.join();
-                return currentTransferSegmentStatus.getSegmentStateTransferState()
-                        .equals(RESTORED);
-            }
-        });
-    }
-
-    public static boolean requiresRedundancyRestoration(Layout layout, String server){
-        if(layout.getSegments().size() == 1){
+    public static boolean requiresRedundancyRestoration(Layout layout, String server) {
+        if (layout.getSegments().size() == 1) {
             return false;
-        }
-        else{
+        } else {
             return layout.getSegments().stream().anyMatch(segment -> !segment.getAllLogServers()
                     .contains(server));
         }
@@ -169,15 +119,15 @@ public class RedundancyCalculator {
 
     /**
      * Returns true if after adding itself to the first segment, the segments can be merged.
+     *
      * @param layout Current layout.
      * @param server The current node.
      * @return True is there is the redundancy restoration is needed.
      */
-    public static boolean requiresMerge(Layout layout, String server){
-        if(layout.getSegments().size() == 1){
+    public static boolean requiresMerge(Layout layout, String server) {
+        if (layout.getSegments().size() == 1) {
             return false;
-        }
-        else{
+        } else {
             int firstSegmentIndex = 0;
             int secondSegmentIndex = 1;
             Layout copy = new Layout(layout);
@@ -197,7 +147,7 @@ public class RedundancyCalculator {
             int secondSegmentIndex = 1;
             boolean serverPresent = IntStream
                     .range(firstSegmentIndex, secondSegmentIndex + 1).boxed().allMatch(index ->
-                    layout.getSegments().get(index).getFirstStripe().getLogServers().contains(server));
+                            layout.getSegments().get(index).getFirstStripe().getLogServers().contains(server));
             return serverPresent && Sets.difference(
                     layout.getSegments().get(secondSegmentIndex).getAllLogServers(),
                     layout.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
@@ -205,110 +155,111 @@ public class RedundancyCalculator {
     }
 
 
-    public ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
-    mergeMaps(ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> oldMap,
-              ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap) {
+    private ArrayList<AgedSegment> mergeSegmentToAccumulatedList(AgedSegment nextSegment,
+                                                                 ArrayList<AgedSegment> accumulatedList) {
+        if (accumulatedList.isEmpty()) {
+            // if it's a first segment, add it to the list.
 
-       // If a new map is empty -> Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
-       if(newMap.isEmpty()){
-           return ImmutableMap.copyOf(oldMap.entrySet().stream().map(entry -> {
-               CurrentTransferSegment segment = entry.getKey();
-               CompletableFuture<CurrentTransferSegmentStatus> status = entry.getValue();
+            return new ArrayList<>(Collections.singletonList(nextSegment));
+        } else {
+            // if it's not, get the last added segment.
+            int size = accumulatedList.size();
+            AgedSegment lastAddedSegment = accumulatedList.remove(size - 1);
+            // if segments overlap
+            if (lastAddedSegment.overlapsWith(nextSegment)) {
+                AgedSegment oldSegment;
+                AgedSegment newSegment;
+                AgedSegment mergedSegment;
+                // find the old and the new segment
+                if (lastAddedSegment.age.equals(OLD_SEGMENT)) {
+                    oldSegment = lastAddedSegment;
+                    newSegment = nextSegment;
+                } else {
+                    oldSegment = nextSegment;
+                    newSegment = lastAddedSegment;
+                }
 
-               if (status.isDone() && status.join().getSegmentStateTransferState().equals(TRANSFERRED)) {
-                   return new SimpleEntry<>(segment,
-                           CompletableFuture.completedFuture(new CurrentTransferSegmentStatus(RESTORED, segment.getEndAddress())));
-               } else {
-                   return entry;
-               }
+                CompletableFuture<CurrentTransferSegmentStatus> oldSegmentStatus =
+                        oldSegment.segment.getStatus();
 
-           }).collect(Collectors.toMap(Entry::getKey, Entry::getValue)));
-       }
-        // Create the lists of old and new segments
-        List<AgedSegment> newSegments =
-                newMap.keySet().stream().map(segment -> new AgedSegment(segment, NEW_SEGMENT))
+                // if the old segment completed with error, not done, failed or restored -> update the segment
+                // with a new range and the old status.
+                if (oldSegmentStatus.isCompletedExceptionally() ||
+                        !oldSegmentStatus.isDone() ||
+                        oldSegmentStatus.join().getSegmentState().equals(FAILED) ||
+                                oldSegmentStatus.join().getSegmentState().equals(RESTORED)) {
+                    mergedSegment = new AgedSegment(new CurrentTransferSegment(newSegment.segment
+                            .getStartAddress(),
+                            newSegment.segment.getEndAddress(), oldSegmentStatus), NEW_SEGMENT);
+                }
+                // otherwise discard the old segment, merged segment is the new segment.
+                else {
+                    mergedSegment = newSegment;
+                }
+
+                accumulatedList.add(mergedSegment);
+                return new ArrayList<>(accumulatedList);
+
+            }
+            // no overlap -> add them both.
+            else {
+                accumulatedList.add(lastAddedSegment);
+                accumulatedList.add(nextSegment);
+                return new ArrayList<>(accumulatedList);
+            }
+        }
+    }
+
+    public ImmutableList<CurrentTransferSegment> mergeLists(List<CurrentTransferSegment> oldList,
+                                                            List<CurrentTransferSegment> newList) {
+
+        // If a new list is empty -> Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
+        if (newList.isEmpty()) {
+            return ImmutableList.copyOf(oldList.stream().map(segment -> {
+                CompletableFuture<CurrentTransferSegmentStatus> status = segment.getStatus();
+
+                CompletableFuture<CurrentTransferSegmentStatus> newStatus =
+                        status.thenApply(oldStatus -> {
+                            if (oldStatus.getSegmentState().equals(TRANSFERRED)) {
+                                return new CurrentTransferSegmentStatus(RESTORED, segment.getEndAddress());
+                            } else {
+                                return oldStatus;
+                            }
+                        });
+                return new CurrentTransferSegment(segment.getStartAddress(),
+                        segment.getEndAddress(), newStatus);
+
+            }).collect(Collectors.toList()));
+        }
+
+        // Group segments by age and sort them.
+        List<AgedSegment> oldSegments =
+                oldList.stream().map(segment -> new AgedSegment(segment, OLD_SEGMENT))
                         .collect(Collectors.toList());
 
-        List<AgedSegment> oldSegments =
-                oldMap.keySet().stream().map(segment -> new AgedSegment(segment, OLD_SEGMENT))
+        List<AgedSegment> newSegments =
+                newList.stream().map(segment -> new AgedSegment(segment, NEW_SEGMENT))
                         .collect(Collectors.toList());
 
         List<AgedSegment> allSegments = new ArrayList<>();
 
-        allSegments.addAll(newSegments);
-
         allSegments.addAll(oldSegments);
 
-        // Sort the list
+        allSegments.addAll(newSegments);
+
         Collections.sort(allSegments);
 
-        // Get the list of possibly overlapping segments
-        List<OverlappingSegments> overlappingSegments = new ArrayList<>();
-        Iterator<AgedSegment> iterator = allSegments.iterator();
+        ArrayList<AgedSegment> initList = new ArrayList<>();
 
-        // Classify the segments based on what map they came from and group them.
-
-        while(iterator.hasNext()){
-            AgedSegment current = iterator.next();
-            AgedSegment next;
-            if(iterator.hasNext()){
-                next = iterator.next();
-                if (current.overlapsWith(next)) {
-                    if (current.age.equals(OLD_SEGMENT)) {
-                        overlappingSegments.add
-                                (new OverlappingSegments(Optional.of(current), Optional.of(next)));
-                    } else {
-                        overlappingSegments.add
-                                (new OverlappingSegments(Optional.of(next), Optional.of(current)));
-                    }
-
-                }
-                else{
-                    if (current.age.equals(OLD_SEGMENT)) {
-                        overlappingSegments.add
-                                (new OverlappingSegments(Optional.of(current), Optional.empty()));
-                        overlappingSegments.add(new OverlappingSegments(Optional.empty(), Optional.of(next)));
-                    } else {
-                        overlappingSegments.add(new OverlappingSegments(Optional.empty(),
-                                Optional.of(current)));
-                        overlappingSegments.add(new OverlappingSegments(Optional.of(next), Optional.empty()));
-                    }
-                }
-            }
-            else{
-                if (current.age.equals(OLD_SEGMENT)) {
-                    overlappingSegments.add
-                            (new OverlappingSegments(Optional.of(current), Optional.empty()));
-                } else {
-                    overlappingSegments.add
-                            (new OverlappingSegments(Optional.empty(), Optional.of(current)));
-                }
-            }
-
-        }
-
-        // Create a new map based on what map the segments came from and whether they overlap or not.
-        return ImmutableMap.copyOf(overlappingSegments.stream().map(segmentPair -> {
-            if (segmentPair.newSegment.isPresent() && segmentPair.oldSegment.isPresent()) {
-                CurrentTransferSegment oldSegment = segmentPair.oldSegment.get().segment;
-                CurrentTransferSegment newSegment = segmentPair.newSegment.get().segment;
-                if (oldMap.get(oldSegment).isCompletedExceptionally() ||
-                        !oldMap.get(oldSegment).isDone() ||
-                        oldMap.get(oldSegment).join().getSegmentStateTransferState().equals(FAILED)) {
-                    return new SimpleEntry<>(newSegment, oldMap.get(oldSegment));
-                }
-                else{
-                    return new SimpleEntry<>(newSegment, newMap.get(newSegment));
-                }
-            } else if(segmentPair.newSegment.isPresent()){
-                CurrentTransferSegment newSegment = segmentPair.newSegment.get().segment;
-                return new SimpleEntry<>(newSegment, newMap.get(newSegment));
-            }
-            else{
-                CurrentTransferSegment oldSegment = segmentPair.oldSegment.get().segment;
-                return new SimpleEntry<>(oldSegment, oldMap.get(oldSegment));
-            }
-        }).collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue)));
-
+        // Merge the overlapping old and new segments and return the new status list.
+        ArrayList<CurrentTransferSegment> result = allSegments.stream()
+                .reduce(initList,
+                        (accumulatedList, nextSegment) ->
+                                mergeSegmentToAccumulatedList(nextSegment, accumulatedList),
+                        (list1, list2) -> list2)
+                .stream()
+                .map(agedSegment -> agedSegment.segment)
+                .collect(Collectors.toCollection(ArrayList::new));
+        return ImmutableList.copyOf(result);
     }
 }

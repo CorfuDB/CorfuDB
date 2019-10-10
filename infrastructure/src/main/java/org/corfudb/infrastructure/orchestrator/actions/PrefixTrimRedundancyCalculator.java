@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -10,6 +11,7 @@ import org.corfudb.util.CFUtils;
 
 import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -40,13 +42,9 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         return trimMark;
     }
 
-    @Override
-    public ImmutableMap<CurrentTransferSegment,
-            CompletableFuture<CurrentTransferSegmentStatus>>
-    createStateMap(Layout layout){
+    public ImmutableList<CurrentTransferSegment> createStateList(Layout layout){
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
-        Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map =
-                layout.getSegments()
+                return ImmutableList.copyOf(layout.getSegments()
                         .stream()
                         // filter the segments that end before the trim mark and are not open.
                         .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != NON_ADDRESS)
@@ -54,27 +52,22 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                             long segmentStart = Math.max(segment.getStart(), trimMark);
                             long segmentEnd = segment.getEnd() - 1;
 
-                            CurrentTransferSegment transferSegment =
-                                    new CurrentTransferSegment(segmentStart, segmentEnd);
-
                             if(segmentContainsServer(segment, getServer())){
-                                return new SimpleEntry<>(transferSegment,
-                                        CompletableFuture
-                                                .completedFuture(new
-                                                        CurrentTransferSegmentStatus(RESTORED,
-                                                        segmentEnd)));
+
+                                return new CurrentTransferSegment(segmentStart, segmentEnd,
+                                        CompletableFuture.completedFuture(
+                                                new CurrentTransferSegmentStatus(RESTORED,
+                                                segmentEnd)));
                             }
                             else{
-                                return new SimpleEntry<>(transferSegment,
-                                        CompletableFuture
-                                                .completedFuture(new
-                                                        CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                        NON_ADDRESS)));
+                                return new CurrentTransferSegment(segmentStart, segmentEnd,
+                                        CompletableFuture.completedFuture(
+                                                new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                                NON_ADDRESS)));
                             }
 
                         })
-                        .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
-        return ImmutableMap.copyOf(map);
+                        .collect(Collectors.toList()));
     }
 
 }
