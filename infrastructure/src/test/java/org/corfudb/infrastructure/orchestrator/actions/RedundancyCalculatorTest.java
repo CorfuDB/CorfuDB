@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import lombok.ToString;
@@ -30,6 +31,7 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.corfudb.runtime.view.Layout.*;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 
@@ -103,23 +105,28 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
         Layout testLayout = createTestLayout(layoutSegments);
 
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> stateMap
-                = calculator.createStateMap(testLayout);
+        PrefixTrimRedundancyCalculator calculator = new PrefixTrimRedundancyCalculator
+                ("localhost", null);
 
-        ImmutableSet<CurrentTransferSegment> currentTransferSegments = stateMap.keySet();
+        ImmutableList<CurrentTransferSegment> currentTransferSegments =
+                calculator.createStateList(testLayout);
 
-        CurrentTransferSegment presentSegment = new CurrentTransferSegment(0L, 20L);
-        CurrentTransferSegment nonPresentSegment = new CurrentTransferSegment(21L, 50L);
+        CurrentTransferSegment presentSegment = new CurrentTransferSegment(0L,
+                20L, CompletableFuture.completedFuture(
+                        new CurrentTransferSegmentStatus(RESTORED, 20L)
+        ));
+        CurrentTransferSegment nonPresentSegment = new CurrentTransferSegment(21L,
+                50L, CompletableFuture.completedFuture(new
+                CurrentTransferSegmentStatus(NOT_TRANSFERRED, NON_ADDRESS)));
+
         Assert.assertTrue(currentTransferSegments.containsAll(Arrays.asList(presentSegment,
                 nonPresentSegment)));
 
-        CurrentTransferSegmentStatus presentSegmentStatus = stateMap.get(presentSegment).join();
+        CurrentTransferSegmentStatus presentSegmentStatus = presentSegment.getStatus().join();
         assertThat(SegmentState.RESTORED)
                 .isEqualTo(presentSegmentStatus.getSegmentStateTransferState());
 
-        CurrentTransferSegmentStatus nonPresentSegmentStatus = stateMap.get(nonPresentSegment)
-                .join();
+        CurrentTransferSegmentStatus nonPresentSegmentStatus = nonPresentSegment.getStatus().join();
 
         assertThat(NOT_TRANSFERRED)
                 .isEqualTo(nonPresentSegmentStatus.getSegmentStateTransferState());
@@ -127,7 +134,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
     @Test
     public void testRestoreRedundancyForSegment(){
-        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 20L);
+        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 20L, null);
 
         LayoutStripe stripe1 = new LayoutStripe(Collections.singletonList("A"));
         LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("C"));
@@ -179,9 +186,9 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
         Layout testLayout = createTestLayout(layoutSegments);
 
         List<CurrentTransferSegment> currentTransferSegments = Arrays.asList
-                (new CurrentTransferSegment(0L, 20L),
-                new CurrentTransferSegment(21L, 50L),
-                new CurrentTransferSegment(51L, 60L));
+                (new CurrentTransferSegment(0L, 20L, null),
+                new CurrentTransferSegment(21L, 50L, null),
+                new CurrentTransferSegment(51L, 60L, null));
 
 
         RedundancyCalculator calculator = new RedundancyCalculator("localhost");
@@ -195,58 +202,12 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
     }
 
-    @Test
-    public void testRedundancyIsRestored(){
-        CurrentTransferSegment notTransferred = new CurrentTransferSegment(0L, 5L);
-        CurrentTransferSegment transferred = new CurrentTransferSegment(6L, 10L);
-        CurrentTransferSegment restored = new CurrentTransferSegment(11L, 20L);
-        CurrentTransferSegment failed = new CurrentTransferSegment(11L, 20L);
-        CurrentTransferSegment inProgress = new CurrentTransferSegment(11L, 20L);
-
-        Map<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> map
-                = new HashMap<>();
-
-        map.put(restored, CompletableFuture.completedFuture(
-                new CurrentTransferSegmentStatus(RESTORED, 20L)));
-
-        map.put(inProgress, CompletableFuture.supplyAsync(() -> {
-            Sleep.sleepUninterruptibly(Duration.ofMillis(3000)); // simulate in progress task
-            return new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 15L);
-        }));
-
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
-
-        // one task is in progress, so will return false
-        assertThat(calculator.redundancyIsRestored(map)).isFalse();
-
-        // remove in progress task, should return true
-        map.remove(inProgress);
-
-        assertThat(calculator.redundancyIsRestored(map)).isTrue();
-
-        // add segments with other statuses, should return false
-        map.put(failed, CompletableFuture.completedFuture(
-                new CurrentTransferSegmentStatus(FAILED, 12L)));
-
-        map.put(notTransferred, CompletableFuture.completedFuture(
-                new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)));
-
-        map.put(transferred, CompletableFuture.completedFuture(
-                new CurrentTransferSegmentStatus(TRANSFERRED, 10L)));
-
-        assertThat(calculator.redundancyIsRestored(map)).isFalse();
-
-        // if map is empty redundancy is restored
-        assertThat(calculator.redundancyIsRestored(new HashMap<>())).isTrue();
-
-    }
 
     @Test
     public void testMergeSegmentsMatchFailed(){
         RedundancyCalculator calculator = new RedundancyCalculator("localhost");
 
-        // old map had a failed transfer, segments match completely -> preserve
-        CurrentTransferSegment segment = new CurrentTransferSegment(0L, 5L);
+
 
         CompletableFuture<CurrentTransferSegmentStatus> failed =
                 CompletableFuture.completedFuture
@@ -258,11 +219,10 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
                         (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
                                 -1L));
 
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> oldMap =
-                ImmutableMap.of(segment, failed);
+        // old map had a failed transfer, segments match completely -> preserve
+        CurrentTransferSegment oldSegment = new CurrentTransferSegment(0L, 5L, failed);
 
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> newMap =
-                ImmutableMap.of(segment, notTransferred);
+        CurrentTransferSegment newSegment = new CurrentTransferSegment(0L, 5L, notTransferred);
 
         assertThat(calculator.mergeMaps(oldMap, newMap).get(segment).join().getSegmentStateTransferState())
                 .isEqualTo(FAILED);

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import java.time.Duration;
@@ -63,14 +64,13 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         x.setRandomPortion(RANDOM_PART);
     };
 
-    public boolean restoreWithBackOff(Map<CurrentTransferSegment,
-            CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
+    public boolean restoreWithBackOff(List<CurrentTransferSegment> stateList,
                                       CorfuRuntime runtime) throws Exception{
         AtomicInteger retries = new AtomicInteger(3);
         try {
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
                 try {
-                    return tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
+                    return tryRestoreRedundancyAndMergeSegments(stateList, runtime);
                 }
                 catch(WrongEpochException | QuorumUnreachableException | OutrankedException e){
                     log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
@@ -91,38 +91,37 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     }
     /**
      * Try restore redundancy for all the currently transferred segments.
-     * @param stateMap A map that holds state for every segment.
+     * @param stateList A list that holds the state for every segment.
      * @param runtime An instance of a runtime.
      */
-    private boolean tryRestoreRedundancyAndMergeSegments(Map<CurrentTransferSegment,
-            CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
+    private boolean tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
                                                       CorfuRuntime runtime)  {
 
         // Filter all the transfers that have been completed.
-        List<Entry<CurrentTransferSegment, CurrentTransferSegmentStatus>> completedEntries
-                = stateMap.entrySet().stream().filter(entry -> entry.getValue().isDone())
-                .map(entry -> new SimpleEntry<>(entry.getKey(), entry.getValue()
-                .join()))
+        List<CurrentTransferSegment> completedEntries
+                = stateList.stream().filter(segment -> segment.getStatus().isDone())
                 .collect(Collectors.toList());
 
         // If any failed transfers exist -> fail.
-        List<Entry<CurrentTransferSegment, CurrentTransferSegmentStatus>> failedEntries =
+        List<CurrentTransferSegment> failedEntries =
                 completedEntries
                         .stream()
-                        .filter(entry -> entry.getValue().getSegmentStateTransferState()
+                        .filter(segment -> segment.getStatus()
+                                .join().getSegmentStateTransferState()
                                 .equals(FAILED))
                         .collect(Collectors.toList());
 
         // Throw the first failure.
         if (!failedEntries.isEmpty()) {
-            throw failedEntries.get(0).getValue().getCauseOfFailure();
+            throw failedEntries.get(0).getStatus().join().getCauseOfFailure();
         }
 
         // Filter all the segments that have been transferred.
         List<CurrentTransferSegment> transferredSegments = completedEntries
                 .stream()
-                .filter(entry -> entry.getValue().getSegmentStateTransferState()
-                        .equals(TRANSFERRED)).map(Entry::getKey)
+                .filter(segment -> segment.getStatus()
+                        .join().getSegmentStateTransferState()
+                        .equals(TRANSFERRED))
                 .collect(Collectors.toList());
 
         // If there are transferred segments, invalidate.
@@ -200,19 +199,19 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                         runtime.getParameters().getBulkReadSize());
 
         // Create the initial state map.
-        ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>> stateMap =
-                redundancyCalculator.createStateMap(layout);
+        ImmutableList<CurrentTransferSegment> stateList =
+                redundancyCalculator.createStateList(layout);
 
-        log.info("State transfer on {}: Initial state map: {}", currentNode, stateMap);
+        log.info("State transfer on {}: Initial state list: {}", currentNode, stateList);
 
         while(RedundancyCalculator.requiresRedundancyRestoration(layout, currentNode) ||
                 RedundancyCalculator.requiresMerge(layout, currentNode)){
             // Initialize a transfer for each segment and update the map.
 
-            stateMap = transferManager.handleTransfer(stateMap);
+            stateList = transferManager.handleTransfer(stateList);
             // Restore redundancy for the segments that are restored.
             // If possible, also merge the segments.
-            boolean restored = restoreWithBackOff(stateMap, runtime);
+            boolean restored = restoreWithBackOff(stateList, runtime);
 
             // Invalidate the layout.
             if(restored){
@@ -224,12 +223,11 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 layout = runtime.getLayoutView().getLayout();
 
                 // Create a new map from the layout.
-                ImmutableMap<CurrentTransferSegment, CompletableFuture<CurrentTransferSegmentStatus>>
-                        newLayoutStateMap =
-                        redundancyCalculator.createStateMap(layout);
+                ImmutableList<CurrentTransferSegment>
+                        newLayoutStateList = redundancyCalculator.createStateList(layout);
 
-                // Merge the new and the old map into the current map.
-                stateMap = redundancyCalculator.mergeMaps(stateMap, newLayoutStateMap);
+                // Merge the new and the old list into the current list.
+                stateList = redundancyCalculator.mergeLists(stateList, newLayoutStateList);
             }
 
         }
