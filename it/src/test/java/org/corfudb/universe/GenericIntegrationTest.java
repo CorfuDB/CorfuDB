@@ -37,7 +37,7 @@ public abstract class GenericIntegrationTest {
                 .docker(DefaultDockerClient.fromEnv().build())
                 .enableLogging(false)
                 .testName(test.getMethodName())
-                .universeMode(UniverseMode.DOCKER)
+                .universeMode(UniverseMode.VM)
                 .corfuServerVersion(getAppVersion())
                 .build();
         universe = universeManager.getUniverse();

@@ -77,7 +77,7 @@ public interface Fixtures {
 
             servers.forEach(corfuCluster::add);
             data = UniverseParams.universeBuilder()
-                    .cleanUpEnabled(true)
+                    .cleanUpEnabled(false)
                     .build()
                     .add(corfuCluster);
 
@@ -162,7 +162,7 @@ public interface Fixtures {
         public AbstractUniverseFixture() {
             this.numNodes = 3;
             this.client = ClientParams.builder().build();
-            this.corfuCluster = CorfuClusterParams.builder().build();
+            this.corfuCluster = CorfuClusterParams.builder().name("disk_based").build();
             this.monitoringCluster = SupportClusterParams.builder().build();
         }
     }
@@ -178,7 +178,7 @@ public interface Fixtures {
 
             List<CorfuServerParams> serversParams = IntStream
                     .rangeClosed(1, numNodes)
-                    .map(i -> ServerUtil.getRandomOpenPort())
+                    .map(i -> 9000 + i -1)
                     .boxed()
                     .sorted()
                     .map(port -> CorfuServerParams.serverParamsBuilder()
@@ -186,6 +186,7 @@ public interface Fixtures {
                             .clusterName(clusterName)
                             //.containerResources(Optional.of(ContainerResources.builder().build()))
                             .serverVersion(corfuServerVersion)
+                            .logLevel(Level.WARN)
                             .build()
                     )
                     .collect(Collectors.toList());
@@ -204,7 +205,7 @@ public interface Fixtures {
                         .clusterName(clusterName)
                         .vmName(vmNamePrefix + (i + 1))
                         .mode(CorfuServer.Mode.CLUSTER)
-                        .logLevel(Level.TRACE)
+                        .logLevel(Level.WARN)
                         .persistence(CorfuServer.Persistence.DISK)
                         .port(port)
                         .stopTimeout(Duration.ofSeconds(1))
