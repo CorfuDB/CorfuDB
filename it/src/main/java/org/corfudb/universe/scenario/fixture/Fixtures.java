@@ -102,7 +102,7 @@ public interface Fixtures {
      * Configuration for VM specific Universe initialization
      */
     class VmUniverseFixture extends AbstractUniverseFixture<VmUniverseParams> {
-        private static final String VM_PREFIX = "corfu-vm-";
+        private static final String VM_PREFIX = "corfu-vm-qe-";
 
         public VmUniverseParams data;
 
@@ -139,6 +139,7 @@ public interface Fixtures {
                     .vmPassword("vmware")
                     .vmIpAddresses(vmIpAddresses)
                     .networkName("corfu_network")
+                    .cleanUpEnabled(true)
                     .build();
             params.add(corfuCluster);
 

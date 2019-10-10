@@ -11,6 +11,7 @@ import org.corfudb.universe.scenario.Scenario;
 import org.corfudb.universe.scenario.fixture.Fixtures;
 import org.corfudb.universe.scenario.fixture.Fixtures.AbstractUniverseFixture;
 import org.corfudb.universe.scenario.fixture.Fixtures.UniverseFixture;
+import org.corfudb.universe.scenario.fixture.Fixtures.VmUniverseFixture;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.Universe.UniverseMode;
 import org.corfudb.universe.universe.UniverseParams;
@@ -61,7 +62,7 @@ public class UniverseManager {
     }
 
     public Scenario getVmScenario(int numNodes) {
-        Fixtures.VmUniverseFixture universeFixture = new Fixtures.VmUniverseFixture();
+        VmUniverseFixture universeFixture = new VmUniverseFixture();
         universeFixture.setNumNodes(numNodes);
         universeFixture.setCorfuServerVersion(corfuServerVersion);
 

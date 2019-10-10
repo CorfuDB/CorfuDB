@@ -35,58 +35,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
     public void oneNodeDownTest() {
 
         getScenario().describe((fixture, testCase) -> {
-            CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 
-            CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
-
-            CorfuTable<String, String> table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
-            for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-                table.put(String.valueOf(i), String.valueOf(i));
-            }
-
-            testCase.it("Should stop one node and then restart", data -> {
-                CorfuServer server0 = corfuCluster.getFirstServer();
-
-                // Stop one node and wait for layout's unresponsive servers to change
-                server0.stop(Duration.ofSeconds(10));
-                waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
-
-                // Verify layout, unresponsive servers should contain only the stopped node
-                Layout layout = corfuClient.getLayout();
-                assertThat(layout.getUnresponsiveServers()).containsExactly(server0.getEndpoint());
-
-                // Verify cluster status is DEGRADED with one node down
-                ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
-
-                Map<String, NodeStatus> statusMap = clusterStatusReport.getClusterNodeStatusMap();
-                assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(NodeStatus.DOWN);
-
-                // Verify data path working fine
-                for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-                    assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
-                }
-
-                // restart the stopped node and wait for layout's unresponsive servers to change
-                server0.start();
-                waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
-
-                final Duration sleepDuration = Duration.ofSeconds(1);
-                // Verify cluster status is STABLE
-                clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
-                    clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                    Sleep.sleepUninterruptibly(sleepDuration);
-                }
-                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
-
-                // Verify data path working fine
-                for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-                    assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
-                }
-            });
-
-            corfuClient.shutdown();
         });
     }
 }
