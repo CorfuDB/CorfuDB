@@ -69,7 +69,7 @@ public class CorfuProcessManager {
     }
 
     public String startCommand(String commandLineParams) {
-        Path corfuLog = corfuDir.resolve("corfu.log");
+        Path corfuLog = serverDir.resolve("corfu.log");
 
         // Compose command line for starting Corfu
         return "java -cp " +
