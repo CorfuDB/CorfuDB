@@ -68,14 +68,7 @@ public class AddNode extends WorkflowRequest{
     @Override
     protected Optional<ManagementClient> getOrchestrator(){
 
-        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout().getBaseClient(nodeForWorkflow);
-        if(baseClient.pingSync()){
-            log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
-            return Optional.of(runtime.getLayoutView()
-                    .getRuntimeLayout().getManagementClient(nodeForWorkflow));
-        }
-        else{
-            return Optional.empty();
-        }
+        return Optional.of(runtime.getLayoutView()
+                .getRuntimeLayout().getManagementClient(nodeForWorkflow));
     }
 }

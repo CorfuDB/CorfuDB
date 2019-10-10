@@ -137,7 +137,18 @@ public class StateTransferManager {
                                                 log.info("State transfer segment success, transferred up to: {}.",
                                                         lastTransferredAddress);
                                                 return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
-                                            } else {
+                                            }
+                                            else if(lastTransferredAddressResult.isValue() &&
+                                                    !lastTransferredAddressResult.get().equals(lastAddressToTransfer)){
+                                                log.error("Incomplete transfer failure occurred, " +
+                                                        "expected last address to be: {}, but it's: {}",
+                                                        lastAddressToTransfer, lastTransferredAddressResult.get());
+                                                return new CurrentTransferSegmentStatus(FAILED,
+                                                        lastTransferredAddressResult.get(),
+                                                        new StateTransferFailure("Incomplete transfer failure."));
+                                            }
+
+                                            else {
                                                 log.error("State transfer failure occurred: ",
                                                         lastTransferredAddressResult.getError().getCause());
                                                 return new CurrentTransferSegmentStatus(

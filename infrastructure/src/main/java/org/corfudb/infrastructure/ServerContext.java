@@ -432,6 +432,7 @@ public class ServerContext implements AutoCloseable {
     public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
         Long lastEpoch = dataStore.get(SERVER_EPOCH_RECORD);
         if (lastEpoch == null || lastEpoch < serverEpoch) {
+            log.info("Setting server epoch: {}", serverEpoch);
             dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
             r.setServerEpoch(serverEpoch);
             getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
