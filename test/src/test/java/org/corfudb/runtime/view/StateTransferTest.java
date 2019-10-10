@@ -20,10 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -45,6 +42,8 @@ import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
@@ -111,20 +110,20 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
 
         bootstrapAllServers(l1);
-        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
 
-        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
         testStream.append("testPayload".getBytes());
         testStream.append("testPayload".getBytes());
         testStream.append("testPayload".getBytes());
 
         addServer(SERVERS.PORT_2);
         final int addNodeRetries = 3;
-        corfuRuntime.getManagementView()
+        rt.getManagementView()
                 .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
 
-        corfuRuntime.invalidateLayout();
+        rt.invalidateLayout();
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(3L)
@@ -145,10 +144,10 @@ public class StateTransferTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-       assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
-       long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-       Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_0, lastAddress);
-       Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_2, lastAddress);
+       assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+       long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+       Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
+       Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
     }
@@ -193,15 +192,15 @@ public class StateTransferTest extends AbstractViewTest {
 
         bootstrapAllServers(l1);
 
-        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
-        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
         testStream.append("testPayload".getBytes());
         testStream.append("testPayload".getBytes());
         testStream.append("testPayload".getBytes());
 
         ClusterStatusReport clusterStatus = null;
         for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++){
-            clusterStatus = corfuRuntime.getManagementView().getClusterStatus();
+            clusterStatus = rt.getManagementView().getClusterStatus();
             if(clusterStatus.getClusterStatus().equals(ClusterStatus.DB_SYNCING)){
                 Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
             }
@@ -230,11 +229,11 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
 
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(STABLE);
-        corfuRuntime.invalidateLayout();
-        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
-        long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_0, lastAddress);
-        Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_2, lastAddress);
+        rt.invalidateLayout();
+        assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
+        Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
         assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
 
@@ -282,9 +281,9 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l1);
 
-        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
-        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
         // Write to address spaces 0 to 2 (inclusive) to SERVER 0 only.
         testStream.append("testPayload".getBytes());
         testStream.append("testPayload".getBytes());
@@ -297,10 +296,10 @@ public class StateTransferTest extends AbstractViewTest {
 
         addServer(SERVERS.PORT_2);
         final int addNodeRetries = 3;
-        corfuRuntime.getManagementView()
+        rt.getManagementView()
                 .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
 
-        corfuRuntime.invalidateLayout();
+        rt.invalidateLayout();
         final long finalEpochAfterAdd = 3L;
 
         Layout expectedLayout1 = new TestLayoutBuilder()
@@ -339,7 +338,7 @@ public class StateTransferTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        ClusterStatusReport clusterStatus = corfuRuntime.getManagementView().getClusterStatus();
+        ClusterStatusReport clusterStatus = rt.getManagementView().getClusterStatus();
         Map<String, ConnectivityStatus> nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
         Map<String, NodeStatus> nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
         ClusterStatusReliability clusterStatusReliability = clusterStatus.getClusterStatusReliability();
@@ -353,14 +352,14 @@ public class StateTransferTest extends AbstractViewTest {
         assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReliability.STRONG_QUORUM);
         // If both of the segments were restored within the same epoch change concurrently, epoch's 3,
         // otherwise its 4.
-        assertThat(corfuRuntime.getLayoutView().getLayout().equals(expectedLayout1)
-        || corfuRuntime.getLayoutView().getLayout()
+        assertThat(rt.getLayoutView().getLayout().equals(expectedLayout1)
+        || rt.getLayoutView().getLayout()
                 .equals(new LayoutBuilder(expectedLayout1).setEpoch(finalEpochAfterAdd + 1).build())).isTrue();
 
-        long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
 
-        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_0, lastAddress);
-        Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, SERVERS.ENDPOINT_2, lastAddress);
+        Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
+        Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
         assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
     }
@@ -634,10 +633,10 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(layout);
 
-        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
 
-        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
 
         for (int i = 0; i < (writtenAddressesBatch1 + writtenAddressesBatch2); i++) {
             testStream.append("testPayload".getBytes());
@@ -646,7 +645,7 @@ public class StateTransferTest extends AbstractViewTest {
                 Lists.partition(testStream
                         .streamUpTo(writtenAddressesBatch1)
                         .map(x -> (LogData) x)
-                        .collect(Collectors.toList()), corfuRuntime.getParameters().getBulkReadSize());
+                        .collect(Collectors.toList()), rt.getParameters().getBulkReadSize());
 
         final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
         StreamLog streamLog = getLogUnit(SERVERS.PORT_1).getStreamLog();
@@ -663,12 +662,12 @@ public class StateTransferTest extends AbstractViewTest {
         });
 
         // Assert that the TimeOutException is thrown
-        assertThatThrownBy(() -> action1.impl(corfuRuntime, spy))
+        assertThatThrownBy(() -> action1.impl(rt, spy))
                 .isInstanceOf(StateTransferFailure.class)
         .hasRootCauseInstanceOf(TimeoutException.class);
 
         // Known addresses should contain only [0:49] and the addresses in the open segment.
-        ArrayList<Long> knownAddresses = new ArrayList<>(corfuRuntime.getLayoutView()
+        ArrayList<Long> knownAddresses = new ArrayList<>(rt.getLayoutView()
                 .getRuntimeLayout()
                 .getLogUnitClient(SERVERS.ENDPOINT_1)
                 .requestKnownAddresses(0L, writtenAddressesBatch1 + writtenAddressesBatch2)
@@ -691,9 +690,9 @@ public class StateTransferTest extends AbstractViewTest {
             return set;
         }).when(spy).getKnownAddressesInRange(0L, 99L);
 
-        action1.impl(corfuRuntime, spy);
+        action1.impl(rt, spy);
 
-        knownAddresses = new ArrayList<>(corfuRuntime.getLayoutView()
+        knownAddresses = new ArrayList<>(rt.getLayoutView()
                 .getRuntimeLayout()
                 .getLogUnitClient(SERVERS.ENDPOINT_1)
                 .requestKnownAddresses(0L, writtenAddressesBatch1 + writtenAddressesBatch2)
@@ -708,11 +707,7 @@ public class StateTransferTest extends AbstractViewTest {
     }
 
     /**
-     * This test verifies that partial state transfers when retried only transfer the delta
-     * of the address space.
-     * Setup: Layout - Write 11_000 entries to SERVER 0 and 1_000 entries to SERVERS 0 & 1.
-     * We then trigger the state transfer and force the transfer to fail on the last range write.
-     * Another transfer is then triggered and verified that only the remaining data is transferred.
+     * This tests verifies that multiple running state transfers run to completion.
      */
     @Test
     public void verifyConcurrentStateTransferCompletion() throws Exception {
@@ -724,25 +719,27 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_0, sc1);
 
         ServerContext sc2 = new ServerContextBuilder()
-                .setMemory(false)
                 .setSingle(false)
-                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                 .setPort(SERVERS.PORT_1).build();
         addServer(SERVERS.PORT_1, sc2);
 
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
+        ServerContext sc3 = new ServerContextBuilder()
+                .setSingle(false)
+                .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
+                .setPort(SERVERS.PORT_2).build();
+        addServer(SERVERS.PORT_2, sc3);
 
         final long writtenAddressesBatch1 = 100;
-        final long writtenAddressesBatch2 = 5;
 
         Layout layout = new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
                 .addSequencer(SERVERS.PORT_0)
                 .addSequencer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
                 .buildSegment()
                 .setStart(0L)
                 .setEnd(writtenAddressesBatch1)
@@ -756,44 +753,65 @@ public class StateTransferTest extends AbstractViewTest {
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
+
         bootstrapAllServers(layout);
 
-        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
 
-        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
-        for (int i = 0; i < (writtenAddressesBatch1 + writtenAddressesBatch2); i++) {
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+
+        for (int i = 0; i < (writtenAddressesBatch1); i++) {
             testStream.append("testPayload".getBytes());
         }
 
-        final int parallelism = 10;
+        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
+        final RestoreRedundancyMergeSegments action2 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_2);
+        StreamLog streamLog1 = getLogUnit(SERVERS.PORT_1).getStreamLog();
+        StreamLog streamLog2 = getLogUnit(SERVERS.PORT_1).getStreamLog();
 
-        List<Callable<Boolean>> taskList = new ArrayList<>();
-        StreamLog streamLog = getLogUnit(SERVERS.PORT_1).getStreamLog();
-        for (int i = 0; i < parallelism; i++) {
-            taskList.add(() -> {
-                RestoreRedundancyMergeSegments action =
-                        new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
-                action.impl(corfuRuntime, streamLog);
-                return true;
-            });
-        }
+        List<CompletableFuture<Void>> futures = new ArrayList();
 
-        ExecutorService executor = Executors.newFixedThreadPool(parallelism);
-        List<Future<Boolean>> futures = executor.invokeAll(taskList);
-        for (Future<Boolean> future : futures) {
+        CorfuRuntime rt1 = getNewRuntime(NodeLocator.builder()
+                .host("test")
+                .port(SERVERS.PORT_1)
+                .nodeId(sc1.getNodeId())
+                .build()).connect();
+
+
+        CorfuRuntime rt2 = getNewRuntime(NodeLocator.builder()
+                .host("test")
+                .port(SERVERS.PORT_2)
+                .nodeId(sc2.getNodeId())
+                .build()).connect();
+
+
+        futures.add(CompletableFuture.runAsync(() -> {
             try {
-                future.get();
+                action1.impl(rt1, streamLog1);
             } catch (Exception e) {
-                continue;
+                e.printStackTrace();
             }
-        }
+        }));
 
-        corfuRuntime.invalidateLayout();
-        assertThat(corfuRuntime.getLayoutView().getLayout().getSegments().size())
+        futures.add(CompletableFuture.runAsync(() -> {
+            try {
+                action2.impl(rt2, streamLog2);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }));
+
+        waitForLayoutChange(l -> l.getSegments().size() == 1, rt);
+
+        CFUtils.sequence(futures);
+
+        rt.invalidateLayout();
+        assertThat(rt.getLayoutView().getLayout().getSegments().size())
                 .isEqualTo(1);
     }
 }

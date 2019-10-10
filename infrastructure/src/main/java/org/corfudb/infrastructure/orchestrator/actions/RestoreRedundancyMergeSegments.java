@@ -2,11 +2,14 @@ package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableMap;
 
+import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -19,8 +22,15 @@ import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter;
 import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
@@ -40,6 +50,45 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         this.currentNode = currentNode;
     }
 
+    private static final int RETRY_BASE = 3;
+    private static final int BACKOFF_DURATION_SECONDS = 10;
+    private static final int EXTRA_WAIT_MILLIS = 20;
+    private static final float RANDOM_PART = 0.5f;
+
+    private static final Consumer<ExponentialBackoffRetry> RETRY_SETTINGS = x -> {
+        x.setBase(RETRY_BASE);
+        x.setExtraWait(EXTRA_WAIT_MILLIS);
+        x.setBackoffDuration(Duration.ofSeconds(
+                BACKOFF_DURATION_SECONDS));
+        x.setRandomPortion(RANDOM_PART);
+    };
+
+    public boolean restoreWithBackOff(Map<CurrentTransferSegment,
+            CompletableFuture<CurrentTransferSegmentStatus>> stateMap,
+                                      CorfuRuntime runtime) throws Exception{
+        AtomicInteger retries = new AtomicInteger(3);
+        try {
+            return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
+                try {
+                    return tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
+                }
+                catch(WrongEpochException | QuorumUnreachableException | OutrankedException e){
+                    log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
+                    if(retries.decrementAndGet() < 0){
+                        log.error("Retries exhausted.");
+                        throw new RetryExhaustedException("Retries exhausted.");
+                    }
+                    else{
+                        throw new RetryNeededException();
+                    }
+                }
+            }).setOptions(RETRY_SETTINGS).run();
+        }
+        catch(Exception e){
+            throw e;
+        }
+
+    }
     /**
      * Try restore redundancy for all the currently transferred segments.
      * @param stateMap A map that holds state for every segment.
@@ -162,7 +211,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             stateMap = transferManager.handleTransfer(stateMap);
             // Restore redundancy for the segments that are restored.
             // If possible, also merge the segments.
-            boolean restored = tryRestoreRedundancyAndMergeSegments(stateMap, runtime);
+            boolean restored = restoreWithBackOff(stateMap, runtime);
 
             // Invalidate the layout.
             if(restored){
