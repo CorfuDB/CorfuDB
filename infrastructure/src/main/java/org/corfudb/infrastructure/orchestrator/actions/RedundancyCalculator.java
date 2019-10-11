@@ -16,6 +16,7 @@ import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -154,16 +155,16 @@ public class RedundancyCalculator {
     }
 
 
-    private List<AgedSegment> mergeSegmentToAccumulatedList(AgedSegment nextSegment,
-                                                            List<AgedSegment> accumulatedList) {
+    private ArrayList<AgedSegment> mergeSegmentToAccumulatedList(AgedSegment nextSegment,
+                                                                 ArrayList<AgedSegment> accumulatedList) {
         if (accumulatedList.isEmpty()) {
             // if it's a first segment, add it to the list.
-            return Collections.singletonList(nextSegment);
+
+            return new ArrayList<>(Collections.singletonList(nextSegment));
         } else {
             // if it's not, get the last added segment.
             int size = accumulatedList.size();
             AgedSegment lastAddedSegment = accumulatedList.remove(size - 1);
-
             // if segments overlap
             if (lastAddedSegment.overlapsWith(nextSegment)) {
                 AgedSegment oldSegment;
@@ -186,7 +187,8 @@ public class RedundancyCalculator {
                 if (oldSegmentStatus.isCompletedExceptionally() ||
                         !oldSegmentStatus.isDone() ||
                         oldSegmentStatus.join().getSegmentStateTransferState().equals(FAILED)) {
-                    mergedSegment = new AgedSegment(new CurrentTransferSegment(newSegment.segment.getStartAddress(),
+                    mergedSegment = new AgedSegment(new CurrentTransferSegment(newSegment.segment
+                            .getStartAddress(),
                             newSegment.segment.getEndAddress(), oldSegmentStatus), NEW_SEGMENT);
                 }
                 // otherwise discard the old segment, merged segment is the new segment.
@@ -195,14 +197,14 @@ public class RedundancyCalculator {
                 }
 
                 accumulatedList.add(mergedSegment);
-                return accumulatedList;
+                return new ArrayList<>(accumulatedList);
 
             }
             // no overlap -> add them both.
             else {
                 accumulatedList.add(lastAddedSegment);
                 accumulatedList.add(nextSegment);
-                return accumulatedList;
+                return new ArrayList<>(accumulatedList);
             }
         }
     }
@@ -215,14 +217,16 @@ public class RedundancyCalculator {
             return ImmutableList.copyOf(oldList.stream().map(segment -> {
                 CompletableFuture<CurrentTransferSegmentStatus> status = segment.getStatus();
 
-                if (status.isDone() && status.join().getSegmentStateTransferState().equals(TRANSFERRED)) {
-                    return new CurrentTransferSegment(segment.getStartAddress(), segment.getEndAddress(),
-                            CompletableFuture.completedFuture(new
-                                    CurrentTransferSegmentStatus(RESTORED, segment.getEndAddress())));
-                } else {
-                    return new CurrentTransferSegment(segment.getStartAddress(),
-                            segment.getEndAddress(), segment.getStatus());
-                }
+                CompletableFuture<CurrentTransferSegmentStatus> newStatus =
+                        status.thenApply(oldStatus -> {
+                            if (oldStatus.getSegmentStateTransferState().equals(TRANSFERRED)) {
+                                return new CurrentTransferSegmentStatus(RESTORED, segment.getEndAddress());
+                            } else {
+                                return oldStatus;
+                            }
+                        });
+                return new CurrentTransferSegment(segment.getStartAddress(),
+                        segment.getEndAddress(), newStatus);
 
             }).collect(Collectors.toList()));
         }
@@ -233,7 +237,7 @@ public class RedundancyCalculator {
                         .collect(Collectors.toList());
 
         List<AgedSegment> newSegments =
-                oldList.stream().map(segment -> new AgedSegment(segment, NEW_SEGMENT))
+                newList.stream().map(segment -> new AgedSegment(segment, NEW_SEGMENT))
                         .collect(Collectors.toList());
 
         List<AgedSegment> allSegments = new ArrayList<>();
@@ -244,17 +248,17 @@ public class RedundancyCalculator {
 
         Collections.sort(allSegments);
 
-        List<AgedSegment> initList = new ArrayList<>();
+        ArrayList<AgedSegment> initList = new ArrayList<>();
 
-        // Merge the overlapping segments and return the new status list.
-
-        List<CurrentTransferSegment> result = allSegments.stream()
+        // Merge the overlapping old and new segments and return the new status list.
+        ArrayList<CurrentTransferSegment> result = allSegments.stream()
                 .reduce(initList,
-                        (accumulatedList, nextSegment) -> mergeSegmentToAccumulatedList(nextSegment, accumulatedList),
-                        (list1, list2) -> ListUtils.union(list1, list2))
+                        (accumulatedList, nextSegment) ->
+                                mergeSegmentToAccumulatedList(nextSegment, accumulatedList),
+                        (list1, list2) -> list2)
                 .stream()
                 .map(agedSegment -> agedSegment.segment)
-                .collect(Collectors.toList());
+                .collect(Collectors.toCollection(ArrayList::new));
         return ImmutableList.copyOf(result);
     }
 }
