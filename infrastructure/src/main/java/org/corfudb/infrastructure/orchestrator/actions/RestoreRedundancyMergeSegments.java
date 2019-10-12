@@ -18,6 +18,7 @@ import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections.ListUtils;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter;
@@ -31,14 +32,16 @@ import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
+import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.*;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
@@ -55,6 +58,12 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         this.currentNode = currentNode;
     }
 
+
+    public enum RestoreStatus{
+        RESTORED,
+        NOT_RESTORED
+    }
+
     private static final int RETRY_BASE = 3;
     private static final int BACKOFF_DURATION_SECONDS = 10;
     private static final int EXTRA_WAIT_MILLIS = 20;
@@ -68,13 +77,17 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         x.setRandomPortion(RANDOM_PART);
     };
 
-    public boolean restoreWithBackOff(List<CurrentTransferSegment> stateList,
+    RestoreStatus restoreWithBackOff(List<CurrentTransferSegment> stateList,
                                       CorfuRuntime runtime) throws Exception {
         AtomicInteger retries = new AtomicInteger(3);
         try {
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
                 try {
-                    return tryRestoreRedundancyAndMergeSegments(stateList, runtime);
+
+                    runtime.invalidateLayout();
+                    Layout oldLayout = runtime.getLayoutView().getLayout();
+                    LayoutManagementView layoutManagementView = runtime.getLayoutManagementView();
+                    return tryRestoreRedundancyAndMergeSegments(stateList, oldLayout, layoutManagementView);
                 } catch (WrongEpochException | QuorumUnreachableException | OutrankedException e) {
                     log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
                     if (retries.decrementAndGet() < 0) {
@@ -95,58 +108,46 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
      * Try restore redundancy for all the currently transferred segments.
      *
      * @param stateList A list that holds the state for every segment.
-     * @param runtime   An instance of a runtime.
      */
-    private boolean tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
-                                                         CorfuRuntime runtime) {
+    RestoreStatus tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
+                                                         Layout oldLayout,
+                                                         LayoutManagementView layoutManagementView) {
 
-
-        // If there are any segments that were completed exceptionally, fail them.
-        List<CurrentTransferSegment> updatedList = stateList.stream()
-                .filter(segment -> segment.getStatus().isCompletedExceptionally())
+        // Get any segments that were completed exceptionally or with a failure.
+        List<CurrentTransferSegment> failed = stateList.stream()
+                .filter(segment -> segment.getStatus().isCompletedExceptionally() ||
+                        segment.getStatus().isDone() && segment.getStatus().join().getSegmentState().equals(FAILED))
                 .map(segment ->
                 {
                     CompletableFuture<CurrentTransferSegmentStatus> newStatus =
                             segment.getStatus().handle((value, exception) ->
-                                    new CurrentTransferSegmentStatus(FAILED, NON_ADDRESS,
-                                            new StateTransferFailure(exception)));
+                            {
+                                if(exception != null){
+                                    return new CurrentTransferSegmentStatus(FAILED, NON_ADDRESS,
+                                            new StateTransferFailure(exception));
+                                }
+                                return value;
+                            });
 
                     return new CurrentTransferSegment(segment.getStartAddress(),
                             segment.getEndAddress(), newStatus);
 
                 }).collect(Collectors.toList());
 
-        // If any failed segments exist -> fail the transfer.
-        List<CurrentTransferSegment> failedEntries =
-                updatedList
-                        .stream()
-                        .filter(segment -> segment.getStatus()
-                                .join()
-                                .getSegmentStateTransferState().equals(FAILED))
-                        .collect(Collectors.toList());
-
         // Throw the first failure.
-        if (!failedEntries.isEmpty()) {
-            throw failedEntries.get(0).getStatus().join().getCauseOfFailure();
+        if (!failed.isEmpty()) {
+            throw failed.get(0).getStatus().join().getCauseOfFailure();
         }
 
-        // Filter all the transfers that have been completed ok.
-        List<CurrentTransferSegment> completedEntries
-                = updatedList.stream().filter(segment -> segment.getStatus().isDone())
+        // Filter all the transfers that have been completed.
+        List<CurrentTransferSegment> transferredSegments
+                = stateList.stream().filter(segment -> segment.getStatus().isDone() &&
+                segment.getStatus().join().getSegmentState().equals(TRANSFERRED))
                 .collect(Collectors.toList());
 
-        // Filter all the segments that have been transferred.
-        List<CurrentTransferSegment> transferredSegments = completedEntries
-                .stream()
-                .filter(segment -> segment.getStatus()
-                        .join().getSegmentStateTransferState()
-                        .equals(TRANSFERRED))
-                .collect(Collectors.toList());
 
+        log.info("State transfer on {}, transferred segments: {}", currentNode, transferredSegments);
         // If there are transferred segments, invalidate.
-        runtime.invalidateLayout();
-
-        Layout oldLayout = runtime.getLayoutView().getLayout();
 
         // Case 1: The transferred has occurred -> Create a new layout with restored node, merge if possible.
         if (!transferredSegments.isEmpty()) {
@@ -164,26 +165,26 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             // If segments can be merged, merge, if not, just reconfigure.
             if (RedundancyCalculator.canMergeSegments(newLayout, currentNode)) {
                 log.info("State transfer on: {}: Can merge segments.", currentNode);
-                runtime.getLayoutManagementView().mergeSegments(newLayout);
+                layoutManagementView.mergeSegments(newLayout);
             } else {
                 // Since we seal with a new epoch, we also need to bump the epoch of the new layout.
                 LayoutBuilder builder = new LayoutBuilder(newLayout);
                 newLayout = builder.setEpoch(oldLayout.getEpoch() + 1).build();
-                runtime.getLayoutManagementView()
+                layoutManagementView
                         .runLayoutReconfiguration(oldLayout, newLayout, false);
             }
             log.info("State transfer on {}: Reconfiguration is successful.", currentNode);
-            return true;
+            return RestoreStatus.RESTORED;
         }
         // Case 2: The transfer has not occurred but the segments can still be merged.
         else if (RedundancyCalculator.canMergeSegments(oldLayout, currentNode)) {
             log.info("State transfer on: {}: Can merge segments.", currentNode);
-            runtime.getLayoutManagementView().mergeSegments(oldLayout);
-            return true;
+            layoutManagementView.mergeSegments(oldLayout);
+            return RestoreStatus.RESTORED;
         }
         // Case 3: Nothing to do.
         else {
-            return false;
+            return RestoreStatus.NOT_RESTORED;
         }
 
     }
@@ -230,10 +231,10 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             stateList = transferManager.handleTransfer(stateList);
             // Restore redundancy for the segments that are restored.
             // If possible, also merge the segments.
-            boolean restored = restoreWithBackOff(stateList, runtime);
+            RestoreStatus restoreStatus = restoreWithBackOff(stateList, runtime);
 
             // Invalidate the layout.
-            if (restored) {
+            if (restoreStatus.equals(RESTORED)) {
 
                 log.info("State transfer on {}: Updating status map.", currentNode);
                 runtime.invalidateLayout();

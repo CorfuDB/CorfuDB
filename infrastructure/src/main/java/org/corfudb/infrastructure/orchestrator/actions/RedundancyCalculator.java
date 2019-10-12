@@ -182,11 +182,12 @@ public class RedundancyCalculator {
                 CompletableFuture<CurrentTransferSegmentStatus> oldSegmentStatus =
                         oldSegment.segment.getStatus();
 
-                // if the old segment completed with error, not done, or failed -> update the segment
+                // if the old segment completed with error, not done, failed or restored -> update the segment
                 // with a new range and the old status.
                 if (oldSegmentStatus.isCompletedExceptionally() ||
                         !oldSegmentStatus.isDone() ||
-                        oldSegmentStatus.join().getSegmentStateTransferState().equals(FAILED)) {
+                        oldSegmentStatus.join().getSegmentState().equals(FAILED) ||
+                                oldSegmentStatus.join().getSegmentState().equals(RESTORED)) {
                     mergedSegment = new AgedSegment(new CurrentTransferSegment(newSegment.segment
                             .getStartAddress(),
                             newSegment.segment.getEndAddress(), oldSegmentStatus), NEW_SEGMENT);
@@ -219,7 +220,7 @@ public class RedundancyCalculator {
 
                 CompletableFuture<CurrentTransferSegmentStatus> newStatus =
                         status.thenApply(oldStatus -> {
-                            if (oldStatus.getSegmentStateTransferState().equals(TRANSFERRED)) {
+                            if (oldStatus.getSegmentState().equals(TRANSFERRED)) {
                                 return new CurrentTransferSegmentStatus(RESTORED, segment.getEndAddress());
                             } else {
                                 return oldStatus;

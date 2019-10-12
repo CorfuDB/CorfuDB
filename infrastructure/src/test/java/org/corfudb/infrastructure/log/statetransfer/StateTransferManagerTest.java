@@ -60,7 +60,7 @@ public class StateTransferManagerTest {
                 .when(spy).getUnknownAddressesInRange(0L, 5L);
 
         CurrentTransferSegmentStatus status = spy.handleTransfer(notPresent).get(0).getStatus().join();
-        assertThat(status.getSegmentStateTransferState()).isEqualTo(TRANSFERRED);
+        assertThat(status.getSegmentState()).isEqualTo(TRANSFERRED);
         assertThat(status.getLastTransferredAddress()).isEqualTo(5L);
 
         // Case 2: Range is partially present
@@ -84,7 +84,7 @@ public class StateTransferManagerTest {
 
         status = spy.handleTransfer(partPresent).get(0).getStatus().join();
 
-        assertThat(status.getSegmentStateTransferState()).isEqualTo(TRANSFERRED);
+        assertThat(status.getSegmentState()).isEqualTo(TRANSFERRED);
 
         assertThat(status.getLastTransferredAddress()).isEqualTo(3L);
 
@@ -97,7 +97,7 @@ public class StateTransferManagerTest {
 
         status = spy.handleTransfer(partPresent).get(0).getStatus().join();
 
-        assertThat(status.getSegmentStateTransferState()).isEqualTo(TRANSFERRED);
+        assertThat(status.getSegmentState()).isEqualTo(TRANSFERRED);
 
         assertThat(status.getLastTransferredAddress()).isEqualTo(5L);
 

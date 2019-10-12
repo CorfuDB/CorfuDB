@@ -143,7 +143,6 @@ public class LayoutServer extends AbstractServer {
         final long msgEpoch = msg.getPayload();
         final long serverEpoch = getServerEpoch();
 
-        log.info("Msg epoch: {}, Server epoch: {}", msgEpoch, serverEpoch);
         if (msgEpoch <= serverEpoch) {
             r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType
                     .LAYOUT_RESPONSE));

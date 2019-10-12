@@ -60,20 +60,20 @@ public class StateTransferManager {
     @ToString
     @EqualsAndHashCode
     public static class CurrentTransferSegmentStatus {
-        private SegmentState segmentStateTransferState;
+        private SegmentState segmentState;
         private long lastTransferredAddress;
         private StateTransferFailure causeOfFailure = null;
 
-        public CurrentTransferSegmentStatus(SegmentState segmentStateTransferState,
+        public CurrentTransferSegmentStatus(SegmentState segmentState,
                                             long lastTransferredAddress) {
-            this.segmentStateTransferState = segmentStateTransferState;
+            this.segmentState = segmentState;
             this.lastTransferredAddress = lastTransferredAddress;
         }
 
-        public CurrentTransferSegmentStatus(SegmentState segmentStateTransferState,
+        public CurrentTransferSegmentStatus(SegmentState segmentState,
                                             long lastTransferredAddress,
                                             StateTransferFailure causeOfFailure) {
-            this.segmentStateTransferState = segmentStateTransferState;
+            this.segmentState = segmentState;
             this.lastTransferredAddress = lastTransferredAddress;
             this.causeOfFailure = causeOfFailure;
         }
@@ -109,7 +109,7 @@ public class StateTransferManager {
                             .getStatus()
                             .thenCompose(status -> {
                                 // if not transferred -> transfer
-                                if (status.getSegmentStateTransferState().equals(NOT_TRANSFERRED)) {
+                                if (status.getSegmentState().equals(NOT_TRANSFERRED)) {
                                     List<Long> unknownAddressesInRange =
                                             getUnknownAddressesInRange(segment.getStartAddress(), segment.getEndAddress());
                                     if (unknownAddressesInRange.isEmpty()) {
