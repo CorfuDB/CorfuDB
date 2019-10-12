@@ -1,9 +1,6 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.sun.tools.javac.util.Pair;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -12,7 +9,6 @@ import org.corfudb.infrastructure.LayoutBasedTest;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
-import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -21,18 +17,15 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.ArrayList;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.not;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
@@ -492,8 +485,8 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
 
     private CurrentTransferSegment dataToSegment(SegmentData data){
-        long begin = data.range.fst;
-        long end = data.range.snd;
+        long begin = data.range.getKey();
+        long end = data.range.getValue();
         SegmentState state = data.state;
         boolean inProgress = data.inProgress;
         boolean failed = data.failed;
@@ -514,12 +507,12 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
     private SegmentData segmentToData(CurrentTransferSegment segment){
         if(!segment.getStatus().isDone()){
-            return new SegmentData(Pair.of(segment.getStartAddress(), segment.getEndAddress()), true, false, NOT_TRANSFERRED);
+            return new SegmentData(new SimpleEntry<>(segment.getStartAddress(), segment.getEndAddress()), true, false, NOT_TRANSFERRED);
         }
         if(segment.getStatus().isCompletedExceptionally()){
-            return new SegmentData(Pair.of(segment.getStartAddress(), segment.getEndAddress()), false, true, NOT_TRANSFERRED);
+            return new SegmentData(new SimpleEntry<>(segment.getStartAddress(), segment.getEndAddress()), false, true, NOT_TRANSFERRED);
         }
-        return new SegmentData(Pair.of(segment.getStartAddress(), segment.getEndAddress()), false, false, segment.getStatus().join().getSegmentState());
+        return new SegmentData(new SimpleEntry<>(segment.getStartAddress(), segment.getEndAddress()), false, false, segment.getStatus().join().getSegmentState());
     }
 
     @Builder
@@ -527,7 +520,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
     @ToString
     @EqualsAndHashCode
     private static class SegmentData{
-        public final Pair<Long, Long> range;
+        public final Map.Entry<Long, Long> range;
         public boolean inProgress;
         public boolean failed;
         public SegmentState state;
@@ -544,22 +537,22 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
         // Old list:
         List<CurrentTransferSegment> oldList = Arrays.asList(
-                SegmentData.builder().range(Pair.of(0L, 10L)).state(TRANSFERRED).build(),
-                SegmentData.builder().range(Pair.of(11L, 12L)).state(NOT_TRANSFERRED).inProgress(true).build(),
-                SegmentData.builder().range(Pair.of(13L, 16L)).state(NOT_TRANSFERRED).failed(true).build(),
-                SegmentData.builder().range(Pair.of(18L, 20L)).state(FAILED).build(),
-                SegmentData.builder().range(Pair.of(21L, 25L)).state(RESTORED).build()
+                SegmentData.builder().range(new SimpleEntry<>(0L, 10L)).state(TRANSFERRED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(11L, 12L)).state(NOT_TRANSFERRED).inProgress(true).build(),
+                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(NOT_TRANSFERRED).failed(true).build(),
+                SegmentData.builder().range(new SimpleEntry<>(18L, 20L)).state(FAILED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(21L, 25L)).state(RESTORED).build()
                 ).stream()
                 .map(data -> dataToSegment(data)).collect(Collectors.toList());
 
         // New list:
         List<CurrentTransferSegment> newList = Arrays.asList(
-                SegmentData.builder().range(Pair.of(5L, 10L)).state(RESTORED).build(),
-                SegmentData.builder().range(Pair.of(11L, 12L)).state(NOT_TRANSFERRED).build(),
-                SegmentData.builder().range(Pair.of(13L, 16L)).state(NOT_TRANSFERRED).build(),
-                SegmentData.builder().range(Pair.of(18L, 20L)).state(NOT_TRANSFERRED).build(),
-                SegmentData.builder().range(Pair.of(21L, 25L)).state(NOT_TRANSFERRED).build(),
-                SegmentData.builder().range(Pair.of(26L, 30L)).state(RESTORED).build()
+                SegmentData.builder().range(new SimpleEntry<>(5L, 10L)).state(RESTORED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(11L, 12L)).state(NOT_TRANSFERRED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(NOT_TRANSFERRED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(18L, 20L)).state(NOT_TRANSFERRED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(21L, 25L)).state(NOT_TRANSFERRED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(26L, 30L)).state(RESTORED).build()
                 ).stream()
                 .map(data -> dataToSegment(data)).collect(Collectors.toList());
 
@@ -569,12 +562,12 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
         // Expected:
         ImmutableList<SegmentData> expected = ImmutableList.copyOf(Arrays.asList(
-                SegmentData.builder().range(Pair.of(5L, 10L)).state(RESTORED).build(),
-                SegmentData.builder().range(Pair.of(11L, 12L)).state(NOT_TRANSFERRED).inProgress(true).build(),
-                SegmentData.builder().range(Pair.of(13L, 16L)).state(NOT_TRANSFERRED).failed(true).build(),
-                SegmentData.builder().range(Pair.of(18L, 20L)).state(FAILED).build(),
-                SegmentData.builder().range(Pair.of(21L, 25L)).state(RESTORED).build(),
-                SegmentData.builder().range(Pair.of(26L, 30L)).state(RESTORED).build()
+                SegmentData.builder().range(new SimpleEntry<>(5L, 10L)).state(RESTORED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(11L, 12L)).state(NOT_TRANSFERRED).inProgress(true).build(),
+                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(NOT_TRANSFERRED).failed(true).build(),
+                SegmentData.builder().range(new SimpleEntry<>(18L, 20L)).state(FAILED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(21L, 25L)).state(RESTORED).build(),
+                SegmentData.builder().range(new SimpleEntry<>(26L, 30L)).state(RESTORED).build()
         ));
 
         assertThat(resultList).isEqualTo(expected);
