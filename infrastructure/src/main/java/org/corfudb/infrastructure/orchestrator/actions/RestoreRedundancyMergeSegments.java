@@ -146,9 +146,6 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 .collect(Collectors.toList());
 
 
-        log.info("State transfer on {}, transferred segments: {}", currentNode, transferredSegments);
-        // If there are transferred segments, invalidate.
-
         // Case 1: The transferred has occurred -> Create a new layout with restored node, merge if possible.
         if (!transferredSegments.isEmpty()) {
 
