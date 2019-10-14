@@ -90,7 +90,7 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 (defn get-port [endpoint] (Integer/parseInt (get (.. endpoint (split ":")) 1)))
 (defn get-host [endpoint] (get (.. endpoint (split ":")) 0))
 
-; Get a runtime or a router, and add it to the runtime/router table
+; Get a runtime or a router, and add it to the runtime/router corfuTable
 (defn add-client ([client] (.. *o (addClient client)))
   ([client, router] (.. router (addClient client))))
 (defn get-runtime

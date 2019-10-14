@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package org.corfudb.test;
+option java_package = "org.corfudb.test";
+
+message Experience {
+    string company = 1;
+}

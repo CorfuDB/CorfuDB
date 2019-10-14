@@ -46,7 +46,7 @@ public class CorfuQueue<E> {
                 .setStreamName(streamName)
                 .setArguments(CorfuTable.IndexRegistry.empty(), new LinkedHashMap<Long, E>())
                 .open();
-        guidGenerator = new CorfuGuidGenerator(runtime);
+        guidGenerator = CorfuGuidGenerator.getInstance(runtime);
     }
 
     /**

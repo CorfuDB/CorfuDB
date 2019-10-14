@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
@@ -33,7 +34,6 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -139,6 +139,7 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+
     /**
      * Returns a new SequencerServer.
      *
@@ -156,6 +157,7 @@ public class SequencerServer extends AbstractServer {
         globalLogTail = config.getInitialToken();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
+
 
         setUpTimerNameCache();
     }
