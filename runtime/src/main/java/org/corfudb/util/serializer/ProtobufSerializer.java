@@ -15,12 +15,13 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.collections.CorfuRecord;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.SerializerException;
 
 /**
  * The Protobuf serializer is the main component that allows CorfuStore to use Protobufs to
  * convert a language specific (Java here) object into an identifiable byte buffer that
  * can be then converted back to a language specific object.
- *
+ * <p>
  * To achieve this, this serializer requires a map of all seen class types or a classMap
  * and Google Protobuf 3's Any.
  * Any type carries with it a typeUrl which helps identify the class uniquely.
@@ -38,11 +39,11 @@ public class ProtobufSerializer implements ISerializer {
         this.classMap = classMap;
     }
 
-    private enum MessageType {
+    enum MessageType {
         KEY(1),
         VALUE(2);
 
-        private static final Map<Integer, MessageType> valToTypeMap = new HashMap<>();
+        static final Map<Integer, MessageType> valToTypeMap = new HashMap<>();
 
         static {
             for (MessageType type : MessageType.values()) {
@@ -50,7 +51,7 @@ public class ProtobufSerializer implements ISerializer {
             }
         }
 
-        private final int val;
+        final int val;
 
         MessageType(int val) {
             this.val = val;
@@ -96,7 +97,7 @@ public class ProtobufSerializer implements ISerializer {
             }
         } catch (IOException ie) {
             log.error("Exception during deserialization!", ie);
-            throw new RuntimeException(ie);
+            throw new SerializerException(ie);
         }
     }
 
@@ -138,6 +139,7 @@ public class ProtobufSerializer implements ISerializer {
             bbos.write(data);
         } catch (IOException ie) {
             log.error("Exception during serialization!", ie);
+            throw new SerializerException(ie);
         }
     }
 }
