@@ -6,7 +6,13 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.infrastructure.BatchProcessor;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter.BatchTransferPlan;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter.ManyToOneReadTransferPlan;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter.ProtocolTransferPlan;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter.TransferMethod;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.IncompleteDataReadException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.IncompleteReadException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.RejectedAppendException;
@@ -40,6 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferWriter.TransferMethod.PROTOCOL;
 import static org.corfudb.runtime.exceptions.OverwriteCause.*;
 import static org.corfudb.runtime.view.Address.*;
 
@@ -57,6 +64,7 @@ public class RegularBatchProcessor {
     @Getter
     private final AddressSpaceView addressSpaceView;
 
+
     @Getter
     private final ReadOptions readOptions = ReadOptions.builder()
             .waitForHole(true)
@@ -65,9 +73,11 @@ public class RegularBatchProcessor {
             .build();
 
     public RegularBatchProcessor(@NonNull StreamLog streamLog,
-                                 @NonNull AddressSpaceView addressSpaceView) {
+                                 @NonNull AddressSpaceView addressSpaceView,
+                                 @NonNull RuntimeLayout runtimeLayout) {
         this.streamLog = streamLog;
         this.addressSpaceView = addressSpaceView;
+        this.runtimeLayout = runtimeLayout;
     }
 
     /**
@@ -76,7 +86,6 @@ public class RegularBatchProcessor {
      * @param exception Read or write exception.
      * @return A function that produces a future that handles the errors depending on their type.
      */
-
     Supplier<CompletableFuture<Result<Long, StateTransferException>>> getErrorHandlingPipeline(StateTransferException exception) {
         if (exception instanceof IncompleteReadException) {
             IncompleteReadException incompleteReadException = (IncompleteDataReadException) exception;
@@ -93,15 +102,34 @@ public class RegularBatchProcessor {
     /**
      * Read data -> write data.
      *
-     * @param addresses A batch of consecutive addresses.
+     * @param batchTransferPlan A batch of consecutive addresses along with
+     *                          a recommendation on transfer method.
      * @return Result of an empty value if a pipeline executes correctly;
      * a result containing the first encountered error otherwise.
      */
-    public CompletableFuture<Result<Long, StateTransferException>> transfer(List<Long> addresses) {
-        return CompletableFuture.supplyAsync(() -> readRecords(addresses))
+    public CompletableFuture<Result<Long, StateTransferException>> transfer(BatchTransferPlan batchTransferPlan) {
+
+        if(batchTransferPlan instanceof ProtocolTransferPlan){
+            return getProtocolPipeline(batchTransferPlan.getTransferAddresses()).get();
+        }
+        else{
+            ManyToOneReadTransferPlan transferPlan = (ManyToOneReadTransferPlan) batchTransferPlan;
+            return getManyToOnePipeline(transferPlan.getTransferAddresses(), transferPlan.getExclusiveEndpoints())
+                    .get();
+        }
+    }
+
+    private Supplier<CompletableFuture<Result<Long, StateTransferException>>>
+    getProtocolPipeline(List<Long> addresses){
+        return () -> CompletableFuture.supplyAsync(() -> readRecords(addresses))
                 .thenApply(records -> records.flatMap(this::writeRecords));
     }
 
+    // Go via the many to one read and write
+    private Supplier<CompletableFuture<Result<Long, StateTransferException>>>
+    getManyToOnePipeline(List<Long> addresses, List<String> sourceServers) {
+        return null;
+    }
 
     /**
      * Handle errors that resulted during the transfer.
@@ -170,7 +198,6 @@ public class RegularBatchProcessor {
                                 return result;
                             }
                         });
-
                 // Join the result.
                 Result<Long, StateTransferException> joinResult = pipelineFuture.join();
                 if (joinResult.isError()) {

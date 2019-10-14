@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.ToString;
 import org.apache.commons.collections.ListUtils;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
@@ -35,6 +36,7 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
 import static org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator.SegmentAge.*;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 @AllArgsConstructor
 public class RedundancyCalculator {
@@ -70,6 +72,10 @@ public class RedundancyCalculator {
 
     static boolean segmentContainsServer(LayoutSegment segment, String server) {
         return segment.getFirstStripe().getLogServers().contains(server);
+    }
+
+    long retrieveGlobalCommittedOffset(Layout layout, CorfuRuntime runtime){
+        return NON_ADDRESS;
     }
 
     Layout restoreRedundancyForSegment(CurrentTransferSegment transferSegment, Layout layout) {

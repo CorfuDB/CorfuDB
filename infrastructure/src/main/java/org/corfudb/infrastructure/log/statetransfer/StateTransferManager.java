@@ -46,7 +46,6 @@ public class StateTransferManager {
         FAILED
     }
 
-    @AllArgsConstructor
     @EqualsAndHashCode
     @Getter
     @ToString
@@ -54,6 +53,26 @@ public class StateTransferManager {
         private final long startAddress;
         private final long endAddress;
         private final CompletableFuture<CurrentTransferSegmentStatus> status;
+        private final CommittedTransferData committedTransferData;
+
+        public CurrentTransferSegment(long startAddress, long endAddress,
+                                      CompletableFuture<CurrentTransferSegmentStatus> status){
+            this.startAddress = startAddress;
+            this.endAddress = endAddress;
+            this.status = status;
+            this.committedTransferData = null;
+        }
+
+        public CurrentTransferSegment(long startAddress, long endAddress,
+                                      CompletableFuture<CurrentTransferSegmentStatus> status,
+                                      CommittedTransferData committedTransferData){
+            this.startAddress = startAddress;
+            this.endAddress = endAddress;
+            this.status = status;
+            this.committedTransferData = committedTransferData;
+        }
+
+
     }
 
     @Getter
@@ -77,6 +96,13 @@ public class StateTransferManager {
             this.lastTransferredAddress = lastTransferredAddress;
             this.causeOfFailure = causeOfFailure;
         }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    public static class CommittedTransferData{
+        private final long committedOffset;
+        private final List<String> sourceServers;
     }
 
     @Getter
@@ -121,8 +147,13 @@ public class StateTransferManager {
                                         // transfer whatever is not transferred
                                         Long lastAddressToTransfer =
                                                 unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
+
+                                        CommittedTransferData committedTransferData = segment.getCommittedTransferData();
+
                                         return stateTransferWriter
-                                                .stateTransfer(unknownAddressesInRange, batchSize)
+                                                .stateTransfer(unknownAddressesInRange, batchSize, Optional
+                                                        .ofNullable(committedTransferData)
+                                                        .orElseGet(null))
                                                 .thenApply(lastTransferredAddressResult -> {
                                                     if (lastTransferredAddressResult.isValue() &&
                                                             lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {

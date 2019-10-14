@@ -13,6 +13,8 @@ import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -44,6 +46,15 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
 
     public ImmutableList<CurrentTransferSegment> createStateList(Layout layout){
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
+        long globalCommittedOffset = retrieveGlobalCommittedOffset(layout, runtime);
+        Optional<CommittedTransferData> committedTransferData;
+        if(globalCommittedOffset == NON_ADDRESS){
+            committedTransferData = Optional.empty();
+        }
+        else{
+            committedTransferData = Optional.of(new CommittedTransferData(globalCommittedOffset,
+                    ImmutableList.copyOf(layout.getSegment(globalCommittedOffset).getAllLogServers())));
+        }
                 return ImmutableList.copyOf(layout.getSegments()
                         .stream()
                         // filter the segments that end before the trim mark and are not open.
@@ -57,13 +68,13 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                 return new CurrentTransferSegment(segmentStart, segmentEnd,
                                         CompletableFuture.completedFuture(
                                                 new CurrentTransferSegmentStatus(RESTORED,
-                                                segmentEnd)));
+                                                segmentEnd)), committedTransferData.orElse(null));
                             }
                             else{
                                 return new CurrentTransferSegment(segmentStart, segmentEnd,
                                         CompletableFuture.completedFuture(
                                                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                NON_ADDRESS)));
+                                                NON_ADDRESS)), committedTransferData.orElse(null));
                             }
 
                         })

@@ -207,6 +207,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         RegularBatchProcessor transferBatchProcessor =
                 new RegularBatchProcessor(streamLog, runtime.getAddressSpaceView());
 
+        runtime.getLayoutView().getRuntimeLayout()
         StateTransferWriter stateTransferWriter =
                 new StateTransferWriter(transferBatchProcessor);
 
@@ -214,7 +215,6 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 new StateTransferManager(streamLog,
                         stateTransferWriter,
                         runtime.getParameters().getBulkReadSize());
-
         // Create the initial state map.
         ImmutableList<CurrentTransferSegment> stateList =
                 redundancyCalculator.createStateList(layout);

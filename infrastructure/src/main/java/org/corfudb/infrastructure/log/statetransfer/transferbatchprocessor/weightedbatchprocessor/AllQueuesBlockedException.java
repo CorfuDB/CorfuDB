@@ -1,0 +1,4 @@
+package org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.weightedbatchprocessor;
+
+public class AllQueuesBlockedException extends WeightedRoundRobinBatchProcessorException {
+}

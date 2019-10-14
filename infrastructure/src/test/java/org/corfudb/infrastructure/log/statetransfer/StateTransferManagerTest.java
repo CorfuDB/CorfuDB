@@ -23,6 +23,7 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -49,7 +50,7 @@ public class StateTransferManagerTest {
         StateTransferWriter stateTransferWriter = mock(StateTransferWriter.class);
 
         doReturn(transferResult)
-                .when(stateTransferWriter).stateTransfer(missingRange, readSize);
+                .when(stateTransferWriter).stateTransfer(missingRange, readSize, NON_ADDRESS);
 
         StateTransferManager stateTransferManager = new StateTransferManager(mock(StreamLog.class),
                 stateTransferWriter, readSize);
@@ -77,7 +78,7 @@ public class StateTransferManagerTest {
                 .mapError(x -> new StateTransferException()));
 
         doReturn(transferResult)
-                .when(stateTransferWriter).stateTransfer(missingRange, readSize);
+                .when(stateTransferWriter).stateTransfer(missingRange, readSize, NON_ADDRESS);
 
         doReturn(missingRange)
                 .when(spy).getUnknownAddressesInRange(0L, 5L);

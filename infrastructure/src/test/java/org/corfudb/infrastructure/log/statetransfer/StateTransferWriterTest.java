@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -114,7 +115,7 @@ public class StateTransferWriterTest extends  DataTest{
 
         StateTransferWriter stateTransferWriter = new StateTransferWriter(spy);
         Result<Long, StateTransferException> res =
-                stateTransferWriter.stateTransfer(addresses, 10).join();
+                stateTransferWriter.stateTransfer(addresses, 10, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(2L);
 
         // transfer is ok, multiple chunks
@@ -132,7 +133,7 @@ public class StateTransferWriterTest extends  DataTest{
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
 
         stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5).join();
+        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(10L);
 
         // first half is already written, second half is ok
@@ -146,7 +147,7 @@ public class StateTransferWriterTest extends  DataTest{
 
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
         stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5).join();
+        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(10L);
 
         // first half got some missing addresses, second half is ok
@@ -175,7 +176,7 @@ public class StateTransferWriterTest extends  DataTest{
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
 
         stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5).join();
+        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(10L);
 
         // first half got some unrecoverable error, second half is ok
@@ -191,7 +192,7 @@ public class StateTransferWriterTest extends  DataTest{
                 .when(spy).transfer(firstRange);
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
         stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5).join();
+        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.getError()).isInstanceOf(StateTransferFailure.class);
     }
 }
