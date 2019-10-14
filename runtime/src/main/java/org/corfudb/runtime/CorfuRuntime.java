@@ -710,6 +710,7 @@ public class CorfuRuntime {
                 parameters.nettyEventLoopThreads;
         ThreadFactory factory = new ThreadFactoryBuilder()
                 .setDaemon(true)
+                .setPriority (Thread.MAX_PRIORITY)
                 .setNameFormat(parameters.nettyEventLoopThreadFormat)
                 .setUncaughtExceptionHandler(this::handleUncaughtThread)
                 .build();
