@@ -19,6 +19,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
+        <module>benchmarks</module>
     </modules>
 
 
@@ -163,7 +164,7 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>23.0</version>
+            <version>28.0-jre</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>

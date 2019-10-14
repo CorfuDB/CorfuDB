@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.channel.DefaultEventLoopGroup;
@@ -12,7 +11,6 @@ import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.LayoutServer;
@@ -224,7 +222,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addServer(int port) {
-        new TestServer(new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(port)).setPort(port).build()).addToTest(port, this);
+        new TestServer(new ServerContextBuilder().setSingle(false)
+            .setServerRouter(new TestServerRouter(port))
+            .setPort(port).build())
+            .addToTest(port, this);
     }
 
 
@@ -526,8 +527,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 serverRouter = new TestServerRouter();
             }
             this.baseServer = new BaseServer(serverContext);
-            MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-            this.sequencerServer = new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-runtime", metricRegistry));
+            this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
             this.managementServer = new ManagementServer(serverContext);
