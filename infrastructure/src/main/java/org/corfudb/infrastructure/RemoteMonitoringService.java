@@ -166,6 +166,7 @@ public class RemoteMonitoringService implements MonitoringService {
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
+                        .setPriority (Thread.MAX_PRIORITY)
                         .setNameFormat(serverContext.getThreadPrefix() + "ManagementService")
                         .build());
 
