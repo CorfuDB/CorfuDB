@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.infrastructure.AbstractServer;
@@ -13,6 +14,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.junit.After;
 import org.junit.Test;
 
@@ -44,6 +46,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
+        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
                 // Required for management server to fetch the latest layout and connect runtime.

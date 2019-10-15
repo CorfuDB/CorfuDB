@@ -31,13 +31,14 @@ import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutManagementView;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.ManagementView;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
@@ -468,6 +469,13 @@ public class CorfuRuntime {
          */
         @Default
         PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+        /**
+         * Port at which the {@link CorfuRuntime} will allow third-party
+         * collectors to pull for metrics.
+         */
+        @Default
+        int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
     }
 
     /**
@@ -518,6 +526,9 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
+
+    @Getter(lazy = true)
+    private final TableRegistry tableRegistry = new TableRegistry(this);
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -576,14 +587,6 @@ public class CorfuRuntime {
 
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
-
-    /** Initialize a default static registry which through that different metrics
-     * can be registered and reported */
-    static {
-        synchronized (defaultMetrics) {
-            MetricsUtils.metricsReportingSetup(defaultMetrics);
-        }
-    }
 
     /**
      * Register SystemDownHandler.
@@ -682,6 +685,14 @@ public class CorfuRuntime {
 
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
+
+        // Try to expose metrics via Dropwizard CsvReporter JmxReporter and Slf4jReporter.
+        MetricsUtils.metricsReportingSetup(defaultMetrics);
+        if (parameters.getPrometheusMetricsPort() != MetricsUtils.NO_METRICS_PORT) {
+            // Try to expose metrics via Prometheus.
+            MetricsUtils.metricsReportingSetup(
+                    defaultMetrics,parameters.getPrometheusMetricsPort());
+        }
 
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
