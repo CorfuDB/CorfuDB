@@ -3,11 +3,10 @@ package org.corfudb.infrastructure.log.statetransfer;
 import com.google.common.collect.Ordering;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.IncompleteDataReadException;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.RejectedDataException;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
-import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.RegularBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.IncompleteDataReadException;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.AddressSpaceView;
@@ -32,30 +31,30 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
-public class StateTransferWriterTest extends  DataTest{
+public class StateTransferPlannerTest extends  DataTest{
 
     @Test
     public void testMergeBatchResults(){
         RegularBatchProcessor batchProcessor = mock(RegularBatchProcessor.class);
-        StateTransferWriter stateTransferWriter = new StateTransferWriter(batchProcessor);
+        StateTransferPlanner StateTransferPlanner = new StateTransferPlanner(batchProcessor);
         // first is ok, second is ok
         Result<Long, StateTransferException> first =
                 Result.ok(0L).mapError(x -> new StateTransferException());
         Result<Long, StateTransferException> second =
                 Result.ok(3L).mapError(x -> new StateTransferException());
-        assertThat(stateTransferWriter.mergeBatchResults(first, second).get()).isEqualTo(3L);
+        assertThat(StateTransferPlanner.mergeBatchResults(first, second).get()).isEqualTo(3L);
         // first is a failure, second is ok
         first = Result.error(new StateTransferFailure());
-        assertThat(stateTransferWriter.mergeBatchResults(first, second).getError())
+        assertThat(StateTransferPlanner.mergeBatchResults(first, second).getError())
                 .isInstanceOf(StateTransferFailure.class);
         // first is ok, second is a failure
         first = Result.ok(0L).mapError(x -> new StateTransferException());
         second = Result.error(new StateTransferFailure());
-        assertThat(stateTransferWriter.mergeBatchResults(first, second).getError())
+        assertThat(StateTransferPlanner.mergeBatchResults(first, second).getError())
                 .isInstanceOf(StateTransferFailure.class);
         // first is a failure, second is a failure
         first = Result.error(new StateTransferFailure());
-        assertThat(stateTransferWriter.mergeBatchResults(first, second).getError())
+        assertThat(StateTransferPlanner.mergeBatchResults(first, second).getError())
                 .isInstanceOf(StateTransferFailure.class);
 
     }
@@ -63,19 +62,19 @@ public class StateTransferWriterTest extends  DataTest{
     @Test
     public void testCoalesceResults(){
         RegularBatchProcessor batchProcessor = mock(RegularBatchProcessor.class);
-        StateTransferWriter stateTransferWriter = new StateTransferWriter(batchProcessor);
+        StateTransferPlanner StateTransferPlanner = new StateTransferPlanner(batchProcessor);
         List<CompletableFuture<Result<Long, StateTransferException>>> resultSet = Stream.of(0L, 1L, 2L)
                 .map(x -> CompletableFuture
                         .completedFuture(Result.ok(x).mapError(y -> new StateTransferException())))
                 .collect(Collectors.toList());
         // all ok
         CompletableFuture<Result<Long, StateTransferException>> finalResult =
-                stateTransferWriter.coalesceResults(resultSet);
+                StateTransferPlanner.coalesceResults(resultSet);
         assertThat(finalResult.join().get()).isEqualTo(2L);
 
         // one is a failure
         resultSet.add(CompletableFuture.completedFuture(Result.error(new StateTransferFailure())));
-        finalResult = stateTransferWriter.coalesceResults(resultSet);
+        finalResult = StateTransferPlanner.coalesceResults(resultSet);
         assertThat(finalResult.join().getError()).isInstanceOf(StateTransferFailure.class);
 
         // one is completed exceptionally
@@ -89,12 +88,12 @@ public class StateTransferWriterTest extends  DataTest{
         resultSet.add(CompletableFuture
                 .completedFuture(Result.ok(3L).mapError(y -> new StateTransferException())));
 
-        finalResult = stateTransferWriter.coalesceResults(resultSet);
+        finalResult = StateTransferPlanner.coalesceResults(resultSet);
         assertThat(finalResult).isCompletedExceptionally();
 
         // the input is empty
         CompletableFuture<Result<Long, StateTransferException>> future =
-                stateTransferWriter.coalesceResults(new ArrayList<>());
+                StateTransferPlanner.coalesceResults(new ArrayList<>());
         assertThat(future.join().getError()).isInstanceOf(StateTransferFailure.class);
     }
 
@@ -113,9 +112,9 @@ public class StateTransferWriterTest extends  DataTest{
         List<Long> addresses = Arrays.asList(0L, 1L, 2L);
         doReturn(CompletableFuture.completedFuture(value)).when(spy).transfer(addresses);
 
-        StateTransferWriter stateTransferWriter = new StateTransferWriter(spy);
+        StateTransferPlanner StateTransferPlanner = new StateTransferPlanner(spy);
         Result<Long, StateTransferException> res =
-                stateTransferWriter.stateTransfer(addresses, 10, NON_ADDRESS).join();
+                StateTransferPlanner.stateTransfer(addresses, 10, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(2L);
 
         // transfer is ok, multiple chunks
@@ -132,8 +131,8 @@ public class StateTransferWriterTest extends  DataTest{
         doReturn(CompletableFuture.completedFuture(firstValue)).when(spy).transfer(firstRange);
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
 
-        stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
+        StateTransferPlanner = new StateTransferPlanner(spy);
+        res = StateTransferPlanner.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(10L);
 
         // first half is already written, second half is ok
@@ -146,8 +145,8 @@ public class StateTransferWriterTest extends  DataTest{
                 .transfer(firstRange);
 
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
-        stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
+        StateTransferPlanner = new StateTransferPlanner(spy);
+        res = StateTransferPlanner.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(10L);
 
         // first half got some missing addresses, second half is ok
@@ -175,8 +174,8 @@ public class StateTransferWriterTest extends  DataTest{
 
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
 
-        stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
+        StateTransferPlanner = new StateTransferPlanner(spy);
+        res = StateTransferPlanner.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.get()).isEqualTo(10L);
 
         // first half got some unrecoverable error, second half is ok
@@ -191,8 +190,8 @@ public class StateTransferWriterTest extends  DataTest{
         doReturn(failure)
                 .when(spy).transfer(firstRange);
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
-        stateTransferWriter = new StateTransferWriter(spy);
-        res = stateTransferWriter.stateTransfer(addresses, 5, NON_ADDRESS).join();
+        StateTransferPlanner = new StateTransferPlanner(spy);
+        res = StateTransferPlanner.stateTransfer(addresses, 5, NON_ADDRESS).join();
         assertThat(res.getError()).isInstanceOf(StateTransferFailure.class);
     }
 }

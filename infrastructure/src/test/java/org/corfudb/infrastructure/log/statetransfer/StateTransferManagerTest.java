@@ -1,17 +1,13 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
-import org.corfudb.util.Sleep;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -19,7 +15,6 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
@@ -47,13 +42,13 @@ public class StateTransferManagerTest {
 
         int readSize = 10;
 
-        StateTransferWriter stateTransferWriter = mock(StateTransferWriter.class);
+        StateTransferPlanner StateTransferPlanner = mock(StateTransferPlanner.class);
 
         doReturn(transferResult)
-                .when(stateTransferWriter).stateTransfer(missingRange, readSize, NON_ADDRESS);
+                .when(StateTransferPlanner).stateTransfer(missingRange, readSize, NON_ADDRESS);
 
         StateTransferManager stateTransferManager = new StateTransferManager(mock(StreamLog.class),
-                stateTransferWriter, readSize);
+                StateTransferPlanner, readSize);
 
         StateTransferManager spy = spy(stateTransferManager);
 
@@ -78,7 +73,7 @@ public class StateTransferManagerTest {
                 .mapError(x -> new StateTransferException()));
 
         doReturn(transferResult)
-                .when(stateTransferWriter).stateTransfer(missingRange, readSize, NON_ADDRESS);
+                .when(StateTransferPlanner).stateTransfer(missingRange, readSize, NON_ADDRESS);
 
         doReturn(missingRange)
                 .when(spy).getUnknownAddressesInRange(0L, 5L);
@@ -115,10 +110,10 @@ public class StateTransferManagerTest {
 
         int readSize = 10;
 
-        StateTransferWriter stateTransferWriter = mock(StateTransferWriter.class);
+        StateTransferPlanner StateTransferPlanner = mock(StateTransferPlanner.class);
 
         StateTransferManager stateTransferManager = new StateTransferManager(mock(StreamLog.class),
-                stateTransferWriter, readSize);
+                StateTransferPlanner, readSize);
 
 
         CurrentTransferSegmentStatus status

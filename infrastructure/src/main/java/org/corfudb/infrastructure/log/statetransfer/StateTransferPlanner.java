@@ -7,19 +7,19 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CommittedTransferData;
-import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.RegularBatchProcessor;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
-import org.corfudb.runtime.view.Layout;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchTransferPlan;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolTransferPlan;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.weightedbatchprocessor.WeightedRoundRobinTransferPlan;
 import org.corfudb.util.CFUtils;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferWriter.TransferMethod.*;
 import static org.corfudb.runtime.view.Address.*;
 
 /**
@@ -27,35 +27,11 @@ import static org.corfudb.runtime.view.Address.*;
  */
 @Slf4j
 @AllArgsConstructor
-public class StateTransferWriter {
+public class StateTransferPlanner {
 
     @Getter
     @NonNull
     private final RegularBatchProcessor batchProcessor;
-
-    @AllArgsConstructor
-    @Getter
-    public class BatchTransferPlan {
-        private final List<Long> transferAddresses;
-    }
-
-    @Getter
-    public class ProtocolTransferPlan extends BatchTransferPlan {
-        public ProtocolTransferPlan(List<Long> transferAddresses) {
-            super(transferAddresses);
-        }
-    }
-
-    @Getter
-    public class ManyToOneReadTransferPlan extends BatchTransferPlan {
-
-        private final List<String> exclusiveEndpoints;
-
-        public ManyToOneReadTransferPlan(List<Long> transferAddresses, List<String> exclusiveEndpoints) {
-            super(transferAddresses);
-            this.exclusiveEndpoints = exclusiveEndpoints;
-        }
-    }
 
     public CompletableFuture<Result<Long, StateTransferException>> stateTransfer(List<Long> addresses,
                                                                                  int readSize,
@@ -66,15 +42,12 @@ public class StateTransferWriter {
                     Optional<CommittedTransferData> data = Optional.ofNullable(transferData);
                     BatchTransferPlan plan;
                     if (data.isPresent()) {
-                        plan = new ManyToOneReadTransferPlan(batch, data.get().getSourceServers());
+                        plan = new WeightedRoundRobinTransferPlan(batch, data.get().getSourceServers());
                     } else {
                         plan = new ProtocolTransferPlan(batch);
                     }
 
-                    return batchProcessor.transfer(plan)
-                            .thenCompose(transferResult ->
-                                    batchProcessor.handlePossibleTransferFailures(transferResult,
-                                            new AtomicInteger()));
+                    return batchProcessor.transfer(plan);
                 }).collect(Collectors.toList());
         return coalesceResults(listOfFutureResults);
     }

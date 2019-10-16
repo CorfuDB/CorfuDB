@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.statetransfer.exceptions;
+package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
 public class StateTransferException extends RuntimeException {
     public StateTransferException(){}

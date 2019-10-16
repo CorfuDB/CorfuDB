@@ -1,29 +1,23 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 
 import java.time.Duration;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections.ListUtils;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferWriter;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
-import org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.RegularBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferPlanner;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -33,7 +27,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.corfudb.runtime.view.LayoutManagementView;
-import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -208,12 +201,12 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 new RegularBatchProcessor(streamLog, runtime.getAddressSpaceView());
 
         runtime.getLayoutView().getRuntimeLayout()
-        StateTransferWriter stateTransferWriter =
-                new StateTransferWriter(transferBatchProcessor);
+        StateTransferPlanner StateTransferPlanner =
+                new StateTransferPlanner(transferBatchProcessor);
 
         StateTransferManager transferManager =
                 new StateTransferManager(streamLog,
-                        stateTransferWriter,
+                        StateTransferPlanner,
                         runtime.getParameters().getBulkReadSize());
         // Create the initial state map.
         ImmutableList<CurrentTransferSegment> stateList =

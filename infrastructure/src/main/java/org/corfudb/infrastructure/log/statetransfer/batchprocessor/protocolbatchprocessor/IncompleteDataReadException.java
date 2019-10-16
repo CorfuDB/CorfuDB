@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.statetransfer.exceptions;
+package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor;
 
 import java.util.Set;
 

@@ -1,6 +1,8 @@
-package org.corfudb.infrastructure.log.statetransfer.transferbatchprocessor.weightedbatchprocessor;
+package org.corfudb.infrastructure.log.statetransfer.batchprocessor.weightedbatchprocessor;
 
-public class WeightedRoundRobinBatchProcessorException extends RuntimeException{
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
+
+public class WeightedRoundRobinBatchProcessorException extends StateTransferException {
     public WeightedRoundRobinBatchProcessorException(){}
 
     public WeightedRoundRobinBatchProcessorException(String message) {

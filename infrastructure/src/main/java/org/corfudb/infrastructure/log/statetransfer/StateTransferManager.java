@@ -1,33 +1,21 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections.ListUtils;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
-import org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator;
-import org.corfudb.runtime.view.Address;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
 
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
-import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
 import static org.corfudb.runtime.view.Address.*;
@@ -111,7 +99,7 @@ public class StateTransferManager {
 
     @Getter
     @NonNull
-    private final StateTransferWriter stateTransferWriter;
+    private final StateTransferPlanner StateTransferPlanner;
 
     @Getter
     @NonNull
@@ -150,7 +138,7 @@ public class StateTransferManager {
 
                                         CommittedTransferData committedTransferData = segment.getCommittedTransferData();
 
-                                        return stateTransferWriter
+                                        return StateTransferPlanner
                                                 .stateTransfer(unknownAddressesInRange, batchSize, Optional
                                                         .ofNullable(committedTransferData)
                                                         .orElseGet(null))

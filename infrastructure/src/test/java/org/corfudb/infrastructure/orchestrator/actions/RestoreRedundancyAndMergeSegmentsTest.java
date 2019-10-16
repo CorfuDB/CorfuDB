@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import org.corfudb.infrastructure.LayoutBasedTest;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.util.Sleep;
@@ -20,9 +20,7 @@ import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyM
 import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.RESTORED;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
