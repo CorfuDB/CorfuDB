@@ -222,9 +222,12 @@ public class StreamLogFiles implements StreamLog {
                 logMetadata.updateGlobalTail(iterator.next());
             }
 
+            // Load garbage log segment to update CompactionMetadata.
+            segmentManager.getGarbageLogSegmentByOrdinal(currentSegment);
+
             // Close and remove the reference of the unprotected segments.
-            if (streamSegment.getOrdinal() <= tailSegment - logParams.protectedSegments) {
-                segmentManager.close(streamSegment.getOrdinal());
+            if (currentSegment <= tailSegment - logParams.protectedSegments) {
+                segmentManager.close(currentSegment);
             }
         }
 
@@ -562,7 +565,7 @@ public class StreamLogFiles implements StreamLog {
         long endSegment = segmentManager.getSegmentOrdinal(Math.max(logMetadata.getGlobalTail(), 0L));
         log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
-        segmentManager.cleanAndClose(endSegment);
+        segmentManager.cleanAndClose();
 
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
