@@ -5,8 +5,6 @@ import lombok.Builder.Default;
 import lombok.ToString;
 import org.corfudb.format.Types;
 
-import java.util.concurrent.TimeUnit;
-
 
 /**
  * This class specifies parameters for stream log implementation
@@ -35,39 +33,32 @@ public class StreamLogParams {
     // Region: stream log parameters
     public String logPath;
 
-    @Default
     public boolean verifyChecksum;
 
-    @Default
     public double logSizeQuotaPercentage;
+
+    public int maxOpenStreamSegments;
+
+    public int maxOpenGarbageSegments;
     // End region
 
     // Region: compactor parameters
-    @Default
     public String compactionPolicyType;
 
-    @Default
     public int compactionInitialDelayMin;
 
-    @Default
     public int compactionPeriodMin;
 
-    @Default
     public int compactionWorkers;
 
-    @Default
     public int maxSegmentsForCompaction;
 
-    @Default
     public int protectedSegments;
 
-    @Default
     public double segmentGarbageRatioThreshold;
 
-    @Default
     public double segmentGarbageSizeThresholdMB;
 
-    @Default
     public double totalGarbageSizeThresholdMB;
     // End region
 }

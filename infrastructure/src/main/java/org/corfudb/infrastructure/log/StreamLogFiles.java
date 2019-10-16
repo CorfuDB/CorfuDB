@@ -561,7 +561,7 @@ public class StreamLogFiles implements StreamLog {
         long endSegment = segmentManager.getSegmentOrdinal(Math.max(logMetadata.getGlobalTail(), 0L));
         log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
-        segmentManager.cleanAndClose(endSegment);
+        segmentManager.cleanAndClose();
 
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();

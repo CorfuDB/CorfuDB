@@ -697,6 +697,8 @@ public class ServerContext implements AutoCloseable {
                 .logPath(getServerConfig(String.class, "--log-path"))
                 .verifyChecksum(!getServerConfig(Boolean.class, "--no-verify"))
                 .logSizeQuotaPercentage(Double.parseDouble(getServerConfig(String.class, "--log-size-quota-percentage")))
+                .maxOpenStreamSegments(Integer.parseInt(getServerConfig(String.class, "--max-open-stream-segments")))
+                .maxOpenGarbageSegments(Integer.parseInt(getServerConfig(String.class, "--max-open-garbage-segments")))
                 .compactionPolicyType(getServerConfig(String.class, "--compaction-policy"))
                 .compactionInitialDelayMin(Integer.parseInt(getServerConfig(String.class, "--compaction-initial-delay")))
                 .compactionPeriodMin(Integer.parseInt(getServerConfig(String.class, "--compaction-period")))
