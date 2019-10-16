@@ -39,6 +39,8 @@ public class ServerContextBuilder {
     int port = 9000;
     String seqCache = "1000";
     String logSizeLimitPercentage = "100.0";
+    String maxOpenStreamSegments = "100";
+    String maxOpenGarbageSegments = "50";
     String batchSize = "100";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
@@ -76,6 +78,8 @@ public class ServerContextBuilder {
                 .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache)
                 .put("--log-size-quota-percentage", logSizeLimitPercentage)
+                .put("--max-open-stream-segments", maxOpenStreamSegments)
+                .put("--max-open-garbage-segments", maxOpenGarbageSegments)
                 .put("--batch-size", batchSize)
                 .put("--metadata-retention", retention)
                 .put("--no-verify", noVerify)
