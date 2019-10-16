@@ -9,6 +9,7 @@ import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
+import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 import javax.annotation.Nonnull;
@@ -27,8 +28,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import static org.corfudb.infrastructure.log.StreamLogFiles.getByteBuffer;
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogEntry;
 import static org.corfudb.infrastructure.log.StreamLogFiles.getMetadata;
@@ -49,7 +50,7 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  */
 @Slf4j
 @Getter
-public abstract class AbstractLogSegment implements AutoCloseable,
+public abstract class AbstractLogSegment implements
         Iterable<AbstractLogSegment.IndexedLogEntry> {
 
     protected final long ordinal;
@@ -71,6 +72,10 @@ public abstract class AbstractLogSegment implements AutoCloseable,
 
     @NonNull
     protected FileChannel readChannel;
+
+    protected AtomicInteger referenceCount = new AtomicInteger(0);
+
+    private volatile boolean closing = false;
 
     AbstractLogSegment(long ordinal, StreamLogParams logParams,
                        String filePath, ResourceQuota logSizeQuota,
@@ -123,6 +128,27 @@ public abstract class AbstractLogSegment implements AutoCloseable,
      * is a new segment, a log header will be appended.
      */
     public abstract void loadAddressSpace();
+
+    /**
+     * Retain the segment, increase the reference count by one.
+     */
+    public void retain() {
+        referenceCount.incrementAndGet();
+    }
+
+    /**
+     * Release the segment, decrease the reference count by one.
+     */
+    public void release() {
+        int refCount = referenceCount.decrementAndGet();
+        if (refCount < 0) {
+            log.warn("release: Segment {} reference count: {} < 0, " +
+                    "might be a bug.", filePath, refCount);
+        }
+        if (closing && refCount == 0) {
+            close();
+        }
+    }
 
     /**
      * Write a log entry record to a file.
@@ -213,24 +239,46 @@ public abstract class AbstractLogSegment implements AutoCloseable,
         } catch (ClosedChannelException cce) {
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
-            log.error("Sync: Can't flush updates for file: {}", filePath, ioe);
+            log.error("sync: Can't flush updates for file: {}", filePath, ioe);
             throw new RuntimeException(ioe);
+        }
+    }
+
+    /**
+     * Request to close the segment. If the reference count is zero,
+     * close immediately and free the resources, otherwise the segment
+     * will be closed later once it is released and not referenced.
+     *
+     * @param force if true, force close the segment without checking
+     *              reference count.
+     */
+    public void close(boolean force) {
+        closing = true;
+        int refCount = referenceCount.get();
+        if (force || refCount <= 0) {
+            if (refCount < 0) {
+                log.warn("close: Segment {} reference count: {} < 0, " +
+                        "might be a bug.", filePath, refCount);
+            }
+            close();
         }
     }
 
     /**
      * Close the segment, releasing the resources if any.
      */
-    public void close() {
-        try {
-            if (writeChannel.isOpen()) {
-                writeChannel.force(true);
+    private synchronized void close() {
+        if (writeChannel.isOpen() || readChannel.isOpen()) {
+            try {
+                if (writeChannel.isOpen()) {
+                    writeChannel.force(true);
+                }
+            } catch (IOException ioe) {
+                log.debug("close: Cannot force updates write channel for file: {}", filePath, ioe);
+            } finally {
+                IOUtils.closeQuietly(writeChannel);
+                IOUtils.closeQuietly(readChannel);
             }
-        } catch (IOException ioe) {
-            log.debug("Can't force updates write channel for file: {}", filePath, ioe);
-        } finally {
-            IOUtils.closeQuietly(readChannel);
-            IOUtils.closeQuietly(writeChannel);
         }
     }
 
@@ -387,5 +435,4 @@ public abstract class AbstractLogSegment implements AutoCloseable,
         // The actual log entry.
         LogEntry logEntry;
     }
-
 }
