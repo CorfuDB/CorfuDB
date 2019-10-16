@@ -396,7 +396,7 @@ public class StreamLogCompactor {
     private void closeSegments(AbstractLogSegment... segments) {
         for (AbstractLogSegment segment : segments) {
             if (segment != null) {
-                segment.close();
+                segment.close(true);
             }
         }
     }
