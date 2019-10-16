@@ -17,18 +17,28 @@ public class CheckpointWrapper {
 
     CorfuRuntime runtime;
     Token trimMark;
+    Map<UUID, String> allMapNames;
+    //Token prefixTrimAddress;
 
-    CheckpointWrapper(CorfuRuntime runtime) {
+    CheckpointWrapper(CorfuRuntime runtime, Map<UUID, String> allMapNames) {
         this.runtime = runtime;
-        //trimMark = -1;
-    }
+        this.trimMark = Token.UNINITIALIZED;
+        this.allMapNames = allMapNames;
+      }
 
     public void trimAndCheckpoint() {
-        //call trim();
-        //batchCheckpoint();
+        trim();
+        trimMark = batchCheckpoint();
     }
 
-    public Token batchCheckpoint(Map<UUID, String> allMapNames) {
+    public void trim() {
+        runtime.getAddressSpaceView().prefixTrim(trimMark);
+        runtime.getAddressSpaceView().invalidateClientCache();
+        runtime.getAddressSpaceView().invalidateServerCaches();
+        runtime.getAddressSpaceView().gc();
+    }
+
+    public Token batchCheckpoint() {
         log.info ("Batch checkpoint started.");
         MultiCheckpointWriter<ICorfuMap> mcWriter = new MultiCheckpointWriter<> ();
 
