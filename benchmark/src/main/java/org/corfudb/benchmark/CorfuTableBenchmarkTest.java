@@ -25,6 +25,7 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
     protected CorfuTables corfuTables;
     boolean shareTable;
     private List<Thread> threads;
+    String endpoint;
 
     CorfuTableBenchmarkTest(CorfuTableParseArgs parseArgs) {
         super(parseArgs);
@@ -38,6 +39,7 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         corfuTables = new CorfuTables(numStreams, openObjects());
         threads = new ArrayList<>();
         shareTable = parseArgs.getShareTable() == 0;
+        endpoint = parseArgs.getEndpoint ();
     }
 
     private HashMap<UUID, CorfuTable> openObjects() {
@@ -82,11 +84,11 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         }
     }
 
-    private void runTest () {
+    private void generateData() {
         runProducer();
         if (shareTable) {
             runConsumers();
-            waitForAppToFinish();
+            //waitForAppToFinish();
         } else {
             try {
                 threads.get(0).join();
@@ -94,6 +96,59 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
                 log.error(e.toString());
             }
         }
+    }
+
+    private void runTest () {
+        generateData ();
+
+        CheckpointWrapper cpWrapper = new CheckpointWrapper(super.getRuntimes().getRuntime (0), streams.getAllMapNames (), corfuTables.getMaps ());
+        log.info("First Trim operation latency(milliseconds): ");
+        cpWrapper.trimAndCheckpoint ();
+
+        generateData ();
+        waitForAppToFinish();
+
+        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
+        runtime.addLayoutServer(endpoint);
+        runtime.connect();
+
+        //FastLoaderWrapper fastloader = new FastLoaderWrapper ();
+        Thread thread = new Thread(() -> {
+            try {
+                long start = System.currentTimeMillis();
+                FastLoaderWrapper.executeFastLoader(runtime, streams.getStreams ());
+                long latency = System.currentTimeMillis() - start;
+                log.info("operation latency(milliseconds): " + latency);
+            } catch (Exception e) {
+                log.error("Operation failed with", e);
+            }
+        });
+        thread.start();
+
+        Thread threadCP = new Thread(() -> {
+            try {
+                long start = System.currentTimeMillis();
+                log.info("Second Trim operation latency(milliseconds)");
+                cpWrapper.trimAndCheckpoint ();
+                log.info("Third Trim operation latency(milliseconds): ");
+                cpWrapper.trimAndCheckpoint ();
+                long latency = System.currentTimeMillis() - start;
+                log.info("Done Trim operation latency(milliseconds): " + latency);
+            } catch (Exception e) {
+                log.error("Operation failed with", e);
+            }
+        });
+        threadCP.start();
+
+        try {
+            thread.join();
+            threadCP.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace ();
+        }
+
+
     }
 
     public static void main(String[] args) {

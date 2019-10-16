@@ -1,6 +1,7 @@
 package org.corfudb.benchmark;
 
 import com.google.common.reflect.TypeToken;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -21,6 +22,7 @@ public class BenchmarkTest {
      * Number of threads per client.
      */
     protected int numThreads;
+    @Getter
     protected Runtimes runtimes;
 
     private final BlockingQueue<Operation> operationQueue;
@@ -92,14 +94,14 @@ public class BenchmarkTest {
 
             if (!finishedInTime) {
                 log.error("not finished in time.");
-                System.exit(0);
+                //System.exit(0);
             }
         } catch (InterruptedException e) {
             log.error(String.valueOf(e));
             throw new UnrecoverableCorfuInterruptedError(e);
 
         } finally {
-            System.exit(1);
+            //System.exit(1);
         }
     }
 }

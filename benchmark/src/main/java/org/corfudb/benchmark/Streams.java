@@ -1,15 +1,14 @@
 
 package org.corfudb.benchmark;
 
+import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 public class Streams {
     int numStreams;
+    @Getter
     List<String> streams;
 
     Streams(int numStreams) {
@@ -20,7 +19,17 @@ public class Streams {
         }
     }
 
-    protected UUID getStreamID(int index) {
+    public UUID getStreamID(int index) {
         return CorfuRuntime.getStreamID(streams.get(index % numStreams));
+    }
+    public String getStreamName(int index)  { return streams.get(index % numStreams);}
+
+    public Map<UUID, String> getAllMapNames() {
+        Map<UUID, String> allMapNames = new HashMap<> ();
+
+        for(int i = 0; i < numStreams; i++) {
+            allMapNames.put(getStreamID (i), getStreamName (i));
+        }
+        return  allMapNames;
     }
 }
