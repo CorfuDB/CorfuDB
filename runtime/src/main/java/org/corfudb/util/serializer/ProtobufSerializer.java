@@ -32,10 +32,13 @@ import org.corfudb.runtime.exceptions.SerializerException;
 public class ProtobufSerializer implements ISerializer {
 
     private final byte type;
+
+    static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
+
     private final Map<String, Class<? extends Message>> classMap;
 
-    public ProtobufSerializer(byte type, Map<String, Class<? extends Message>> classMap) {
-        this.type = type;
+    public ProtobufSerializer(Map<String, Class<? extends Message>> classMap) {
+        this.type = PROTOBUF_SERIALIZER_CODE;
         this.classMap = classMap;
     }
 
