@@ -1,6 +1,9 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.RequiredArgsConstructor;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.github.benmanes.caffeine.cache.RemovalListener;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
 
@@ -15,6 +18,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -24,12 +28,7 @@ import java.util.stream.Collectors;
  * Created by WenbinZhu on 5/28/19.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class SegmentManager {
-
-    // TODO: add max open segments restrict, maybe with an auxiliary ordered list?
-    // Maximum number of open segments kept in memory.
-    private static final int MAX_OPEN_SEGMENTS = 20;
 
     // Suffix of the stream log segment files.
     private static final String STREAM_SEGMENT_FILE_SUFFIX = ".log";
@@ -46,19 +45,46 @@ public class SegmentManager {
 
     private final StreamLogDataStore dataStore;
 
-    private final Map<Long, StreamLogSegment> streamLogSegments = new ConcurrentHashMap<>();
+    private final LoadingCache<Long, StreamLogSegment> streamSegmentCache;
 
-    private final Map<Long, GarbageLogSegment> garbageLogSegments = new ConcurrentHashMap<>();
+    private final LoadingCache<Long, GarbageLogSegment> garbageSegmentCache;
 
     // A CompactionMetadata is not removed for the whole life time of log unit.
     private final Map<Long, CompactionMetadata> segmentCompactionMetadata = new ConcurrentHashMap<>();
 
-    long getSegmentOrdinal(long globalAddress) {
-        return globalAddress / StreamLogParams.RECORDS_PER_SEGMENT;
+    SegmentManager(StreamLogParams logParams, Path logDir,
+                   ResourceQuota logSizeQuota, StreamLogDataStore dataStore) {
+        this.logParams = logParams;
+        this.logDir = logDir;
+        this.logSizeQuota = logSizeQuota;
+        this.dataStore = dataStore;
+        this.streamSegmentCache = Caffeine.newBuilder()
+                .maximumSize(logParams.maxOpenStreamSegments)
+                .removalListener(getRemovalListener())
+                .build(ordinal -> getLogSegment(ordinal, StreamLogSegment.class));
+        this.garbageSegmentCache = Caffeine.newBuilder()
+                .maximumSize(logParams.maxOpenGarbageSegments)
+                .removalListener(getRemovalListener())
+                .build(ordinal -> getLogSegment(ordinal, GarbageLogSegment.class));
+    }
+
+    private <T extends AbstractLogSegment> RemovalListener<Long, T> getRemovalListener() {
+        return (key, value, cause) -> {
+            if (value == null) {
+                return;
+            }
+            if (cause == RemovalCause.SIZE) {
+                value.close(false);
+            } else if (cause == RemovalCause.EXPLICIT) {
+                value.close(true);
+            } else {
+                log.error("RemovalListener: unexpected removal cause: {}", cause);
+            }
+        };
     }
 
     private <T extends AbstractLogSegment> String getSegmentFilePath(
-            long ordinal, Class<T> segmentType, boolean forCompaction) {
+            long ordinal, Class<T> segmentType, boolean isCompactionOutput) {
         String fileSuffix;
 
         if (segmentType.equals(StreamLogSegment.class)) {
@@ -70,11 +96,21 @@ public class SegmentManager {
                     "Unknown segment type: " + segmentType);
         }
 
-        if (forCompaction) {
+        if (isCompactionOutput) {
             fileSuffix += SEGMENT_COMPACTING_FILE_SUFFIX;
         }
 
         return Paths.get(logDir.toString(), ordinal + fileSuffix).toString();
+    }
+
+    /**
+     * Get the ordinal of the segment that the global address belongs to.
+     *
+     * @param globalAddress the global address
+     * @return ordinal of the segment
+     */
+    long getSegmentOrdinal(long globalAddress) {
+        return globalAddress / StreamLogParams.RECORDS_PER_SEGMENT;
     }
 
     /**
@@ -87,7 +123,7 @@ public class SegmentManager {
      */
     StreamLogSegment getStreamLogSegment(long address) {
         long ordinal = getSegmentOrdinal(address);
-        return getLogSegment(ordinal, StreamLogSegment.class, streamLogSegments);
+        return getStreamLogSegmentByOrdinal(ordinal);
     }
 
     /**
@@ -99,7 +135,9 @@ public class SegmentManager {
      * @return the stream log segment for that ordinal
      */
     StreamLogSegment getStreamLogSegmentByOrdinal(long ordinal) {
-        return getLogSegment(ordinal, StreamLogSegment.class, streamLogSegments);
+        StreamLogSegment segment = streamSegmentCache.get(ordinal);
+        Objects.requireNonNull(segment).retain();
+        return segment;
     }
 
     /**
@@ -112,32 +150,42 @@ public class SegmentManager {
      */
     GarbageLogSegment getGarbageLogSegment(long address) {
         long ordinal = getSegmentOrdinal(address);
-        return getLogSegment(ordinal, GarbageLogSegment.class, garbageLogSegments);
+        return getGarbageLogSegmentByOrdinal(ordinal);
+    }
+
+    /**
+     * Get the opened garbage log segment that is responsible for storing the
+     * data associated with the provided segment ordinal, creating a new one
+     * if the segment is not present and opened in the current cached mapping.
+     *
+     * @param ordinal the ordinal of the segment
+     * @return the garbage log segment for that ordinal
+     */
+    GarbageLogSegment getGarbageLogSegmentByOrdinal(long ordinal) {
+        GarbageLogSegment segment = garbageSegmentCache.get(ordinal);
+        Objects.requireNonNull(segment).retain();
+        return segment;
     }
 
     @SuppressWarnings("unchecked")
-    private <T extends AbstractLogSegment> T getLogSegment(long ordinal,
-                                                           Class<T> segmentType,
-                                                           Map<Long, T> segmentMap) {
-        return segmentMap.computeIfAbsent(ordinal, ord -> {
-            String filePath = getSegmentFilePath(ordinal, segmentType, false);
-            CompactionMetadata metaData = getCompactionMetaData(ordinal);
+    private <T extends AbstractLogSegment> T getLogSegment(long ordinal, Class<T> segmentType) {
+        String filePath = getSegmentFilePath(ordinal, segmentType, false);
+        CompactionMetadata metaData = getCompactionMetaData(ordinal);
 
-            AbstractLogSegment segment;
-            if (segmentType.equals(StreamLogSegment.class)) {
-                segment = new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData, dataStore);
-            } else if (segmentType.equals(GarbageLogSegment.class)) {
-                segment = new GarbageLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData);
-            } else {
-                throw new IllegalArgumentException("getLogSegment: Unknown segment type: " + segmentType);
-            }
+        AbstractLogSegment segment;
+        if (segmentType.equals(StreamLogSegment.class)) {
+            segment = new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData, dataStore);
+        } else if (segmentType.equals(GarbageLogSegment.class)) {
+            segment = new GarbageLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData);
+        } else {
+            throw new IllegalArgumentException("getLogSegment: Unknown segment type: " + segmentType);
+        }
 
-            // The first time we open a file we should read to the end, to load the map
-            // of entries we already have. Once the segment address space is loaded, it
-            // should be ready to accept writes.
-            segment.loadAddressSpace();
-            return (T) segment;
-        });
+        // The first time we open a file we should read to the end, to load the map
+        // of entries we already have. Once the segment address space is loaded, it
+        // should be ready to accept writes.
+        segment.loadAddressSpace();
+        return (T) segment;
     }
 
     private CompactionMetadata getCompactionMetaData(long ordinal) {
@@ -200,8 +248,7 @@ public class SegmentManager {
             throw new IllegalStateException(msg);
         }
 
-        GarbageLogSegment curGarbageSegment =
-                getLogSegment(ordinal, GarbageLogSegment.class, garbageLogSegments);
+        GarbageLogSegment curGarbageSegment = getGarbageLogSegmentByOrdinal(ordinal);
         GarbageLogSegment newGarbageSegment =
                 new GarbageLogSegment(ordinal, logParams, filePath, logSizeQuota, null);
         newGarbageSegment.setGarbageEntryMap(curGarbageSegment.getGarbageEntryMap());
@@ -287,24 +334,28 @@ public class SegmentManager {
     /**
      * Close the old segment and rename the new segment file to the old segment file.
      * After this call, subsequent or pending calls to acquire a segment would return the new segment.
+     * NOTE: the caller needs to make sure that there are no concurrent writers by either locking
+     * or ensuring the segment is fully committed and cannot be written to.
      */
     void remapCompactedSegment(AbstractLogSegment oldSegment, AbstractLogSegment newSegment) {
         long ordinal = newSegment.getOrdinal();
-        Map<Long, ? extends AbstractLogSegment> segmentMap;
+        LoadingCache<Long, ? extends AbstractLogSegment> segmentCache;
 
         if (newSegment instanceof StreamLogSegment) {
-            segmentMap = streamLogSegments;
+            segmentCache = streamSegmentCache;
         } else if (newSegment instanceof GarbageLogSegment) {
-            segmentMap = garbageLogSegments;
+            segmentCache = garbageSegmentCache;
         } else {
             throw new IllegalArgumentException("remapCompactedSegment: Unknown segment class: "
                     + newSegment.getClass());
         }
 
-        segmentMap.compute(ordinal, (ord, segment) -> {
+        segmentCache.asMap().compute(ordinal, (ord, segment) -> {
             // Close the segment to fail on-going operations with ClosedSegmentException.
             if (segment != null) {
-                segment.close();
+                // Force close the segment without checking reference count, let
+                // any on-going channel operation fail with ClosedChannelException.
+                segment.close(true);
             }
 
             Path oldPath = Paths.get(oldSegment.getFilePath());
@@ -331,55 +382,39 @@ public class SegmentManager {
         });
     }
 
-    void close(long segmentOrdinal) {
-        close(streamLogSegments, segmentOrdinal);
-        close(garbageLogSegments, segmentOrdinal);
-    }
-
-    private void close(Map<Long, ? extends AbstractLogSegment> segmentMap, long segmentOrdinal) {
-        segmentMap.computeIfPresent(segmentOrdinal, (ordinal, segment) -> {
-            segment.close();
-            return null;
-        });
+    /**
+     * Close and remove the segment from the cache.
+     *
+     * @param ordinal ordinal of the segment to close
+     */
+    void close(long ordinal) {
+        streamSegmentCache.invalidate(ordinal);
+        garbageSegmentCache.invalidate(ordinal);
     }
 
     /**
-     * Close the segments and delete the corresponding files up to {@code endSegment}.
-     *
-     * @param endSegment the last segment to close.
+     * Close and remove all the segments from the cache.
      */
-    void cleanAndClose(long endSegment) {
-        cleanAndClose(streamLogSegments, endSegment);
-        cleanAndClose(garbageLogSegments, endSegment);
-
-        deleteFiles(endSegment);
+    public void close() {
+        streamSegmentCache.invalidateAll();
+        garbageSegmentCache.invalidateAll();
+        segmentCompactionMetadata.clear();
     }
 
-    private void cleanAndClose(Map<Long, ? extends AbstractLogSegment> segmentMap, long endSegment) {
-        List<AbstractLogSegment> segments = segmentMap.values()
-                .stream()
-                .filter(segment -> segment.getOrdinal() <= endSegment)
-                .collect(Collectors.toList());
-
-        segments.forEach(segment -> {
-            segment.close();
-            segmentMap.remove(segment.getOrdinal());
-        });
+    /**
+     * Close and remove all the segments from the cache,
+     * delete the underlying files.
+     */
+    void cleanAndClose() {
+        close();
+        deleteFiles();
     }
 
-    private void deleteFiles(long endSegment) {
+    private void deleteFiles() {
         int numFiles = 0;
         long freedBytes = 0;
         File dir = logDir.toFile();
-        File[] files = dir.listFiles(file -> {
-            try {
-                String segmentNum = file.getName().split("\\.")[0];
-                return Long.parseLong(segmentNum) <= endSegment;
-            } catch (Exception e) {
-                log.warn("deleteFiles: ignoring file {}", file.getName());
-                return false;
-            }
-        });
+        File[] files = dir.listFiles();
 
         if (files == null) {
             return;
@@ -397,16 +432,5 @@ public class SegmentManager {
         }
         logSizeQuota.release(freedBytes);
         log.info("deleteFiles: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
-    }
-
-    /**
-     * Close all managed log segments.
-     */
-    public void close() {
-        streamLogSegments.values().forEach(StreamLogSegment::close);
-        garbageLogSegments.values().forEach(GarbageLogSegment::close);
-        streamLogSegments.clear();
-        garbageLogSegments.clear();
-        segmentCompactionMetadata.clear();
     }
 }

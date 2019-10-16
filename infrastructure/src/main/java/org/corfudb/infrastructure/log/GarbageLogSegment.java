@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
 /**
- * TODO: add unit tests
  * Garbage log segment, has one-to-one mapping to a stream log segment.
  * This segment does not support random reads to the backing file, all
  * access to the garbage information go through an in-memory map which
@@ -92,6 +91,8 @@ public class GarbageLogSegment extends AbstractLogSegment {
         } catch (IOException ioe) {
             log.error("append[{}]: IOException when writing a garbage entry.", address, ioe);
             throw new RuntimeException(ioe);
+        } finally {
+            release();
         }
     }
 
@@ -139,6 +140,8 @@ public class GarbageLogSegment extends AbstractLogSegment {
         } catch (IOException ioe) {
             log.error("append: IOException when writing entries: {}", entries, ioe);
             throw new RuntimeException(ioe);
+        } finally {
+            release();
         }
     }
 
@@ -175,13 +178,17 @@ public class GarbageLogSegment extends AbstractLogSegment {
      */
     @Override
     public LogData read(long address) {
-        SMRGarbageEntry garbageEntry = garbageEntryMap.get(address);
-        if (garbageEntry == null || garbageEntry.getGarbageRecordCount() == 0) {
-            return null;
-        }
+        try {
+            SMRGarbageEntry garbageEntry = garbageEntryMap.get(address);
+            if (garbageEntry == null || garbageEntry.getGarbageRecordCount() == 0) {
+                return null;
+            }
 
-        LogData ld = new LogData(DataType.GARBAGE, garbageEntry);
-        ld.setGlobalAddress(address);
-        return ld;
+            LogData ld = new LogData(DataType.GARBAGE, garbageEntry);
+            ld.setGlobalAddress(address);
+            return ld;
+        } finally {
+            release();
+        }
     }
 }

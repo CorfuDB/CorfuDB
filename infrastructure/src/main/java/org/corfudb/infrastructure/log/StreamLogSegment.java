@@ -72,6 +72,8 @@ class StreamLogSegment extends AbstractLogSegment {
         } catch (IOException ioe) {
             log.error("read[{}]: IOException when reading an entry.", address, ioe);
             throw new RuntimeException(ioe);
+        } finally {
+            release();
         }
     }
 
@@ -126,6 +128,8 @@ class StreamLogSegment extends AbstractLogSegment {
         } catch (IOException ioe) {
             log.error("append[{}]: IOException when writing an entry.", address, ioe);
             throw new RuntimeException(ioe);
+        } finally {
+            release();
         }
     }
 
@@ -159,6 +163,8 @@ class StreamLogSegment extends AbstractLogSegment {
         } catch (IOException ioe) {
             log.error("append: IOException when writing entries: {}", entries, ioe);
             throw new RuntimeException(ioe);
+        } finally {
+            release();
         }
     }
 

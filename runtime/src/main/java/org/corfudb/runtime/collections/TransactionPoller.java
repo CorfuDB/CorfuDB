@@ -70,7 +70,6 @@ public class TransactionPoller implements Runnable {
         long lastReadAddress = streamContexts.get(0).getLastReadAddress();
 
         StreamOptions options = StreamOptions.builder()
-                .ignoreTrimmed(true)
                 .cacheEntries(false)
                 .build();
         IStreamView txStream = runtime.getStreamsView()
