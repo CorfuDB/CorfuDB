@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.bcel.generic.ATHROW;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -49,6 +50,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
+import static java.lang.Thread.sleep;
 import static org.corfudb.recovery.RecoveryUtils.createObjectIfNotExist;
 import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
 import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
@@ -489,7 +491,6 @@ public class FastObjectLoader {
         }
     }
 
-
     /**
      * Initialize log head and log tails
      *
@@ -519,7 +520,9 @@ public class FastObjectLoader {
 
         // Re ask for the Head, if it changes while we were trying.
         findAndSetLogHead();
+        findAndSetLogTail();
 
+        log.info("retry fastobject loader head " + logHead + " tail " + logTail);
         nextRead = logHead;
         resetAddressProcessed();
     }
@@ -649,7 +652,7 @@ public class FastObjectLoader {
      * this operation.
      *
      */
-    private void resurrectCheckpoints() {
+    private void resurrectCheckpoints() throws TrimmedException {
         ExecutorService executorService = Executors.newFixedThreadPool(numOfWorkers, new ThreadFactoryBuilder()
                 .setNameFormat("FastObjectLoaderResurrectCheckpointsThread-%d").build());
         CompletableFuture[] cfs = new CompletableFuture[streamsMetaData.size()];
@@ -662,13 +665,13 @@ public class FastObjectLoader {
                     try {
                         if (checkPoint == null) {
                             log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
-                                    Utils.toReadableId(entry.getKey()));
+                                    Utils.toReadableId (entry.getKey ()));
                             return;
                         }
 
                         // For now one by one read and apply
                         for (long address : checkPoint.getAddresses()) {
-                            updateCorfuObject(getLogData(runtime, loadInCache, address));
+                            updateCorfuObject (getLogData(runtime, loadInCache, address));
                         }
                     } catch (Throwable t) {
                         log.error("resurrectCheckpoints[{}]: error on addresses {}", checkPoint.getCheckPointId(),
@@ -690,6 +693,8 @@ public class FastObjectLoader {
                 }
             }
 
+        } catch (TrimmedException e) {
+            throw e;
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             throw new FastObjectLoaderException("Failed to resurrectCheckpoints");
@@ -698,26 +703,41 @@ public class FastObjectLoader {
         }
     }
 
+    private void recoverRuntime() {
+        while (true) {
+            try {
+                recoverRuntimeNative ();
+                return;
+            } catch (TrimmedException e) {
+                retryIteration++;
+                if (retryIteration > numberOfAttempt) {
+                    log.error("processLogData[]: retried {} number of times and failed", retryIteration);
+                    throw new RuntimeException("FastObjectLoader failed after too many retry (" + retryIteration + ")");
+                }
+                handleRetry ();
+            }
+        }
+    }
+
     /**
      * This method will use the checkpoints and the entries
      * after checkpoints to resurrect the SMRMaps
      */
-    private void recoverRuntime() {
-        log.info("recoverRuntime: Resurrecting the runtime");
-
+    private void recoverRuntimeNative() throws TrimmedException {
+        log.info("fastobject loader head " + logHead + " tail " + logTail);
         // If the user is sure that he has no checkpoint,
         // we can just do the last step. Risky, but the flag is
         // explicit enough.
         if (logHasNoCheckPoint) {
             applyForEachAddress(this::processLogData);
         } else {
+            resetAddressProcessed();
             applyForEachAddress(this::findCheckPointsInLogAddress);
             resurrectCheckpoints();
 
             resetAddressProcessed();
             applyForEachAddress(this::processLogData);
         }
-
     }
 
     /**
@@ -728,6 +748,8 @@ public class FastObjectLoader {
     public void loadMaps() {
         log.info("loadMaps: Starting to resurrect maps");
         initializeHeadAndTails();
+
+        log.info("Start revover loadMaps: Starting to resurrect maps");
         recoverRuntime();
 
         log.info("loadMaps[startAddress: {}, stopAddress (included): {}, addressProcessed: {}]",
@@ -740,11 +762,14 @@ public class FastObjectLoader {
      * This method will apply for each address the consumer given in parameter.
      * The Necromancer thread is used to do the heavy lifting.
      */
-    private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) {
+    private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) throws TrimmedException {
 
         summonNecromancer();
         nextRead = logHead;
+        log.info("loghead:" + logHead + " addressProcessed : " + addressProcessed + " + 1");
+
         while (nextRead <= logTail) {
+            log.debug("nextRead:" + nextRead + " addressProcessed : " + addressProcessed + " + 1");
             try {
                 final long lower = nextRead;
                 final long upper = Math.min(lower + batchReadSize - 1, logTail);
@@ -762,10 +787,10 @@ public class FastObjectLoader {
                     long address = entry.getKey();
                     ILogData logData = entry.getValue();
                     if (address != addressProcessed + 1) {
-                        throw new IllegalStateException("We missed an entry. It can lead to correctness issues.");
+                        throw new IllegalStateException("We missed an entry." +
+                                "It can lead to correctness issues: " + address + " != " + addressProcessed + " + 1");
                     }
                     addressProcessed++;
-
                     if (logData.getType() == DataType.TRIMMED) {
                         throw new IllegalStateException("Unexpected TRIMMED data");
                     }
@@ -776,10 +801,9 @@ public class FastObjectLoader {
                 }
 
                 invokeNecromancer(range, logDataProcessor);
-
             } catch (TrimmedException ex) {
-                log.warn("Error loading data", ex);
-                handleRetry();
+                log.warn("caught a trimmed exception " + ex);
+                throw ex;
             }
         }
         killNecromancer();

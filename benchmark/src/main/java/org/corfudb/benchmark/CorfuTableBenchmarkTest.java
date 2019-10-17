@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+import static java.lang.Thread.sleep;
+
 /**
  * BenchmarkTest to CorfuTable.
  */
@@ -98,57 +100,70 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         }
     }
 
+    int getKeyNum(CorfuRuntime runtime) {
+        int sum = 0;
+        for (Object o : runtime.getObjectsView ().getObjectCache ().values ()) {
+            sum += ((CorfuTable)o).size ();
+        }
+        return sum;
+    }
+
     private void runTest () {
         generateData ();
 
-        CheckpointWrapper cpWrapper = new CheckpointWrapper(super.getRuntimes().getRuntime (0), streams.getAllMapNames (), corfuTables.getMaps ());
-        log.info("First Trim operation latency(milliseconds): ");
+        CheckpointWrapper cpWrapper = new CheckpointWrapper (super.getRuntimes ().getRuntime (0), streams.getAllMapNames (), corfuTables.getMaps ());
+        log.info ("First Trim operation latency(milliseconds): ");
         cpWrapper.trimAndCheckpoint ();
 
         generateData ();
-        waitForAppToFinish();
+        waitForAppToFinish ();
 
-        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
-        CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
-        runtime.addLayoutServer(endpoint);
-        runtime.connect();
+        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder ().build ();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters (parameters);
+        runtime.addLayoutServer (endpoint);
+        runtime.connect ();
 
-        //FastLoaderWrapper fastloader = new FastLoaderWrapper ();
-        Thread thread = new Thread(() -> {
+        Thread thread = new Thread (() -> {
             try {
-                long start = System.currentTimeMillis();
-                FastLoaderWrapper.executeFastLoader(runtime, streams.getStreams ());
-                long latency = System.currentTimeMillis() - start;
-                log.info("operation latency(milliseconds): " + latency);
+                long start = System.currentTimeMillis ();
+                FastLoaderWrapper.executeFastLoader (runtime, streams.getStreams ());
+                long sum = getKeyNum (runtime);
+                log.info ("Loading number objects " + sum);
+                long latency = System.currentTimeMillis () - start;
+                // get total number of keys in all streams:
+                // runtime.getObjectsView ()
+                log.info ("operation latency(milliseconds): " + latency);
             } catch (Exception e) {
-                log.error("Operation failed with", e);
+                log.error ("Operation failed with", e);
             }
         });
-        thread.start();
+        thread.start ();
 
-        Thread threadCP = new Thread(() -> {
+        Thread threadCP = new Thread (() -> {
             try {
-                long start = System.currentTimeMillis();
-                log.info("Second Trim operation latency(milliseconds)");
+                //sleep(2000);
+                long start = System.currentTimeMillis ();
+                long latency;
+                log.info ("Second Trim operation start.");
                 cpWrapper.trimAndCheckpoint ();
-                log.info("Third Trim operation latency(milliseconds): ");
+                latency = System.currentTimeMillis () - start;
+                log.info ("Second Trim operation finish latency (milliseconds):" +  latency);
+                log.info ("Third Trim operation start.");
                 cpWrapper.trimAndCheckpoint ();
-                long latency = System.currentTimeMillis() - start;
-                log.info("Done Trim operation latency(milliseconds): " + latency);
+                latency = System.currentTimeMillis () - start;
+                log.info ("Third Trim operation finish latency (milliseconds):" +  latency);
             } catch (Exception e) {
-                log.error("Operation failed with", e);
+                log.error ("Operation failed with", e);
             }
         });
-        threadCP.start();
+        threadCP.start ();
 
         try {
-            thread.join();
-            threadCP.join();
+            thread.join ();
+            threadCP.join ();
         } catch (InterruptedException e) {
             e.printStackTrace ();
         }
-
-
     }
 
     public static void main(String[] args) {

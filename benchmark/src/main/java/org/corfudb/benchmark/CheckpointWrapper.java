@@ -34,9 +34,11 @@ public class CheckpointWrapper {
     public void trimAndCheckpoint() {
         trim();
         trimMark = batchCheckpoint();
+        log.info ("the next trimMark " + trimMark);
     }
 
     public void trim() {
+        log.info("trimmed till " + trimMark);
         runtime.getAddressSpaceView().prefixTrim(trimMark);
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getAddressSpaceView().invalidateServerCaches();
@@ -59,7 +61,7 @@ public class CheckpointWrapper {
         }
 
         Token tmpToken = mcWriter.appendCheckpoints(runtime, getCurrentLocalDateTimeStamp());
-
+        log.info("Batch checkpoint tmpToken " + tmpToken);
         if (firstToken == Token.UNINITIALIZED) {
             firstToken = tmpToken;
         }
@@ -68,7 +70,7 @@ public class CheckpointWrapper {
         clearCaches();
         System.gc();
 
-        log.info("Batch checkpoint finished.");
+        log.info("Batch checkpoint finished " + firstToken);
         return firstToken;
     }
 
