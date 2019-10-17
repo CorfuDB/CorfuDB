@@ -22,6 +22,7 @@ public class CorfuClusterParamsTest {
                 .serverParamsBuilder()
                 .port(port)
                 .clusterName(clusterName)
+                .serverVersion("1.0.0")
                 .build();
 
         SortedSet<CorfuServerParams> corfuServers = new TreeSet<>(Collections.singletonList(param));
@@ -29,6 +30,7 @@ public class CorfuClusterParamsTest {
         CorfuClusterParams clusterParams = CorfuClusterParams.builder()
                 .name(clusterName)
                 .nodes(corfuServers)
+                .serverVersion("1.0.0")
                 .build();
 
         String fqdn = clusterParams.getFullNodeName("node" + port);

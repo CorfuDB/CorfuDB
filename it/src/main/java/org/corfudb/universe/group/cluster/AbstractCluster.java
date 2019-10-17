@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.NodeException;
@@ -11,7 +12,6 @@ import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.common.util.ClassUtils;
 
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,7 +21,7 @@ import java.util.concurrent.Executors;
 public abstract class AbstractCluster<
         T extends Node,
         N extends NodeParams,
-        P extends Group.GroupParams<N>,
+        P extends GroupParams<N>,
         U extends UniverseParams> implements Cluster<T, P> {
 
     @Getter
