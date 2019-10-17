@@ -1,12 +1,15 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+
+import java.util.Map;
+import java.util.UUID;
+
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import org.corfudb.runtime.view.Layout;
 
 /**
  *
@@ -18,19 +21,24 @@ import java.util.UUID;
 
 @Data
 @RequiredArgsConstructor
+@AllArgsConstructor
 public class TailsResponse implements ICorfuPayload<TailsResponse> {
+
+    long epoch = Layout.INVALID_EPOCH;
 
     final long logTail;
 
     final Map<UUID, Long> streamTails;
 
     public TailsResponse(ByteBuf buf) {
+        epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         logTail = ICorfuPayload.fromBuffer(buf, Long.class);
         streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
+        ICorfuPayload.serialize(buf, epoch);
         ICorfuPayload.serialize(buf, logTail);
         ICorfuPayload.serialize(buf, streamTails);
     }
