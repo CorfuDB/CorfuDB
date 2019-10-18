@@ -2,43 +2,24 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
 
 import lombok.Builder;
-import lombok.Builder.Default;
 import lombok.Getter;
-import lombok.NonNull;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferException;
 
 import javax.annotation.Nullable;
 import java.util.List;
 
 /**
- * An exception that is propagated to the caller after all the retries.
+ * An exception that is propagated to the caller of the batch processor,
+ * after the batch processor failed to handle it.
  */
 @Getter
+@Builder
 public class BatchProcessorFailure extends StateTransferException {
 
-    private final String endpoint;
+    private String endpoint;
 
-    private final List<Long> addresses;
+    private List<Long> addresses;
 
-
-    public BatchProcessorFailure(@Nullable String endpoint, @Nullable List<Long> addresses) {
-        super();
-        this.endpoint = endpoint;
-        this.addresses = addresses;
-    }
-
-    public BatchProcessorFailure(String msg, @Nullable String endpoint, @Nullable List<Long> addresses) {
-        super(msg);
-        this.endpoint = endpoint;
-        this.addresses = addresses;
-    }
-
-    public BatchProcessorFailure(Throwable throwable, @Nullable String endpoint, @Nullable List<Long> addresses){
-        super(throwable);
-        this.endpoint = endpoint;
-        this.addresses = addresses;
-    }
-
-
-
+    private Throwable throwable;
 
 }

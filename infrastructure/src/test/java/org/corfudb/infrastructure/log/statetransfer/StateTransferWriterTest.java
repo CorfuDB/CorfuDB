@@ -4,7 +4,6 @@ import com.google.common.collect.Ordering;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.IncompleteDataReadException;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;

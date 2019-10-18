@@ -19,11 +19,11 @@ public interface StateTransferBatchProcessor {
      * @param dataEntries The list of entries (data or garbage).
      * @return A result of a record append.
      */
-    default Result<Long, StateTransferException>
+    default Result<Long, BatchProcessorFailure>
     writeRecords(List<LogData> dataEntries, StreamLog streamlog) {
         return Result.of(() -> {
             streamlog.append(dataEntries);
             return (long) dataEntries.size();
-        }).mapError(StateTransferException::new);
+        }).mapError(e -> BatchProcessorFailure.builder().throwable(e).build());
     }
 }

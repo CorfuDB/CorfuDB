@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatc
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferException;
 
 import java.util.Set;
 

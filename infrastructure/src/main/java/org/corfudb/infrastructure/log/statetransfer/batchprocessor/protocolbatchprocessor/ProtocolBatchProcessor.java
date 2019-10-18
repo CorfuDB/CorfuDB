@@ -9,9 +9,9 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorError;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -20,8 +20,8 @@ import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
+
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +35,9 @@ import java.util.stream.Collectors;
 public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
 
-    public static final int MAX_RETRIES = 3;
-    public static final Duration MAX_RETRY_TIMEOUT = Duration.ofSeconds(10);
-    public static final float RANDOM_FACTOR_BACKOFF = 0.5f;
+    private static final int MAX_RETRIES = 3;
+    private static final Duration MAX_RETRY_TIMEOUT = Duration.ofSeconds(10);
+    private static final float RANDOM_FACTOR_BACKOFF = 0.5f;
 
     @Getter
     private final ReadOptions readOptions = ReadOptions.builder()
@@ -59,107 +59,83 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
-        CompletableFuture<Result<Long, StateTransferException>> protocolTransfer =
-                readRecords(batch.getAddresses())
+        CompletableFuture<Result<Long, BatchProcessorFailure>> protocolTransfer =
+                readRecords(batch.getAddresses(), new AtomicInteger(MAX_RETRIES))
                         .thenApply(records ->
                                 records.flatMap(recs ->
                                         writeRecords(recs, streamLog)));
-
         return protocolTransfer
                 .thenApply(result ->
                         new BatchResult(result.map(BatchResultData::new)
-                                .mapError(e -> new BatchProcessorFailure(e, null, null))))
+                                .mapError(e -> BatchProcessorFailure.builder()
+                                        .throwable(e).build())))
                 .exceptionally(failure ->
                         new BatchResult(Result.error(
-                                new BatchProcessorFailure(failure, null, null))));
-
+                                BatchProcessorFailure.builder()
+                                        .throwable(failure).build())));
     }
 
     /**
-     * Reads data entries by utilizing the replication protocol. If there are incomplete reads,
-     * retry.
+     * Reads data entries by utilizing the replication protocol. If there are errors retries.
      *
      * @param addresses The list of addresses.
      * @return A result of reading records.
      */
-    CompletableFuture<Result<List<LogData>, StateTransferException>> readRecords(List<Long> addresses) {
-
+    CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> readRecords(List<Long> addresses,
+                                                                                AtomicInteger initRetries) {
         return CompletableFuture.supplyAsync(() ->
-                Result.of(() -> addressSpaceView.read(addresses, readOptions)))
-                .thenApply(result -> result.flatMap(records ->
-                        checkReadRecords(addresses, records)
-                                .mapError(e -> new IncompleteDataReadException(e.getMissingAddresses())))
-                ).thenCompose(result ->
-                        {
-                            CompletableFuture<Result<List<LogData>, StateTransferException>> newResult;
-
-                            if (result.isError() && result.getError() instanceof IncompleteReadException) {
-                                IncompleteReadException incompleteReadException =
-                                        (IncompleteDataReadException) result.getError();
-                                newResult =
-                                        tryHandleIncompleteRead(incompleteReadException,
-                                                new AtomicInteger(MAX_RETRIES));
-                            } else if (result.isValue()) {
-                                newResult = CompletableFuture.completedFuture(result
-                                        .mapError(StateTransferException::new));
-                            } else {
-                                newResult = CompletableFuture
-                                        .completedFuture(Result
-                                                .error(new BatchProcessorFailure(result.getError(),
-                                                        null,
-                                                        null)));
-                            }
-                            return newResult;
-                        }
-                );
+                Result.of(() -> addressSpaceView.read(addresses, readOptions))
+                        .mapError(BatchProcessorError::new))
+                .thenApply(readResult ->
+                        readResult
+                                .flatMap(records -> checkReadRecords(addresses, records)))
+                .thenCompose(checkedReadResult -> {
+                    if (checkedReadResult.isError()) {
+                        return retryReadRecords(checkedReadResult.getError().getAddresses(), initRetries);
+                    } else {
+                        return CompletableFuture.completedFuture(checkedReadResult
+                                .mapError(e -> BatchProcessorFailure
+                                        .builder().throwable(e).build()));
+                    }
+                });
     }
 
     /**
      * Handle possible read errors. Exponential backoff policy is utilized.
      *
-     * @param incompleteReadException Exception that occurred during the read.
-     * @param readRetries             Configurable number of retries for the current batch.
+     * @param addresses   Addresses to be retries.
+     * @param readRetries Configurable number of retries for the current batch.
      * @return Future of the result of the retry.
      */
-    CompletableFuture<Result<List<LogData>, StateTransferException>> tryHandleIncompleteRead
-    (IncompleteReadException incompleteReadException, AtomicInteger readRetries) {
+    CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> retryReadRecords
+    (List<Long> addresses, AtomicInteger readRetries) {
 
         try {
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
 
-                List<Long> addresses = Ordering.natural().sortedCopy(incompleteReadException.getMissingAddresses());
-
-                Supplier<CompletableFuture<Result<List<LogData>, StateTransferException>>> pipeline =
-                        () -> readRecords(addresses);
+                Supplier<CompletableFuture<Result<List<LogData>, BatchProcessorFailure>>> pipeline =
+                        () -> readRecords(addresses, readRetries);
 
                 // If a pipeline completed exceptionally, than return the error.
-                CompletableFuture<Result<List<LogData>, StateTransferException>> pipelineFuture =
+                CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> pipelineFuture =
                         pipeline.get().handle((result, exception) -> {
                             if (Optional.ofNullable(exception).isPresent()) {
-                                return Result.error(new BatchProcessorFailure(exception,
-                                        null, null));
+                                return Result.error(BatchProcessorFailure.builder().throwable(exception).build());
                             } else {
                                 return result;
                             }
                         });
                 // Join the result.
-                Result<List<LogData>, StateTransferException> joinResult = pipelineFuture.join();
+                Result<List<LogData>, BatchProcessorFailure> joinResult = pipelineFuture.join();
                 if (joinResult.isError()) {
                     // If an error occurred, increment retries.
                     readRetries.incrementAndGet();
 
-                    // If the instance of an error is the incomplete read, retry with exp. backoff
-                    // if possible.
-                    if (joinResult.getError() instanceof IncompleteReadException) {
-                        if (readRetries.get() >= MAX_RETRIES) {
-                            throw new RetryExhaustedException("Read retries are exhausted");
-                        } else {
-                            log.warn("Retried {} times", readRetries.get());
-                            throw new RetryNeededException();
-                        }
+                    if (readRetries.get() >= MAX_RETRIES) {
+                        throw new RetryExhaustedException("Read retries are exhausted");
                     } else {
-                        // Unhandled error, return.
-                        return CompletableFuture.completedFuture(joinResult);
+                        log.warn("Retried {} times", readRetries.get());
+                        throw new RetryNeededException();
                     }
                 } else {
                     // If the result is not an error, return.
@@ -170,10 +146,10 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);
                 retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);
             }).run();
-            // Map to unrecoverable error if an interrupt has occurred or retries occurred.
+            // Map to unrecoverable error if an interrupt has occurred or retries exhausted.
         } catch (InterruptedException | RetryExhaustedException ie) {
             return CompletableFuture.completedFuture(
-                    Result.error(new BatchProcessorFailure("Retries exhausted or interrupted", null, null)));
+                    Result.error(BatchProcessorFailure.builder().throwable(ie).build()));
         }
     }
 
@@ -185,20 +161,21 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      * @param readResult A result of the read.
      * @return A result containing either exception or data.
      */
-    Result<List<LogData>, IncompleteReadException> checkReadRecords(List<Long> addresses,
-                                                                    Map<Long, ILogData> readResult) {
+    Result<List<LogData>, BatchProcessorError> checkReadRecords(List<Long> addresses,
+                                                                Map<Long, ILogData> readResult) {
         List<Long> transferredAddresses =
                 addresses.stream().filter(readResult::containsKey)
                         .collect(Collectors.toList());
         if (transferredAddresses.equals(addresses)) {
-            return Result.of(() -> readResult.entrySet().stream()
+            return Result.ok(readResult.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .map(entry -> (LogData) entry.getValue()).collect(Collectors.toList()));
         } else {
             HashSet<Long> transferredSet = new HashSet<>(transferredAddresses);
             HashSet<Long> entireSet = new HashSet<>(addresses);
-            return new Result<>(new ArrayList<>(),
-                    new IncompleteReadException(Sets.difference(entireSet, transferredSet)));
+            return Result.error(
+                    new BatchProcessorError
+                            (Ordering.natural().sortedCopy(Sets.difference(entireSet, transferredSet))));
         }
     }
 }
