@@ -752,7 +752,7 @@ public class FastObjectLoader {
             } catch (TrimmedException e) {
                 if (handleRetry() == false) {
                     log.error ("loadMaps: loading failure!");
-                    return;
+                    throw e;
                 }
             }
         }
