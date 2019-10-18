@@ -23,10 +23,7 @@ import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.stati
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicy;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
-
-import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -47,7 +44,7 @@ public class PolicyStreamProcessor {
     private final DynamicPolicy dynamicDistributionPolicy = new IdentityPolicy();
 
     @Default
-    private final DynamicPolicy BatchProcessorFailureHandlingPolicy = new RemoveServersWithRoundRobin();
+    private final DynamicPolicy batchProcessorFailureHandlingPolicy = new RemoveServersWithRoundRobin();
 
     @NonNull
     private final BatchProcessingPolicy batchProcessingPolicy;
@@ -163,7 +160,7 @@ public class PolicyStreamProcessor {
         });
     }
 
-    private CompletableFuture<Result<Long, StreamProcessFailure>> finalize(SlidingWindow slidingWindow) {
+    private CompletableFuture<Result<Long, StreamProcessFailure>> finalizeTransfers(SlidingWindow slidingWindow) {
         CompletableFuture<Result<Long, StreamProcessFailure>> successfulResult =
                 finalizeSuccessfulTransfers(slidingWindow, CFUtils.sequence(slidingWindow.getProcessed()));
 
@@ -183,7 +180,7 @@ public class PolicyStreamProcessor {
 
     private DynamicPolicyData invokeDynamicPolicies(DynamicPolicyData dynamicPolicyData) {
         return dynamicDistributionPolicy
-                .applyPolicy(BatchProcessorFailureHandlingPolicy
+                .applyPolicy(batchProcessorFailureHandlingPolicy
                         .applyPolicy(dynamicPolicyData))
                 .resetDynamicWindow();
     }
@@ -230,7 +227,7 @@ public class PolicyStreamProcessor {
                 ));
             }
         } else {
-            return TailCalls.done(finalize(slidingWindow));
+            return TailCalls.done(finalizeTransfers(slidingWindow));
         }
     }
 
