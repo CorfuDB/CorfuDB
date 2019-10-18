@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
+import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 
@@ -13,9 +14,9 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.corfudb.runtime.view.Address.*;
 
-public interface RegularBatchProcessor {
+public interface StateTransferBatchProcessor {
 
-    CompletableFuture<Result<Long, StateTransferException>> transfer(Batch batch);
+    CompletableFuture<BatchResult> transfer(Batch batch);
 
     /**
      * Appends records to the stream log.

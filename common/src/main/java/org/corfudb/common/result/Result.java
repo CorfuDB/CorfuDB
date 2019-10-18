@@ -4,6 +4,7 @@ import lombok.ToString;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -11,7 +12,7 @@ import java.util.function.Supplier;
 /**
  * Container type for encapsulating function result and propagating errors.
  *
- * @author jameschang, xnull, pzaytsev
+ * @author jameschang, xnull
  */
 public class Result<T, E extends RuntimeException> implements Supplier<T> {
 

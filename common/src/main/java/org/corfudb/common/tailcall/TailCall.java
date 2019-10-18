@@ -39,7 +39,7 @@ public interface TailCall<T> {
 
     /**
      * Lazily iterates over the pending tail call recursions until it
-     * reaches the end of a recursion.
+     * reaches the end.
      * @return An optional result of a recursive calls.
      */
     default Optional<T> invoke() {

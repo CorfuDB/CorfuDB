@@ -6,8 +6,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
+import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchTransferPlan;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -31,7 +33,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class ProtocolBatchProcessor implements RegularBatchProcessor {
+public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
 
     public static final int MAX_RETRIES = 3;
@@ -187,4 +189,8 @@ public class ProtocolBatchProcessor implements RegularBatchProcessor {
     }
 
 
+    @Override
+    public CompletableFuture<BatchResult> transfer(Batch batch) {
+        return null;
+    }
 }
