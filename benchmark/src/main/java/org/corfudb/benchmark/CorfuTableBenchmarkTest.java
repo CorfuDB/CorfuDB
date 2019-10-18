@@ -102,7 +102,7 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
 
     int getKeyNum(CorfuRuntime runtime) {
         int sum = 0;
-        for (Object o : runtime.getObjectsView ().getObjectCache ().values ()) {
+        for (Object o : runtime.getObjectsView().getObjectCache().values()) {
             sum += ((CorfuTable)o).size ();
         }
         return sum;
@@ -121,14 +121,14 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder ().build ();
         CorfuRuntime runtime = CorfuRuntime.fromParameters (parameters);
         runtime.addLayoutServer (endpoint);
-        runtime.connect ();
+        runtime.connect();
 
         Thread thread = new Thread (() -> {
             try {
                 long start = System.currentTimeMillis ();
                 FastLoaderWrapper.executeFastLoader (runtime, streams.getStreams ());
                 long sum = getKeyNum (runtime);
-                log.info ("Loading number objects " + sum);
+                log.info ("FastObjectLoader loading number objects " + sum);
                 long latency = System.currentTimeMillis () - start;
                 // get total number of keys in all streams:
                 // runtime.getObjectsView ()
@@ -141,7 +141,7 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
 
         Thread threadCP = new Thread (() -> {
             try {
-                //sleep(2000);
+                sleep(410);
                 long start = System.currentTimeMillis ();
                 long latency;
                 log.info ("Second Trim operation start.");
@@ -170,5 +170,6 @@ public class CorfuTableBenchmarkTest extends BenchmarkTest {
         CorfuTableParseArgs parseArgs = new CorfuTableParseArgs(args);
         CorfuTableBenchmarkTest corfuTableBenchmarkTest = new CorfuTableBenchmarkTest(parseArgs);
         corfuTableBenchmarkTest.runTest();
+        log.info ("main system exit");
     }
 }
