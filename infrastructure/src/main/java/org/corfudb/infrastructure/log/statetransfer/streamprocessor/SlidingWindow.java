@@ -23,7 +23,7 @@ public class SlidingWindow {
     /**
      * If a sum of the processed and failed entries >= this value,
      * invoke the dynamic protocols:
-     * dynamicDistributionPolicy and/or stateTransferFailureHandlingPolicy.
+     * dynamicDistributionPolicy and/or BatchProcessorFailureHandlingPolicy.
      */
     private final long dynamicProtocolWindowSize = 2 * windowSize;
     @Default

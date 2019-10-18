@@ -8,7 +8,7 @@ import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 
 import java.util.List;
 import java.util.Optional;
@@ -69,7 +69,7 @@ public class StateTransferManager {
     public static class CurrentTransferSegmentStatus {
         private SegmentState segmentState;
         private long lastTransferredAddress;
-        private StateTransferFailure causeOfFailure = null;
+        private BatchProcessorFailure causeOfFailure = null;
 
         public CurrentTransferSegmentStatus(SegmentState segmentState,
                                             long lastTransferredAddress) {
@@ -79,7 +79,7 @@ public class StateTransferManager {
 
         public CurrentTransferSegmentStatus(SegmentState segmentState,
                                             long lastTransferredAddress,
-                                            StateTransferFailure causeOfFailure) {
+                                            BatchProcessorFailure causeOfFailure) {
             this.segmentState = segmentState;
             this.lastTransferredAddress = lastTransferredAddress;
             this.causeOfFailure = causeOfFailure;
@@ -156,14 +156,14 @@ public class StateTransferManager {
                                                                 lastAddressToTransfer, lastTransferredAddressResult.get());
                                                         return new CurrentTransferSegmentStatus(FAILED,
                                                                 lastTransferredAddressResult.get(),
-                                                                new StateTransferFailure("Incomplete transfer failure."));
+                                                                new BatchProcessorFailure("Incomplete transfer failure."));
                                                     } else {
                                                         log.error("State transfer failure occurred: ",
                                                                 lastTransferredAddressResult.getError().getCause());
                                                         return new CurrentTransferSegmentStatus(
                                                                 FAILED,
                                                                 NON_ADDRESS,
-                                                                (StateTransferFailure) lastTransferredAddressResult.getError());
+                                                                (BatchProcessorFailure) lastTransferredAddressResult.getError());
                                                     }
                                                 });
                                     }

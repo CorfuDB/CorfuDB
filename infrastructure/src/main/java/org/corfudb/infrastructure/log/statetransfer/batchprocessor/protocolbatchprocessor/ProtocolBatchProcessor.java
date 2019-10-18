@@ -11,7 +11,7 @@ import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchTransferPlan;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -59,10 +59,10 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     }
 
     @Override
-    public CompletableFuture<Result<Long, StateTransferException>> transfer(BatchTransferPlan batchTransferPlan) {
+    public CompletableFuture<BatchResult> transfer(Batch batch) {
         return readRecords(batchTransferPlan.getTransferAddresses())
                 .thenApply(result -> result.flatMap(data -> writeRecords(data, streamLog)))
-                .exceptionally(e -> Result.error(new StateTransferFailure(e)));
+                .exceptionally(e -> Result.error(new BatchProcessorFailure(e)));
     }
 
     /**
@@ -94,7 +94,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                                         .mapError(StateTransferException::new));
                             } else {
                                 newResult = CompletableFuture
-                                        .completedFuture(Result.error(new StateTransferFailure(result.getError())));
+                                        .completedFuture(Result.error(new BatchProcessorFailure(result.getError())));
                             }
                             return newResult;
                         }
@@ -123,7 +123,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 CompletableFuture<Result<List<LogData>, StateTransferException>> pipelineFuture =
                         pipeline.get().handle((result, exception) -> {
                             if (Optional.ofNullable(exception).isPresent()) {
-                                return Result.error(new StateTransferFailure(exception));
+                                return Result.error(new BatchProcessorFailure(exception));
                             } else {
                                 return result;
                             }
@@ -159,7 +159,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
             // Map to unrecoverable error if an interrupt has occurred or retries occurred.
         } catch (InterruptedException | RetryExhaustedException ie) {
             return CompletableFuture.completedFuture(
-                    Result.error(new StateTransferFailure("Retries exhausted or interrupted")));
+                    Result.error(new BatchProcessorFailure("Retries exhausted or interrupted")));
         }
     }
 

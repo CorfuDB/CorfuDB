@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.clients.LogUnitClient;
 
@@ -93,6 +93,6 @@ public class WeightedRoundRobinBatchProcessor implements RegularBatchProcessor {
         return client.readAll(addresses).thenApply(records -> {
             List<LogData> logData = ImmutableList.copyOf(records.getAddresses().values());
             return writeRecords(logData, streamlog);
-        }).exceptionally(e -> Result.error(new StateTransferFailure(e)));
+        }).exceptionally(e -> Result.error(new BatchProcessorFailure(e)));
     }
 }

@@ -4,12 +4,15 @@ import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.NonNull;
+import org.corfudb.common.result.Result;
 import org.corfudb.common.streamutils.StreamUtils;
 import org.corfudb.common.streamutils.StreamUtils.StreamHeadAndTail;
 import org.corfudb.common.tailcall.TailCall;
 import org.corfudb.common.tailcall.TailCalls;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.batchpolicy.BatchProcessingPolicy;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.batchpolicy.BatchProcessingPolicyData;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.DynamicPolicy;
@@ -19,7 +22,13 @@ import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.error
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.RoundRobinPolicy;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicy;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
+import org.corfudb.util.CFUtils;
 
+import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -38,7 +47,7 @@ public class PolicyStreamProcessor {
     private final DynamicPolicy dynamicDistributionPolicy = new IdentityPolicy();
 
     @Default
-    private final DynamicPolicy stateTransferFailureHandlingPolicy = new RemoveServersWithRoundRobin();
+    private final DynamicPolicy BatchProcessorFailureHandlingPolicy = new RemoveServersWithRoundRobin();
 
     @NonNull
     private final BatchProcessingPolicy batchProcessingPolicy;
@@ -100,14 +109,86 @@ public class PolicyStreamProcessor {
         }
     }
 
+
+    private CompletableFuture<Result<Long, StreamProcessFailure>> finalizeSuccessfulTransfers
+            (SlidingWindow slidingWindow, CompletableFuture<List<BatchResult>> successful) {
+        return slidingWindow.getTotalAddressesTransferred().thenCompose(total ->
+                successful.thenApply(s -> Result.ok(s.size() + total)
+                        .mapError(e -> new StreamProcessFailure())));
+    }
+
+    private CompletableFuture<Result<Long, StreamProcessFailure>> finalizeFailedTransfers
+            (CompletableFuture<List<BatchResult>> failed) {
+        return failed.thenApply(f -> {
+            if (f.isEmpty()) {
+                return Result.ok(0L).mapError(e -> new StreamProcessFailure());
+            } else {
+                return Result.error(new StreamProcessFailure(f.get(0).getResult().getError()));
+            }
+        });
+    }
+
+    private CompletableFuture<Result<Long, StreamProcessFailure>> finalizePendingTransfers
+            (CompletableFuture<List<BatchResult>> pending) {
+
+        return pending.thenApply(list -> {
+            if (!list.isEmpty()) {
+                SimpleEntry<Result<BatchResultData, BatchProcessorFailure>, Long> res = list.stream()
+                        .map(result -> new SimpleEntry<>(result.getResult(), 1L))
+                        .reduce((x, y) -> {
+                            Result<BatchResultData, BatchProcessorFailure> first = x.getKey();
+                            Result<BatchResultData, BatchProcessorFailure> second = y.getKey();
+                            if (first.isValue() && second.isValue()) {
+                                return new SimpleEntry<>(first, 1L + 1L);
+
+                            } else if (first.isValue()) {
+                                return new SimpleEntry<>(second, 1L);
+                            } else {
+                                return new SimpleEntry<>(first, 1L);
+                            }
+                        }).get();
+
+                Result<BatchResultData, BatchProcessorFailure> accumResult = res.getKey();
+                long totalTransferred = res.getValue();
+                if (accumResult.isError()) {
+                    return Result.error(new StreamProcessFailure(accumResult.getError()));
+                } else {
+                    return Result.ok(totalTransferred).mapError(e -> new StreamProcessFailure());
+                }
+
+            } else {
+                return Result.ok(0L).mapError(e -> new StreamProcessFailure());
+            }
+
+        });
+    }
+
+    private CompletableFuture<Result<Long, StreamProcessFailure>> finalize(SlidingWindow slidingWindow) {
+        CompletableFuture<Result<Long, StreamProcessFailure>> successfulResult =
+                finalizeSuccessfulTransfers(slidingWindow, CFUtils.sequence(slidingWindow.getProcessed()));
+
+        CompletableFuture<Result<Long, StreamProcessFailure>> failedResult =
+                finalizeFailedTransfers(CFUtils.sequence(slidingWindow.getFailed()));
+
+        CompletableFuture<Result<Long, StreamProcessFailure>> pendingResult =
+                finalizePendingTransfers(CFUtils.sequence(slidingWindow.getWindow()));
+
+        CompletableFuture<List<Result<Long, StreamProcessFailure>>> allResults =
+                CFUtils.sequence(Arrays.asList(successfulResult, failedResult, pendingResult));
+
+        return allResults.thenApply(list -> list.stream().reduce((first, second) ->
+                first.flatMap(f -> second.map(s -> f + s))).get());
+
+    }
+
     private DynamicPolicyData invokeDynamicPolicies(DynamicPolicyData dynamicPolicyData) {
         return dynamicDistributionPolicy
-                .applyPolicy(stateTransferFailureHandlingPolicy
+                .applyPolicy(BatchProcessorFailureHandlingPolicy
                         .applyPolicy(dynamicPolicyData))
                 .resetDynamicWindow();
     }
 
-    private TailCall<SlidingWindow>
+    private TailCall<CompletableFuture<Result<Long, StreamProcessFailure>>>
     doProcessStream(Stream<Optional<Batch>> stream,
                     SlidingWindow slidingWindow) {
         StreamHeadAndTail<Batch> headAndTail = StreamUtils.splitTail(stream);
@@ -148,21 +229,17 @@ public class PolicyStreamProcessor {
                         newWindow
                 ));
             }
-        }
-
-        // Head is not present, stream termination
-        else {
-            return TailCalls.done(slidingWindow);
+        } else {
+            return TailCalls.done(finalize(slidingWindow));
         }
     }
 
-    public CompletableFuture<Long> processStream(StaticPolicyData staticPolicyData) {
+    public CompletableFuture<Result<Long, StreamProcessFailure>> processStream(StaticPolicyData staticPolicyData) {
         Stream<Optional<Batch>> initStream = initialDistributionPolicy.applyPolicy(staticPolicyData);
         SlidingWindow slidingWindow = SlidingWindow.builder().build();
         return doProcessStream(initStream, slidingWindow)
                 .invoke()
-                .get() // Guaranteed to execute since the stream is finite.
-                .getTotalAddressesTransferred();
+                .get();
     }
 
 

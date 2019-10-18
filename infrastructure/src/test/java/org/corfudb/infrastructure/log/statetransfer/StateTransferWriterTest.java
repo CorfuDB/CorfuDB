@@ -5,7 +5,7 @@ import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.IncompleteDataReadException;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -44,18 +44,18 @@ public class StateTransferPlannerTest extends  DataTest{
                 Result.ok(3L).mapError(x -> new StateTransferException());
         assertThat(StateTransferPlanner.mergeBatchResults(first, second).get()).isEqualTo(3L);
         // first is a failure, second is ok
-        first = Result.error(new StateTransferFailure());
+        first = Result.error(new BatchProcessorFailure());
         assertThat(StateTransferPlanner.mergeBatchResults(first, second).getError())
-                .isInstanceOf(StateTransferFailure.class);
+                .isInstanceOf(BatchProcessorFailure.class);
         // first is ok, second is a failure
         first = Result.ok(0L).mapError(x -> new StateTransferException());
-        second = Result.error(new StateTransferFailure());
+        second = Result.error(new BatchProcessorFailure());
         assertThat(StateTransferPlanner.mergeBatchResults(first, second).getError())
-                .isInstanceOf(StateTransferFailure.class);
+                .isInstanceOf(BatchProcessorFailure.class);
         // first is a failure, second is a failure
-        first = Result.error(new StateTransferFailure());
+        first = Result.error(new BatchProcessorFailure());
         assertThat(StateTransferPlanner.mergeBatchResults(first, second).getError())
-                .isInstanceOf(StateTransferFailure.class);
+                .isInstanceOf(BatchProcessorFailure.class);
 
     }
 
@@ -73,9 +73,9 @@ public class StateTransferPlannerTest extends  DataTest{
         assertThat(finalResult.join().get()).isEqualTo(2L);
 
         // one is a failure
-        resultSet.add(CompletableFuture.completedFuture(Result.error(new StateTransferFailure())));
+        resultSet.add(CompletableFuture.completedFuture(Result.error(new BatchProcessorFailure())));
         finalResult = StateTransferPlanner.coalesceResults(resultSet);
-        assertThat(finalResult.join().getError()).isInstanceOf(StateTransferFailure.class);
+        assertThat(finalResult.join().getError()).isInstanceOf(BatchProcessorFailure.class);
 
         // one is completed exceptionally
         resultSet.remove(resultSet.size() - 1);
@@ -94,7 +94,7 @@ public class StateTransferPlannerTest extends  DataTest{
         // the input is empty
         CompletableFuture<Result<Long, StateTransferException>> future =
                 StateTransferPlanner.coalesceResults(new ArrayList<>());
-        assertThat(future.join().getError()).isInstanceOf(StateTransferFailure.class);
+        assertThat(future.join().getError()).isInstanceOf(BatchProcessorFailure.class);
     }
 
     @Test
@@ -181,7 +181,7 @@ public class StateTransferPlannerTest extends  DataTest{
         // first half got some unrecoverable error, second half is ok
         CompletableFuture<Result<Long, StateTransferException>> failure =
                 CompletableFuture.completedFuture(
-                        new Result<>(null, new StateTransferFailure()));
+                        new Result<>(null, new BatchProcessorFailure()));
         streamLog = mock(StreamLog.class);
         addressSpaceView = mock(AddressSpaceView.class);
 
@@ -192,6 +192,6 @@ public class StateTransferPlannerTest extends  DataTest{
         doReturn(CompletableFuture.completedFuture(secondValue)).when(spy).transfer(secondRange);
         StateTransferPlanner = new StateTransferPlanner(spy);
         res = StateTransferPlanner.stateTransfer(addresses, 5, NON_ADDRESS).join();
-        assertThat(res.getError()).isInstanceOf(StateTransferFailure.class);
+        assertThat(res.getError()).isInstanceOf(BatchProcessorFailure.class);
     }
 }

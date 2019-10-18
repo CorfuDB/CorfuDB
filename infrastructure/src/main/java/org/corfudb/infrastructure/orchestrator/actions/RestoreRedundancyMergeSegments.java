@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferPlanner;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
@@ -117,7 +117,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                             {
                                 if(exception != null){
                                     return new CurrentTransferSegmentStatus(FAILED, NON_ADDRESS,
-                                            new StateTransferFailure(exception));
+                                            new BatchProcessorFailure(exception));
                                 }
                                 return value;
                             });

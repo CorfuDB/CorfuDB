@@ -29,7 +29,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -664,7 +664,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Assert that the TimeOutException is thrown
         assertThatThrownBy(() -> action1.impl(rt, spy))
-                .isInstanceOf(StateTransferFailure.class)
+                .isInstanceOf(BatchProcessorFailure.class)
         .hasRootCauseInstanceOf(TimeoutException.class);
 
         // Known addresses should contain only [0:49] and the addresses in the open segment.

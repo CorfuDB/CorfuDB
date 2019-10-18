@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import org.corfudb.infrastructure.LayoutBasedTest;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferFailure;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.util.Sleep;
@@ -76,7 +76,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
         RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost");
         assertThatThrownBy(() ->
                 action.tryRestoreRedundancyAndMergeSegments(failed, testLayout, layoutManagementView))
-                .isInstanceOf(StateTransferFailure.class)
+                .isInstanceOf(BatchProcessorFailure.class)
                 .hasRootCauseInstanceOf(RuntimeException.class);
     }
 
@@ -90,14 +90,14 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
         Layout testLayout = createTestLayout(Arrays.asList(segment));
         List<CurrentTransferSegment> failed = Arrays.asList(new CurrentTransferSegment(0L, 5L,
                 CompletableFuture.completedFuture(new CurrentTransferSegmentStatus(SegmentState.FAILED, -1L,
-                        new StateTransferFailure(new IllegalStateException())))));
+                        new BatchProcessorFailure(new IllegalStateException())))));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
         RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost");
         assertThatThrownBy(() ->
                 action.tryRestoreRedundancyAndMergeSegments(failed, testLayout, layoutManagementView))
-                .isInstanceOf(StateTransferFailure.class)
+                .isInstanceOf(BatchProcessorFailure.class)
                 .hasRootCauseInstanceOf(IllegalStateException.class);
     }
 
