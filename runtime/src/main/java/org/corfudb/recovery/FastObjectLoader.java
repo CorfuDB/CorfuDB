@@ -703,7 +703,7 @@ public class FastObjectLoader {
                 }
             }
         } catch (TrimmedException e) {
-            log.warn("caught a TrimmedException. ", e);
+            log.warn("caught a TrimmedException: ", e);
             throw e;
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -745,7 +745,7 @@ public class FastObjectLoader {
         while (true) {
             try {
                 recoverRuntime();
-                log.info("loadMaps[startAddress: {}, stopAddress (included): {}, addressProcessed: {}]",
+                log.info("loadMaps [startAddress: {}, stopAddress (included): {}, addressProcessed: {}]",
                         logHead, logTail, addressProcessed);
                 log.info("loadMaps: loading successful, Corfu maps are alive!");
                 return;
@@ -804,7 +804,7 @@ public class FastObjectLoader {
 
                 invokeNecromancer(range, logDataProcessor);
             } catch (TrimmedException ex) {
-                log.warn("caught a TrimmedException killNecromance. ", ex);
+                log.warn("caught a TrimmedException killNecromance: ", ex);
                 killNecromancer();
                 throw ex;
             }
