@@ -84,14 +84,15 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> readRecords(List<Long> addresses,
                                                                                 AtomicInteger initRetries) {
         return CompletableFuture.supplyAsync(() ->
-                Result.of(() -> addressSpaceView.read(addresses, readOptions))
+                Result.of(() -> addressSpaceView.simpleProtocolRead(addresses, readOptions))
                         .mapError(BatchProcessorError::new))
                 .thenApply(readResult ->
                         readResult
                                 .flatMap(records -> checkReadRecords(addresses, records)))
                 .thenCompose(checkedReadResult -> {
                     if (checkedReadResult.isError()) {
-                        return retryReadRecords(checkedReadResult.getError().getAddresses(), initRetries);
+                        return retryReadRecords(checkedReadResult.getError().getAddresses(),
+                                initRetries);
                     } else {
                         return CompletableFuture.completedFuture(checkedReadResult
                                 .mapError(e -> BatchProcessorFailure
@@ -101,7 +102,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     }
 
     /**
-     * Handle possible read errors. Exponential backoff policy is utilized.
+     * Handle read errors. Exponential backoff policy is utilized.
      *
      * @param addresses   Addresses to be retries.
      * @param readRetries Configurable number of retries for the current batch.

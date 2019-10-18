@@ -7,10 +7,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CommittedTransferData;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchTransferPlan;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolTransferPlan;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.weightedbatchprocessor.WeightedRoundRobinTransferPlan;
 import org.corfudb.util.CFUtils;
 

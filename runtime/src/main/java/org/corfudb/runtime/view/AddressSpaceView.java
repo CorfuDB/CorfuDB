@@ -450,6 +450,18 @@ public class AddressSpaceView extends AbstractView {
 
     }
 
+    public Map<Long, ILogData> simpleProtocolRead(List<Long> addressBatch, ReadOptions readOptions) {
+        Map<Long, ILogData> data = layoutHelper(runtimeLayout ->
+                runtimeLayout.getLayout()
+                        .getReplicationMode(addressBatch.iterator().next())
+                        .getReplicationProtocol(runtime)
+                        .readAll(runtimeLayout, addressBatch,
+                                readOptions.isWaitForHole(),
+                                readOptions.isServerCacheable()),
+                true);
+        return checkForTrimmedAddresses(data, readOptions);
+    }
+
     /**
      * Get the first address in the address space.
      */

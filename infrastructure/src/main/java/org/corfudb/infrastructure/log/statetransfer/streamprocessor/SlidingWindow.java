@@ -7,7 +7,6 @@ import lombok.Getter;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
 
 
 @Builder(toBuilder = true)
