@@ -1,4 +1,4 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime";
@@ -8,13 +8,13 @@ import "google/protobuf/descriptor.proto";
 // Option tags to be used by the CorfuStore consumers to tag special fields to be detected by Corfu.
 message SchemaOptions {
     // Secondary keys to be indexed.
-    bool secondary_key = 1;
+    optional bool secondary_key = 1;
     // Version number in metadata field.
-    bool version = 2;
+    optional bool version = 2;
 }
 
 // Field options to be extended in the user's protobuf fields.
 extend google.protobuf.FieldOptions {
     // 1036 is in the extendable range in the descriptor.proto.
-    SchemaOptions schema = 1036;
+    optional SchemaOptions schema = 1036;
 }
