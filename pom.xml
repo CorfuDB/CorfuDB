@@ -20,6 +20,7 @@
         <module>generator</module>
         <module>it</module>
         <module>benchmarks</module>
+        <module>performancetest</module>
     </modules>
 
 
