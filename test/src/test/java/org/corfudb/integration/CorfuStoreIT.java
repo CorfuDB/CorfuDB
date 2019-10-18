@@ -3,8 +3,14 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.DynamicMessage;
 
-import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -153,8 +159,7 @@ public class CorfuStoreIT extends AbstractIT {
         // Interpret using dynamic messages.
         runtime = createRuntime(singleNodeEndpoint);
 
-        final int code = 25;
-        ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer((byte) code, runtime);
+        ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtime);
         Serializers.registerSerializer(dynamicProtobufSerializer);
 
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable = runtime.getObjectsView().build()

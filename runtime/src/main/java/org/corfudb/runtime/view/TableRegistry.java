@@ -75,16 +75,11 @@ public class TableRegistry {
      */
     private final CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>> registryTable;
 
-    /**
-     * Byte code for the Protobuf Serializer.
-     */
-    private static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
-
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
         this.classMap = new ConcurrentHashMap<>();
         this.tableMap = new ConcurrentHashMap<>();
-        this.protobufSerializer = new ProtobufSerializer(PROTOBUF_SERIALIZER_CODE, classMap);
+        this.protobufSerializer = new ProtobufSerializer(classMap);
         Serializers.registerSerializer(this.protobufSerializer);
         this.registryTable = this.runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>>>() {

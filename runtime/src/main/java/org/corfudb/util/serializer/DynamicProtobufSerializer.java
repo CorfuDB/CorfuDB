@@ -59,11 +59,6 @@ import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 public class DynamicProtobufSerializer implements ISerializer {
 
     /**
-     * This is the serializer code used by the ProtobufSerializer.
-     */
-    private static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
-
-    /**
      * Type code of the serializer. In this case the code needs to override the code of {@link ProtobufSerializer}.
      */
     @Getter
@@ -86,8 +81,8 @@ public class DynamicProtobufSerializer implements ISerializer {
      */
     private final ConcurrentMap<String, FileDescriptor> fileDescriptorMap = new ConcurrentHashMap<>();
 
-    public DynamicProtobufSerializer(byte type, CorfuRuntime corfuRuntime) {
-        this.type = type;
+    public DynamicProtobufSerializer(CorfuRuntime corfuRuntime) {
+        this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
 
         // Create and register a protobuf serializer to read the table registry.
         ISerializer protobufSerializer = createProtobufSerializer();
@@ -125,7 +120,7 @@ public class DynamicProtobufSerializer implements ISerializer {
         // Register the schemas of TableName and TableDescriptors to be able to understand registry table.
         classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
         classMap.put(getTypeUrl(TableDescriptors.getDescriptor()), TableDescriptors.class);
-        return new ProtobufSerializer(PROTOBUF_SERIALIZER_CODE, classMap);
+        return new ProtobufSerializer(classMap);
     }
 
     /**
