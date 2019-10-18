@@ -7,33 +7,68 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 
 @Slf4j
 public class SequencerPerformanceTest {
-    public final static String DEFAULT_ENDPOINT = "localhost:9000";
-    public final static int METRICS_PORT = 1000;
-    public final static long SEED = 1024;
-    public final static int RANDOM_BOUNDARY = 100;
-    public final static long TIME = 1000;
-    public final static int MILLI_TO_SECOND = 1000;
+    public static String endPoint = "localhost:9000";
+    public static int metricsPort = 1000;
+    public static long seed = 1024;
+    public static int randomBoundary = 100;
+    public static long time = 1000;
+    public static int milliToSecond = 1000;
     private CorfuRuntime runtime;
     private Random random;
+    public static final Properties PROPERTIES = new Properties();
+
+    public SequencerPerformanceTest() {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        InputStream input = classLoader.getResourceAsStream("PerformanceTest.properties");
+
+        try {
+            PROPERTIES.load(input);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     @Before
     public void before() {
+        loadProperties();
+
         runtime = initRuntime();
-        random = new Random(SEED);
+        random = new Random(seed);
+    }
+
+    private void loadProperties() {
+        if (PROPERTIES.contains("metricsPort")) {
+            metricsPort = (int) PROPERTIES.get("metricsPort");
+        }
+        if (PROPERTIES.contains("endPoint")) {
+            endPoint = (String) PROPERTIES.get("endPoint");
+        }
+        if (PROPERTIES.contains("seed")) {
+            seed = (long) PROPERTIES.get("seed");
+        }
+        if (PROPERTIES.contains("randomBoundary")) {
+            randomBoundary = (int) PROPERTIES.get("randomBoundary");
+        }
+        if (PROPERTIES.contains("time")) {
+            time = (long) PROPERTIES.get("time");
+        }
+        if (PROPERTIES.contains("milliToSecond")) {
+            milliToSecond = (int) PROPERTIES.get("milliToSecond");
+        }
     }
 
     private CorfuRuntime initRuntime() {
         CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
-        parameters.setPrometheusMetricsPort(METRICS_PORT);
+        parameters.setPrometheusMetricsPort(metricsPort);
         CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(parameters);
-        corfuRuntime.addLayoutServer(DEFAULT_ENDPOINT);
+        corfuRuntime.addLayoutServer(endPoint);
         corfuRuntime.connect();
         return corfuRuntime;
     }
@@ -80,12 +115,12 @@ public class SequencerPerformanceTest {
     public void sequencerPerformanceTest() {
         long start = System.currentTimeMillis();
         while (true) {
-            if ((System.currentTimeMillis() - start) / MILLI_TO_SECOND >  TIME) {
+            if ((System.currentTimeMillis() - start) / milliToSecond > time) {
                 System.out.println("finish test");
                 break;
             }
-            tokenQuery(runtime, random.nextInt(RANDOM_BOUNDARY));
-            tokenTx(runtime, random.nextInt(RANDOM_BOUNDARY));
+            tokenQuery(runtime, random.nextInt(randomBoundary));
+            tokenTx(runtime, random.nextInt(randomBoundary));
         }
     }
 }
