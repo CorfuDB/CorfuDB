@@ -13,16 +13,11 @@ import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.batchpolicy.BatchProcessingPolicy;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.batchpolicy.BatchProcessingPolicyData;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.DynamicPolicy;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.DynamicPolicyData;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.IdentityPolicy;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.errorpolicy.RemoveServersWithRoundRobin;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.RoundRobinPolicy;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicy;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
+
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.List;
@@ -35,22 +30,14 @@ import java.util.stream.Stream;
 public class PolicyStreamProcessor {
 
     @Default
-    private final StaticPolicy initialDistributionPolicy = new RoundRobinPolicy();
-
-    @Default
-    private final DynamicPolicy slidingWindowPolicy = new IdentityPolicy();
-
-    @Default
-    private final DynamicPolicy dynamicDistributionPolicy = new IdentityPolicy();
-
-    @Default
-    private final DynamicPolicy batchProcessorFailureHandlingPolicy = new RemoveServersWithRoundRobin();
+    private final PolicyStreamProcessorData policyData =
+            PolicyStreamProcessorData.builder().build();
 
     @NonNull
-    private final BatchProcessingPolicy batchProcessingPolicy;
+    private final StateTransferBatchProcessor batchProcessor;
 
     /**
-     * Update the current sliding window without sliding it.
+     * Update the current window without sliding it.
      *
      * @param newBatchResult A future of a batch transfer result.
      * @param currentWindow  A current sliding window.
@@ -179,8 +166,8 @@ public class PolicyStreamProcessor {
     }
 
     private DynamicPolicyData invokeDynamicPolicies(DynamicPolicyData dynamicPolicyData) {
-        return dynamicDistributionPolicy
-                .applyPolicy(batchProcessorFailureHandlingPolicy
+        return policyData.getDynamicDistributionPolicy()
+                .applyPolicy(policyData.getBatchProcessorFailureHandlingPolicy()
                         .applyPolicy(dynamicPolicyData))
                 .resetDynamicWindow();
     }
@@ -196,8 +183,8 @@ public class PolicyStreamProcessor {
         if (head.isPresent() && currentWindowSize < slidingWindow.getWindowSize()) {
             // Apply current transfer batch policy
             final Batch currentBatch = head.get();
-            CompletableFuture<BatchResult> transferResult = batchProcessingPolicy
-                    .applyPolicy(new BatchProcessingPolicyData(currentBatch));
+            CompletableFuture<BatchResult> transferResult =
+                    batchProcessor.transfer(currentBatch);
 
             return TailCalls.call(() ->
                     doProcessStream(
@@ -208,8 +195,7 @@ public class PolicyStreamProcessor {
         // Head is present, window is full.
         else if (head.isPresent() && currentWindowSize == slidingWindow.getWindowSize()) {
             final Batch currentBatch = head.get();
-            CompletableFuture<BatchResult> transferResult = batchProcessingPolicy
-                    .applyPolicy(new BatchProcessingPolicyData(currentBatch));
+            CompletableFuture<BatchResult> transferResult = batchProcessor.transfer(currentBatch);
             SlidingWindow newWindow = slideWindow(transferResult, slidingWindow).invoke()
                     .get();
             // Recursion is guaranteed to execute, since we lift all the errors to
@@ -232,7 +218,8 @@ public class PolicyStreamProcessor {
     }
 
     public CompletableFuture<Result<Long, StreamProcessFailure>> processStream(StaticPolicyData staticPolicyData) {
-        Stream<Optional<Batch>> initStream = initialDistributionPolicy.applyPolicy(staticPolicyData);
+        Stream<Optional<Batch>> initStream = policyData.getInitialDistributionPolicy()
+                .applyPolicy(staticPolicyData);
         SlidingWindow slidingWindow = SlidingWindow.builder().build();
         return doProcessStream(initStream, slidingWindow)
                 .invoke()
