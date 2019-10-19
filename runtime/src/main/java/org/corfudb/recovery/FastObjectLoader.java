@@ -10,18 +10,21 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
@@ -32,13 +35,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -46,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -203,19 +201,23 @@ public class FastObjectLoader {
     // In charge of summoning Corfu maps back in this world
     private ExecutorService necromancer;
 
-    private final Map<UUID, StreamMetaData> streamsMetaData;
+    private final Hashtable<UUID, StreamMetaData> streamsMetaData;
+    private AtomicInteger numCompletedCheckpoints;
+    AtomicReference<TrimmedException> trimmedException;
 
     @Setter
     @Getter
     private int numberOfAttempt = NUMBER_OF_ATTEMPT;
 
     private int retryIteration = 0;
-    private long nextRead;
+    //private long nextRead;
 
     public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
         loadInCache = !corfuRuntime.getParameters().isCacheDisabled();
-        streamsMetaData = new HashMap<>();
+        streamsMetaData = new Hashtable<>();
+        numCompletedCheckpoints = new AtomicInteger(0);
+        trimmedException = new AtomicReference<> ();
     }
 
     public void addStreamToIgnore(String streamName) {
@@ -253,9 +255,14 @@ public class FastObjectLoader {
     private void invokeNecromancer(Map<Long, ILogData> logDataMap, BiConsumer<Long, ILogData> resurrectionSpell) {
         lastReadRequest = necromancer.submit(() ->
         {
-            logDataMap.forEach((address, logData) -> {
-                resurrectionSpell.accept(address, logData);
-            });
+            try {
+                logDataMap.forEach ((address, logData) -> {
+                    resurrectionSpell.accept (address, logData);
+                });
+            } catch (TrimmedException e) {
+                log.warn ("caught a TrimmedException: ", e);
+                trimmedException.set(e);
+            }
         });
     }
 
@@ -289,12 +296,22 @@ public class FastObjectLoader {
      * These two functions are called if no parameter were supplied
      * by the user.
      */
-    private void findAndSetLogHead() {
-         logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();
-    }
+    private void findAndSetLogHeadAndTail() {
+         Token token0;
+         Token token1;
 
-    private void findAndSetLogTail() {
-        logTail = runtime.getAddressSpaceView().getLogTail();
+         for (int i = 0; i < numberOfAttempt; i++) {
+             token0 = runtime.getAddressSpaceView ().getTrimMark();
+             logHead = runtime.getAddressSpaceView ().getTrimMark ().getSequence ();
+             logTail = runtime.getAddressSpaceView ().getLogTail ();
+             token1 = runtime.getAddressSpaceView ().getTrimMark();
+             if (token0.getEpoch () == token1.getEpoch ())
+                 return;
+             log.warn("Changing from TrimMark {} to TrimMakr {}. Will retry {}.", token1, token1, i);
+         }
+
+         log.error("Epoch has been changed {} times. Abort the fastloader", numberOfAttempt);
+         throw new RuntimeException("Epoch keep changing");
     }
 
     private void resetAddressProcessed() {
@@ -496,15 +513,8 @@ public class FastObjectLoader {
      * the user, initialize to default.
      *
      */
-    private void initializeHeadAndTails() {
-        if (logHead == Address.NON_EXIST) {
-            findAndSetLogHead();
-        }
-
-        if (logTail == Address.NON_EXIST) {
-            findAndSetLogTail();
-        }
-
+    private void setLogHeadAndTail() {
+        findAndSetLogHeadAndTail();
         resetAddressProcessed();
     }
 
@@ -515,13 +525,6 @@ public class FastObjectLoader {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
         runtime.getStreamsView().getStreamCache().clear();
-
-        // Re ask for the Head, if it changes while we were trying.
-        findAndSetLogHead();
-        findAndSetLogTail();
-        nextRead = logHead;
-        resetAddressProcessed();
-
         log.info("retry fastobject loader head " + logHead + " tail " + logTail);
     }
     /**
@@ -573,22 +576,17 @@ public class FastObjectLoader {
      * When we encounter a start checkpoint, we need to create the new entry in the Stream
      * @param address
      * @param logData
-     * @param streamId
-     * @param checkPointId
-     * @param streamMeta
      */
-    private void handleStartCheckPoint(long address, ILogData logData, UUID streamId,
-                                       UUID checkPointId, StreamMetaData streamMeta) {
+    private void handleStartCheckPoint(CheckPoint checkPoint, long address, ILogData logData) {
         try {
             CheckpointEntry logEntry = (CheckpointEntry) deserializeLogData(runtime, logData);
             long snapshotAddress = getSnapShotAddressOfCheckPoint(logEntry);
             long startAddress = getStartAddressOfCheckPoint(logData);
 
-            streamMeta.addCheckPoint(new CheckPoint(checkPointId)
-                    .addAddress(address)
+            checkPoint.addAddress(address)
                     .setSnapshotAddress(snapshotAddress)
                     .setStartAddress(startAddress)
-                    .setStarted(true));
+                    .setStarted(true);
 
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
@@ -598,6 +596,7 @@ public class FastObjectLoader {
             throw new IllegalStateException("Couldn't get the snapshotAddress at address " + address);
         }
     }
+
 
     /**
      * Find if there is a checkpoint in the current logAddress
@@ -618,27 +617,28 @@ public class FastObjectLoader {
             StreamMetaData streamMeta;
             streamMeta = streamsMetaData.computeIfAbsent(streamId, (id) -> new StreamMetaData(id));
             UUID checkPointId = logData.getCheckpointId();
+            CheckPoint checkPoint = streamMeta.addCheckPointIfAbsent(checkPointId);
 
             switch (logData.getCheckpointType()) {
                 case START:
-                    handleStartCheckPoint(address, logData, streamId, checkPointId, streamMeta);
-
+                    handleStartCheckPoint(checkPoint, address, logData);
                     break;
                 case CONTINUATION:
-                    if (streamMeta.checkPointExists(checkPointId)) {
-                        streamMeta.getCheckPoint(checkPointId).addAddress(address);
-                    }
-
+                    checkPoint.addAddress(address);
+                    checkPoint.setCont(true);
                     break;
                 case END:
-                    if (streamMeta.checkPointExists(checkPointId)) {
-                        streamMeta.getCheckPoint(checkPointId).setEnded(true).addAddress(address);
-                        streamMeta.updateLatestCheckpointIfLater(checkPointId);
-                    }
+                    checkPoint.addAddress(address);
+                    checkPoint.setEnded(true);
                     break;
                 default:
                     log.warn("findCheckPointsInLog[address = {}] Unknown checkpoint type", address);
                     break;
+            }
+
+            if (checkPoint.isEnded() && checkPoint.isStarted() && checkPoint.isCont()) {
+                streamMeta.updateLatestCheckpointIfLater (checkPointId);
+                numCompletedCheckpoints.incrementAndGet();
             }
         }
     }
@@ -656,7 +656,6 @@ public class FastObjectLoader {
                 .setNameFormat("FastObjectLoaderResurrectCheckpointsThread-%d").build());
         CompletableFuture[] cfs = new CompletableFuture[streamsMetaData.size()];
         int i = 0;
-        AtomicReference<TrimmedException> trimmedException = new AtomicReference<> ();
 
         try {
             for (Map.Entry<UUID, StreamMetaData> entry : streamsMetaData.entrySet()) {
@@ -718,6 +717,7 @@ public class FastObjectLoader {
      * after checkpoints to resurrect the SMRMaps
      */
     private void recoverRuntime() throws TrimmedException {
+        setLogHeadAndTail();
         log.info("fastobject loader head " + logHead + " tail " + logTail);
         // If the user is sure that he has no checkpoint,
         // we can just do the last step. Risky, but the flag is
@@ -725,7 +725,7 @@ public class FastObjectLoader {
         if (logHasNoCheckPoint) {
             applyForEachAddress(this::processLogData);
         } else {
-            applyForEachAddress(this::findCheckPointsInLogAddress);
+            applyForEachAddressReverse(this::findCheckPointsInLogAddress);
             resurrectCheckpoints();
 
             resetAddressProcessed();
@@ -740,7 +740,6 @@ public class FastObjectLoader {
      */
     public void loadMaps() {
         log.info("loadMaps: Starting to loadmaps");
-        initializeHeadAndTails();
 
         while (true) {
             try {
@@ -758,15 +757,15 @@ public class FastObjectLoader {
         }
     }
 
-
     /**
      * This method will apply for each address the consumer given in parameter.
      * The Necromancer thread is used to do the heavy lifting.
      */
     private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) throws TrimmedException {
-
+        long nextRead;
         summonNecromancer();
         nextRead = logHead;
+        long currentTail = logTail;
         log.debug("loghead:" + logHead + " addressProcessed : " + addressProcessed + " + 1");
 
         while (nextRead <= logTail) {
@@ -802,7 +801,69 @@ public class FastObjectLoader {
                     }
                 }
 
+                log.debug("nextRead:" + nextRead + " addressProcessed : " + addressProcessed + " + 1");
                 invokeNecromancer(range, logDataProcessor);
+            } catch (TrimmedException ex) {
+                log.warn("caught a TrimmedException killNecromance: ", ex);
+                killNecromancer();
+                throw ex;
+            }
+        }
+        killNecromancer();
+    }
+
+    /**
+     * This method will apply for each address the consumer given in parameter.
+     * The Necromancer thread is used to do the heavy lifting.
+     */
+    private void applyForEachAddressReverse(BiConsumer<Long, ILogData> logDataProcessor) throws TrimmedException {
+        summonNecromancer();
+        long curentTail = logTail;
+        log.debug("loghead:" + logHead + " addressProcessed : " + addressProcessed + " + 1");
+
+        long address;
+        long start = 0;
+
+        while (curentTail >= logHead) {
+            if (numCompletedCheckpoints.intValue () == (streamsToLoad.size() + customTypeStreams.size ())) {
+                log.info ("find all streams checkpoints start {} tail {}", start, logTail);
+                return;
+            }
+
+            try {
+                start = Math.max(logHead, curentTail - batchReadSize + 1);
+                addressProcessed = start;
+                log.debug("nextRead from {}  to {}, addressProcessed {}", start, curentTail, addressProcessed);
+
+                // Don't cache the read results on server for fast loader
+                ContiguousSet<Long> addresses = ContiguousSet.create(
+                        Range.closed(start, curentTail), DiscreteDomain.longs());
+
+                Map<Long, ILogData> range = runtime.getAddressSpaceView().read(addresses,
+                        RecoveryUtils.fastLoaderReadOptions);
+                curentTail = curentTail - batchReadSize;
+
+                // Sanity
+                for (Map.Entry<Long, ILogData> entry : range.entrySet()) {
+                    address = entry.getKey();
+                    ILogData logData = entry.getValue();
+                    if (address != addressProcessed) {
+                        throw new IllegalStateException("We missed an entry." +
+                                "It can lead to correctness issues: " + address + " != " + addressProcessed + " + 1");
+                    }
+                    addressProcessed++;
+                    if (logData.getType() == DataType.TRIMMED) {
+                        throw new IllegalStateException("Unexpected TRIMMED data");
+                    }
+
+                    if (address % STATUS_UPDATE_PACE == 0) {
+                        log.info("applyForEachAddress: read up to {}", address);
+                    }
+                }
+
+                invokeNecromancer(range, logDataProcessor);
+                if (trimmedException.get()!= null)
+                    throw trimmedException.get();
             } catch (TrimmedException ex) {
                 log.warn("caught a TrimmedException killNecromance: ", ex);
                 killNecromancer();
@@ -819,10 +880,11 @@ public class FastObjectLoader {
         long startAddress;
         boolean ended = false;
         boolean started = false;
+        boolean cont = false;
         List<Long> addresses = new ArrayList<>();
 
         public CheckPoint addAddress(long address) {
-            addresses.add(address);
+            addresses.add(0, address);
             return this;
         }
     }
@@ -831,22 +893,19 @@ public class FastObjectLoader {
     private class StreamMetaData {
         final UUID streamId;
         CheckPoint latestCheckPoint;
-        Map<UUID, CheckPoint> checkPoints = new HashMap<>();
+        Map<UUID, CheckPoint> checkPoints = new Hashtable<> ();
 
         public Long getHeadAddress() {
             return latestCheckPoint != null ? latestCheckPoint.snapshotAddress : Address.NEVER_READ;
         }
 
-        public void addCheckPoint(CheckPoint cp) {
-            checkPoints.put(cp.getCheckPointId(), cp);
+        public CheckPoint addCheckPoint(CheckPoint cp) {
+            checkPoints.putIfAbsent(cp.getCheckPointId(), cp);
+            return checkPoints.get(cp.getCheckPointId ());
         }
 
         public CheckPoint getCheckPoint(UUID checkPointId) {
             return checkPoints.get(checkPointId);
-        }
-
-        public boolean checkPointExists(UUID checkPointId) {
-            return checkPoints.containsKey(checkPointId);
         }
 
         public void updateLatestCheckpointIfLater(UUID checkPointId) {
@@ -855,6 +914,11 @@ public class FastObjectLoader {
                     contender.getSnapshotAddress() > latestCheckPoint.getSnapshotAddress()) {
                         latestCheckPoint = contender;
             }
+        }
+
+        public CheckPoint addCheckPointIfAbsent(UUID checkPointId) {
+            checkPoints.putIfAbsent(checkPointId, new CheckPoint(checkPointId));
+            return checkPoints.get(checkPointId);
         }
     }
 
