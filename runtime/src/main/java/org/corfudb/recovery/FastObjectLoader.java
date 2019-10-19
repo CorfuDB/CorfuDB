@@ -826,7 +826,7 @@ public class FastObjectLoader {
         long start = 0;
 
         while (curentTail >= logHead) {
-            if (numCompletedCheckpoints.intValue () == streamsToLoad.size ()) {
+            if (numCompletedCheckpoints.intValue () == (streamsToLoad.size() + customTypeStreams.size ())) {
                 log.info ("find all streams checkpoints start {} tail {}", start, logTail);
                 return;
             }
