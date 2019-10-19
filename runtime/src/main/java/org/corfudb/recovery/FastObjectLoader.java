@@ -17,12 +17,14 @@ import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
@@ -294,12 +296,22 @@ public class FastObjectLoader {
      * These two functions are called if no parameter were supplied
      * by the user.
      */
-    private void findAndSetLogHead() {
-         logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();
-    }
+    private void findAndSetLogHeadAndTail() {
+         Token token0;
+         Token token1;
 
-    private void findAndSetLogTail() {
-        logTail = runtime.getAddressSpaceView().getLogTail();
+         for (int i = 0; i < numberOfAttempt; i++) {
+             token0 = runtime.getAddressSpaceView ().getTrimMark();
+             logHead = runtime.getAddressSpaceView ().getTrimMark ().getSequence ();
+             logTail = runtime.getAddressSpaceView ().getLogTail ();
+             token1 = runtime.getAddressSpaceView ().getTrimMark();
+             if (token0.getEpoch () == token1.getEpoch ())
+                 return;
+             log.warn("Changing from TrimMark {} to TrimMakr {}. Will retry {}.", token1, token1, i);
+         }
+
+         log.error("Epoch has been changed {} times. Abort the fastloader", numberOfAttempt);
+         throw new RuntimeException("Epoch keep changing");
     }
 
     private void resetAddressProcessed() {
@@ -501,15 +513,8 @@ public class FastObjectLoader {
      * the user, initialize to default.
      *
      */
-    private void initializeHeadAndTails() {
-        if (logHead == Address.NON_EXIST) {
-            findAndSetLogHead();
-        }
-
-        if (logTail == Address.NON_EXIST) {
-            findAndSetLogTail();
-        }
-
+    private void setLogHeadAndTail() {
+        findAndSetLogHeadAndTail();
         resetAddressProcessed();
     }
 
@@ -520,12 +525,6 @@ public class FastObjectLoader {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
         runtime.getStreamsView().getStreamCache().clear();
-
-        // Re ask for the Head, if it changes while we were trying.
-        findAndSetLogHead();
-        findAndSetLogTail();
-        resetAddressProcessed();
-
         log.info("retry fastobject loader head " + logHead + " tail " + logTail);
     }
     /**
@@ -718,6 +717,7 @@ public class FastObjectLoader {
      * after checkpoints to resurrect the SMRMaps
      */
     private void recoverRuntime() throws TrimmedException {
+        setLogHeadAndTail();
         log.info("fastobject loader head " + logHead + " tail " + logTail);
         // If the user is sure that he has no checkpoint,
         // we can just do the last step. Risky, but the flag is
@@ -740,7 +740,6 @@ public class FastObjectLoader {
      */
     public void loadMaps() {
         log.info("loadMaps: Starting to loadmaps");
-        initializeHeadAndTails();
 
         while (true) {
             try {
@@ -909,10 +908,6 @@ public class FastObjectLoader {
             return checkPoints.get(checkPointId);
         }
 
-        public boolean checkPointExists(UUID checkPointId) {
-            return checkPoints.containsKey(checkPointId);
-        }
-
         public void updateLatestCheckpointIfLater(UUID checkPointId) {
             CheckPoint contender = getCheckPoint(checkPointId);
             if (latestCheckPoint == null ||
@@ -922,7 +917,8 @@ public class FastObjectLoader {
         }
 
         public CheckPoint addCheckPointIfAbsent(UUID checkPointId) {
-            return checkPoints.putIfAbsent(checkPointId, new CheckPoint(checkPointId));
+            checkPoints.putIfAbsent(checkPointId, new CheckPoint(checkPointId));
+            return checkPoints.get(checkPointId);
         }
     }
 
