@@ -83,21 +83,22 @@ public class StateTransferManager {
     @ToString
     @EqualsAndHashCode
     public static class CurrentTransferSegmentStatus {
-        private SegmentState segmentState;
-        private long lastTransferredAddress;
-        private BatchProcessorFailure causeOfFailure = null;
+        private final SegmentState segmentState;
+        private final long totalTransferred;
+        private final Optional<StreamProcessFailure> causeOfFailure;
 
         public CurrentTransferSegmentStatus(SegmentState segmentState,
-                                            long lastTransferredAddress) {
+                                            long totalTransferred) {
             this.segmentState = segmentState;
-            this.lastTransferredAddress = lastTransferredAddress;
+            this.totalTransferred = totalTransferred;
+            this.causeOfFailure = Optional.empty();
         }
 
         public CurrentTransferSegmentStatus(SegmentState segmentState,
-                                            long lastTransferredAddress,
-                                            BatchProcessorFailure causeOfFailure) {
+                                            long totalTransferred,
+                                            Optional<StreamProcessFailure> causeOfFailure) {
             this.segmentState = segmentState;
-            this.lastTransferredAddress = lastTransferredAddress;
+            this.totalTransferred = totalTransferred;
             this.causeOfFailure = causeOfFailure;
         }
     }
@@ -123,7 +124,8 @@ public class StateTransferManager {
                 .collect(Collectors.toList());
     }
 
-    public ImmutableList<CurrentTransferSegment> handleTransfer(List<CurrentTransferSegment> stateList) {
+    public ImmutableList<CurrentTransferSegment> handleTransfer(List<CurrentTransferSegment> stateList,
+                                                                StateTransferBatchProcessorData batchProcessorData) {
 
         List<CurrentTransferSegment> finalList = stateList.stream().map(segment ->
                 {
@@ -140,40 +142,16 @@ public class StateTransferManager {
                                                 new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress())
                                         );
                                     } else {
-                                        // transfer whatever is not transferred
-                                        Long lastAddressToTransfer =
-                                                unknownAddressesInRange.get(unknownAddressesInRange.size() - 1);
+                                        long numAddressesToTransfer = unknownAddressesInRange.size();
+                                        Optional<CommittedTransferData> committedTransferData = segment.getCommittedTransferData();
+                                        StateTransferConfig config = StateTransferConfig.builder()
+                                                .unknownAddresses(unknownAddressesInRange)
+                                                .committedTransferData(committedTransferData)
+                                                .batchProcessorData(batchProcessorData).build();
 
-                                        CommittedTransferData committedTransferData = segment.getCommittedTransferData();
+                                        return stateTransfer(config).thenApply(result ->
+                                                createStatusBasedOnTransferResult(result, numAddressesToTransfer));
 
-                                        return StateTransferPlanner
-                                                .stateTransfer(unknownAddressesInRange, batchSize, Optional
-                                                        .ofNullable(committedTransferData)
-                                                        .orElseGet(null))
-                                                .thenApply(lastTransferredAddressResult -> {
-                                                    if (lastTransferredAddressResult.isValue() &&
-                                                            lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
-                                                        long lastTransferredAddress = lastTransferredAddressResult.get();
-                                                        log.info("State transfer segment success, transferred up to: {}.",
-                                                                lastTransferredAddress);
-                                                        return new CurrentTransferSegmentStatus(TRANSFERRED, lastTransferredAddress);
-                                                    } else if (lastTransferredAddressResult.isValue() &&
-                                                            !lastTransferredAddressResult.get().equals(lastAddressToTransfer)) {
-                                                        log.error("Incomplete transfer failure occurred, " +
-                                                                        "expected last address to be: {}, but it's: {}",
-                                                                lastAddressToTransfer, lastTransferredAddressResult.get());
-                                                        return new CurrentTransferSegmentStatus(FAILED,
-                                                                lastTransferredAddressResult.get(),
-                                                                new BatchProcessorFailure("Incomplete transfer failure."));
-                                                    } else {
-                                                        log.error("State transfer failure occurred: ",
-                                                                lastTransferredAddressResult.getError().getCause());
-                                                        return new CurrentTransferSegmentStatus(
-                                                                FAILED,
-                                                                NON_ADDRESS,
-                                                                (BatchProcessorFailure) lastTransferredAddressResult.getError());
-                                                    }
-                                                });
                                     }
                                 } else {
                                     return CompletableFuture.completedFuture(status);
@@ -194,10 +172,31 @@ public class StateTransferManager {
         return configureStateTransferPipeline(stateTransferConfig).get();
     }
 
+    CurrentTransferSegmentStatus createStatusBasedOnTransferResult(Result<Long, StreamProcessFailure> result,
+                                                                   long totalNeeded) {
+        Result<Long, StreamProcessFailure> checkedResult =
+                result.flatMap(totalTransferred -> {
+                    if (totalTransferred != totalNeeded) {
+                        return Result.error(new StreamProcessFailure
+                                (new IllegalStateException
+                                        ("Needed " + totalNeeded +
+                                                " but transferred " + totalTransferred)));
+                    } else {
+                        return Result.ok(totalTransferred);
+                    }
+                });
+
+        if (checkedResult.isError()) {
+            return new CurrentTransferSegmentStatus(FAILED, 0L, Optional.of(checkedResult.getError()));
+        } else {
+            return new CurrentTransferSegmentStatus(TRANSFERRED, checkedResult.get(), Optional.empty());
+        }
+    }
+
     Supplier<CompletableFuture<Result<Long, StreamProcessFailure>>>
     configureStateTransferPipeline(StateTransferConfig stateTransferConfig) {
 
-        CommittedTransferData committedTransferData =
+        Optional<CommittedTransferData> possibleCommittedTransferData =
                 stateTransferConfig.getCommittedTransferData();
 
         List<Long> unknownAddresses =
@@ -212,8 +211,8 @@ public class StateTransferManager {
                 stateTransferConfig.getPolicyStreamProcessorData();
 
         // There exists a range of addresses that can be transferred with a committed batch processor.
-        if (Optional.ofNullable(committedTransferData).isPresent()) {
-
+        if (possibleCommittedTransferData.isPresent()) {
+            CommittedTransferData committedTransferData = possibleCommittedTransferData.get();
             long committedOffset = committedTransferData.getCommittedOffset();
             List<String> sourceServers = committedTransferData.getSourceServers();
 

@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransfer
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessorData;
 
 import java.util.List;
+import java.util.Optional;
 
 @Getter
 @Builder
@@ -18,7 +19,7 @@ public class StateTransferConfig {
     private final List<Long> unknownAddresses;
 
     @NonNull
-    private final CommittedTransferData committedTransferData;
+    private final Optional<CommittedTransferData> committedTransferData;
 
     @NonNull
     private final StateTransferBatchProcessorData batchProcessorData;
