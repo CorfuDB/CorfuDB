@@ -75,8 +75,6 @@ public class StateTransferManager {
             this.status = status;
             this.committedTransferData = committedTransferData;
         }
-
-
     }
 
     @Getter

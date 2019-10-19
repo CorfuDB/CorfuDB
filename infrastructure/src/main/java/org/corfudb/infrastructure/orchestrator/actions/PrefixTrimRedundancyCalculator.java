@@ -27,13 +27,13 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
 
     private final CorfuRuntime runtime;
 
-    public PrefixTrimRedundancyCalculator(String node, CorfuRuntime runtime){
+    public PrefixTrimRedundancyCalculator(String node, CorfuRuntime runtime) {
         super(node);
         this.runtime = runtime;
     }
 
     long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
-                                     String endpoint) {
+                             String endpoint) {
 
         long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
 
@@ -44,41 +44,39 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         return trimMark;
     }
 
-    public ImmutableList<CurrentTransferSegment> createStateList(Layout layout){
+    public ImmutableList<CurrentTransferSegment> createStateList(Layout layout) {
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
         long globalCommittedOffset = retrieveGlobalCommittedOffset(layout, runtime);
         Optional<CommittedTransferData> committedTransferData;
-        if(globalCommittedOffset == NON_ADDRESS){
+        if (globalCommittedOffset == NON_ADDRESS) {
             committedTransferData = Optional.empty();
-        }
-        else{
+        } else {
             committedTransferData = Optional.of(new CommittedTransferData(globalCommittedOffset,
                     ImmutableList.copyOf(layout.getSegment(globalCommittedOffset).getAllLogServers())));
         }
-                return ImmutableList.copyOf(layout.getSegments()
-                        .stream()
-                        // filter the segments that end before the trim mark and are not open.
-                        .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != NON_ADDRESS)
-                        .map(segment -> {
-                            long segmentStart = Math.max(segment.getStart(), trimMark);
-                            long segmentEnd = segment.getEnd() - 1;
+        return ImmutableList.copyOf(layout.getSegments()
+                .stream()
+                // filter the segments that end before the trim mark and are not open.
+                .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != NON_ADDRESS)
+                .map(segment -> {
+                    long segmentStart = Math.max(segment.getStart(), trimMark);
+                    long segmentEnd = segment.getEnd() - 1;
 
-                            if(segmentContainsServer(segment, getServer())){
+                    if (segmentContainsServer(segment, getServer())) {
 
-                                return new CurrentTransferSegment(segmentStart, segmentEnd,
-                                        CompletableFuture.completedFuture(
-                                                new CurrentTransferSegmentStatus(RESTORED,
-                                                segmentEnd)), committedTransferData.orElse(null));
-                            }
-                            else{
-                                return new CurrentTransferSegment(segmentStart, segmentEnd,
-                                        CompletableFuture.completedFuture(
-                                                new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                NON_ADDRESS)), committedTransferData.orElse(null));
-                            }
+                        return new CurrentTransferSegment(segmentStart, segmentEnd,
+                                CompletableFuture.completedFuture(
+                                        new CurrentTransferSegmentStatus(RESTORED,
+                                                segmentEnd)), committedTransferData);
+                    } else {
+                        return new CurrentTransferSegment(segmentStart, segmentEnd,
+                                CompletableFuture.completedFuture(
+                                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
+                                                NON_ADDRESS)), committedTransferData);
+                    }
 
-                        })
-                        .collect(Collectors.toList()));
+                })
+                .collect(Collectors.toList()));
     }
 
 }

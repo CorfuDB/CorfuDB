@@ -1,24 +1,15 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableList;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
-
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.RegularBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -30,11 +21,19 @@ import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
-import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.*;
-import static org.corfudb.runtime.view.Address.NON_ADDRESS;
+import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.RESTORED;
 
 /**
  * This action attempts to restore the redundancy for the segments, for which the current node is
@@ -51,7 +50,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     }
 
 
-    public enum RestoreStatus{
+    public enum RestoreStatus {
         RESTORED,
         NOT_RESTORED
     }
@@ -70,7 +69,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     };
 
     RestoreStatus restoreWithBackOff(List<CurrentTransferSegment> stateList,
-                                      CorfuRuntime runtime) throws Exception {
+                                     CorfuRuntime runtime) throws Exception {
         AtomicInteger retries = new AtomicInteger(3);
         try {
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
@@ -102,39 +101,23 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
      * @param stateList A list that holds the state for every segment.
      */
     RestoreStatus tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
-                                                         Layout oldLayout,
-                                                         LayoutManagementView layoutManagementView) {
+                                                       Layout oldLayout,
+                                                       LayoutManagementView layoutManagementView) {
 
-        // Get any segments that were completed exceptionally or with a failure.
+        // Get any segments that failed.
         List<CurrentTransferSegment> failed = stateList.stream()
-                .filter(segment -> segment.getStatus().isCompletedExceptionally() ||
-                        segment.getStatus().isDone() && segment.getStatus().join().getSegmentState().equals(FAILED))
-                .map(segment ->
-                {
-                    CompletableFuture<CurrentTransferSegmentStatus> newStatus =
-                            segment.getStatus().handle((value, exception) ->
-                            {
-                                if(exception != null){
-                                    return new CurrentTransferSegmentStatus(FAILED, NON_ADDRESS,
-                                            new BatchProcessorFailure(exception));
-                                }
-                                return value;
-                            });
-
-                    return new CurrentTransferSegment(segment.getStartAddress(),
-                            segment.getEndAddress(), newStatus);
-
-                }).collect(Collectors.toList());
+                .filter(segment -> segment.getStatus().join().getSegmentState().equals(FAILED))
+                .collect(Collectors.toList());
 
         // Throw the first failure.
         if (!failed.isEmpty()) {
-            throw failed.get(0).getStatus().join().getCauseOfFailure();
+            throw failed.get(0).getStatus().join().getCauseOfFailure().get();
         }
 
         // Filter all the transfers that have been completed.
         List<CurrentTransferSegment> transferredSegments
-                = stateList.stream().filter(segment -> segment.getStatus().isDone() &&
-                segment.getStatus().join().getSegmentState().equals(TRANSFERRED))
+                = stateList.stream().filter(segment -> segment
+                .getStatus().join().getSegmentState().equals(TRANSFERRED))
                 .collect(Collectors.toList());
 
 
@@ -184,6 +167,11 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         return "RestoreRedundancyAndMergeSegments";
     }
 
+    @FunctionalInterface
+    public interface LogUnitClientMap {
+        Map<String, LogUnitClient> generate(CorfuRuntime runtime);
+    }
+
     @Override
     public void impl(@Nonnull CorfuRuntime runtime, @NonNull StreamLog streamLog) throws Exception {
 
@@ -195,21 +183,19 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         PrefixTrimRedundancyCalculator redundancyCalculator =
                 new PrefixTrimRedundancyCalculator(currentNode, runtime);
 
-        // Create a transfer manager instance.
-        RegularBatchProcessor transferBatchProcessor =
-                new RegularBatchProcessor(streamLog, runtime.getAddressSpaceView());
-
-        runtime.getLayoutView().getRuntimeLayout()
-        StateTransferPlanner StateTransferPlanner =
-                new StateTransferPlanner(transferBatchProcessor);
-
         StateTransferManager transferManager =
-                new StateTransferManager(streamLog,
-                        StateTransferPlanner,
-                        runtime.getParameters().getBulkReadSize());
+                new StateTransferManager(streamLog);
+
+        LogUnitClientMap map = (CorfuRuntime rt) ->
+                rt.getLayoutView().getLayout().getAllActiveServers()
+                        .stream().map(server ->
+                        new SimpleEntry<>(server, rt.getLayoutView().getRuntimeLayout().getLogUnitClient(server)))
+                        .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
+
         // Create the initial state map.
         ImmutableList<CurrentTransferSegment> stateList =
                 redundancyCalculator.createStateList(layout);
+
 
         log.info("State transfer on {}: Initial state list: {}", currentNode, stateList);
 
@@ -217,7 +203,10 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 RedundancyCalculator.requiresMerge(layout, currentNode)) {
             // Initialize a transfer for each segment and update the map.
 
-            stateList = transferManager.handleTransfer(stateList);
+            stateList = transferManager.handleTransfer(stateList,
+                    new StateTransferBatchProcessorData(streamLog,
+                            runtime.getAddressSpaceView(),
+                            map.generate(runtime)));
             // Restore redundancy for the segments that are restored.
             // If possible, also merge the segments.
             RestoreStatus restoreStatus = restoreWithBackOff(stateList, runtime);
