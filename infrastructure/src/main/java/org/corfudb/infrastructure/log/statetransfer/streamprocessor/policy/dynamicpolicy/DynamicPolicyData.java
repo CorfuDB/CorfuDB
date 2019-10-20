@@ -34,7 +34,7 @@ public class DynamicPolicyData {
         return new DynamicPolicyData(
                 tail,
                 slidingWindow.toBuilder()
-                        .processed(ImmutableList.of())
+                        .succeeded(ImmutableList.of())
                         .failed(ImmutableList.of())
                         .build()
         );
