@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  * A class that handles an actual state transfer for a complete segment or a portion of it.
  * It operates over a lazy stream of batches by running a sliding window algorithm.
  * A sliding window is used to aggregate a dynamic data over the transferred batches
- * and make the timely decisions regarding how the future load will be handled.
+ * and make the timely decisions with respect to how the future load will be handled.
  */
 @Builder
 public class PolicyStreamProcessor {
@@ -382,7 +382,7 @@ public class PolicyStreamProcessor {
     /**
      * Execute the state transfer.
      * @param staticPolicyData A data needed to initialize a stream.
-     * @return A future of a result, containing a total number of records transferred or an exception. 
+     * @return A future of a result, containing a total number of records transferred or an exception.
      */
     public CompletableFuture<Result<Long, StreamProcessFailure>> processStream(StaticPolicyData staticPolicyData) {
         Stream<Optional<Batch>> initStream = policyData.getInitialDistributionPolicy()

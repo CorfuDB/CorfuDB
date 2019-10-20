@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * A batch processor that transfers non-committed addresses one batch a time
+ * A batch processor that transfers non-committed addresses one batch at a time
  * via a replication protocol.
  */
 @Slf4j

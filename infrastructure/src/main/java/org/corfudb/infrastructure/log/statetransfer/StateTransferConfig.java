@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * A config need to execute an instance of a state transfer.
+ * A config needed to execute an instance of a state transfer.
  */
 @Getter
 @Builder
@@ -39,8 +39,8 @@ public class StateTransferConfig {
     /**
      * A size of every transfer batch, small enough to fit within one rpc call.
      */
-    @Default
-    private final int batchSize = 10;
+    @NonNull
+    private final int batchSize;
 
     /**
      * A set of predefined policies needed to execute the state transfer.
