@@ -1,28 +1,25 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CommittedTransferData;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
-import static org.corfudb.runtime.view.Address.*;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
+/**
+ * A redundancy calculator that also considers a prefix trim.
+ */
 public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
 
     private final CorfuRuntime runtime;
@@ -32,6 +29,13 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         this.runtime = runtime;
     }
 
+    /**
+     * Sets the trim mark on this log unit and also performs a prefix trim.
+     * @param layout A current layout.
+     * @param runtime  A current runtime.
+     * @param endpoint A current endpoint.
+     * @return A retrieved trim mark.
+     */
     long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
                              String endpoint) {
 
@@ -44,6 +48,11 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         return trimMark;
     }
 
+    /**
+     * Given a layout, creates an initial list of transfer segments.
+     * @param layout A current layout.
+     * @return A list of transfer segments.
+     */
     public ImmutableList<CurrentTransferSegment> createStateList(Layout layout) {
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
         long globalCommittedOffset = retrieveGlobalCommittedOffset(layout, runtime);
@@ -60,19 +69,19 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                 .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != NON_ADDRESS)
                 .map(segment -> {
                     long segmentStart = Math.max(segment.getStart(), trimMark);
-                    long segmentEnd = segment.getEnd() - 1;
+                    long segmentEnd = segment.getEnd() - 1L;
 
                     if (segmentContainsServer(segment, getServer())) {
 
                         return new CurrentTransferSegment(segmentStart, segmentEnd,
                                 CompletableFuture.completedFuture(
                                         new CurrentTransferSegmentStatus(RESTORED,
-                                                segmentEnd)), committedTransferData);
+                                                segmentEnd - segmentStart + 1L)), committedTransferData);
                     } else {
                         return new CurrentTransferSegment(segmentStart, segmentEnd,
                                 CompletableFuture.completedFuture(
                                         new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                                NON_ADDRESS)), committedTransferData);
+                                                0L)), committedTransferData);
                     }
 
                 })

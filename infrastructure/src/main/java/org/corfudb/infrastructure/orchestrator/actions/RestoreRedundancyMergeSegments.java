@@ -104,7 +104,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                                                        Layout oldLayout,
                                                        LayoutManagementView layoutManagementView) {
 
-        // Get any segments that failed.
+        // Get any transfers that failed.
         List<CurrentTransferSegment> failed = stateList.stream()
                 .filter(segment -> segment.getStatus().join().getSegmentState().equals(FAILED))
                 .collect(Collectors.toList());
@@ -183,9 +183,11 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         PrefixTrimRedundancyCalculator redundancyCalculator =
                 new PrefixTrimRedundancyCalculator(currentNode, runtime);
 
+        // Create a state transfer manager.
         StateTransferManager transferManager =
-                new StateTransferManager(streamLog);
+                new StateTransferManager(streamLog, runtime.getParameters().getBulkReadSize());
 
+        // Create lambda that, given a runtime, creates the log unit clients map.
         LogUnitClientMap map = (CorfuRuntime rt) ->
                 rt.getLayoutView().getLayout().getAllActiveServers()
                         .stream().map(server ->

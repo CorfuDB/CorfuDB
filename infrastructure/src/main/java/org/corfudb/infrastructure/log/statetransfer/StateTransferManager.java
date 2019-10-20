@@ -180,8 +180,8 @@ public class StateTransferManager {
     }
 
     /**
-     * Perform the state transfer for the current transfer segments and also
-     * update their state as a result.
+     * Performs the state transfer for the current transfer segments and also
+     * updates their state as a result.
      *
      * @param currentTransferSegments A list of the segment currently present in the system.
      * @param batchProcessorData      A piece of data needed to select

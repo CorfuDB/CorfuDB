@@ -53,6 +53,16 @@ public class LayoutBuilder {
     }
 
     /**
+     * Set layout's segments.
+     * @param segments List of segments.
+     * @return This builder.
+     */
+    public LayoutBuilder setSegments(@NonNull List<LayoutSegment> segments){
+        layout.setSegments(segments);
+        return this;
+    }
+
+    /**
      * Clears the existing unresponsive servers.
      *
      * @return this builder
