@@ -1,5 +1,6 @@
 package org.corfudb.common.streamutils;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
@@ -9,15 +10,25 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-
+/**
+ * A utility class to perform operation on a stream of elements.
+ */
 public class StreamUtils {
-    @Builder
+
     @Getter
     public static class StreamHeadAndTail<T> {
-        @Default
-        private final Optional<T> head = Optional.empty();
-        @Default
-        private final Stream<Optional<T>> tail = Stream.empty();
+        private final Optional<T> head;
+        private final Stream<Optional<T>> tail;
+
+        public StreamHeadAndTail(Optional<T> head, Stream<Optional<T>> tail) {
+            this.head = head;
+            this.tail = tail;
+        }
+
+        public StreamHeadAndTail() {
+            this.head = Optional.empty();
+            this.tail = Stream.of();
+        }
     }
 
     private static StreamUtils ourInstance = new StreamUtils();
@@ -42,6 +53,12 @@ public class StreamUtils {
 
     }
 
+    /**
+     * Splits the tail of a stream into the head and a tail.
+     * @param tail An instance of a stream.
+     * @param <T> A generic parameter.
+     * @return An instance of a split stream.
+     */
     public static <T> StreamHeadAndTail<T> splitTail(final Stream<Optional<T>> tail) {
         Iterator<Optional<T>> iterator = tail.iterator();
 

@@ -1,20 +1,16 @@
 package org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy;
 
-import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
-
-import java.util.Optional;
-import java.util.function.Supplier;
-
+/**
+ * An interface that dynamic policies should implement to transform the tail of a stream.
+ */
 @FunctionalInterface
 public interface DynamicPolicy {
 
     /**
-     * Based on the aggregated statistics so far,
-     * apply the function to the tail of the batch stream
-     * to transform it.
+     * Based on the current dynamic policy data
+     * apply the function to get the new dynamic policy data.
      * @param data A dynamic policy data.
-     * @return A supplier that transforms the tail.
-     * Should be utilized in the Stream.generate() function.
+     * @return A new dynamic policy data.
      */
     DynamicPolicyData applyPolicy(DynamicPolicyData data);
 }

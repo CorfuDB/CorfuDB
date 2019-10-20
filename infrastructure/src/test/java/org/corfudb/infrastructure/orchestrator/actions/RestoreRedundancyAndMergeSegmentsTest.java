@@ -2,16 +2,19 @@ package org.corfudb.infrastructure.orchestrator.actions;
 
 import org.corfudb.infrastructure.LayoutBasedTest;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,7 +29,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // empty list
     @Test
-    public void testTryRestoreRedundancyEmptyList(){
+    public void testTryRestoreRedundancyEmptyList() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
@@ -40,9 +43,10 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
         assertThat(status).isEqualTo(NOT_RESTORED);
 
     }
+
     // list with non completed transfers only
     @Test
-    public void testTryRestoreNotDoneTransfers(){
+    public void testTryRestoreNotDoneTransfers() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
@@ -62,7 +66,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // list with transfer that failed exceptionally
     @Test
-    public void testTryRestoreExceptionalTransfers(){
+    public void testTryRestoreExceptionalTransfers() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
@@ -83,14 +87,14 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // list with transfer that failed
     @Test
-    public void testTryRestoreFailedTransfer(){
+    public void testTryRestoreFailedTransfer() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
         Layout testLayout = createTestLayout(Arrays.asList(segment));
         List<CurrentTransferSegment> failed = Arrays.asList(new CurrentTransferSegment(0L, 5L,
                 CompletableFuture.completedFuture(new CurrentTransferSegmentStatus(SegmentState.FAILED, -1L,
-                        new BatchProcessorFailure(new IllegalStateException())))));
+                        Optional.of(new StreamProcessFailure())))));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
@@ -103,7 +107,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // list with non transferred entities
     @Test
-    public void testTryRestoreNotTransferred(){
+    public void testTryRestoreNotTransferred() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
@@ -121,7 +125,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // list with restored segments that can be merged
     @Test
-    public void testTryRestoreRestoredNotMerged(){
+    public void testTryRestoreRestoredNotMerged() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost", "B"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
@@ -139,7 +143,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 15L, Arrays.asList(stripe));
 
         doAnswer(invocation -> {
-            Layout oldLayout = (Layout)invocation.getArguments()[0];
+            Layout oldLayout = (Layout) invocation.getArguments()[0];
             oldLayout.setSegments(Arrays.asList(segment3));
             return null;
         }).when(layoutManagementView).mergeSegments(testLayout);
@@ -153,7 +157,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // list with transferred segments that can be merged
     @Test
-    public void testTryRestoreTransferredCanMerge(){
+    public void testTryRestoreTransferredCanMerge() {
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("B"));
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
@@ -180,7 +184,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
 
     // list with transferred segments that can't be merged, but are still restored
     @Test
-    public void testTryRestoreTrasferredCantMerge(){
+    public void testTryRestoreTrasferredCantMerge() {
 
         Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("B"));
         Layout.LayoutSegment segment =

@@ -11,11 +11,8 @@ import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory.BatchProcessorType;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.committedbatchprocessor.CommittedBatchProcessor;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
@@ -32,17 +29,30 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
-import static org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory.BatchProcessorType.*;
-import static org.corfudb.runtime.view.Address.*;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory.BatchProcessorType.COMMITTED;
+import static org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory.BatchProcessorType.PROTOCOL;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
+/**
+ * A class responsible for managing state transfer on the current node.
+ * It executes the state transfer for each non-transferred segment asynchronously
+ * and keeps track of every transfer segment state.
+ */
 @Slf4j
 @AllArgsConstructor
-/**
- * This class is responsible for managing a state transfer on the current node.
- */
 public class StateTransferManager {
 
+    /**
+     * States of the segment:
+     * - {@link SegmentState#NOT_TRANSFERRED}: Segment is not transferred.
+     * - {@link SegmentState#TRANSFERRED}: Segment was transferred fully.
+     * - {@link SegmentState#RESTORED}: Segment was restored, and is present in the current layout.
+     * - {@link SegmentState#FAILED}: The state transfer of a segment has failed.
+     *
+     */
     public enum SegmentState {
         NOT_TRANSFERRED,
         TRANSFERRED,
@@ -50,13 +60,28 @@ public class StateTransferManager {
         FAILED
     }
 
+    /**
+     * A data class that represent one segment to be transferred.
+     */
     @EqualsAndHashCode
     @Getter
     @ToString
     public static class CurrentTransferSegment {
+        /**
+         * Start address of a segment.
+         */
         private final long startAddress;
+        /**
+         * End address of a segment.
+         */
         private final long endAddress;
+        /**
+         * A future that hold the status of a transfer of a segment.
+         */
         private final CompletableFuture<CurrentTransferSegmentStatus> status;
+        /**
+         * An optional data that could be utilized to transfer this segment more efficiently.
+         */
         private final Optional<CommittedTransferData> committedTransferData;
 
         public CurrentTransferSegment(long startAddress, long endAddress,
@@ -77,12 +102,24 @@ public class StateTransferManager {
         }
     }
 
+    /**
+     * A data class that represent a status of a segment to be transferred.
+     */
     @Getter
     @ToString
     @EqualsAndHashCode
     public static class CurrentTransferSegmentStatus {
+        /**
+         * A state of a segment.
+         */
         private final SegmentState segmentState;
+        /**
+         * Total number of records transferred for this segment.
+         */
         private final long totalTransferred;
+        /**
+         * An optional cause of failure for this segment.
+         */
         private final Optional<StreamProcessFailure> causeOfFailure;
 
         public CurrentTransferSegmentStatus(SegmentState segmentState,
@@ -101,10 +138,20 @@ public class StateTransferManager {
         }
     }
 
+    /**
+     * A data class that hold the information needed to transfer the committed records.
+     */
     @AllArgsConstructor
     @Getter
     public static class CommittedTransferData {
+        /**
+         * An address of the last committed record.
+         */
         private final long committedOffset;
+        /**
+         * A list of servers that a state transfer processor can use
+         * to transfer the committed records directly, bypassing the consistency protocol.
+         */
         private final List<String> sourceServers;
     }
 
@@ -112,6 +159,12 @@ public class StateTransferManager {
     @NonNull
     private final StreamLog streamLog;
 
+    /**
+     * Given a range, return an addresses that are currently not present in the stream log.
+     * @param rangeStart Start address.
+     * @param rangeEnd End address.
+     * @return A list of addresses, currently not present in the stream log.
+     */
     List<Long> getUnknownAddressesInRange(long rangeStart, long rangeEnd) {
         Set<Long> knownAddresses = streamLog
                 .getKnownAddressesInRange(rangeStart, rangeEnd);
@@ -123,8 +176,8 @@ public class StateTransferManager {
     }
 
     public ImmutableList<CurrentTransferSegment> handleTransfer(List<CurrentTransferSegment> stateList,
-                                                                StateTransferBatchProcessorData batchProcessorData) {
-
+                                                                StateTransferBatchProcessorData
+                                                                        batchProcessorData) {
         List<CurrentTransferSegment> finalList = stateList.stream().map(segment ->
                 {
                     CompletableFuture<CurrentTransferSegmentStatus> newStatus = segment
@@ -133,29 +186,34 @@ public class StateTransferManager {
                                 // if not transferred -> transfer
                                 if (status.getSegmentState().equals(NOT_TRANSFERRED)) {
                                     List<Long> unknownAddressesInRange =
-                                            getUnknownAddressesInRange(segment.getStartAddress(), segment.getEndAddress());
+                                            getUnknownAddressesInRange(segment.getStartAddress(),
+                                                    segment.getEndAddress());
                                     if (unknownAddressesInRange.isEmpty()) {
                                         // no addresses to transfer - all done
                                         return CompletableFuture.completedFuture(
-                                                new CurrentTransferSegmentStatus(TRANSFERRED, segment.getEndAddress())
+                                                new CurrentTransferSegmentStatus(TRANSFERRED,
+                                                        segment.getEndAddress())
                                         );
                                     } else {
                                         long numAddressesToTransfer = unknownAddressesInRange.size();
-                                        Optional<CommittedTransferData> committedTransferData = segment.getCommittedTransferData();
+                                        Optional<CommittedTransferData> committedTransferData =
+                                                segment.getCommittedTransferData();
                                         StateTransferConfig config = StateTransferConfig.builder()
                                                 .unknownAddresses(unknownAddressesInRange)
                                                 .committedTransferData(committedTransferData)
                                                 .batchProcessorData(batchProcessorData).build();
 
                                         return stateTransfer(config).thenApply(result ->
-                                                createStatusBasedOnTransferResult(result, numAddressesToTransfer));
+                                                createStatusBasedOnTransferResult(result,
+                                                        numAddressesToTransfer));
 
                                     }
                                 } else {
                                     return CompletableFuture.completedFuture(status);
                                 }
                             });
-                    return new CurrentTransferSegment(segment.getStartAddress(), segment.getEndAddress(), newStatus);
+                    return new CurrentTransferSegment(segment.getStartAddress(),
+                            segment.getEndAddress(), newStatus);
                 }
 
 
@@ -170,8 +228,8 @@ public class StateTransferManager {
         return configureStateTransferPipeline(stateTransferConfig).get();
     }
 
-    CurrentTransferSegmentStatus createStatusBasedOnTransferResult(Result<Long, StreamProcessFailure> result,
-                                                                   long totalNeeded) {
+    CurrentTransferSegmentStatus createStatusBasedOnTransferResult(Result<Long,
+            StreamProcessFailure> result, long totalNeeded) {
         Result<Long, StreamProcessFailure> checkedResult =
                 result.flatMap(totalTransferred -> {
                     if (totalTransferred != totalNeeded) {
@@ -213,6 +271,7 @@ public class StateTransferManager {
             CommittedTransferData committedTransferData = possibleCommittedTransferData.get();
             long committedOffset = committedTransferData.getCommittedOffset();
             List<String> sourceServers = committedTransferData.getSourceServers();
+            int windowSize = sourceServers.size() * batchSize;
 
             int indexOfTheLastCommittedAddress =
                     Collections.binarySearch(unknownAddresses, committedOffset);
@@ -227,7 +286,7 @@ public class StateTransferManager {
                     new StaticPolicyData(committedAddresses, Optional.of(sourceServers), batchSize);
 
             PolicyStreamProcessor committedStreamProcessor = createStreamProcessor(batchProcessorData,
-                    policyStreamProcessorData, COMMITTED);
+                    policyStreamProcessorData, COMMITTED, windowSize);
 
             if (indexOfTheFirstNonCommittedAddress <= indexOfTheLastAddress) {
                 List<Long> nonCommittedAddresses =
@@ -238,7 +297,7 @@ public class StateTransferManager {
                         new StaticPolicyData(nonCommittedAddresses, Optional.empty(), batchSize);
 
                 PolicyStreamProcessor protocolStreamProcessor = createStreamProcessor(batchProcessorData,
-                        policyStreamProcessorData, PROTOCOL);
+                        policyStreamProcessorData, PROTOCOL, windowSize);
 
                 return () -> coalesceResults(ImmutableList.of(protocolStreamProcessor
                                 .processStream(protocolStaticPolicyData),
@@ -249,7 +308,7 @@ public class StateTransferManager {
 
         } else {
             PolicyStreamProcessor protocolStreamProcessor = createStreamProcessor(batchProcessorData,
-                    policyStreamProcessorData, PROTOCOL);
+                    policyStreamProcessorData, PROTOCOL, batchSize);
 
             StaticPolicyData protocolStaticPolicyData =
                     new StaticPolicyData(unknownAddresses, Optional.empty(), batchSize);
@@ -262,27 +321,16 @@ public class StateTransferManager {
 
     PolicyStreamProcessor createStreamProcessor(StateTransferBatchProcessorData batchProcessorData,
                                                 PolicyStreamProcessorData policyStreamProcessorData,
-                                                BatchProcessorType type) {
-        if (type.equals(PROTOCOL)) {
-            StateTransferBatchProcessor protocolBatchProcessor =
-                    BatchProcessorFactory.createBatchProcessor(batchProcessorData, type);
-            return PolicyStreamProcessor
-                    .builder()
-                    .policyData(policyStreamProcessorData)
-                    .batchProcessor(protocolBatchProcessor).build();
-
-        } else if (type.equals(COMMITTED)) {
-
-            StateTransferBatchProcessor committedBatchProcessor =
-                    BatchProcessorFactory.createBatchProcessor(batchProcessorData, type);
-            return PolicyStreamProcessor
-                    .builder()
-                    .policyData(policyStreamProcessorData)
-                    .batchProcessor(committedBatchProcessor).build();
-
-        } else {
-            throw new IllegalStateException("Other types are not defined.");
-        }
+                                                BatchProcessorType type,
+                                                int windowSize) {
+        StateTransferBatchProcessor protocolBatchProcessor =
+                BatchProcessorFactory.createBatchProcessor(batchProcessorData, type);
+        return PolicyStreamProcessor
+                .builder()
+                .windowSize(windowSize)
+                .dynamicProtocolWindowSize(windowSize)
+                .policyData(policyStreamProcessorData)
+                .batchProcessor(protocolBatchProcessor).build();
     }
 
     CompletableFuture<Result<Long, StreamProcessFailure>> coalesceResults

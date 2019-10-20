@@ -8,17 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * An exception that should be handled by the batch processor.
+ * An error that should be handled by the batch processor instance.
  */
 @Getter
 public class BatchProcessorError extends StateTransferException {
     @NonNull
-    private List<Long> addresses;
-
-    public BatchProcessorError(List<Long> addresses, Throwable cause) {
-        super(cause);
-        this.addresses = addresses;
-    }
+    private final List<Long> addresses;
 
     public BatchProcessorError(List<Long> addresses) {
         this.addresses = addresses;

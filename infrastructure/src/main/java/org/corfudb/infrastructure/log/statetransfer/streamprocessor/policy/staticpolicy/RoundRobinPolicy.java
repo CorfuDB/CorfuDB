@@ -5,33 +5,28 @@ import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.IntStream;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+/**
+ * A static policy that distributes the load among the available servers
+ * in the round robin fashion, if they present, otherwise just initializes a stream of batches.
+ */
 public class RoundRobinPolicy implements StaticPolicy {
     @Override
-    public Stream<Optional<Batch>> applyPolicy(StaticPolicyData data) {
+    public Stream<Batch> applyPolicy(StaticPolicyData data) {
         int defaultBatchSize = data.getDefaultBatchSize();
         List<Long> addresses = data.getAddresses();
-        List<String> availableServers = data.getAvailableServers();
-        return Optional.ofNullable(addresses)
-                .flatMap(
-                        addrs -> {
-                            if (defaultBatchSize > 0) {
-                                return Optional.of(Lists.partition(addrs, defaultBatchSize));
-                            } else {
-                                return Optional.empty();
-                            }
-                        }
-                ).map(partitionedList ->
-                        IntStream
-                                .range(0, partitionedList.size())
-                                .boxed()
-                                .map(index -> Optional.ofNullable(availableServers)
-                                        .map(servers -> {
-                                            String scheduledServer =
-                                                    servers.get(index % servers.size());
-                                            return new Batch(partitionedList.get(index), scheduledServer);
-                                        }))).orElseGet(() -> Stream.of(Optional.empty()));
+        Optional<List<String>> availableServers = data.getAvailableServers();
+        AtomicInteger index = new AtomicInteger(0);
+        return Lists.partition(addresses, defaultBatchSize).stream().map(batch -> {
+            if (availableServers.isPresent()) {
+                return new Batch(addresses, Optional.empty());
+            } else {
+                return new Batch(addresses,
+                        availableServers.map(servers ->
+                                servers.get(index.getAndIncrement() % servers.size())));
+            }
+        });
     }
 }

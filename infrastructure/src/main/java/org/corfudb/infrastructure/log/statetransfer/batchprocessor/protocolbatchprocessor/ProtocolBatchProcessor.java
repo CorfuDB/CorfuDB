@@ -31,14 +31,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+/**
+ * A batch processor that transfers non-committed addresses one batch a time
+ * via a replication protocol.
+ */
 @Slf4j
 public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
-
+    /**
+     * Configurations for the retry logic.
+     */
     private static final int MAX_RETRIES = 3;
     private static final Duration MAX_RETRY_TIMEOUT = Duration.ofSeconds(10);
     private static final float RANDOM_FACTOR_BACKOFF = 0.5f;
 
+    /**
+     *  Default read options for the replication protocol read.
+     */
     @Getter
     private final ReadOptions readOptions = ReadOptions.builder()
             .waitForHole(true)
@@ -76,7 +85,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     }
 
     /**
-     * Reads data entries by utilizing the replication protocol. If there are errors retries.
+     * Reads data entries by utilizing the replication protocol. If there are errors, retries.
      *
      * @param addresses The list of addresses.
      * @return A result of reading records.
@@ -147,7 +156,8 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);
                 retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);
             }).run();
-            // Map to unrecoverable error if an interrupt has occurred or retries exhausted.
+            // Map to batch processor failure if an interrupt has occurred
+            // or the retries were exhausted.
         } catch (InterruptedException | RetryExhaustedException ie) {
             return CompletableFuture.completedFuture(
                     Result.error(BatchProcessorFailure.builder().throwable(ie).build()));
@@ -156,11 +166,11 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
     /**
      * Sanity check after the read is performed. If the number of records is not equal to the
-     * intended, return an incomplete read exception.
+     * intended, return with an error.
      *
-     * @param addresses  Addresses that were read.
-     * @param readResult A result of the read.
-     * @return A result containing either exception or data.
+     * @param addresses  All addresses that has to be read.
+     * @param readResult A result of a read operation.
+     * @return A result containing either an error or data.
      */
     Result<List<LogData>, BatchProcessorError> checkReadRecords(List<Long> addresses,
                                                                 Map<Long, ILogData> readResult) {

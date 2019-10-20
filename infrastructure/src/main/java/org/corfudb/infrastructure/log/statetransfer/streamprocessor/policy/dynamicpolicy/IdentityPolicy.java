@@ -1,12 +1,8 @@
 package org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy;
 
-import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
-
-import java.util.Iterator;
-import java.util.Optional;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
-
+/**
+ * A dynamic policy that does not transform a tail of a stream.
+ */
 public class IdentityPolicy implements DynamicPolicy {
     @Override
     public DynamicPolicyData applyPolicy(DynamicPolicyData data) {

@@ -8,6 +8,9 @@ import org.corfudb.runtime.view.AddressSpaceView;
 
 import java.util.Map;
 
+/**
+ * A piece of data that batch processor needs to perform a batch transfer.
+ */
 @Getter
 @AllArgsConstructor
 public class StateTransferBatchProcessorData {

@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
+/**
+ * A general state transfer exception. 
+ */
 public class StateTransferException extends RuntimeException {
     public StateTransferException(){}
 

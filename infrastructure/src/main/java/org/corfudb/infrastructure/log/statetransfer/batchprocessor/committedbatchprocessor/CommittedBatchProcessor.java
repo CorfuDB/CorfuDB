@@ -6,11 +6,13 @@ import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.runtime.clients.LogUnitClient;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * A batch processor that transfers globally committed addresses
+ * one batch a time in an optimized fashion.
+ */
 public class CommittedBatchProcessor implements StateTransferBatchProcessor {
 
     @Getter
@@ -27,6 +29,6 @@ public class CommittedBatchProcessor implements StateTransferBatchProcessor {
 
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
-        throw new NotImplementedException();
+        throw new IllegalStateException("Not implemented");
     }
 }

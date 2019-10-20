@@ -2,9 +2,11 @@ package org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.erro
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.SlidingWindow;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor.SlidingWindow;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.DynamicPolicy;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.DynamicPolicyData;
 import org.corfudb.util.CFUtils;
@@ -18,6 +20,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * A failure policy that reschedules the recently failed batch transfers
+ * and all the future batch transfers
+ * to run on the alive servers in the round robin fashion.
+ * If there are no alive servers left, then all
+ * the remaining batches fail and the tail of the stream becomes empty.
+ */
 public class RemoveServersWithRoundRobin implements DynamicPolicy {
     @Override
     public DynamicPolicyData applyPolicy(DynamicPolicyData data) {
@@ -32,38 +41,65 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
 
         List<BatchResult> failedBatches = CFUtils.sequence(failed).join();
 
-        Set<String> failedServersSet =
-                failedBatches.stream()
-                        .map(batch -> batch.getResult().getError()
-                                .getEndpoint()).collect(Collectors.toSet());
+        Set<String> failedServersSet = failedBatches.stream().map(batch -> batch
+                .getResult().getError().getEndpoint())
+                .filter(Optional::isPresent)
+                .map(Optional::get).collect(Collectors.toSet());
 
         Set<String> remainingServersSet = Sets.difference(allServersSet, failedServersSet);
 
         ImmutableList<String> remainingServers = ImmutableList.copyOf(remainingServersSet);
 
-        // Update the current servers & a failed list.
-        SlidingWindow newSlidingWindow = slidingWindow.toBuilder()
-                .allServers(remainingServers)
-                .failed(ImmutableList.of())
-                .build();
+        if (remainingServers.isEmpty()) {
+            Stream<Optional<Batch>> newTail = Stream.empty();
+            ImmutableList<CompletableFuture<BatchResult>> failedTail =
+                    ImmutableList.copyOf(tail.filter(Optional::isPresent)
+                            .map(batch -> {
+                                Batch scheduledBatch = batch.get();
+                                return CompletableFuture.completedFuture(new BatchResult(
+                                        Result.error(
+                                                BatchProcessorFailure.builder()
+                                                        .addresses(scheduledBatch.getAddresses())
+                                                        .endpoint(scheduledBatch.getDestination())
+                                                        .throwable(new IllegalStateException
+                                                                ("Remaining server list is empty")).build())));
+                            })
+                            .collect(Collectors.toList()));
 
-        // Reschedule failed batches and the tail on the remaining servers
-        // with the round robin policy.
-        Stream<Optional<Batch>> rescheduledBatches = failedBatches.stream()
-                .map(failedBatch -> {
-                    List<Long> addresses = failedBatch.getResult().getError().getAddresses();
-                    String previousEndpoint = failedBatch.getResult().getError().getEndpoint();
+            SlidingWindow newSlidingWindow = slidingWindow.toBuilder()
+                    .allServers(remainingServers)
+                    .failed(new ImmutableList
+                            .Builder<CompletableFuture<BatchResult>>().addAll(failed)
+                            .addAll(failedTail).build())
+                    .build();
 
-                    return Optional.of(new Batch(addresses, previousEndpoint));
-                });
+            return new DynamicPolicyData(newTail, newSlidingWindow);
 
-        AtomicInteger count = new AtomicInteger(0);
+        } else {
+            // Update the current servers & a failed list.
+            SlidingWindow newSlidingWindow = slidingWindow.toBuilder()
+                    .allServers(remainingServers)
+                    .failed(ImmutableList.of())
+                    .build();
 
-        Stream<Optional<Batch>> newTail = Stream.concat(rescheduledBatches, tail)
-                .map(batch -> batch.map(b -> new Batch(b.getAddresses(), remainingServers
-                        .get(count.getAndIncrement() % remainingServers.size()))));
+            // Reschedule failed batches and the tail on the remaining servers
+            // with the round robin policy.
+            Stream<Optional<Batch>> rescheduledBatches = failedBatches.stream()
+                    .map(failedBatch -> {
+                        List<Long> addresses = failedBatch.getResult().getError().getAddresses();
+                        Optional<String> previousEndpoint = failedBatch.getResult().getError().getEndpoint();
+                        return Optional.of(new Batch(addresses, previousEndpoint));
+                    });
+
+            AtomicInteger count = new AtomicInteger(0);
+
+            Stream<Optional<Batch>> newTail = Stream.concat(rescheduledBatches, tail)
+                    .map(batch -> batch.map(b -> new Batch(b.getAddresses(), Optional.of(remainingServers
+                            .get(count.getAndIncrement() % remainingServers.size())))));
 
 
-        return new DynamicPolicyData(newTail, newSlidingWindow);
+            return new DynamicPolicyData(newTail, newSlidingWindow);
+        }
+
     }
 }

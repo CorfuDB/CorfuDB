@@ -11,22 +11,40 @@ import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStream
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * A config need to execute an instance of a state transfer.
+ */
 @Getter
 @Builder
 public class StateTransferConfig {
 
+    /**
+     * Addresses to transfer within this state transfer.
+     */
     @NonNull
     private final List<Long> unknownAddresses;
 
+    /**
+     * An optional committed transfer data to perform state transfer more optimally.
+     */
     @NonNull
     private final Optional<CommittedTransferData> committedTransferData;
 
+    /**
+     * A piece of data that batch processor needs to perform a batch transfer
+     */
     @NonNull
     private final StateTransferBatchProcessorData batchProcessorData;
 
+    /**
+     * A size of every transfer batch, small enough to fit within one rpc call.
+     */
     @Default
     private final int batchSize = 10;
 
+    /**
+     * A set of predefined policies needed to execute the state transfer.
+     */
     @Default
     private final PolicyStreamProcessorData policyStreamProcessorData =
             PolicyStreamProcessorData.builder().build();
