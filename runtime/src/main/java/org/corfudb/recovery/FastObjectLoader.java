@@ -768,7 +768,7 @@ public class FastObjectLoader {
     private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) throws TrimmedException {
         long nextRead;
         summonNecromancer();
-        logHead = Math.max(logHead, minSnapshotAddress);
+        logHead = Math.max(logHead, minSnapshotAddress + 1);
         addressProcessed = logHead;
         log.info("loghead:" + logHead + " logtail: " + logTail);
 
