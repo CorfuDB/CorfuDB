@@ -204,6 +204,7 @@ public class FastObjectLoader {
     private final Hashtable<UUID, StreamMetaData> streamsMetaData;
     private AtomicInteger numCompletedCheckpoints;
     AtomicReference<TrimmedException> trimmedException;
+    long minSnapshotAddress = Address.NON_EXIST;
 
     @Setter
     @Getter
@@ -587,7 +588,10 @@ public class FastObjectLoader {
                     .setSnapshotAddress(snapshotAddress)
                     .setStartAddress(startAddress)
                     .setStarted(true);
-
+            if (minSnapshotAddress == Address.NON_EXIST)
+                minSnapshotAddress = snapshotAddress;
+            else
+                minSnapshotAddress = Math.min(minSnapshotAddress, snapshotAddress);
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
         } catch (Exception e) {
@@ -764,13 +768,14 @@ public class FastObjectLoader {
     private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) throws TrimmedException {
         long nextRead;
         summonNecromancer();
-        nextRead = logHead;
-        long currentTail = logTail;
-        log.debug("loghead:" + logHead + " addressProcessed : " + addressProcessed + " + 1");
+        logHead = Math.max(logHead, minSnapshotAddress);
+        addressProcessed = logHead;
+        log.info("loghead:" + logHead + " logtail: " + logTail);
 
+        nextRead = logHead;
         while (nextRead <= logTail) {
             long address = 0;
-            log.debug("nextRead:" + nextRead + " addressProcessed : " + addressProcessed + " + 1");
+            log.debug("nextRead:" + nextRead + " addressProcessed : " + addressProcessed);
             try {
                 final long lower = nextRead;
                 final long upper = Math.min(lower + batchReadSize - 1, logTail);
@@ -787,9 +792,9 @@ public class FastObjectLoader {
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {
                     address = entry.getKey();
                     ILogData logData = entry.getValue();
-                    if (address != addressProcessed + 1) {
+                    if (address != addressProcessed) {
                         throw new IllegalStateException("We missed an entry." +
-                                "It can lead to correctness issues: " + address + " != " + addressProcessed + " + 1");
+                                "It can lead to correctness issues: " + address + " != " + addressProcessed);
                     }
                     addressProcessed++;
                     if (logData.getType() == DataType.TRIMMED) {
@@ -819,14 +824,14 @@ public class FastObjectLoader {
     private void applyForEachAddressReverse(BiConsumer<Long, ILogData> logDataProcessor) throws TrimmedException {
         summonNecromancer();
         long curentTail = logTail;
-        log.debug("loghead:" + logHead + " addressProcessed : " + addressProcessed + " + 1");
+        log.info("loghead:" + logHead + " logtail: " + logTail);
 
         long address;
         long start = 0;
 
         while (curentTail >= logHead) {
             if (numCompletedCheckpoints.intValue () == (streamsToLoad.size() + customTypeStreams.size ())) {
-                log.info ("find all streams checkpoints start {} tail {}", start, logTail);
+                log.info ("find all streams checkpoints start {} currentTail {}", start, curentTail);
                 return;
             }
 
