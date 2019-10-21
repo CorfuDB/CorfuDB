@@ -14,29 +14,32 @@ import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcesso
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor.SlidingWindow;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor.SlidingWindow;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
-import static org.corfudb.infrastructure.log.statetransfer.Plan.*;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory.BatchProcessorType.COMMITTED;
-import static org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFactory.BatchProcessorType.PROTOCOL;
-import static org.corfudb.runtime.view.Address.NON_ADDRESS;
+import static org.corfudb.infrastructure.log.statetransfer.Plan.Bundle;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager
+        .SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager
+        .SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager
+        .SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.batchprocessor
+        .BatchProcessorFactory.BatchProcessorType.COMMITTED;
+import static org.corfudb.infrastructure.log.statetransfer.batchprocessor
+        .BatchProcessorFactory.BatchProcessorType.PROTOCOL;
 
 /**
  * A class responsible for managing a state transfer on the current node.
@@ -190,7 +193,8 @@ public class StateTransferManager {
      *                                an appropriate batch processor instance.
      * @return A list with the updated transfer segments.
      */
-    public ImmutableList<CurrentTransferSegment> handleTransfer(List<CurrentTransferSegment> currentTransferSegments,
+    public ImmutableList<CurrentTransferSegment> handleTransfer(List<CurrentTransferSegment>
+                                                                        currentTransferSegments,
                                                                 StateTransferBatchProcessorData
                                                                         batchProcessorData) {
         List<CurrentTransferSegment> finalList = currentTransferSegments.stream().map(segment ->
@@ -338,22 +342,26 @@ public class StateTransferManager {
                             .boxed().map(unknownAddresses::get).collect(Collectors.toList());
 
             StaticPolicyData committedStaticPolicyData =
-                    new StaticPolicyData(committedAddresses, Optional.of(sourceServers), batchSize);
+                    new StaticPolicyData(committedAddresses, Optional.of(sourceServers),
+                            batchSize);
 
-            PolicyStreamProcessor committedStreamProcessor = createStreamProcessor(batchProcessorData,
-                    policyStreamProcessorData, COMMITTED, windowSize);
+            PolicyStreamProcessor committedStreamProcessor =
+                    createStreamProcessor(batchProcessorData,
+                            policyStreamProcessorData, COMMITTED, windowSize);
 
             // Part of records is transferred via a protocol and part via a committed processor.
             if (indexOfTheFirstNonCommittedAddress <= indexOfTheLastAddress) {
                 List<Long> nonCommittedAddresses =
-                        IntStream.range(indexOfTheFirstNonCommittedAddress, indexOfTheLastAddress)
+                        IntStream.range(indexOfTheFirstNonCommittedAddress,
+                                indexOfTheLastAddress + 1)
                                 .boxed().map(unknownAddresses::get).collect(Collectors.toList());
 
                 StaticPolicyData protocolStaticPolicyData =
                         new StaticPolicyData(nonCommittedAddresses, Optional.empty(), batchSize);
 
-                PolicyStreamProcessor protocolStreamProcessor = createStreamProcessor(batchProcessorData,
-                        policyStreamProcessorData, PROTOCOL, windowSize);
+                PolicyStreamProcessor protocolStreamProcessor =
+                        createStreamProcessor(batchProcessorData,
+                                policyStreamProcessorData, PROTOCOL, windowSize);
 
                 return new Plan(ImmutableList.of(
                         Bundle.builder()
@@ -373,8 +381,9 @@ public class StateTransferManager {
             }
             // Everything is transferred via a protocol.
         } else {
-            PolicyStreamProcessor protocolStreamProcessor = createStreamProcessor(batchProcessorData,
-                    policyStreamProcessorData, PROTOCOL, batchSize);
+            PolicyStreamProcessor protocolStreamProcessor =
+                    createStreamProcessor(batchProcessorData,
+                            policyStreamProcessorData, PROTOCOL, batchSize);
 
             StaticPolicyData protocolStaticPolicyData =
                     new StaticPolicyData(unknownAddresses, Optional.empty(), batchSize);
@@ -424,16 +433,18 @@ public class StateTransferManager {
         CompletableFuture<List<Result<Long, StreamProcessFailure>>> futureOfListResults =
                 CFUtils.sequence(allResults);
 
-        CompletableFuture<Optional<Result<Long, StreamProcessFailure>>> possibleSingleResult = futureOfListResults
-                .thenApply(multipleResults ->
-                        multipleResults
-                                .stream()
-                                .reduce(this::mergeTransferResults));
+        CompletableFuture<Optional<Result<Long, StreamProcessFailure>>> possibleSingleResult =
+                futureOfListResults
+                        .thenApply(multipleResults ->
+                                multipleResults
+                                        .stream()
+                                        .reduce(this::mergeTransferResults));
 
         return possibleSingleResult.thenApply(result -> result.orElseGet(() ->
-                new Result<>(NON_ADDRESS,
+                new Result<>(0L,
                         new StreamProcessFailure(
-                                new IllegalStateException("Coalesced transfer batch result is empty.")))));
+                                new IllegalStateException
+                                        ("Coalesced transfer batch result is empty.")))));
 
     }
 
@@ -445,8 +456,10 @@ public class StateTransferManager {
      * @param secondResult A result of a second transfer.
      * @return A combined result.
      */
-    Result<Long, StreamProcessFailure> mergeTransferResults(Result<Long, StreamProcessFailure> firstResult,
-                                                            Result<Long, StreamProcessFailure> secondResult) {
+    Result<Long, StreamProcessFailure> mergeTransferResults(Result<Long, StreamProcessFailure>
+                                                                    firstResult,
+                                                            Result<Long, StreamProcessFailure>
+                                                                    secondResult) {
         return firstResult.flatMap(firstTotal ->
                 secondResult.map(secondTotal ->
                         firstTotal + secondTotal));

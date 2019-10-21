@@ -27,8 +27,8 @@ public class StateTransferConfig {
     /**
      * An optional committed transfer data to perform state transfer more optimally.
      */
-    @NonNull
-    private final Optional<CommittedTransferData> committedTransferData;
+    @Default
+    private final Optional<CommittedTransferData> committedTransferData = Optional.empty();
 
     /**
      * A piece of data that batch processor needs to perform a batch transfer

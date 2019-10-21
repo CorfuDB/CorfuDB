@@ -21,7 +21,6 @@ import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.stati
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
 
-import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -36,6 +35,7 @@ import java.util.stream.Stream;
  * and make the timely decisions with respect to how the future load will be handled.
  */
 @Builder
+@Getter
 public class PolicyStreamProcessor {
 
     /**
@@ -97,8 +97,8 @@ public class PolicyStreamProcessor {
         }
 
         /**
-         * Returns true if the number of failed and succeeded elements of the current window is equal
-         * to {@link SlidingWindow#dynamicProtocolWindowSize}.
+         * Returns true if the number of failed and succeeded elements of the current
+         * window is equal to {@link SlidingWindow#dynamicProtocolWindowSize}.
          *
          * @return True if the dynamic protocols can be executed and false otherwise.
          */
@@ -169,7 +169,8 @@ public class PolicyStreamProcessor {
      * Slide a current window over a lazy stream of batches.
      * This entails creating a new instance of a window with a new updated data.
      *
-     * @param newBatchResult A future of a batch transferred by {@link PolicyStreamProcessor#batchProcessor}.
+     * @param newBatchResult A future of a batch transferred by
+     *                       {@link PolicyStreamProcessor#batchProcessor}.
      * @param slidingWindow  The most recent instance of a sliding window.
      * @return An instance of a new sliding window, with a new, updated data,
      * wrapped in a tail-recursive call.
@@ -198,7 +199,8 @@ public class PolicyStreamProcessor {
                     return slidingWindow.toBuilder()
                             .window(newWindow)
                             .totalAddressesTransferred(slidingWindow.getTotalAddressesTransferred()
-                                    .thenApply(x -> x + batch.getResult().get().getAddressesTransferred()))
+                                    .thenApply(x -> x + batch.getResult().get()
+                                            .getAddressesTransferred()))
                             .succeeded(
                                     new ImmutableList
                                             .Builder<CompletableFuture<BatchResult>>()
@@ -260,13 +262,15 @@ public class PolicyStreamProcessor {
                         .map(BatchResult::getResult)
                         .reduce((first, second) -> first.flatMap(firstData ->
                                 second.map(secondData ->
-                                        new BatchResultData(firstData.getAddressesTransferred() +
+                                        new BatchResultData(firstData
+                                                .getAddressesTransferred() +
                                                 secondData.getAddressesTransferred())))).get();
 
                 if (accumRes.isError()) {
                     return Result.error(new StreamProcessFailure(accumRes.getError()));
                 } else {
-                    return Result.ok(accumRes.get().getAddressesTransferred()).mapError(StreamProcessFailure::new);
+                    return Result.ok(accumRes.get().getAddressesTransferred())
+                            .mapError(StreamProcessFailure::new);
                 }
 
             } else {
@@ -282,7 +286,8 @@ public class PolicyStreamProcessor {
      * @param slidingWindow The last instance of a sliding window.
      * @return A result containing a total number of addresses transferred or an exception.
      */
-    CompletableFuture<Result<Long, StreamProcessFailure>> finalizeTransfers(SlidingWindow slidingWindow) {
+    CompletableFuture<Result<Long, StreamProcessFailure>> finalizeTransfers(
+            SlidingWindow slidingWindow) {
         CompletableFuture<Result<Long, StreamProcessFailure>> successfulResult =
                 finalizeSuccessfulTransfers(slidingWindow.getTotalAddressesTransferred(),
                         CFUtils.sequence(slidingWindow.getSucceeded()));
@@ -345,7 +350,8 @@ public class PolicyStreamProcessor {
             return TailCalls.call(() ->
                     doProcessStream(
                             tail,
-                            updateWindow(transferResult, slidingWindow), streamSize - 1));
+                            updateWindow(transferResult, slidingWindow),
+                            streamSize - 1));
 
         }
         // Head is present, window is full.
@@ -361,10 +367,12 @@ public class PolicyStreamProcessor {
             // If the dynamic policies can be invoked on a tail of a stream, invoke.
             // Then call this function recursively.
             if (newWindow.canInvokeDynamicPolicies(dynamicProtocolWindowSize)) {
-                DynamicPolicyData dynamicPolicyData = invokeDynamicPolicies(new DynamicPolicyData(tail, newWindow, streamSize));
+                DynamicPolicyData dynamicPolicyData = invokeDynamicPolicies(
+                        new DynamicPolicyData(tail, newWindow, streamSize));
                 return TailCalls.call(() -> doProcessStream(
                         dynamicPolicyData.getTail(),
-                        dynamicPolicyData.getSlidingWindow(), dynamicPolicyData.getSize() - 1));
+                        dynamicPolicyData.getSlidingWindow(),
+                        dynamicPolicyData.getSize() - 1));
             } else {
                 return TailCalls.call(() -> doProcessStream(
                         tail,
@@ -382,8 +390,10 @@ public class PolicyStreamProcessor {
      * @param staticPolicyData A data needed to initialize a stream.
      * @return A future of a result, containing a total number of records transferred or an exception.
      */
-    public CompletableFuture<Result<Long, StreamProcessFailure>> processStream(StaticPolicyData staticPolicyData) {
-        InitialBatchStream initStream = policyData.getInitialDistributionPolicy().applyPolicy(staticPolicyData);
+    public CompletableFuture<Result<Long, StreamProcessFailure>> processStream(
+            StaticPolicyData staticPolicyData) {
+        InitialBatchStream initStream = policyData.getInitialDistributionPolicy()
+                .applyPolicy(staticPolicyData);
         SlidingWindow slidingWindow = SlidingWindow
                 .builder().build();
         return doProcessStream(initStream.getInitialStream().map(Optional::of),
