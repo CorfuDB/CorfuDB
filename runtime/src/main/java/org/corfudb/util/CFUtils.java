@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -30,7 +31,9 @@ public final class CFUtils {
                             .setNameFormat("failAfter-%d")
                             .build());
 
-    /** A static timeout exception that we complete futures exceptionally with. */
+    /**
+     * A static timeout exception that we complete futures exceptionally with.
+     */
     static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
 
     private CFUtils() {
@@ -48,25 +51,25 @@ public final class CFUtils {
                                                       Class<C> throwableC,
                                                       Class<D> throwableD)
             throws A, B, C, D {
-            try {
-                return future.get();
-            } catch (InterruptedException e) {
-                throw new UnrecoverableCorfuInterruptedError("Interrupted while completing future", e);
-            } catch (ExecutionException ee) {
-                if (throwableA.isInstance(ee.getCause())) {
-                    throw (A) ee.getCause();
-                }
-                if (throwableB.isInstance(ee.getCause())) {
-                    throw (B) ee.getCause();
-                }
-                if (throwableC.isInstance(ee.getCause())) {
-                    throw (C) ee.getCause();
-                }
-                if (throwableD.isInstance(ee.getCause())) {
-                    throw (D) ee.getCause();
-                }
-                throw new RuntimeException(ee.getCause());
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            throw new UnrecoverableCorfuInterruptedError("Interrupted while completing future", e);
+        } catch (ExecutionException ee) {
+            if (throwableA.isInstance(ee.getCause())) {
+                throw (A) ee.getCause();
             }
+            if (throwableB.isInstance(ee.getCause())) {
+                throw (B) ee.getCause();
+            }
+            if (throwableC.isInstance(ee.getCause())) {
+                throw (C) ee.getCause();
+            }
+            if (throwableD.isInstance(ee.getCause())) {
+                throw (D) ee.getCause();
+            }
+            throw new RuntimeException(ee.getCause());
+        }
     }
 
     public static <T,
@@ -114,7 +117,7 @@ public final class CFUtils {
     public static <T> CompletableFuture<T> failAfter(Duration duration) {
         final CompletableFuture<T> promise = new CompletableFuture<>();
         SCHEDULER.schedule(() -> promise.completeExceptionally(TIMEOUT_EXCEPTION),
-                                        duration.toMillis(), TimeUnit.MILLISECONDS);
+                duration.toMillis(), TimeUnit.MILLISECONDS);
         return promise;
     }
 
@@ -135,8 +138,8 @@ public final class CFUtils {
      * @param future   The completable future that must be completed within duration.
      * @param duration The duration the future must be completed in.
      * @param <T>      The return type of the future.
-     * @return         A completable future which completes with the original value if completed
-     *                 within duration, otherwise completes exceptionally with TimeoutException.
+     * @return A completable future which completes with the original value if completed
+     * within duration, otherwise completes exceptionally with TimeoutException.
      */
     public static <T> CompletableFuture<T> within(CompletableFuture<T> future, Duration duration) {
         final CompletableFuture<T> timeout = failAfter(duration);
@@ -161,6 +164,14 @@ public final class CFUtils {
                 .thenApply(x -> futures.stream()
                         .map(CompletableFuture::join)
                         .collect(Collectors.toList()));
+    }
+
+    public static <T> CompletableFuture<T> runFutureAfter(Supplier<CompletableFuture<T>> future,
+                                                          ScheduledExecutorService scheduledExecutorService,
+                                                          long millis) throws InterruptedException, ExecutionException {
+        scheduledExecutorService.schedule(() ->
+                true, millis, TimeUnit.MILLISECONDS).get();
+        return future.get();
     }
 
     /**

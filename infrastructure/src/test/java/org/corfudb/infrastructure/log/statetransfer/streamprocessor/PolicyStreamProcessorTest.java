@@ -3,11 +3,13 @@ package org.corfudb.infrastructure.log.statetransfer.streamprocessor;
 import com.google.common.collect.ImmutableList;
 import org.corfudb.common.result.Result;
 import org.corfudb.common.tailcall.TailCall;
+import org.corfudb.infrastructure.log.statetransfer.GoodBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor.SlidingWindow;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 import org.junit.jupiter.api.Test;
@@ -15,8 +17,10 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -211,10 +215,38 @@ class PolicyStreamProcessorTest {
 
 
     @Test
-    void doProcessStream() {
+    void testProcessStreamOkWindowNotSlid() {
+        StateTransferBatchProcessor batchProcessor = new GoodBatchProcessor(Optional.of(100L));
+        StaticPolicyData data = new StaticPolicyData(LongStream.range(0L, 5L).boxed().collect(Collectors.toList()), Optional.empty(), 10);
+        PolicyStreamProcessor streamProcessor = PolicyStreamProcessor
+                .builder()
+                .windowSize(10)
+                .dynamicProtocolWindowSize(10)
+                .policyData(PolicyStreamProcessorData.builder().build())
+                .batchProcessor(batchProcessor)
+                .build();
+        CompletableFuture<Result<Long, StreamProcessFailure>> res = streamProcessor.processStream(data);
+        assertThat(res.join().get()).isEqualTo(5L);
     }
 
     @Test
-    void processStream() {
+    void testProcessStreamFailWindowNotSlid() {
     }
+
+    @Test
+    void testProcessStreamEmptyStream() {
+    }
+
+    @Test
+    void testProcessStreamOkWindowSlid() {
+    }
+
+    @Test
+    void testProcessStreamFailWindowSlid() {
+    }
+
+
+
+
+
 }
