@@ -213,8 +213,8 @@ public class StateTransferManager {
 
                                         return CompletableFuture.completedFuture(
                                                 new CurrentTransferSegmentStatus(TRANSFERRED,
-                                                        segment.getStartAddress() -
-                                                                segment.getEndAddress() + 1L)
+                                                        segment.getEndAddress() -
+                                                                segment.getStartAddress() + 1L)
                                         );
                                     } else {
                                         // Get total number of addresses needed to transfer.
