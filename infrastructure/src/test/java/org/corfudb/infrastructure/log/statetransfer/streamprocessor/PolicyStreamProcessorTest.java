@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer.streamprocessor;
 
 import com.google.common.collect.ImmutableList;
 import org.corfudb.common.result.Result;
-import org.corfudb.common.tailcall.TailCall;
+import org.corfudb.infrastructure.log.statetransfer.FaultyBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.GoodBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
@@ -24,7 +24,6 @@ import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
 class PolicyStreamProcessorTest {
@@ -74,7 +73,7 @@ class PolicyStreamProcessorTest {
 
         List<CompletableFuture<BatchResult>> collect = Stream.of
                 (new BatchResult(Result.ok(new BatchResultData(10L))),
-                new BatchResult(Result.ok(new BatchResultData(10L))))
+                        new BatchResult(Result.ok(new BatchResultData(10L))))
                 .map(CompletableFuture::completedFuture).collect(Collectors.toList());
         collect.add(result);
 
@@ -170,7 +169,8 @@ class PolicyStreamProcessorTest {
 
         initialData = ImmutableList.of();
 
-        CompletableFuture<List<BatchResult>> emptySequence = CFUtils.sequence(initialData.stream().collect(Collectors.toList()));;
+        CompletableFuture<List<BatchResult>> emptySequence = CFUtils.sequence(initialData.stream().collect(Collectors.toList()));
+        ;
 
         res = processor.finalizeFailedTransfers(emptySequence);
         assertThat(res.join().isValue()).isTrue();
@@ -231,22 +231,87 @@ class PolicyStreamProcessorTest {
 
     @Test
     void testProcessStreamFailWindowNotSlid() {
+        StateTransferBatchProcessor batchProcessor = new FaultyBatchProcessor(3,
+                Optional.of(100L));
+        StaticPolicyData data = new StaticPolicyData(LongStream.range(0L, 5L)
+                .boxed().collect(Collectors.toList()), Optional.empty(), 10);
+        PolicyStreamProcessor streamProcessor = PolicyStreamProcessor
+                .builder()
+                .windowSize(10)
+                .dynamicProtocolWindowSize(10)
+                .policyData(PolicyStreamProcessorData.builder().build())
+                .batchProcessor(batchProcessor)
+                .build();
+        CompletableFuture<Result<Long, StreamProcessFailure>> res = streamProcessor.processStream(data);
+        assertThat(res.join().getError()).isInstanceOf(StreamProcessFailure.class)
+                .hasRootCauseInstanceOf(BatchProcessorFailure.class);
     }
 
     @Test
     void testProcessStreamEmptyStream() {
+        StateTransferBatchProcessor batchProcessor = new GoodBatchProcessor(
+                Optional.of(100L));
+
+        StaticPolicyData data = new StaticPolicyData(LongStream.range(0L, 0L)
+                .boxed().collect(Collectors.toList()), Optional.empty(), 10);
+        PolicyStreamProcessor streamProcessor = PolicyStreamProcessor
+                .builder()
+                .windowSize(10)
+                .dynamicProtocolWindowSize(10)
+                .policyData(PolicyStreamProcessorData.builder().build())
+                .batchProcessor(batchProcessor)
+                .build();
+        CompletableFuture<Result<Long, StreamProcessFailure>> res = streamProcessor.processStream(data);
+        assertThat(res.join().get()).isEqualTo(0L);
+
     }
 
     @Test
     void testProcessStreamOkWindowSlid() {
+        StateTransferBatchProcessor batchProcessor = new GoodBatchProcessor(
+                Optional.of(100L));
+
+        StaticPolicyData data = new StaticPolicyData(LongStream.range(0L, 98L)
+                .boxed().collect(Collectors.toList()), Optional.empty(), 10);
+
+
+        PolicyStreamProcessor streamProcessor = PolicyStreamProcessor
+                .builder()
+                .windowSize(10)
+                .dynamicProtocolWindowSize(10)
+                .policyData(PolicyStreamProcessorData.builder().build())
+                .batchProcessor(batchProcessor)
+                .build();
+
+        CompletableFuture<Result<Long, StreamProcessFailure>> res =
+                streamProcessor.processStream(data);
+
+        assertThat(res.join().get()).isEqualTo(98L);
+
     }
 
     @Test
     void testProcessStreamFailWindowSlid() {
+        StateTransferBatchProcessor batchProcessor = new FaultyBatchProcessor(50,
+                Optional.of(100L));
+        StaticPolicyData data = new StaticPolicyData(LongStream.range(0L, 100L)
+                .boxed().collect(Collectors.toList()), Optional.empty(), 10);
+
+        PolicyStreamProcessor streamProcessor = PolicyStreamProcessor
+                .builder()
+                .windowSize(10)
+                .dynamicProtocolWindowSize(10)
+                .policyData(PolicyStreamProcessorData.builder().build())
+                .batchProcessor(batchProcessor)
+                .build();
+
+        CompletableFuture<Result<Long, StreamProcessFailure>> res =
+                streamProcessor.processStream(data);
+
+        assertThat(res.join().getError()).isInstanceOf(StreamProcessFailure.class)
+                .hasRootCauseInstanceOf(BatchProcessorFailure.class);
+
     }
-
-
-
 
 
 }

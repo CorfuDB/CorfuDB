@@ -27,6 +27,7 @@ public class GoodBatchProcessor implements StateTransferBatchProcessor, DelayedE
         CompletableFuture<BatchResult> exec = CompletableFuture
                 .completedFuture(new BatchResult
                         (Result.ok(new BatchResultData((long) batch.getAddresses().size()))));
-        return withDelayOf(() -> exec, delay.map(d -> (long) (random.nextFloat() * d)).orElse(0L), ec);
+        return withDelayOf(() -> exec, delay.map(d -> (long)
+                (random.nextFloat() * d)).orElse(0L), ec);
     }
 }
