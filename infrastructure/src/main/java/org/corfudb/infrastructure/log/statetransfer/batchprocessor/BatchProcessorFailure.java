@@ -1,9 +1,13 @@
 package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
 
+import com.google.common.collect.ImmutableList;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferException;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -13,21 +17,25 @@ import java.util.Optional;
  */
 @Getter
 @Builder
+@ToString
 public class BatchProcessorFailure extends StateTransferException {
 
     /**
      * An endpoint from which the data was supposed to be read (if known in advance).
      */
-    private final Optional<String> endpoint;
+    @Builder.Default
+    private final Optional<String> endpoint = Optional.empty();
 
     /**
      * A batch of addresses that were supposed to get transferred.
      */
-    private final List<Long> addresses;
+    @Builder.Default
+    private final List<Long> addresses = ImmutableList.of();
 
     /**
      * An exception that a batch processor could not handle.
      */
-    private final Throwable throwable;
+    @Builder.Default
+    private final Throwable throwable = new IllegalStateException();
 
 }

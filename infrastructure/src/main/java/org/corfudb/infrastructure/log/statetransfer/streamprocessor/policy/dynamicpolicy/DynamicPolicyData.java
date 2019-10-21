@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dyna
 import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor.SlidingWindow;
 
@@ -14,6 +15,7 @@ import java.util.stream.Stream;
  */
 @AllArgsConstructor
 @Getter
+@ToString
 public class DynamicPolicyData {
     /**
      * A current tail of a stream (batches of data yet to be processed).
@@ -25,9 +27,15 @@ public class DynamicPolicyData {
     private final SlidingWindow slidingWindow;
 
     /**
+     * The expected size of tail.
+     */
+    private final long size;
+
+    /**
      * Invoked on the instance
      * of a dynamic policy to purge the data
      * after it was utilized in the dynamic policy protocols.
+     *
      * @return A new instance of a dynamic policy data.
      */
     public final DynamicPolicyData resetDynamicWindow() {
@@ -36,7 +44,8 @@ public class DynamicPolicyData {
                 slidingWindow.toBuilder()
                         .succeeded(ImmutableList.of())
                         .failed(ImmutableList.of())
-                        .build()
+                        .build(),
+                size
         );
     }
 }

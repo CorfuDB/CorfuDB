@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log.statetransfer.batch;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 /**
@@ -9,6 +10,7 @@ import lombok.Getter;
  */
 @AllArgsConstructor
 @Getter
+@EqualsAndHashCode
 public class BatchResultData {
     private final long addressesTransferred;
 }

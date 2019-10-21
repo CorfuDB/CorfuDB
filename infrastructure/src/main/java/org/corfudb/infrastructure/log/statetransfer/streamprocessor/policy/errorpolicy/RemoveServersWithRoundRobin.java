@@ -65,7 +65,6 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
                                                                 ("Remaining server list is empty")).build())));
                             })
                             .collect(Collectors.toList()));
-
             SlidingWindow newSlidingWindow = slidingWindow.toBuilder()
                     .allServers(remainingServers)
                     .failed(new ImmutableList
@@ -73,7 +72,7 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
                             .addAll(failedTail).build())
                     .build();
 
-            return new DynamicPolicyData(newTail, newSlidingWindow);
+            return new DynamicPolicyData(newTail, newSlidingWindow, 0L);
 
         } else {
             // Update the current servers & a failed list.
@@ -84,6 +83,7 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
 
             // Reschedule failed batches and the tail on the remaining servers
             // with the round robin policy.
+            int failedBatchesSize = failedBatches.size();
             Stream<Optional<Batch>> rescheduledBatches = failedBatches.stream()
                     .map(failedBatch -> {
                         List<Long> addresses = failedBatch.getResult().getError().getAddresses();
@@ -98,7 +98,7 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
                             .get(count.getAndIncrement() % remainingServers.size())))));
 
 
-            return new DynamicPolicyData(newTail, newSlidingWindow);
+            return new DynamicPolicyData(newTail, newSlidingWindow, data.getSize() + failedBatchesSize);
         }
 
     }

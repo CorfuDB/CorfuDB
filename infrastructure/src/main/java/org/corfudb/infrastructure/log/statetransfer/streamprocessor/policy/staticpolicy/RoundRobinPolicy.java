@@ -5,7 +5,7 @@ import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -14,19 +14,15 @@ import java.util.stream.Stream;
  */
 public class RoundRobinPolicy implements StaticPolicy {
     @Override
-    public Stream<Batch> applyPolicy(StaticPolicyData data) {
+    public InitialBatchStream applyPolicy(StaticPolicyData data) {
         int defaultBatchSize = data.getDefaultBatchSize();
         List<Long> addresses = data.getAddresses();
         Optional<List<String>> availableServers = data.getAvailableServers();
-        AtomicInteger index = new AtomicInteger(0);
-        return Lists.partition(addresses, defaultBatchSize).stream().map(batch -> {
-            if (availableServers.isPresent()) {
-                return new Batch(addresses, Optional.empty());
-            } else {
-                return new Batch(addresses,
-                        availableServers.map(servers ->
-                                servers.get(index.getAndIncrement() % servers.size())));
-            }
-        });
+        List<List<Long>> plan = Lists.partition(addresses, defaultBatchSize);
+        long size = plan.size();
+
+        Stream<Batch> stream = IntStream.range(0, plan.size()).boxed().map(batchIndex -> new Batch(plan.get(batchIndex),
+                availableServers.map(list -> list.get(batchIndex % list.size()))));
+        return new InitialBatchStream(stream, size);
     }
 }

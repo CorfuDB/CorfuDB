@@ -49,7 +49,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      *  Default read options for the replication protocol read.
      */
     @Getter
-    private final ReadOptions readOptions = ReadOptions.builder()
+    private static ReadOptions readOptions = ReadOptions.builder()
             .waitForHole(true)
             .clientCacheable(false)
             .serverCacheable(false)
@@ -69,7 +69,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
         CompletableFuture<Result<Long, BatchProcessorFailure>> protocolTransfer =
-                readRecords(batch.getAddresses(), new AtomicInteger(MAX_RETRIES))
+                readRecords(batch.getAddresses(), 0)
                         .thenApply(records ->
                                 records.flatMap(recs ->
                                         writeRecords(recs, streamLog)));
@@ -91,7 +91,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      * @return A result of reading records.
      */
     CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> readRecords(List<Long> addresses,
-                                                                                AtomicInteger initRetries) {
+                                                                                int retries) {
         return CompletableFuture.supplyAsync(() ->
                 Result.of(() -> addressSpaceView.simpleProtocolRead(addresses, readOptions))
                         .mapError(BatchProcessorError::new))
@@ -101,7 +101,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 .thenCompose(checkedReadResult -> {
                     if (checkedReadResult.isError()) {
                         return retryReadRecords(checkedReadResult.getError().getAddresses(),
-                                initRetries);
+                                retries);
                     } else {
                         return CompletableFuture.completedFuture(checkedReadResult
                                 .mapError(e -> BatchProcessorFailure
@@ -114,17 +114,20 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      * Handle read errors. Exponential backoff policy is utilized.
      *
      * @param addresses   Addresses to be retries.
-     * @param readRetries Configurable number of retries for the current batch.
+     * @param retriesTried Configurable number of retries for the current batch.
      * @return Future of the result of the retry.
      */
     CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> retryReadRecords
-    (List<Long> addresses, AtomicInteger readRetries) {
+    (List<Long> addresses, int retriesTried) {
 
         try {
+            AtomicInteger readRetries = new AtomicInteger(retriesTried);
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
-
+                if(readRetries.incrementAndGet() >= MAX_RETRIES){
+                    throw new RetryExhaustedException("Read retries are exhausted");
+                }
                 Supplier<CompletableFuture<Result<List<LogData>, BatchProcessorFailure>>> pipeline =
-                        () -> readRecords(addresses, readRetries);
+                        () -> readRecords(addresses, readRetries.get());
 
                 // If a pipeline completed exceptionally, than return the error.
                 CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> pipelineFuture =
@@ -138,15 +141,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 // Join the result.
                 Result<List<LogData>, BatchProcessorFailure> joinResult = pipelineFuture.join();
                 if (joinResult.isError()) {
-                    // If an error occurred, increment retries.
-                    readRetries.incrementAndGet();
-
-                    if (readRetries.get() >= MAX_RETRIES) {
-                        throw new RetryExhaustedException("Read retries are exhausted");
-                    } else {
-                        log.warn("Retried {} times", readRetries.get());
-                        throw new RetryNeededException();
-                    }
+                    throw new RetryNeededException();
                 } else {
                     // If the result is not an error, return.
                     return CompletableFuture.completedFuture(joinResult);

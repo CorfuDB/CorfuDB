@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 import org.corfudb.common.result.Result;
 import org.corfudb.common.streamutils.StreamUtils;
 import org.corfudb.common.streamutils.StreamUtils.StreamHeadAndTail;
@@ -16,6 +17,7 @@ import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.dynamicpolicy.DynamicPolicyData;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.InitialBatchStream;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
 
@@ -42,6 +44,7 @@ public class PolicyStreamProcessor {
      */
     @Getter
     @Builder(toBuilder = true)
+    @ToString
     public static class SlidingWindow {
 
         /**
@@ -87,7 +90,7 @@ public class PolicyStreamProcessor {
          */
         public boolean canSlideWindow() {
             if (window.isEmpty()) {
-                return true;
+                return false;
             } else {
                 return window.get(0).isDone();
             }
@@ -134,7 +137,6 @@ public class PolicyStreamProcessor {
      * Initial distribution transfer policy,
      * dynamic distribution transfer policy (invoked every dynamic protocol window size),
      * failure handling policy (invoked every dynamic protocol window size).
-     *
      */
     @NonNull
     private final PolicyStreamProcessorData policyData;
@@ -155,10 +157,8 @@ public class PolicyStreamProcessor {
      * @return A new updated window.
      */
     SlidingWindow updateWindow(CompletableFuture<BatchResult> newBatchResult,
-                                       SlidingWindow currentWindow) {
+                               SlidingWindow currentWindow) {
         return currentWindow.toBuilder()
-                .totalAddressesTransferred(currentWindow.getTotalAddressesTransferred()
-                        .thenApply(x -> x + 1))
                 .window(new ImmutableList.Builder<CompletableFuture<BatchResult>>()
                         .addAll(currentWindow.getWindow())
                         .add(newBatchResult).build())
@@ -168,13 +168,14 @@ public class PolicyStreamProcessor {
     /**
      * Slide a current window over a lazy stream of batches.
      * This entails creating a new instance of a window with a new updated data.
+     *
      * @param newBatchResult A future of a batch transferred by {@link PolicyStreamProcessor#batchProcessor}.
-     * @param slidingWindow The most recent instance of a sliding window.
+     * @param slidingWindow  The most recent instance of a sliding window.
      * @return An instance of a new sliding window, with a new, updated data,
      * wrapped in a tail-recursive call.
      */
     TailCall<SlidingWindow> slideWindow(CompletableFuture<BatchResult> newBatchResult,
-                                                SlidingWindow slidingWindow) {
+                                        SlidingWindow slidingWindow) {
         if (slidingWindow.canSlideWindow()) {
             CompletableFuture<BatchResult> completedBatch = slidingWindow.getWindow().get(0);
 
@@ -197,7 +198,7 @@ public class PolicyStreamProcessor {
                     return slidingWindow.toBuilder()
                             .window(newWindow)
                             .totalAddressesTransferred(slidingWindow.getTotalAddressesTransferred()
-                                    .thenApply(x -> x + 1))
+                                    .thenApply(x -> x + batch.getResult().get().getAddressesTransferred()))
                             .succeeded(
                                     new ImmutableList
                                             .Builder<CompletableFuture<BatchResult>>()
@@ -214,28 +215,30 @@ public class PolicyStreamProcessor {
 
     /**
      * Finalize all the successful transfers of a sliding window.
+     *
      * @param totalAddressesTransferred Total addresses transferred.
-     * @param successful A list of the latest succeeded batch transfers.
+     * @param successful                A list of the latest succeeded batch transfers.
      * @return A result containing a number of addresses transferred or an exception.
      */
     CompletableFuture<Result<Long, StreamProcessFailure>> finalizeSuccessfulTransfers
-            (CompletableFuture<Long> totalAddressesTransferred,
-             CompletableFuture<List<BatchResult>> successful) {
+    (CompletableFuture<Long> totalAddressesTransferred,
+     CompletableFuture<List<BatchResult>> successful) {
         return totalAddressesTransferred.thenCompose(total ->
                 successful.thenApply(s -> Result.ok(s.size() + total)
-                        .mapError(e -> new StreamProcessFailure())));
+                        .mapError(StreamProcessFailure::new)));
     }
 
     /**
      * Finalize all the failed transfers of a sliding window.
+     *
      * @param failed A list of the latest failed batch transfers.
      * @return A result containing a number of addresses transferred or an exception.
      */
     CompletableFuture<Result<Long, StreamProcessFailure>> finalizeFailedTransfers
-            (CompletableFuture<List<BatchResult>> failed) {
+    (CompletableFuture<List<BatchResult>> failed) {
         return failed.thenApply(f -> {
             if (f.isEmpty()) {
-                return Result.ok(0L).mapError(e -> new StreamProcessFailure());
+                return Result.ok(0L).mapError(StreamProcessFailure::new);
             } else {
                 return Result.error(new StreamProcessFailure(f.get(0).getResult().getError()));
             }
@@ -244,39 +247,30 @@ public class PolicyStreamProcessor {
 
     /**
      * Finalize all the pending transfers of a sliding window.
+     *
      * @param pending A list of the latest pending batch transfers.
      * @return A result containing a number of addresses transferred or an exception.
      */
     CompletableFuture<Result<Long, StreamProcessFailure>> finalizePendingTransfers
-            (CompletableFuture<List<BatchResult>> pending) {
+    (CompletableFuture<List<BatchResult>> pending) {
 
         return pending.thenApply(list -> {
             if (!list.isEmpty()) {
-                SimpleEntry<Result<BatchResultData, BatchProcessorFailure>, Long> res = list.stream()
-                        .map(result -> new SimpleEntry<>(result.getResult(), 1L))
-                        .reduce((x, y) -> {
-                            Result<BatchResultData, BatchProcessorFailure> first = x.getKey();
-                            Result<BatchResultData, BatchProcessorFailure> second = y.getKey();
-                            if (first.isValue() && second.isValue()) {
-                                return new SimpleEntry<>(first, 1L + 1L);
+                Result<BatchResultData, BatchProcessorFailure> accumRes = list.stream()
+                        .map(BatchResult::getResult)
+                        .reduce((first, second) -> first.flatMap(firstData ->
+                                second.map(secondData ->
+                                        new BatchResultData(firstData.getAddressesTransferred() +
+                                                secondData.getAddressesTransferred())))).get();
 
-                            } else if (first.isValue()) {
-                                return new SimpleEntry<>(second, 1L);
-                            } else {
-                                return new SimpleEntry<>(first, 1L);
-                            }
-                        }).get();
-
-                Result<BatchResultData, BatchProcessorFailure> accumResult = res.getKey();
-                long totalTransferred = res.getValue();
-                if (accumResult.isError()) {
-                    return Result.error(new StreamProcessFailure(accumResult.getError()));
+                if (accumRes.isError()) {
+                    return Result.error(new StreamProcessFailure(accumRes.getError()));
                 } else {
-                    return Result.ok(totalTransferred).mapError(e -> new StreamProcessFailure());
+                    return Result.ok(accumRes.get().getAddressesTransferred()).mapError(StreamProcessFailure::new);
                 }
 
             } else {
-                return Result.ok(0L).mapError(e -> new StreamProcessFailure());
+                return Result.ok(0L).mapError(StreamProcessFailure::new);
             }
 
         });
@@ -284,6 +278,7 @@ public class PolicyStreamProcessor {
 
     /**
      * Finalize all the transfers of a sliding window.
+     *
      * @param slidingWindow The last instance of a sliding window.
      * @return A result containing a total number of addresses transferred or an exception.
      */
@@ -309,6 +304,7 @@ public class PolicyStreamProcessor {
     /**
      * Invoke the dynamic policies on the tail of a stream:
      * a distribution policy and failure handling policy.
+     *
      * @param dynamicPolicyData Data needed to transform the tail of a stream dynamically.
      * @return A new dynamic policy data: a transformed stream and a new sliding window.
      */
@@ -321,16 +317,19 @@ public class PolicyStreamProcessor {
 
     /**
      * Perform a state transfer over a stream lazily.
-     * @param stream A tail or a non processed part of a stream.
+     *
+     * @param stream        A tail or a non processed part of a stream.
      * @param slidingWindow The latest sliding window.
+     * @param streamSize    Batches left to process.
      * @return A future of a result, containing a total number of records transferred
      * or an exception, wrapped in a tail-recursive call.
      */
     TailCall<CompletableFuture<Result<Long, StreamProcessFailure>>>
     doProcessStream(Stream<Optional<Batch>> stream,
-                    SlidingWindow slidingWindow) {
+                    SlidingWindow slidingWindow,
+                    long streamSize) {
         // Split the stream into a head and a tail.
-        StreamHeadAndTail<Batch> headAndTail = StreamUtils.splitTail(stream);
+        StreamHeadAndTail<Batch> headAndTail = StreamUtils.splitTail(stream, streamSize);
         Optional<Batch> head = headAndTail.getHead();
         Stream<Optional<Batch>> tail = headAndTail.getTail();
         final int currentWindowSize = slidingWindow.getWindow().size();
@@ -346,7 +345,7 @@ public class PolicyStreamProcessor {
             return TailCalls.call(() ->
                     doProcessStream(
                             tail,
-                            updateWindow(transferResult, slidingWindow)));
+                            updateWindow(transferResult, slidingWindow), streamSize - 1));
 
         }
         // Head is present, window is full.
@@ -362,16 +361,14 @@ public class PolicyStreamProcessor {
             // If the dynamic policies can be invoked on a tail of a stream, invoke.
             // Then call this function recursively.
             if (newWindow.canInvokeDynamicPolicies(dynamicProtocolWindowSize)) {
-                DynamicPolicyData dynamicPolicyData = invokeDynamicPolicies(new DynamicPolicyData(tail, newWindow));
+                DynamicPolicyData dynamicPolicyData = invokeDynamicPolicies(new DynamicPolicyData(tail, newWindow, streamSize));
                 return TailCalls.call(() -> doProcessStream(
                         dynamicPolicyData.getTail(),
-                        dynamicPolicyData.getSlidingWindow()
-                ));
+                        dynamicPolicyData.getSlidingWindow(), dynamicPolicyData.getSize() - 1));
             } else {
                 return TailCalls.call(() -> doProcessStream(
                         tail,
-                        newWindow
-                ));
+                        newWindow, streamSize - 1));
             }
             // End of a stream, terminate, finalize transfers and return from the function.
         } else {
@@ -381,15 +378,17 @@ public class PolicyStreamProcessor {
 
     /**
      * Execute the state transfer.
+     *
      * @param staticPolicyData A data needed to initialize a stream.
      * @return A future of a result, containing a total number of records transferred or an exception.
      */
     public CompletableFuture<Result<Long, StreamProcessFailure>> processStream(StaticPolicyData staticPolicyData) {
-        Stream<Optional<Batch>> initStream = policyData.getInitialDistributionPolicy()
-                .applyPolicy(staticPolicyData).map(Optional::of);
+        InitialBatchStream initStream = policyData.getInitialDistributionPolicy().applyPolicy(staticPolicyData);
         SlidingWindow slidingWindow = SlidingWindow
                 .builder().build();
-        return doProcessStream(initStream, slidingWindow)
+        return doProcessStream(initStream.getInitialStream().map(Optional::of),
+                slidingWindow,
+                initStream.getInitialBatchStreamSize())
                 .invoke()
                 .get();
     }
