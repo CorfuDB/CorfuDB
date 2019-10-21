@@ -52,9 +52,9 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         ImmutableList<MockedSegment> expected = ImmutableList.of(
                 new MockedSegment(0L, 1L,
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L)),
+                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)),
                 new MockedSegment(2L, 3L,
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L)));
+                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)));
 
         ImmutableList<CurrentTransferSegment> result = spy
                 .createStateList(layout);
@@ -65,9 +65,9 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         expected = ImmutableList.of(
                 new MockedSegment(0L, 1L,
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, -1L)),
+                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)),
                 new MockedSegment(2L, 3L,
-                        new CurrentTransferSegmentStatus(RESTORED, 3L)));
+                        new CurrentTransferSegmentStatus(RESTORED, 2L)));
 
         doReturn(-1L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");
@@ -99,7 +99,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
                 ImmutableList.of(
                         new MockedSegment(3L, 3L,
                                 new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                        -1L)));
+                                        0L)));
 
 
         List<CurrentTransferSegment> result = spy
@@ -111,7 +111,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         expected = ImmutableList.of(
                 new MockedSegment(3L, 3L,
-                        new CurrentTransferSegmentStatus(RESTORED, 3L)));
+                        new CurrentTransferSegmentStatus(RESTORED, 1L)));
 
         doReturn(3L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");

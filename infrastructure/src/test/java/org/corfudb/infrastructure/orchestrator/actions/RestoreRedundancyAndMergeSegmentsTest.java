@@ -51,7 +51,8 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
         Layout testLayout = createTestLayout(Arrays.asList(segment));
-        List<CurrentTransferSegment> notDone = Arrays.asList(new CurrentTransferSegment(0L, 5L, CompletableFuture.supplyAsync(() -> {
+        List<CurrentTransferSegment> notDone = Arrays.asList(new CurrentTransferSegment(0L, 5L,
+                CompletableFuture.supplyAsync(() -> {
             Sleep.sleepUninterruptibly(Duration.ofMillis(5000));
             return null;
         })));
@@ -63,27 +64,6 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
                 action.tryRestoreRedundancyAndMergeSegments(notDone, testLayout, layoutManagementView);
         assertThat(status).isEqualTo(NOT_RESTORED);
     }
-
-    // list with transfer that failed exceptionally
-    @Test
-    public void testTryRestoreExceptionalTransfers() {
-        Layout.LayoutStripe stripe = new Layout.LayoutStripe(Arrays.asList("localhost"));
-        Layout.LayoutSegment segment =
-                new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
-        Layout testLayout = createTestLayout(Arrays.asList(segment));
-        List<CurrentTransferSegment> failed = Arrays.asList(new CurrentTransferSegment(0L, 5L, CompletableFuture.supplyAsync(() -> {
-            throw new RuntimeException("Failure");
-        })));
-
-        LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
-
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost");
-        assertThatThrownBy(() ->
-                action.tryRestoreRedundancyAndMergeSegments(failed, testLayout, layoutManagementView))
-                .isInstanceOf(BatchProcessorFailure.class)
-                .hasRootCauseInstanceOf(RuntimeException.class);
-    }
-
 
     // list with transfer that failed
     @Test
@@ -101,8 +81,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest {
         RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost");
         assertThatThrownBy(() ->
                 action.tryRestoreRedundancyAndMergeSegments(failed, testLayout, layoutManagementView))
-                .isInstanceOf(BatchProcessorFailure.class)
-                .hasRootCauseInstanceOf(IllegalStateException.class);
+                .isInstanceOf(StreamProcessFailure.class);
     }
 
     // list with non transferred entities

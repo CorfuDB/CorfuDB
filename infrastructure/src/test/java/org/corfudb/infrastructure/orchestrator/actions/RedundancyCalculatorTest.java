@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -159,11 +160,11 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
 
         MockedSegment presentSegment = new MockedSegment(0L,
                 20L,
-                new CurrentTransferSegmentStatus(RESTORED, 20L));
+                new CurrentTransferSegmentStatus(RESTORED, 21L));
 
 
         MockedSegment nonPresentSegment = new MockedSegment(21L,
-                50L, new CurrentTransferSegmentStatus(NOT_TRANSFERRED, NON_ADDRESS));
+                50L, new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L));
 
         Assert.assertTrue(transformListToMock(currentTransferSegments).containsAll(Arrays.asList(presentSegment,
                 nonPresentSegment)));
@@ -307,35 +308,6 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
         ImmutableList<CurrentTransferSegment> newList = ImmutableList.of(newSegment);
 
         assertThat(calculator.mergeLists(oldList, newList).get(0).getStatus().isDone()).isFalse();
-    }
-
-    @Test
-    public void testMergeSegmentsMatchExceptional() {
-
-        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
-
-
-        CompletableFuture<CurrentTransferSegmentStatus> notTransferred =
-                CompletableFuture.completedFuture
-                        (new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                -1L));
-
-        // old map had an exceptionally failed transfer, segments match -> preserve
-        CompletableFuture<CurrentTransferSegmentStatus> exceptional =
-                CompletableFuture.supplyAsync(() -> {
-                    throw new RuntimeException();
-                });
-
-        CurrentTransferSegment oldSegment = new CurrentTransferSegment(0L, 5L, exceptional);
-
-        CurrentTransferSegment newSegment = new CurrentTransferSegment(0L, 5L, notTransferred);
-
-        ImmutableList<CurrentTransferSegment> oldList = ImmutableList.of(oldSegment);
-        ImmutableList<CurrentTransferSegment> newList = ImmutableList.of(newSegment);
-
-        Sleep.sleepUninterruptibly(Duration.ofMillis(200));
-        assertThat(calculator.mergeLists(oldList, newList).get(0).getStatus().isCompletedExceptionally())
-                .isTrue();
     }
 
     @Test
@@ -498,11 +470,9 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
             }));
         }
         if(failed){
-            return new CurrentTransferSegment(begin, end, CompletableFuture.supplyAsync(() -> {
-                throw new RuntimeException("failed");
-            }));
+            return new CurrentTransferSegment(begin, end, CompletableFuture.completedFuture(new CurrentTransferSegmentStatus(FAILED, 0L, Optional.empty())));
         }
-        return new CurrentTransferSegment(begin, end, CompletableFuture.completedFuture(new CurrentTransferSegmentStatus(state, -1L)));
+        return new CurrentTransferSegment(begin, end, CompletableFuture.completedFuture(new CurrentTransferSegmentStatus(state, 0L)));
     }
 
     private SegmentData segmentToData(CurrentTransferSegment segment){
@@ -539,7 +509,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
         List<CurrentTransferSegment> oldList = Arrays.asList(
                 SegmentData.builder().range(new SimpleEntry<>(0L, 10L)).state(TRANSFERRED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(11L, 12L)).state(NOT_TRANSFERRED).inProgress(true).build(),
-                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(NOT_TRANSFERRED).failed(true).build(),
+                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(FAILED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(18L, 20L)).state(FAILED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(21L, 25L)).state(RESTORED).build()
                 ).stream()
@@ -564,7 +534,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest {
         ImmutableList<SegmentData> expected = ImmutableList.copyOf(Arrays.asList(
                 SegmentData.builder().range(new SimpleEntry<>(5L, 10L)).state(RESTORED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(11L, 12L)).state(NOT_TRANSFERRED).inProgress(true).build(),
-                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(NOT_TRANSFERRED).failed(true).build(),
+                SegmentData.builder().range(new SimpleEntry<>(13L, 16L)).state(FAILED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(18L, 20L)).state(FAILED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(21L, 25L)).state(RESTORED).build(),
                 SegmentData.builder().range(new SimpleEntry<>(26L, 30L)).state(RESTORED).build()

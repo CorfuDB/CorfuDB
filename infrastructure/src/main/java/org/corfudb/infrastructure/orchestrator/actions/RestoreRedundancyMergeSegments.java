@@ -103,9 +103,12 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     RestoreStatus tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
                                                        Layout oldLayout,
                                                        LayoutManagementView layoutManagementView) {
+        // Get any transfers that are done.
+        List<CurrentTransferSegment> doneTransfers =
+                stateList.stream().filter(segment -> segment.getStatus().isDone()).collect(Collectors.toList());
 
         // Get any transfers that failed.
-        List<CurrentTransferSegment> failed = stateList.stream()
+        List<CurrentTransferSegment> failed = doneTransfers.stream()
                 .filter(segment -> segment.getStatus().join().getSegmentState().equals(FAILED))
                 .collect(Collectors.toList());
 
@@ -116,7 +119,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
 
         // Filter all the transfers that have been completed.
         List<CurrentTransferSegment> transferredSegments
-                = stateList.stream().filter(segment -> segment
+                = doneTransfers.stream().filter(segment -> segment
                 .getStatus().join().getSegmentState().equals(TRANSFERRED))
                 .collect(Collectors.toList());
 

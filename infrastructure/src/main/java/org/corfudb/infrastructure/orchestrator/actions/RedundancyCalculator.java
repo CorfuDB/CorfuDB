@@ -241,7 +241,7 @@ public class RedundancyCalculator {
                 CompletableFuture<CurrentTransferSegmentStatus> oldSegmentStatus =
                         oldSegment.segment.getStatus();
 
-                // If the old segment is not done transferring, failed or restored -> update the segment
+                // If the old segment is not done transferring, or restored -> update the segment
                 // with a new range and the old status.
                 if (!oldSegmentStatus.isDone() ||
                         oldSegmentStatus.join().getSegmentState().equals(FAILED) ||
