@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer;
 
 import lombok.Builder;
 import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CommittedTransferData;
@@ -16,6 +17,7 @@ import java.util.Optional;
  */
 @Getter
 @Builder
+@EqualsAndHashCode(exclude = {"batchProcessorData", "policyStreamProcessorData"})
 public class StateTransferConfig {
 
     /**
@@ -46,6 +48,7 @@ public class StateTransferConfig {
      * A set of predefined policies needed to execute the state transfer.
      */
     @Default
+
     private final PolicyStreamProcessorData policyStreamProcessorData =
             PolicyStreamProcessorData.builder().build();
 

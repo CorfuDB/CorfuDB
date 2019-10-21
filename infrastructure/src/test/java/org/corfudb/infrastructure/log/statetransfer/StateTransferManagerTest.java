@@ -14,7 +14,6 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.junit.jupiter.api.Test;
 
-import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.List;
@@ -29,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.log.statetransfer.Plan.Bundle;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CommittedTransferData;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
 import static org.mockito.Mockito.doReturn;
@@ -108,8 +108,38 @@ class StateTransferManagerTest {
         assertThat(ranges).isEqualTo(rangesExpected);
         StateTransferManager spy = spy(manager);
 
+        // Segment is from 0L to 50L, all data present, segment is transferred
+        CurrentTransferSegment transferSegment =
+                createTransferSegment(0L, 50L, Optional.empty(), NOT_TRANSFERRED,
+                        0L, Optional.empty());
+        doReturn(ImmutableList.of()).when(spy).getUnknownAddressesInRange(0L, 50L);
+        currentTransferSegments =
+                spy.handleTransfer(ImmutableList.of(transferSegment), batchProcessorData);
 
+        assertThat(currentTransferSegments.get(0).getStatus().join().getSegmentState())
+                .isEqualTo(TRANSFERRED);
+        assertThat(currentTransferSegments.get(0).getStatus().join().getTotalTransferred())
+                .isEqualTo(51L);
+        // Some data is not present
+        ImmutableList<Long> unknownData =
+                ImmutableList.copyOf(LongStream.range(25L, 51L).boxed().collect(Collectors.toList()));
 
+        doReturn(unknownData).when(spy).getUnknownAddressesInRange(0L, 50L);
+
+        StateTransferConfig config = StateTransferConfig.builder()
+                .unknownAddresses(unknownData)
+                .committedTransferData(Optional.empty())
+                .batchSize(10)
+                .batchProcessorData(batchProcessorData).build();
+
+        doReturn(CompletableFuture.completedFuture(Result.ok(26L)))
+                .when(spy).stateTransfer(config);
+
+        currentTransferSegments =
+                spy.handleTransfer(ImmutableList.of(transferSegment), batchProcessorData);
+
+        assertThat(currentTransferSegments.get(0).getStatus().join().getSegmentState())
+                .isEqualTo(TRANSFERRED);
     }
 
 
