@@ -60,12 +60,12 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     private static final int EXTRA_WAIT_MILLIS = 20;
     private static final float RANDOM_PART = 0.5f;
 
-    private static final Consumer<ExponentialBackoffRetry> RETRY_SETTINGS = x -> {
-        x.setBase(RETRY_BASE);
-        x.setExtraWait(EXTRA_WAIT_MILLIS);
-        x.setBackoffDuration(Duration.ofSeconds(
+    private static final Consumer<ExponentialBackoffRetry> RETRY_SETTINGS = settings -> {
+        settings.setBase(RETRY_BASE);
+        settings.setExtraWait(EXTRA_WAIT_MILLIS);
+        settings.setBackoffDuration(Duration.ofSeconds(
                 BACKOFF_DURATION_SECONDS));
-        x.setRandomPortion(RANDOM_PART);
+        settings.setRandomPortion(RANDOM_PART);
     };
 
     RestoreStatus restoreWithBackOff(List<CurrentTransferSegment> stateList,
@@ -121,7 +121,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 .collect(Collectors.toList());
 
 
-        // Case 1: The transferred has occurred -> Create a new layout with restored node, merge if possible.
+        // Case 1: The transfer has occurred -> Create a new layout with a restored node, merge if possible.
         if (!transferredSegments.isEmpty()) {
 
             log.info("State transfer on {}: Transferred segments: {}.", currentNode, transferredSegments);

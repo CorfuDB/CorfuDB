@@ -19,6 +19,7 @@ import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProces
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.policy.staticpolicy.StaticPolicyData;
 import org.corfudb.util.CFUtils;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.PolicyStreamProcessor.SlidingWindow;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
+import static org.corfudb.infrastructure.log.statetransfer.Plan.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
@@ -138,7 +140,7 @@ public class StateTransferManager {
     }
 
     /**
-     * A data class that hold the information needed to transfer the committed records.
+     * A data class that holds the information needed to transfer the committed records.
      */
     @AllArgsConstructor
     @Getter
@@ -247,17 +249,27 @@ public class StateTransferManager {
 
     /**
      * Perform a state transfer for this segment.
+     *
      * @param stateTransferConfig A state transfer config object.
-     * @return A result, containing a total number of records transferred or a failure.
+     * @return A future of a result, containing a total number of records transferred or a failure.
      */
     CompletableFuture<Result<Long, StreamProcessFailure>> stateTransfer(
             StateTransferConfig stateTransferConfig) {
-        return configureStateTransfer(stateTransferConfig).get();
+        Plan stateTransferPlan = createStateTransferPlan(stateTransferConfig);
+        return coalesceResults(stateTransferPlan
+                .getBundles()
+                .stream()
+                .map(bundle -> {
+                    StaticPolicyData data = bundle.getData();
+                    PolicyStreamProcessor processor = bundle.getProcessor();
+                    return processor.processStream(data);
+                }).collect(Collectors.toList()));
     }
 
     /**
      * Based on a result of a state transfer, update a segment status.
-     * @param result A result, containing a total number of records transferred or a failure.
+     *
+     * @param result      A result, containing a total number of records transferred or a failure.
      * @param totalNeeded A total number of records that must be transferred.
      * @return An updated segment status.
      */
@@ -276,21 +288,23 @@ public class StateTransferManager {
                 });
 
         if (checkedResult.isError()) {
-            return new CurrentTransferSegmentStatus(FAILED, 0L, Optional.of(checkedResult.getError()));
+            return new CurrentTransferSegmentStatus(FAILED,
+                    0L, Optional.of(checkedResult.getError()));
         } else {
-            return new CurrentTransferSegmentStatus(TRANSFERRED, checkedResult.get(), Optional.empty());
+            return new CurrentTransferSegmentStatus(TRANSFERRED,
+                    checkedResult.get(), Optional.empty());
         }
     }
 
     /**
-     * Based on a state transfer config, decide what part of a segment
+     * Based on a state transfer config, decide which part of a segment
      * is transferred via a replication protocol, and which part is transferred
-     * via a committed batch processor.
+     * via a committed batch processor and create a plan of execution.
+     *
      * @param stateTransferConfig A config needed to execute a state transfer on the current segment.
-     * @return A function that executes a state transfer for this segment.
+     * @return A plan of execution.
      */
-    Supplier<CompletableFuture<Result<Long, StreamProcessFailure>>>
-    configureStateTransfer(StateTransferConfig stateTransferConfig) {
+    Plan createStateTransferPlan(StateTransferConfig stateTransferConfig) {
 
         Optional<CommittedTransferData> possibleCommittedTransferData =
                 stateTransferConfig.getCommittedTransferData();
@@ -315,6 +329,7 @@ public class StateTransferManager {
 
             int indexOfTheLastCommittedAddress =
                     Collections.binarySearch(unknownAddresses, committedOffset);
+
             int indexOfTheFirstNonCommittedAddress = indexOfTheLastCommittedAddress + 1;
             int indexOfTheLastAddress = unknownAddresses.size() - 1;
 
@@ -340,11 +355,21 @@ public class StateTransferManager {
                 PolicyStreamProcessor protocolStreamProcessor = createStreamProcessor(batchProcessorData,
                         policyStreamProcessorData, PROTOCOL, windowSize);
 
-                return () -> coalesceResults(ImmutableList.of(protocolStreamProcessor
-                                .processStream(protocolStaticPolicyData),
-                        committedStreamProcessor.processStream(committedStaticPolicyData)));
+                return new Plan(ImmutableList.of(
+                        Bundle.builder()
+                                .data(protocolStaticPolicyData)
+                                .processor(protocolStreamProcessor)
+                                .build(),
+                        Bundle.builder()
+                                .data(committedStaticPolicyData)
+                                .processor(committedStreamProcessor)
+                                .build()));
             } else {
-                return () -> committedStreamProcessor.processStream(committedStaticPolicyData);
+                return new Plan(ImmutableList.of(
+                        Bundle.builder()
+                                .data(committedStaticPolicyData)
+                                .processor(committedStreamProcessor)
+                                .build()));
             }
             // Everything is transferred via a protocol.
         } else {
@@ -354,19 +379,22 @@ public class StateTransferManager {
             StaticPolicyData protocolStaticPolicyData =
                     new StaticPolicyData(unknownAddresses, Optional.empty(), batchSize);
 
-
-            return () -> protocolStreamProcessor
-                    .processStream(protocolStaticPolicyData);
+            return new Plan(ImmutableList.of(
+                    Bundle.builder()
+                            .data(protocolStaticPolicyData)
+                            .processor(protocolStreamProcessor)
+                            .build()));
         }
     }
 
     /**
      * Create a stream processor instance.
-     * @param batchProcessorData A data needed to initiate a batch processor.
+     *
+     * @param batchProcessorData        A data needed to initiate a batch processor.
      * @param policyStreamProcessorData Policies that this stream processor
      *                                  will use to aid with a state transfer.
-     * @param type A type of a batch processor to create.
-     * @param windowSize A size of a {@link SlidingWindow}.
+     * @param type                      A type of a batch processor to create.
+     * @param windowSize                A size of a {@link SlidingWindow}.
      * @return An instance of a stream processor with predefined policies.
      */
     PolicyStreamProcessor createStreamProcessor(StateTransferBatchProcessorData batchProcessorData,
@@ -386,12 +414,13 @@ public class StateTransferManager {
     /**
      * If the parts of a transfer were transferred by using different mechanics,
      * combine the results.
+     *
      * @param allResults All the results of the state transfer for the segment.
      * @return A result containing a total number of addresses transferred
      * or an exception of either one of them.
      */
     CompletableFuture<Result<Long, StreamProcessFailure>> coalesceResults
-            (List<CompletableFuture<Result<Long, StreamProcessFailure>>> allResults) {
+    (List<CompletableFuture<Result<Long, StreamProcessFailure>>> allResults) {
         CompletableFuture<List<Result<Long, StreamProcessFailure>>> futureOfListResults =
                 CFUtils.sequence(allResults);
 
@@ -411,7 +440,8 @@ public class StateTransferManager {
     /**
      * Add the total number of addresses transferred from both the results
      * or propagate their exceptions.
-     * @param firstResult A result of a first transfer.
+     *
+     * @param firstResult  A result of a first transfer.
      * @param secondResult A result of a second transfer.
      * @return A combined result.
      */
