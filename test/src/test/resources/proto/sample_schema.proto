@@ -16,7 +16,6 @@ message FirewallRule {
 message LogicalSwitch {
     optional int64 switch_id = 1 [(org.corfudb.runtime.schema).secondary_key = true];
     optional org.corfudb.test.Appliance input = 2;
-    repeated int64 aray = 3 [(org.corfudb.runtime.schema).secondary_key = true];
 }
 
 message ManagedResources {

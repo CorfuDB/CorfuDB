@@ -30,16 +30,6 @@ public class CorfuMsgFilterIT extends AbstractIT {
     private static int corfuSingleNodePort;
     private static String singleNodeEndpoint;
 
-    // Helper method to run a single persistent server for provided address and port
-    private Process runSinglePersistentServer(String address, int port) throws IOException {
-        return new AbstractIT.CorfuServerRunner()
-                .setHost(address)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
-                .setSingle(true)
-                .runServer();
-    }
-
     @Before
     public  void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");

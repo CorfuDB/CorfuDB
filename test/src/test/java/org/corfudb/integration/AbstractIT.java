@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
@@ -292,17 +291,21 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     public static CorfuRuntime createRuntime(String endpoint) {
-        CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(true)
+        return CorfuRuntime.fromParameters(
+                CorfuRuntime.CorfuRuntimeParameters.builder()
+                        .cacheDisabled(true)
+                        .build())
+                .parseConfigurationString(endpoint)
                 .connect();
-        return rt;
     }
 
     public static CorfuRuntime createRuntimeWithCache() {
-        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT)
-                .setCacheDisabled(false)
+        return CorfuRuntime.fromParameters(
+                CorfuRuntime.CorfuRuntimeParameters.builder()
+                        .cacheDisabled(false)
+                        .build())
+                .parseConfigurationString(DEFAULT_ENDPOINT)
                 .connect();
-        return rt;
     }
 
     public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {
@@ -435,5 +438,21 @@ public class AbstractIT extends AbstractCorfuTest {
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
         }
+    }
+
+    /**
+     * A helper method that takes host and port specification, start a single server and returns a process.
+     *
+     * @param host Hostname/IP of the server.
+     * @param port Port of the server.
+     * @return Process instance of the server.
+     */
+    Process runSinglePersistentServer(String host, int port) throws IOException {
+        return new AbstractIT.CorfuServerRunner()
+                .setHost(host)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(host, port))
+                .setSingle(true)
+                .runServer();
     }
 }

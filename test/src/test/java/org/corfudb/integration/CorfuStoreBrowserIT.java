@@ -2,9 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.UnknownFieldSet;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-
+import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -27,26 +25,13 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
     private static String singleNodeEndpoint;
 
-    /* A helper method that takes host and port specification, start a single server and
-     *  returns a process. */
-    private Process runSinglePersistentServer(String host, int port) throws
-        IOException {
-        return new AbstractIT.CorfuServerRunner()
-            .setHost(host)
-            .setPort(port)
-            .setLogPath(getCorfuServerLogPath(host, port))
-            .setSingle(true)
-            .runServer();
-    }
-
     /**
      * Load properties for a single node corfu server before each test
      */
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty(
-            "corfuSingleNodePort"));
+        corfuStringNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format(
             "%s:%d",
             corfuSingleNodeHost,
@@ -57,17 +42,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
      */
     @Test
-    public void browserTest() throws
-        IOException,
-        NoSuchMethodException,
-        IllegalAccessException,
-        InvocationTargetException {
+    public void browserTest() throws Exception{
         final String namespace = "namespace";
         final String tableName = "table";
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
@@ -81,24 +58,24 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         store.openTable(
             namespace,
             tableName,
-            SampleSchema.Uuid.class,
-            SampleSchema.Uuid.class,
-            SampleSchema.Uuid.class,
+            Uuid.class,
+            Uuid.class,
+            Uuid.class,
             TableOptions.builder().build());
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
         final long metadataUuid = 5L;
 
-        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+        Uuid uuidKey = Uuid.newBuilder()
             .setMsb(keyUuid)
             .setLsb(keyUuid)
             .build();
-        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+        Uuid uuidVal = Uuid.newBuilder()
             .setMsb(valueUuid)
             .setLsb(valueUuid)
             .build();
-        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+        Uuid metadata = Uuid.newBuilder()
             .setMsb(metadataUuid)
             .setLsb(metadataUuid)
             .build();
@@ -125,17 +102,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     /**
      * Create a table and add nested protobufs as data to it.  Verify that the
      * browser tool is able to read the contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
      */
     @Test
-    public void nestedProtoTest() throws
-        IOException,
-        NoSuchMethodException,
-        IllegalAccessException,
-        InvocationTargetException {
+    public void nestedProtoTest() throws Exception{
         final String namespace = "namespace";
         final String tableName = "table";
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
@@ -152,12 +121,12 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         store.openTable(
             namespace,
             tableName,
-            SampleSchema.Uuid.class,
+            Uuid.class,
             SampleSchema.FirewallRule.class,
-            SampleSchema.Uuid.class,
+            Uuid.class,
             TableOptions.builder().build());
 
-        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid)
+        Uuid uuidKey = Uuid.newBuilder().setLsb(keyUuid)
             .setMsb(keyUuid).build();
         SampleSchema.FirewallRule firewallRuleVal = SampleSchema.FirewallRule.newBuilder()
             .setRuleId(ruleIdVal).setRuleName("Test Rule")
@@ -166,7 +135,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .setOutput(
                 SampleAppliance.Appliance.newBuilder().setEndpoint("localhost"))
             .build();
-        SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid)
+        Uuid uuidMeta = Uuid.newBuilder().setLsb(metaUuid)
             .setMsb(metaUuid).build();
         TxBuilder tx = store.tx(namespace);
         tx.create(tableName, uuidKey, firewallRuleVal, uuidMeta)

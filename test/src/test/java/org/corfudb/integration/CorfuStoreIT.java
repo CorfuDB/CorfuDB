@@ -33,17 +33,6 @@ public class CorfuStoreIT extends AbstractIT {
     private static int corfuStringNodePort;
     private static String singleNodeEndpoint;
 
-    /* A helper method that takes host and port specification, start a single server and
-     *  returns a process. */
-    private Process runSinglePersistentServer(String host, int port) throws IOException {
-        return new AbstractIT.CorfuServerRunner()
-                .setHost(host)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(host, port))
-                .setSingle(true)
-                .runServer();
-    }
-
     /**
      * Load properties for a single node corfu server before each test
      */
