@@ -3,8 +3,8 @@ package org.corfudb.infrastructure.log;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.IDataStore;
-import org.corfudb.infrastructure.IDataStore.KvRecord;
+import org.corfudb.infrastructure.datastore.KvDataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.runtime.view.Address;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -34,7 +34,7 @@ public class StreamLogDataStore {
     private static final long ZERO_ADDRESS = 0L;
 
     @NonNull
-    private final IDataStore dataStore;
+    private final KvDataStore dataStore;
 
     /**
      * Cached starting address

@@ -18,7 +18,7 @@ import org.corfudb.runtime.view.Address;
 /**
  * A snapshot transactional context.
  *
- * <p>Given the snapshot (log address) given by the TransactionBuilder,
+ * <p>Given the snapshot (log address) given by the TxBuilder,
  * access all objects within the same snapshot during the course of
  * this transactional context.
  *

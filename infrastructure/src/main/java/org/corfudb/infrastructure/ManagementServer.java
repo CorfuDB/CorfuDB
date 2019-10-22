@@ -60,14 +60,14 @@ public class ManagementServer extends AbstractServer {
     /**
      * Policy to be used to handle failures/healing.
      */
-    private IReconfigurationHandlerPolicy failureHandlerPolicy;
+    private final IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     private final ClusterStateContext clusterContext;
 
     @Getter
     private final ManagementAgent managementAgent;
 
-    private Orchestrator orchestrator;
+    private final Orchestrator orchestrator;
 
     /**
      * System down handler to break out of live-locks if the runtime cannot reach the cluster for a

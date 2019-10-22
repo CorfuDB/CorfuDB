@@ -27,7 +27,7 @@ import org.corfudb.runtime.view.Address;
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
     private Map<Long, LogData> logCache;
-    private Set<Long> trimmed;
+    private final Set<Long> trimmed;
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
 

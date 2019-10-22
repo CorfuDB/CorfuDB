@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package org.corfudb.test;
+option java_package = "org.corfudb.test";
+
+message Car {
+    string company = 1;
+    string model = 2;
+    string color = 3;
+}

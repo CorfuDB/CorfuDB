@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.cluster.AbstractCluster;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
@@ -29,15 +31,17 @@ import java.util.stream.Collectors;
  * Provides VM implementation of a {@link CorfuCluster}.
  */
 @Slf4j
-public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmUniverseParams> {
+public class VmCorfuCluster extends AbstractCorfuCluster<VmUniverseParams> {
     private final ImmutableMap<String, VirtualMachine> vms;
 
     @Builder
-    protected VmCorfuCluster(CorfuClusterParams params, VmUniverseParams universeParams,
+    protected VmCorfuCluster(CorfuClusterParams corfuClusterParams,
+                             VmUniverseParams universeParams,
                              ImmutableMap<String, VirtualMachine> vms) {
-        super(params, universeParams);
+        super(corfuClusterParams, universeParams);
         this.vms = vms;
     }
+
 
     /**
      * Deploys a Corfu server node according to the provided parameter.
@@ -45,9 +49,9 @@ public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmU
      * @return an instance of {@link Node}
      */
     @Override
-    protected CorfuServer buildCorfuServer(CorfuServerParams corfuServerParams) {
-        log.info("Deploy corfu server: {}", corfuServerParams);
-        VmCorfuServerParams params = getVmServerParams(corfuServerParams);
+    protected Node buildServer(CorfuServerParams nodeParams) {
+        log.info("Deploy corfu server: {}", nodeParams);
+        VmCorfuServerParams params = getVmServerParams(nodeParams);
 
         VirtualMachine vm = vms.get(params.getVmName());
 

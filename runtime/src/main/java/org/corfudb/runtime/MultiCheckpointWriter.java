@@ -27,10 +27,10 @@ public class MultiCheckpointWriter<T extends Map> {
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
 
     // Registry and Timer used for measuring append checkpoints
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
     private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
             "append-several-checkpoints";
-    private Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);
+    private final Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")

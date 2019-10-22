@@ -44,7 +44,7 @@ public class StateTransfer {
     private static final int OVERWRITE_RETRIES = 3;
 
     // Default read options for the state read calls
-    private static ReadOptions readOptions = ReadOptions.builder()
+    private static final ReadOptions readOptions = ReadOptions.builder()
             .waitForHole(true)
             .clientCacheable(false)
             .serverCacheable(false)
