@@ -5,11 +5,10 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.3.0.20191003002541.158</version>
+        <version>0.3.0.20191022222708.9701</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.corfudb</groupId>
     <artifactId>samples</artifactId>
 
     <properties>
@@ -31,6 +30,12 @@
             <groupId>org.corfudb</groupId>
             <artifactId>test</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.offbytwo</groupId>
+            <artifactId>docopt</artifactId>
+            <version>0.6.0.20150202</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 
