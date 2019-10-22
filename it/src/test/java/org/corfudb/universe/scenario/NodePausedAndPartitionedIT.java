@@ -46,9 +46,6 @@ public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
                 CorfuServer server1 = corfuCluster.getServerByIndex(1);
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
-                System.out.println(server0.getEndpoint());
-                System.out.println(server1.getEndpoint());
-                System.out.println(server2.getEndpoint());
                 // Pause one node and partition another one
                 server1.pause();
                 server2.disconnect(Arrays.asList(server0, server1));

@@ -165,13 +165,10 @@ public abstract class AbstractView {
             if (++systemDownTriggerCounter
                     >= runtime.getParameters().getSystemDownHandlerTriggerLimit()) {
                 log.info("layoutHelper: Invoking the systemDownHandler.");
-                log.info("systemDownTriggerCounter: {}, limit: {}", systemDownTriggerCounter,
-                        runtime.getParameters().getSystemDownHandlerTriggerLimit());
                 runtime.getParameters().getSystemDownHandler().run();
             }
 
             runtime.invalidateLayout();
-            log.info("Sleeping for {}", retryRate);
             Sleep.sleepUninterruptibly(retryRate);
         }
     }

@@ -84,7 +84,6 @@ public class ClusterResizeIT extends GenericIntegrationTest {
             testCase.it("should add two nodes back to corfu cluster", data -> {
                 // Sequentially add two nodes back into cluster
                 for (CorfuServer candidate : servers) {
-                    System.out.println("Adding: " + candidate.getEndpoint());
                     corfuClient.getManagementView().addNode(
                             candidate.getEndpoint(),
                             clientFixture.getNumRetry(),

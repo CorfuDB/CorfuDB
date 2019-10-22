@@ -1,16 +1,7 @@
 package org.corfudb.runtime.view.workflows;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.TimeoutException;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -19,6 +10,13 @@ import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * An abstract class that defines a generic workflow request structure.

@@ -10,7 +10,6 @@ import org.corfudb.runtime.view.Layout;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Predicate;
 
 /**
  * A workflow request that makes an orchestrator call to remove a node from

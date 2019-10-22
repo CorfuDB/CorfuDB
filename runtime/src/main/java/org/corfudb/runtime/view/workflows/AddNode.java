@@ -4,7 +4,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
@@ -14,7 +13,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Predicate;
 
 /**
  *

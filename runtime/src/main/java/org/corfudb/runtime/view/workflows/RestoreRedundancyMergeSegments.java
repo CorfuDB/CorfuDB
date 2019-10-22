@@ -1,19 +1,17 @@
 package org.corfudb.runtime.view.workflows;
 
-import java.time.Duration;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.TimeoutException;
-import java.util.function.Predicate;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
+
+import java.time.Duration;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Sending a workflow request to restore all redundancies and merge all segments.
