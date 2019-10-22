@@ -3,6 +3,7 @@ package org.corfudb.test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 
+import java.time.Duration;
 import java.util.function.Predicate;
 
 import org.corfudb.runtime.CorfuRuntime;

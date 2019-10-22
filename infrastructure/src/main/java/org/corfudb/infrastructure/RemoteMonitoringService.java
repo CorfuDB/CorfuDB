@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
@@ -16,6 +17,7 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
+import org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -212,7 +214,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param serverContext server context
      */
     private CompletableFuture<DetectorTask> sequencerBootstrap(ServerContext serverContext) {
-        log.info("Trigger sequencer bootstrap on startup");
+        log.info("Trigger sequencer bootstrap on startup: {}", serverContext.getLocalEndpoint());
         return getCorfuRuntime()
                 .getLayoutManagementView()
                 .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker)
@@ -421,25 +423,41 @@ public class RemoteMonitoringService implements MonitoringService {
      * @return Detector task.
      */
     private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
-        int segmentsCount = layout.getSegments().size();
+        String localEndpoint = serverContext.getLocalEndpoint();
 
-        if (segmentsCount == 1) {
-            log.debug("No segments to merge. Skipping step.");
-            return DetectorTask.SKIPPED;
+        if (RedundancyCalculator.requiresMerge(layout, localEndpoint) &&
+                !layout.getUnresponsiveServers().contains(localEndpoint)) {
+            log.info("Layout requires restoration: {}. Spawning task to merge segments on {}.",
+                    layout, localEndpoint);
+            Supplier<Boolean> redundancyAction = () ->
+                    handleMergeSegments(
+                            localEndpoint, runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+                    );
+            mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
+
+            return DetectorTask.COMPLETED;
         } else if (!mergeSegmentsTask.isDone()) {
             log.debug("Merge segments task already in progress. Skipping spawning another task.");
             return DetectorTask.SKIPPED;
         }
+        log.debug("No segments to merge. Skipping step.");
+        return DetectorTask.SKIPPED;
+    }
 
-        log.debug("Number of segments present: {}. Spawning task to merge segments.", segmentsCount);
 
-        Supplier<Boolean> redundancyAction = () ->
-                ReconfigurationEventHandler.handleMergeSegments(
-                        getCorfuRuntime(), layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
-                );
-        mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
+    @VisibleForTesting
+    public DetectorTask restoreRedundancy(Layout layout){
+        return restoreRedundancyAndMergeSegments(layout);
+    }
 
-        return DetectorTask.COMPLETED;
+    boolean handleMergeSegments(String localEndpoint,
+                                SingletonResource<CorfuRuntime> runtimeSingletonResource,
+                                Layout layout, Duration retryQueryTimeout
+    ){
+        return ReconfigurationEventHandler.handleMergeSegments(
+                localEndpoint,
+                runtimeSingletonResource.get(), layout, retryQueryTimeout
+        );
     }
 
     /**

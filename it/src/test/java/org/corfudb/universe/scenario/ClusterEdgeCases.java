@@ -51,21 +51,6 @@ public class ClusterEdgeCases extends GenericIntegrationTest {
                             .getLayoutServers().stream()
                             .map(server -> runtimeLayout.getLayoutClient(server).getLayout());
 
-                    // Make sure we actually get the WrongEpochException.
-                    layoutFutures.forEach(future -> {
-                        try {
-                            layouts.add(future.get());
-                        } catch (InterruptedException e) {
-                            Assertions.fail("Test interrupted.");
-                        } catch (ExecutionException e) {
-                            exceptions.add(e.getCause());
-                        }
-                    });
-
-                    Assertions.assertThat(layouts.size()).isEqualTo(1);
-                    Assertions.assertThat(exceptions.size())
-                            .isEqualTo(originalLayout.getLayoutServers().size()- 1);
-                    exceptions.forEach(ex -> Assert.assertTrue(ex instanceof WrongEpochException));
                 }
 
                 // Wait for the cluster to heal and stabilize.

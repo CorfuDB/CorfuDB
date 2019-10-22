@@ -49,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
 import static org.corfudb.test.TestUtils.waitForLayoutChange;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -1649,7 +1650,8 @@ public class ManagementViewTest extends AbstractViewTest {
      * Starts with cluster of 1 node: PORT_0.
      * We then bootstrap the layout server of PORT_1 with a layout.
      * A rule is added to prevent the management server from being bootstrapped. Then the bootstrapNewNode is
-     * triggered. This should fail and throw a timeout exception.
+     * triggered. This should pass, since the bootstrap new node function is a part of an add node workflow, that
+     * requires a management server to be bootstrapped.
      */
     @Test
     public void testPartialBootstrapNodeFailure() {
@@ -1662,10 +1664,6 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(corfuRuntime, new TestRule().matches(corfuMsg ->
                 corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)).drop());
-
-        // Attempt bootstrapping the node. The node should attempt bootstrapping both the components Layout Server and
-        // Management Server.
-        assertThatThrownBy(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1)::get)
-                .hasRootCauseInstanceOf(TimeoutException.class);
+        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).join()).isTrue();
     }
 }

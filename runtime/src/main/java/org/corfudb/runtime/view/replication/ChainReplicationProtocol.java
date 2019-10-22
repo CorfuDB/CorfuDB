@@ -103,7 +103,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
         // A map of log unit server endpoint to addresses it's responsible for
         Map<String, List<Long>> serverAddressMap = new HashMap<>();
-
+        
         for (Long address : addresses) {
             List<String> logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();
             String logServer = logServers.get(logServers.size() - 1);

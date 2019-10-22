@@ -10,9 +10,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.collect.Sets;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -97,18 +99,16 @@ public class LayoutManagementView extends AbstractView {
      * Bootstraps the new node with the current layout.
      * This action is invoked as a part of the add node workflow which requires the new node
      * to be added to the cluster to be bootstrapped with the existing layout of this cluster.
-     * This bootstraps the Layout and the Management server with the existing layout which
-     * initiates failure handling capabilities on the management server.
+     * This bootstraps the Layout server with the existing layout.
      *
      * @param endpoint New node endpoint.
-     * @return Completable Future which completes when the node's layout and management servers are bootstrapped.
+     * @return Completable Future which completes when the node's layout is bootstrapped.
      */
     public CompletableFuture<Boolean> bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         return runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout)
-                .thenCompose(result -> runtime.getManagementView().bootstrapManagementServer(endpoint, layout))
                 .thenApply(result -> {
                     log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
                     return true;
@@ -226,10 +226,25 @@ public class LayoutManagementView extends AbstractView {
 
             sealEpoch(currentLayout);
 
-            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-            newLayout = layoutBuilder
-                    .mergePreviousSegment(1)
-                    .build();
+            Predicate<Layout> shouldMergeSegments = layout -> {
+                if(layout.getSegments().size() > 1){
+                    return Sets.difference(
+                            layout.getSegments().get(1).getAllLogServers(),
+                            layout.getSegments().get(0).getAllLogServers()).isEmpty();
+                }
+                return false;
+            };
+
+
+            while(shouldMergeSegments.test(currentLayout)){
+                LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+                currentLayout = layoutBuilder
+                        .mergePreviousSegment(1)
+                        .build();
+            }
+
+            newLayout = currentLayout;
+
             attemptConsensus(newLayout);
         } else {
             log.info("mergeSegments: skipping, no segments to merge {}", currentLayout);
@@ -335,7 +350,7 @@ public class LayoutManagementView extends AbstractView {
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
      * @throws OutrankedException if consensus is outranked.
      */
-    private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
+    public void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
             throws OutrankedException {
 

@@ -4,7 +4,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.infrastructure.management.FailureDetector;
@@ -89,6 +91,7 @@ public class ManagementServer extends AbstractServer {
      * defaulted to 1 second in the Runtime parameters. This gives the Runtime a total of 1 minute
      * to make progress. Else the ongoing task is aborted.
      */
+    @Setter
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     private final ExecutorService executor;
@@ -119,7 +122,7 @@ public class ManagementServer extends AbstractServer {
      *
      * @param serverContext context object providing parameters and objects
      */
-    public ManagementServer(ServerContext serverContext) {
+    public ManagementServer(ServerContext serverContext, StreamLog streamLog) {
         this.serverContext = serverContext;
 
         this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
@@ -149,7 +152,7 @@ public class ManagementServer extends AbstractServer {
                 corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
         );
 
-        orchestrator = new Orchestrator(corfuRuntime, serverContext);
+        orchestrator = new Orchestrator(corfuRuntime, serverContext, streamLog);
     }
 
     /**
@@ -168,7 +171,7 @@ public class ManagementServer extends AbstractServer {
             managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);
         }
         runtime.connect();
-        log.info("getCorfuRuntime: Corfu Runtime connected successfully");
+        log.info("getCorfuRuntime of {}: Corfu Runtime connected successfully", serverContext.getLocalEndpoint());
         params.setSystemDownHandler(runtimeSystemDownHandler);
         return runtime;
     }

@@ -6,6 +6,7 @@ import io.netty.buffer.Unpooled;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,6 +20,7 @@ import org.corfudb.util.serializer.Serializers;
  * Created by mwei on 8/15/16.
  */
 @Slf4j
+@EqualsAndHashCode
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     public final static LogData EMPTY = new LogData(DataType.EMPTY);
