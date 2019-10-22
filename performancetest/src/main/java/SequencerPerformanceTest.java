@@ -12,6 +12,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
+/**
+ * Created by Lin Dong on 10/18/19.
+ */
+
 @Slf4j
 public class SequencerPerformanceTest {
     public static String endPoint = "localhost:9000";
@@ -33,31 +37,32 @@ public class SequencerPerformanceTest {
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    @Before
-    public void before() {
         loadProperties();
 
         runtime = initRuntime();
         random = new Random(seed);
     }
 
+//    @Before
+//    public void before() {
+//
+//    }
+
     private void loadProperties() {
-        if (PROPERTIES.contains("metricsPort")) {
-            metricsPort = (int) PROPERTIES.get("metricsPort");
+        if (PROPERTIES.contains("sequencerMetricsPort")) {
+            metricsPort = (int) PROPERTIES.get("sequencerMetricsPort");
         }
         if (PROPERTIES.contains("endPoint")) {
             endPoint = (String) PROPERTIES.get("endPoint");
         }
-        if (PROPERTIES.contains("seed")) {
-            seed = (long) PROPERTIES.get("seed");
+        if (PROPERTIES.contains("sequencerSeed")) {
+            seed = (long) PROPERTIES.get("sequencerSeed");
         }
-        if (PROPERTIES.contains("randomBoundary")) {
-            randomBoundary = (int) PROPERTIES.get("randomBoundary");
+        if (PROPERTIES.contains("sequencerRandomBoundary")) {
+            randomBoundary = (int) PROPERTIES.get("sequencerRandomBoundary");
         }
-        if (PROPERTIES.contains("time")) {
-            time = (long) PROPERTIES.get("time");
+        if (PROPERTIES.contains("sequencerTime")) {
+            time = (long) PROPERTIES.get("sequencerTime");
         }
         if (PROPERTIES.contains("milliToSecond")) {
             milliToSecond = (int) PROPERTIES.get("milliToSecond");
