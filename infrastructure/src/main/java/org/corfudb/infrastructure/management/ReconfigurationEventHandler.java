@@ -6,6 +6,7 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -135,7 +136,8 @@ public class ReconfigurationEventHandler {
      * @param retryQueryTimeout Timeout to poll for workflow status.
      * @return True if workflow completed successfully. False otherwise.
      */
-    public static boolean handleMergeSegments(@Nonnull CorfuRuntime runtime,
+    public static boolean handleMergeSegments(@NonNull String currentEndpoint,
+                                              @Nonnull CorfuRuntime runtime,
                                               @Nonnull Layout layout,
                                               @Nonnull Duration retryQueryTimeout) {
 
@@ -150,7 +152,7 @@ public class ReconfigurationEventHandler {
             // Thus to deterministically choose an endpoint we always choose the last added log unit in the first
             // stripe.
             runtime.getManagementView().mergeSegments(
-                    layout.getLastAddedNodeInLastSegment(),
+                    currentEndpoint,
                     workflowRetries,
                     workflowTimeout,
                     retryQueryTimeout);

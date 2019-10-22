@@ -96,6 +96,7 @@ public class LogUnitServer extends AbstractServer {
      * storage.
      */
     private final LogUnitServerCache dataCache;
+    @Getter
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
     private final BatchProcessor batchWriter;
@@ -139,6 +140,21 @@ public class LogUnitServer extends AbstractServer {
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+    }
+
+    public LogUnitServer(ServerContext serverContext, StreamLog streamLog){
+        this.serverContext = serverContext;
+        this.executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
+                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
+        this.streamLog = streamLog;
+        this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
+        this.dataCache = new LogUnitServerCache(config, streamLog);
+        this.batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
+        logCleaner = new StreamLogCompaction(streamLog,
+                10,
+                45,
+                TimeUnit.MINUTES,
+                ServerContext.SHUTDOWN_TIMER);
     }
 
     /**

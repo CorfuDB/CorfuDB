@@ -1,7 +1,11 @@
 package org.corfudb.common.result;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -24,7 +28,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
         this(null, Objects.requireNonNull(error));
     }
 
-    protected Result(T value, E error) {
+    public Result(T value, E error) {
         // Exactly one value/error is non-null based on constructors calling this constructor.
         this.value = value;
         this.error = error;
@@ -33,7 +37,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
     public static <T, E extends RuntimeException> Result<T, E> of(Supplier<T> result) {
         try {
             return Result.ok(result.get());
-        } catch (RuntimeException ex){
+        } catch (RuntimeException ex) {
             return Result.error((E) ex);
         }
     }
@@ -127,9 +131,26 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
         }
     }
 
-    public<U> Result<U, E> flatMap(Function<T, Result<U, E>> mapper) {
+    /**
+     * Maps a given function to the {@link Result#error}, if the error is valid.
+     *
+     * @param function mapping function to apply to the internal result
+     * @param <Q>      type of the mapped error
+     * @return a new instance of {@link Result} which contains the result of applying the mapping
+     * function to the original internal value.
+     */
+    public <Q extends RuntimeException> Result<T, Q> mapError(Function<? super E, ? extends Q> function) {
+        if (isError()) {
+            return new Result<>(null, function.apply(error));
+        } else {
+            return new Result<>(get(), null);
+        }
+    }
 
-        if(isError()) {
+
+    public <U> Result<U, E> flatMap(Function<T, Result<U, E>> mapper) {
+
+        if (isError()) {
             return Result.error(getError());
         }
 

@@ -451,6 +451,25 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * A version of a protocol read that reads a single batch of addresses, and also propagates
+     * exceptions back to the caller.
+     * @param addressBatch A batch of addresses, small enough to fit within one rpc call.
+     * @param readOptions A read options for the protocol read.
+     * @return A mapping from addresses to log data.
+     */
+    public Map<Long, ILogData> simpleProtocolRead(List<Long> addressBatch, ReadOptions readOptions) {
+        Map<Long, ILogData> data = layoutHelper(runtimeLayout ->
+                runtimeLayout.getLayout()
+                        .getReplicationMode(addressBatch.iterator().next())
+                        .getReplicationProtocol(runtime)
+                        .readAll(runtimeLayout, addressBatch,
+                                readOptions.isWaitForHole(),
+                                readOptions.isServerCacheable()),
+                true);
+        return checkForTrimmedAddresses(data, readOptions);
+    }
+
+    /**
      * Get the first address in the address space.
      */
     public Token getTrimMark() {
