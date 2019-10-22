@@ -7,11 +7,11 @@ import com.google.protobuf.Message;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.collections.CorfuTable.Index;
+import org.corfudb.runtime.collections.CorfuTable.IndexName;
 
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * This layer implements the
@@ -23,15 +23,15 @@ import java.util.function.Supplier;
  */
 public class ProtobufIndexer implements CorfuTable.IndexRegistry<Message, CorfuRecord<Message, Message>> {
 
-    private HashMap<String,
-            CorfuTable.Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>>
+    private final HashMap<String,
+            Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>>
             indices = new HashMap<>();
 
     ProtobufIndexer(Message payloadSchema) {
         payloadSchema.getDescriptorForType().getFields().forEach(this::registerIndices);
     }
 
-    private <T extends Comparable<T>> CorfuTable.Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
+    private <T extends Comparable<T>> Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
     getIndex(String indexName, FieldDescriptor fieldDescriptor) {
 
         return new Index<>(
@@ -52,18 +52,8 @@ public class ProtobufIndexer implements CorfuTable.IndexRegistry<Message, CorfuR
     }
 
     @Override
-    public Optional<CorfuTable.Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>> get(
-            CorfuTable.IndexName name) {
-
-        String indexName = Optional.ofNullable(name)
-                .map(Supplier::get)
-                .orElse(null);
-        CorfuTable.Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>> index = indices.get(indexName);
-        if (index != null) {
-            return Optional.of(index);
-        } else {
-            return Optional.empty();
-        }
+    public Optional<Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>> get(IndexName name) {
+        return Optional.ofNullable(name).map(indexName -> indices.get(indexName));
     }
 
     @Override

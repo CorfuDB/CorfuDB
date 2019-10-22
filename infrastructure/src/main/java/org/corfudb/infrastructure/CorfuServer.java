@@ -5,13 +5,10 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.datastore.DataStore.DataStoreConfig;
 import org.corfudb.common.metrics.MetricsServer;
@@ -20,6 +17,10 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Map;
 
 
 /**
@@ -195,7 +196,15 @@ public class CorfuServer {
      * @param args command line argument strings
      */
     public static void main(String[] args) {
+        try {
+            startServer(args);
+        } catch (Throwable err) {
+            log.error("Exit. Unrecoverable error", err);
+            throw err;
+        }
+    }
 
+    private static void startServer(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts = new Docopt(USAGE)
                 .withVersion(GitRepositoryState.getRepositoryState().describe)

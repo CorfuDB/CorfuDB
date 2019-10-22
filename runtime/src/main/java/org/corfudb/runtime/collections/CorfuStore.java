@@ -78,7 +78,7 @@ public class CorfuStore {
                              @Nonnull final String tableName,
                              @Nonnull final Class<K> kClass,
                              @Nonnull final Class<V> vClass,
-                             @Nonnull final Class<M> mClass,
+                             @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
@@ -135,6 +135,20 @@ public class CorfuStore {
         return new TxBuilder(
                 this.runtime.getObjectsView(),
                 this.runtime.getTableRegistry(),
+                namespace);
+    }
+
+    /**
+     * Provides a query interface.
+     *
+     * @param namespace Namespace within which the queries are executed.
+     * @return Query implementation.
+     */
+    @Nonnull
+    public Query query(@Nonnull final String namespace) {
+        return new Query(
+                this.runtime.getTableRegistry(),
+                this.runtime.getObjectsView(),
                 namespace);
     }
 }

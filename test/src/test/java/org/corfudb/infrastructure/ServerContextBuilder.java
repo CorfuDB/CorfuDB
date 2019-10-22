@@ -89,7 +89,7 @@ public class ServerContextBuilder {
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
-                 .put("<port>", port);
+                 .put("<port>", Integer.toString(port));
 
         // Set the prefix to the port number
         if (prefix.equals("")) {
@@ -114,7 +114,8 @@ public class ServerContextBuilder {
      * @return      A {@link ServerContext} with a {@link TestServerRouter} installed.
      */
     public static ServerContext defaultTestContext(int port) {
-        ServerContext sc = new ServerContextBuilder().setPort(port).build();
+        ServerContext sc = new ServerContextBuilder()
+            .setPort(port).build();
         sc.setServerRouter(new TestServerRouter());
         return sc;
     }
@@ -125,7 +126,8 @@ public class ServerContextBuilder {
      * @return      A non-test {@link ServerContext}
      */
     public static ServerContext defaultContext(int port) {
-        ServerContext sc = new ServerContextBuilder().setPort(port)
+        ServerContext sc = new ServerContextBuilder()
+            .setPort(port)
             .setImplementation("auto")
             .build();
         return sc;

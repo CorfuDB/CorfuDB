@@ -7,6 +7,7 @@ import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema.EventInfo;
@@ -14,10 +15,12 @@ import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.google.protobuf.DescriptorProtos.*;
 import static com.google.protobuf.Descriptors.*;
@@ -97,6 +100,9 @@ public class CorfuStoreTest extends AbstractViewTest {
         }
         tx.commit();
 
+        // Query interface.
+        Query q = corfuStore.query(nsxManager);
+
         // Point lookup.
         final int fifty = 50;
         UUID uuid = UUID.nameUUIDFromBytes(Integer.toString(fifty).getBytes());
@@ -111,10 +117,37 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .setEventTime(fifty)
                 .build();
 
-        ManagedResources updatedMetadata = ManagedResources.newBuilder(metadata).setVersion(2).build();
-        table.update(lookupKey, EventInfo.newBuilder().getDefaultInstanceForType(), metadata);
-        assertThat(table.get(lookupKey))
-                .isEqualTo(new CorfuRecord<>(EventInfo.getDefaultInstance(), updatedMetadata));
+        assertThatThrownBy(() -> q.getRecord(null, lookupKey))
+                .isExactlyInstanceOf(IllegalArgumentException.class);
+
+        assertThat(q.getRecord(tableName, lookupKey).getPayload()).isEqualTo(expectedValue);
+
+        // Get by secondary index.
+        final long fiftyLong = 50L;
+        Collection<Message> secondaryIndex = q.getByIndex(tableName, "event_time", fiftyLong).getResult()
+                .stream()
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+        assertThat(secondaryIndex)
+                .hasSize(1)
+                .containsExactly(expectedValue);
+
+        // Execute Query. (Scan and filter)
+        final int sixty = 60;
+        assertThat(q.executeQuery(tableName, record -> ((EventInfo) record.getPayload()).getEventTime() >= sixty)
+                .getResult()
+                .size())
+                .isEqualTo(count - sixty);
+
+        assertThat(q.count(tableName, timestamp)).isEqualTo(1);
+        assertThat(q.count(tableName)).isEqualTo(count + 1);
+
+        assertThat(corfuStore.listTables(nsxManager))
+                .containsExactly(CorfuStoreMetadata.TableName.newBuilder()
+                        .setNamespace(nsxManager)
+                        .setTableName(tableName)
+                        .build());
+
     }
 
     /**
