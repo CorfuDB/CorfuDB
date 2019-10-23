@@ -12,7 +12,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
@@ -41,9 +40,9 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public class AbstractIT extends AbstractCorfuTest {
-    static final String DEFAULT_HOST = "localhost";
-    static final int DEFAULT_PORT = 9000;
-    static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
+    protected static final String DEFAULT_HOST = "localhost";
+    protected static final int DEFAULT_PORT = 9000;
+    protected static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
