@@ -16,15 +16,10 @@
     </properties>
 
     <dependencies>
-    <dependency>
-        <groupId>org.corfudb</groupId>
-        <artifactId>runtime</artifactId>
-        <version>${project.version}</version>
-    </dependency>
         <dependency>
-            <groupId>com.offbytwo</groupId>
-            <artifactId>docopt</artifactId>
-            <version>0.6.0.20150202</version>
+            <groupId>org.corfudb</groupId>
+            <artifactId>runtime</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -37,7 +32,89 @@
             <version>0.6.0.20150202</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.4</version>
+        </dependency>
+
+        <dependency>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
+            <version>2.6</version>
+        </dependency>
+
+
+        <!-- external dependencies -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.1.0</version>
+        </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.7.0.1</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeMavenTypes>direct</includeMavenTypes>
+                            <includeDirectories>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
+                            <inputDirectories>
+                                <inputDirectory>proto</inputDirectory>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+                <configuration>
+                    <shadedArtifactAttached>true</shadedArtifactAttached>
+                    <shadedClassifierName>shaded</shadedClassifierName>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
