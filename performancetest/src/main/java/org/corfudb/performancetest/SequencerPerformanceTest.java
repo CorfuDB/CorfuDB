@@ -4,8 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -18,15 +16,15 @@ import java.util.*;
 
 @Slf4j
 public class SequencerPerformanceTest {
-    public static String endPoint = "localhost:9000";
-    public static int metricsPort = 1000;
-    public static long seed = 1024;
-    public static int randomBoundary = 100;
-    public static long time = 1000;
-    public static int milliToSecond = 1000;
+    private String endPoint = "localhost:9000";
+    private int metricsPort = 1000;
+    private long seed = 1024;
+    private int randomBoundary = 100;
+    private long time = 1000;
+    private int milliToSecond = 1000;
     private CorfuRuntime runtime;
     private Random random;
-    public static final Properties PROPERTIES = new Properties();
+    private static final Properties PROPERTIES = new Properties();
 
     public SequencerPerformanceTest() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -43,29 +41,24 @@ public class SequencerPerformanceTest {
         random = new Random(seed);
     }
 
-//    @Before
-//    public void before() {
-//
-//    }
-
     private void loadProperties() {
-        if (PROPERTIES.contains("sequencerMetricsPort")) {
-            metricsPort = (int) PROPERTIES.get("sequencerMetricsPort");
+        if (PROPERTIES.containsKey("sequencerMetricsPort")) {
+            metricsPort = Integer.parseInt((String)PROPERTIES.get("sequencerMetricsPort"));
         }
-        if (PROPERTIES.contains("endPoint")) {
+        if (PROPERTIES.containsKey("endPoint")) {
             endPoint = (String) PROPERTIES.get("endPoint");
         }
-        if (PROPERTIES.contains("sequencerSeed")) {
-            seed = (long) PROPERTIES.get("sequencerSeed");
+        if (PROPERTIES.containsKey("sequencerSeed")) {
+            seed = Long.parseLong((String)PROPERTIES.get("sequencerSeed"));
         }
-        if (PROPERTIES.contains("sequencerRandomBoundary")) {
-            randomBoundary = (int) PROPERTIES.get("sequencerRandomBoundary");
+        if (PROPERTIES.containsKey("sequencerRandomBoundary")) {
+            randomBoundary = Integer.parseInt((String) PROPERTIES.get("sequencerRandomBoundary"));
         }
-        if (PROPERTIES.contains("sequencerTime")) {
-            time = (long) PROPERTIES.get("sequencerTime");
+        if (PROPERTIES.containsKey("sequencerTime")) {
+            time = Long.parseLong((String) PROPERTIES.get("sequencerTime"));
         }
-        if (PROPERTIES.contains("milliToSecond")) {
-            milliToSecond = (int) PROPERTIES.get("milliToSecond");
+        if (PROPERTIES.containsKey("milliToSecond")) {
+            milliToSecond = Integer.parseInt((String)PROPERTIES.get("milliToSecond"));
         }
     }
 
@@ -79,17 +72,12 @@ public class SequencerPerformanceTest {
     }
 
     private void tokenQuery(CorfuRuntime corfuRuntime, int numRequest) {
-        System.out.println("*************tokenQuery**********" + numRequest);
         for (int i = 0; i < numRequest; i++) {
-            long start = System.currentTimeMillis();
-            TokenResponse tokenResponse = corfuRuntime.getSequencerView().query();
-            System.out.println("token query latency: " + (System.currentTimeMillis() - start));
+            corfuRuntime.getSequencerView().query();
         }
-        System.out.println("************tokenQuery end***********");
     }
 
     private void tokenTx(CorfuRuntime corfuRuntime, int numRequest) {
-        System.out.println("*************token TX**********" + numRequest);
         for (int i = 0; i < numRequest; i++) {
             UUID transactionID = UUID.nameUUIDFromBytes("transaction".getBytes());
             UUID stream = UUID.randomUUID();
@@ -109,11 +97,8 @@ public class SequencerPerformanceTest {
                     new Token(0, -1),
                     conflictMap,
                     writeConflictParams);
-            long start = System.currentTimeMillis();
             corfuRuntime.getSequencerView().next(conflictInfo, stream);
-            System.out.println("token tx latency: " + (System.currentTimeMillis() - start));
         }
-        System.out.println("************token tx end***********");
     }
 
     @Test
@@ -121,7 +106,6 @@ public class SequencerPerformanceTest {
         long start = System.currentTimeMillis();
         while (true) {
             if ((System.currentTimeMillis() - start) / milliToSecond > time) {
-                System.out.println("finish test");
                 break;
             }
             tokenQuery(runtime, random.nextInt(randomBoundary));

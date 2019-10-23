@@ -17,17 +17,17 @@ import java.util.*;
 
 @Slf4j
 public class CorfuTablePerformanceTest {
-    public String endPoint = "localhost:9000";
-    public int metricsPort = 1000;
-    public long seed = 1024;
-    public int randomBoundary = 100;
-    public long time = 1000;
-    public int milliToSecond = 1000;
+    private String endPoint = "localhost:9000";
+    private int metricsPort = 1000;
+    private long seed = 1024;
+    private int randomBoundary = 100;
+    private long time = 1000;
+    private int milliToSecond = 1000;
     private int keyNum = 10;
     private int valueSize = 1024;
     private CorfuRuntime runtime;
     private Random random;
-    public static final Properties PROPERTIES = new Properties();
+    private static final Properties PROPERTIES = new Properties();
     private KeyValueManager keyValueManager;
 
     public CorfuTablePerformanceTest() {
@@ -44,22 +44,31 @@ public class CorfuTablePerformanceTest {
         keyValueManager = new org.corfudb.performancetest.KeyValueManager(keyNum, valueSize);
     }
 
-    private String getProperty(String key) {
-        if (PROPERTIES.containsKey(key)) {
-            return (String) PROPERTIES.get(key);
-        }
-        System.out.println("print null");
-        return null;
-    }
     private void loadProperties()  {
-        metricsPort = Integer.parseInt(getProperty("tableMetricsPort"));
-        endPoint = getProperty("endPoint");
-        seed = Long.parseLong(getProperty("tableSeed"));
-        randomBoundary = Integer.parseInt(getProperty("tableRandomBoundary"));
-        time = Long.parseLong(getProperty("tableTime"));
-        milliToSecond = Integer.parseInt(getProperty("milliToSecond"));
-        keyNum = Integer.parseInt(getProperty("keyNum"));
-        valueSize = Integer.parseInt(getProperty("valueSize"));
+        if (PROPERTIES.containsKey("tableMetricsPort")) {
+            metricsPort = Integer.parseInt((String) PROPERTIES.get("tableMetricsPort"));
+        }
+        if (PROPERTIES.containsKey("endPoint")) {
+            endPoint = (String) PROPERTIES.get("endPoint");
+        }
+        if (PROPERTIES.containsKey("tableSeed")) {
+            seed = Long.parseLong((String) PROPERTIES.get("tableSeed"));
+        }
+        if (PROPERTIES.containsKey("tableRandomBoundary")) {
+            randomBoundary = Integer.parseInt((String) PROPERTIES.get("tableRandomBoundary"));
+        }
+        if (PROPERTIES.containsKey("tableTime")) {
+            time = Long.parseLong((String) PROPERTIES.get("tableTime"));
+        }
+        if (PROPERTIES.containsKey("milliToSecond")) {
+            milliToSecond = Integer.parseInt((String) PROPERTIES.get("milliToSecond"));
+        }
+        if (PROPERTIES.containsKey("keyNum")) {
+            keyNum = Integer.parseInt((String) PROPERTIES.get("keyNum"));
+        }
+        if (PROPERTIES.containsKey("valueSize")) {
+            valueSize = Integer.parseInt((String) PROPERTIES.get("valueSize"));
+        }
     }
 
     private CorfuRuntime initRuntime() {
@@ -79,29 +88,17 @@ public class CorfuTablePerformanceTest {
     }
 
     private void putTable(CorfuTable corfuTable, int numRequests) {
-        System.out.println("=========put operation =========="+numRequests);
         for (int i = 0; i < numRequests; i++) {
             String key = keyValueManager.generateKey();
             String value = keyValueManager.generateValue();
-            //try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTablePutTimer)) {
             corfuTable.put(key, value);
-            //}
         }
     }
 
     private void getTable(CorfuTable corfuTable, int numRequests) {
-        System.out.println("=========get operation =========="+numRequests);
         for (int i = 0; i < numRequests; i++) {
             String key = keyValueManager.getKey();
-            System.out.println("get value for key: " + key);
-            //try (Timer.Context context = MetricsUtils.getConditionalContext(corfuTableGetTimer)) {
-            Object value = corfuTable.get(key);
-            //System.out.println(value);
-            if (value == null) {
-                System.out.println("no such key");
-            } else {
-                System.out.println("get value: "+value);
-            }
+            corfuTable.get(key);
         }
     }
 
@@ -117,7 +114,6 @@ public class CorfuTablePerformanceTest {
                     log.error("Operation failed with", e);
                 }
             }
-            System.out.println("finish test");
         });
     }
 
@@ -129,7 +125,6 @@ public class CorfuTablePerformanceTest {
         long start = System.currentTimeMillis();
         while (true) {
             if ((System.currentTimeMillis() - start) / milliToSecond > time) {
-                System.out.println("finish test");
                 break;
             }
             putTable(corfuTable, random.nextInt(randomBoundary));
@@ -145,7 +140,6 @@ public class CorfuTablePerformanceTest {
         Thread[] threads = new Thread[10];
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10; i++) {
-            int id = i;
             threads[i] = createThread(corfuTable, start);
             threads[i].start();
         }
@@ -164,7 +158,6 @@ public class CorfuTablePerformanceTest {
         Thread[] threads = new Thread[10];
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10; i++) {
-            int id = i;
             threads[i] = createThread(corfuTables[i], start);
             threads[i].start();
         }
