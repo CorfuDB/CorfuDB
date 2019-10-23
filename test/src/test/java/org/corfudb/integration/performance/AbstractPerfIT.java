@@ -8,6 +8,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+/**
+ * Performance Test
+ *
+ * Load Performance properties and set metricRegistry.
+ */
 class AbstractPerfIT extends AbstractIT {
     static final String METRIC_PREFIX = "corfu-perf-";
     static final int RANDOM_UPPER_BOUND = 100;
@@ -24,7 +29,5 @@ class AbstractPerfIT extends AbstractIT {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        // setup metrics report
     }
 }

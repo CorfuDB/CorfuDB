@@ -3,7 +3,6 @@ package org.corfudb.integration.performance;
 import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -16,7 +15,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-@Slf4j
 public class LogUnitPerfIT extends AbstractPerfIT {
     private static final String READ_PERCENT = "logunitReadPercent";
     private static final String SINGLE_REQUEST = "logunitSingleRequests";
@@ -24,6 +22,12 @@ public class LogUnitPerfIT extends AbstractPerfIT {
     private static final String BATCH_SIZE = "logunitBatchSize";
     private static final String ENTRY_SIZE = "logEntrySize";
 
+    /**
+     * tests write() and read() performance of logunit client,
+     * use random to generate and send mixed requests.
+     *
+     * This test does not check correctness.
+     */
     @Test
     public void logunitSingleReadWrite() throws Exception {
         Process server = new CorfuServerRunner()
@@ -64,12 +68,14 @@ public class LogUnitPerfIT extends AbstractPerfIT {
                 context.stop();
             }
         }
-
-        // how long it will run? if short, how to report a snapshot by csv.
-        log.info("logunit-single-read-timer snapshot timer is " + readTimer.getSnapshot().get98thPercentile());
-        log.info("logunit-single-write-timer snapshot timer is " + writeTimer.getSnapshot().get98thPercentile());
     }
 
+    /**
+     * tests writeRange() and readAll() performance of logunit client,
+     * use random to generate and send mixed requests.
+     *
+     * This test does not check correctness.
+     */
     @Test
     public void logunitRangeReadWrite() throws Exception {
         Process server = new CorfuServerRunner()

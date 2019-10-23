@@ -11,6 +11,12 @@ public class StreamPerfIT extends AbstractPerfIT {
     private static final String OBJECT_SIZE = "appendObjectSize";
     private static final String PRODUCER_NUM = "producerNum";
 
+    /**
+     * tests append() and next() performance on a stream,
+     * with single producer and single consumer in two threads.
+     *
+     * This test does not check correctness.
+     */
     @Test
     public void streamSingleProducer() throws Exception{
         Process server = new CorfuServerRunner()
@@ -50,6 +56,12 @@ public class StreamPerfIT extends AbstractPerfIT {
         }
     }
 
+    /**
+     * tests append() and next() performance on a stream,
+     * with multiple producers and single consumer in different threads.
+     *
+     * This test does not check correctness.
+     */
     @Test
     public void streamMultipleProducers() throws Exception{
         Process server = new CorfuServerRunner()
