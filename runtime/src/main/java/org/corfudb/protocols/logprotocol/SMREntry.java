@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
@@ -21,6 +22,7 @@ import org.corfudb.util.serializer.Serializers;
 @SuppressWarnings("checkstyle:abbreviation")
 @ToString(callSuper = true)
 @NoArgsConstructor
+@EqualsAndHashCode
 public class SMREntry extends LogEntry implements ISMRConsumable {
 
     /**
