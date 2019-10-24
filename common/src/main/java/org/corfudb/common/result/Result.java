@@ -1,11 +1,7 @@
 package org.corfudb.common.result;
 
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
-
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -28,7 +24,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
         this(null, Objects.requireNonNull(error));
     }
 
-    public Result(T value, E error) {
+    protected Result(T value, E error) {
         // Exactly one value/error is non-null based on constructors calling this constructor.
         this.value = value;
         this.error = error;
@@ -37,7 +33,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
     public static <T, E extends RuntimeException> Result<T, E> of(Supplier<T> result) {
         try {
             return Result.ok(result.get());
-        } catch (RuntimeException ex) {
+        } catch (RuntimeException ex){
             return Result.error((E) ex);
         }
     }
@@ -72,7 +68,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
      * @throws NoSuchElementException if there is no error present.
      */
     public E getError() {
-        if (error == null) {
+        if(error == null) {
             throw new NoSuchElementException("No error present");
         }
 

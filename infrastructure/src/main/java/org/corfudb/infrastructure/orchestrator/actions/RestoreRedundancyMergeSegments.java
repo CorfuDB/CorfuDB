@@ -26,7 +26,6 @@ import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;

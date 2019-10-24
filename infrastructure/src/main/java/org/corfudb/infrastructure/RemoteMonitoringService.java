@@ -214,7 +214,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param serverContext server context
      */
     private CompletableFuture<DetectorTask> sequencerBootstrap(ServerContext serverContext) {
-        log.info("Trigger sequencer bootstrap on startup: {}", serverContext.getLocalEndpoint());
+        log.info("Trigger sequencer bootstrap on startup");
         return getCorfuRuntime()
                 .getLayoutManagementView()
                 .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker)

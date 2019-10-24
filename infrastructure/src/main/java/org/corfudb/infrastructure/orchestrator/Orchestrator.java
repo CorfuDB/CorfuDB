@@ -65,15 +65,15 @@ public class Orchestrator {
      */
     private static final int ACTION_RETRY = 3;
 
-    private final ServerContext serverContext;
+    final ServerContext serverContext;
 
-    private final SingletonResource<CorfuRuntime> getRuntime;
+    final SingletonResource<CorfuRuntime> getRuntime;
 
-    private final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
+    final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
 
-    private final ExecutorService executor;
+    final ExecutorService executor;
 
-    private final StreamLog streamLog;
+    final StreamLog streamLog;
 
 
     public Orchestrator(@Nonnull SingletonResource<CorfuRuntime> runtime,

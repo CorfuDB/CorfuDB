@@ -171,7 +171,7 @@ public class ManagementServer extends AbstractServer {
             managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);
         }
         runtime.connect();
-        log.info("getCorfuRuntime of {}: Corfu Runtime connected successfully", serverContext.getLocalEndpoint());
+        log.info("getCorfuRuntime: Corfu Runtime connected successfully");
         params.setSystemDownHandler(runtimeSystemDownHandler);
         return runtime;
     }
