@@ -221,4 +221,5 @@ pip-log.txt
 target
 *.dat
 
-/it/src/test/resources/vm.properties
+/it/src/test/resources/vm.credentials.properties
+/benchmarks/src/jmh/resources/vm.credentials.properties

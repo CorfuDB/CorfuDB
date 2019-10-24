@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-package org.corfudb.test;
-option java_package = "org.corfudb.test";
+package samples.protobuf;
+option java_package = "samples.protobuf";
 
 message Car {
     string company = 1;
