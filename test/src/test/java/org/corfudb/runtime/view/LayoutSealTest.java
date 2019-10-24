@@ -8,7 +8,7 @@ import java.util.List;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.CorfuTestRule;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
 
@@ -146,9 +146,9 @@ public class LayoutSealTest extends AbstractViewTest {
         RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         Layout l = runtimeLayout.getLayout();
 
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_1, new TestRule().drop().always());
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3, new TestRule().drop().always());
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_4, new TestRule().drop().always());
+        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_1, new CorfuTestRule().drop().always());
+        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3, new CorfuTestRule().drop().always());
+        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_4, new CorfuTestRule().drop().always());
 
         l.setEpoch(l.getEpoch() + 1);
         assertThatThrownBy(runtimeLayout::sealMinServerSet)
@@ -190,7 +190,7 @@ public class LayoutSealTest extends AbstractViewTest {
         Layout l = runtimeLayout.getLayout();
 
         addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3,
-                new TestRule().drop().always());
+                new CorfuTestRule().drop().always());
 
         l.setEpoch(l.getEpoch() + 1);
         assertThatThrownBy(runtimeLayout::sealMinServerSet)

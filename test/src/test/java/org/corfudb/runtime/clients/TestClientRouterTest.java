@@ -38,7 +38,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         assertThat(bc.pingSync())
                 .isTrue();
 
-        tcr.rules.add(new TestRule()
+        tcr.rules.add(new CorfuTestRule()
                 .always()
                 .drop());
 
@@ -48,7 +48,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void onlyDropEpochChangeMessages() {
-        tcr.rules.add(new TestRule()
+        tcr.rules.add(new CorfuTestRule()
                 .matches(x -> x.getMsgType().equals(CorfuMsgType.SEAL))
                 .drop());
 

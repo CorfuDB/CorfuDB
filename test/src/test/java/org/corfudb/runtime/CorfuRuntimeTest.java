@@ -4,7 +4,7 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.CorfuTestRule;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -148,7 +148,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         // Server2 is sealed but will not be able to commit the layout.
         addClientRule(rt, SERVERS.ENDPOINT_2,
-                new TestRule().always().drop());
+                new CorfuTestRule().always().drop());
 
 
         rt.getLayoutView().updateLayout(currentLayout, 0);
@@ -169,9 +169,9 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         // Server 0 and Server 1 are not able to respond to layout request
         // Reduce their timeout to speed up the test.
         addClientRule(rt, SERVERS.ENDPOINT_0,
-                new TestRule().always().drop());
+                new CorfuTestRule().always().drop());
         addClientRule(rt, SERVERS.ENDPOINT_1,
-                new TestRule().always().drop());
+                new CorfuTestRule().always().drop());
 
         rt.getRouter(SERVERS.ENDPOINT_0).setTimeoutResponse(1);
         rt.getRouter(SERVERS.ENDPOINT_1).setTimeoutResponse(1);

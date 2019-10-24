@@ -91,7 +91,7 @@ public class TestClientRouter implements IClientRouter {
     @Setter
     public long timeoutRetry = PARAMETERS.TIMEOUT_SHORT.toMillis();
 
-    public List<TestRule> rules;
+    public List<CorfuTestRule> rules;
 
     /** The server router endpoint this client should route to. */
     TestServerRouter serverRouter;

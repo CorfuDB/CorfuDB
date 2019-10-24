@@ -10,7 +10,7 @@ import java.util.function.Function;
 /**
  * Created by mwei on 6/29/16.
  */
-public class TestRule {
+public class CorfuTestRule {
 
     // conditions
     private boolean always = false;
@@ -29,7 +29,7 @@ public class TestRule {
     /**
      * Always evaluate this rule.
      */
-    public TestRule always() {
+    public CorfuTestRule always() {
         this.always = true;
         return this;
     }
@@ -39,7 +39,7 @@ public class TestRule {
      *
      * @param transformation A function which transforms the supplied message.
      */
-    public TestRule transform(Consumer<CorfuMsg> transformation) {
+    public CorfuTestRule transform(Consumer<CorfuMsg> transformation) {
         transformer = transformation;
         return this;
     }
@@ -47,7 +47,7 @@ public class TestRule {
     /**
      * Drop this message.
      */
-    public TestRule drop() {
+    public CorfuTestRule drop() {
         this.drop = true;
         return this;
     }
@@ -55,7 +55,7 @@ public class TestRule {
     /**
      * Drop this message on even matches (first match is even)
      */
-    public TestRule dropEven() {
+    public CorfuTestRule dropEven() {
         this.dropEven = true;
         return this;
     }
@@ -63,7 +63,7 @@ public class TestRule {
     /**
      * Drop this message on odd matches
      */
-    public TestRule dropOdd() {
+    public CorfuTestRule dropOdd() {
         this.dropOdd = true;
         return this;
     }
@@ -74,7 +74,7 @@ public class TestRule {
      * @param injectBefore A function which takes the CorfuMsg the rule is being
      *                     applied to and returns a CorfuMsg to be injected.
      */
-    public TestRule injectBefore(Function<CorfuMsg, CorfuMsg> injectBefore) {
+    public CorfuTestRule injectBefore(Function<CorfuMsg, CorfuMsg> injectBefore) {
         this.injectBefore = injectBefore;
         return this;
     }
@@ -85,7 +85,7 @@ public class TestRule {
      * @param matcher A function that takes a CorfuMsg and returns true if the
      *                message matches.
      */
-    public TestRule matches(Function<CorfuMsg, Boolean> matcher) {
+    public CorfuTestRule matches(Function<CorfuMsg, Boolean> matcher) {
         this.matcher = matcher;
         return this;
     }

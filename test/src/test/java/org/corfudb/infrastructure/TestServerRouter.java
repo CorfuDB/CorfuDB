@@ -9,7 +9,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.clients.TestChannelContext;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.CorfuTestRule;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +33,7 @@ public class TestServerRouter implements IServerRouter {
     @Getter
     public List<AbstractServer> servers;
 
-    public List<TestRule> rules;
+    public List<CorfuTestRule> rules;
 
     AtomicLong requestCounter;
 

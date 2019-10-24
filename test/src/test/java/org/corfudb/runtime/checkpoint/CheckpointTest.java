@@ -14,7 +14,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.CorfuTestRule;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -390,7 +390,7 @@ public class CheckpointTest extends AbstractObjectTest {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
         CorfuRuntime rt = getARuntime();
 
-        TestRule dropSequencerTrim = new TestRule()
+        CorfuTestRule dropSequencerTrim = new CorfuTestRule()
                 .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEQUENCER_TRIM_REQ))
                 .drop();
         addClientRule(rt, dropSequencerTrim);

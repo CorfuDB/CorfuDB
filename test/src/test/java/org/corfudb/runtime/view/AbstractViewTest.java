@@ -34,7 +34,7 @@ import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.CorfuTestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 
 import org.corfudb.util.NodeLocator;
@@ -424,7 +424,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      *
      * @param rule  The rule to install
      */
-    public void addClientRule(TestRule rule) {
+    public void addClientRule(CorfuTestRule rule) {
         addClientRule(getRuntime(), rule);
     }
 
@@ -433,7 +433,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param r     The runtime to install the rule to
      * @param rule  The rule to install.
      */
-    public void addClientRule(CorfuRuntime r, TestRule rule) {
+    public void addClientRule(CorfuRuntime r, CorfuTestRule rule) {
         runtimeRouterMap.get(r).values().forEach(x -> x.rules.add(rule));
     }
 
@@ -443,7 +443,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param clientRouterEndpoint  The Client router endpoint to install the rule to
      * @param rule                  The rule to install.
      */
-    public void addClientRule(CorfuRuntime r, String clientRouterEndpoint, TestRule rule) {
+    public void addClientRule(CorfuRuntime r, String clientRouterEndpoint, CorfuTestRule rule) {
         runtimeRouterMap.get(r).get(clientRouterEndpoint).rules.add(rule);
     }
 
@@ -460,7 +460,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port  The port of the server to install the rule to.
      * @param rule  The rule to install.
      */
-    public void addServerRule(int port, TestRule rule) {
+    public void addServerRule(int port, CorfuTestRule rule) {
         getServer(port).getServerRouter().rules.add(rule);
     }
 

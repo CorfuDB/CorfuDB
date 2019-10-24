@@ -32,9 +32,8 @@ import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSeg
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.CorfuTestRule;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -233,7 +232,7 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
 
-        addServerRule(SERVERS.PORT_2, new TestRule().matches(
+        addServerRule(SERVERS.PORT_2, new CorfuTestRule().matches(
                 msg -> !msg.getMsgType().equals(CorfuMsgType.LAYOUT_BOOTSTRAP)
                         && !msg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST))
                 .drop());
@@ -394,7 +393,7 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
 
         // Drop read responses to make sure state transfer will fail if it happens
-        addServerRule(SERVERS.PORT_1, new TestRule().matches(m ->
+        addServerRule(SERVERS.PORT_1, new CorfuTestRule().matches(m ->
                 m.getMsgType().equals(CorfuMsgType.READ_RESPONSE)).drop());
 
         bootstrapAllServers(layout);
@@ -480,7 +479,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // STEP 1.
         // Rule added to fail the state transfer on the last range write.
-        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
+        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new CorfuTestRule().matches(
                 corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)
                         && allowedWrites.decrementAndGet() < 0)
                 .drop());
@@ -510,7 +509,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // STEP 2.
         // Rule added to fail the state transfer on the last range write.
-        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
+        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new CorfuTestRule().matches(
                 corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.KNOWN_ADDRESS_REQUEST))
                 .drop());
 
@@ -523,7 +522,7 @@ public class StateTransferTest extends AbstractViewTest {
         // STEP 3.
         // Rule added to count the number of range writes transferred.
         AtomicInteger rangeWrites = new AtomicInteger();
-        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
+        addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new CorfuTestRule().matches(
                 corfuMsg -> {
                     if (corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)) {
                         rangeWrites.incrementAndGet();
