@@ -4,6 +4,10 @@ import org.apache.commons.lang3.RandomStringUtils;
 
 import java.util.*;
 
+/**
+ * Created by Lin Dong on 10/18/19.
+ */
+
 public class KeyValueManager {//1 char = 2B
     int keyNum;
     List<String> keySet;

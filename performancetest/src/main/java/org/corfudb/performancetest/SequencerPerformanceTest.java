@@ -42,24 +42,12 @@ public class SequencerPerformanceTest {
     }
 
     private void loadProperties() {
-        if (PROPERTIES.containsKey("sequencerMetricsPort")) {
-            metricsPort = Integer.parseInt((String)PROPERTIES.get("sequencerMetricsPort"));
-        }
-        if (PROPERTIES.containsKey("endPoint")) {
-            endPoint = (String) PROPERTIES.get("endPoint");
-        }
-        if (PROPERTIES.containsKey("sequencerSeed")) {
-            seed = Long.parseLong((String)PROPERTIES.get("sequencerSeed"));
-        }
-        if (PROPERTIES.containsKey("sequencerRandomBoundary")) {
-            randomBoundary = Integer.parseInt((String) PROPERTIES.get("sequencerRandomBoundary"));
-        }
-        if (PROPERTIES.containsKey("sequencerTime")) {
-            time = Long.parseLong((String) PROPERTIES.get("sequencerTime"));
-        }
-        if (PROPERTIES.containsKey("milliToSecond")) {
-            milliToSecond = Integer.parseInt((String)PROPERTIES.get("milliToSecond"));
-        }
+        metricsPort = Integer.parseInt(PROPERTIES.getProperty("sequencerMetricsPort", "1000"));
+        endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
+        seed = Long.parseLong(PROPERTIES.getProperty("sequencerSeed", "1024"));
+        randomBoundary = Integer.parseInt(PROPERTIES.getProperty("sequencerRandomBoundary", "100"));
+        time = Long.parseLong(PROPERTIES.getProperty("sequencerTime", "100"));
+        milliToSecond = Integer.parseInt(PROPERTIES.getProperty("milliToSecond", "1000"));
     }
 
     private CorfuRuntime initRuntime() {

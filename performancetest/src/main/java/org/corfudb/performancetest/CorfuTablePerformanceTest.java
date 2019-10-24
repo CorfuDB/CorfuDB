@@ -33,7 +33,6 @@ public class CorfuTablePerformanceTest {
     public CorfuTablePerformanceTest() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         InputStream input = classLoader.getResourceAsStream("PerformanceTest.properties");
-
         try {
             PROPERTIES.load(input);
         } catch (IOException e) {
@@ -45,30 +44,14 @@ public class CorfuTablePerformanceTest {
     }
 
     private void loadProperties()  {
-        if (PROPERTIES.containsKey("tableMetricsPort")) {
-            metricsPort = Integer.parseInt((String) PROPERTIES.get("tableMetricsPort"));
-        }
-        if (PROPERTIES.containsKey("endPoint")) {
-            endPoint = (String) PROPERTIES.get("endPoint");
-        }
-        if (PROPERTIES.containsKey("tableSeed")) {
-            seed = Long.parseLong((String) PROPERTIES.get("tableSeed"));
-        }
-        if (PROPERTIES.containsKey("tableRandomBoundary")) {
-            randomBoundary = Integer.parseInt((String) PROPERTIES.get("tableRandomBoundary"));
-        }
-        if (PROPERTIES.containsKey("tableTime")) {
-            time = Long.parseLong((String) PROPERTIES.get("tableTime"));
-        }
-        if (PROPERTIES.containsKey("milliToSecond")) {
-            milliToSecond = Integer.parseInt((String) PROPERTIES.get("milliToSecond"));
-        }
-        if (PROPERTIES.containsKey("keyNum")) {
-            keyNum = Integer.parseInt((String) PROPERTIES.get("keyNum"));
-        }
-        if (PROPERTIES.containsKey("valueSize")) {
-            valueSize = Integer.parseInt((String) PROPERTIES.get("valueSize"));
-        }
+        metricsPort = Integer.parseInt(PROPERTIES.getProperty("tableMetricsPort", "1000"));
+        endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
+        seed = Long.parseLong(PROPERTIES.getProperty("tableSeed", "1024"));
+        randomBoundary = Integer.parseInt(PROPERTIES.getProperty("tableRandomBoundary","10"));
+        time = Long.parseLong(PROPERTIES.getProperty("tableTime", "100"));
+        milliToSecond = Integer.parseInt(PROPERTIES.getProperty("milliToSecond", "1000"));
+        keyNum = Integer.parseInt(PROPERTIES.getProperty("keyNum", "10"));
+        valueSize = Integer.parseInt(PROPERTIES.getProperty("valueSize", "1024"));
     }
 
     private CorfuRuntime initRuntime() {
