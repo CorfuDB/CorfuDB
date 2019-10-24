@@ -33,6 +33,12 @@ public class FaultyBatchProcessor implements StateTransferBatchProcessor, Delaye
         this.delay = delay;
     }
 
+    public FaultyBatchProcessor(int batchFailureOrder) {
+        this.batchFailureOrder = batchFailureOrder;
+        this.delay = Optional.empty();
+    }
+
+
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
         CompletableFuture<BatchResult> exec;

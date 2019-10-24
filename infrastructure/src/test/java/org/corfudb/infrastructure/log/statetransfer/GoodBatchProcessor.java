@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
-import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
@@ -19,6 +18,9 @@ public class GoodBatchProcessor implements StateTransferBatchProcessor, DelayedE
 
     public GoodBatchProcessor(Optional<Long> delay) {
         this.delay = delay;
+    }
+    public GoodBatchProcessor(){
+        this.delay = Optional.empty();
     }
 
     @Override

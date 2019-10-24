@@ -7,6 +7,7 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.corfudb.infrastructure.LayoutBasedTest;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
+import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -20,6 +21,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -30,7 +32,7 @@ import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
-public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
+public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest implements TransferSegmentCreator {
 
 
     @Test
@@ -52,9 +54,9 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         ImmutableList<MockedSegment> expected = ImmutableList.of(
                 new MockedSegment(0L, 1L,
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)),
+                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())),
                 new MockedSegment(2L, 3L,
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)));
+                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
 
         ImmutableList<CurrentTransferSegment> result = spy
                 .createStateList(layout);
@@ -65,9 +67,9 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         expected = ImmutableList.of(
                 new MockedSegment(0L, 1L,
-                        new CurrentTransferSegmentStatus(NOT_TRANSFERRED, 0L)),
+                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())),
                 new MockedSegment(2L, 3L,
-                        new CurrentTransferSegmentStatus(RESTORED, 2L)));
+                        createStatus(RESTORED, 2L, Optional.empty())));
 
         doReturn(-1L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");
@@ -97,9 +99,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
 
         ImmutableList<MockedSegment> expected =
                 ImmutableList.of(
-                        new MockedSegment(3L, 3L,
-                                new CurrentTransferSegmentStatus(NOT_TRANSFERRED,
-                                        0L)));
+                        new MockedSegment(3L, 3L, createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
 
 
         List<CurrentTransferSegment> result = spy
@@ -110,8 +110,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest {
         layout = createPresentLayout();
 
         expected = ImmutableList.of(
-                new MockedSegment(3L, 3L,
-                        new CurrentTransferSegmentStatus(RESTORED, 1L)));
+                new MockedSegment(3L, 3L, createStatus(RESTORED, 1L, Optional.empty())));
 
         doReturn(3L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");

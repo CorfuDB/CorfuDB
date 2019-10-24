@@ -4,9 +4,11 @@ import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.Tuple;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
+import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -17,6 +19,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -26,6 +29,7 @@ import java.time.Duration;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -103,11 +107,12 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     RestoreStatus tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
                                                        Layout oldLayout,
                                                        LayoutManagementView layoutManagementView) {
-        // Get any transfers that are done.
+        // Get all the transfers that are done.
         List<CurrentTransferSegment> doneTransfers =
-                stateList.stream().filter(segment -> segment.getStatus().isDone()).collect(Collectors.toList());
+                stateList.stream().filter(segment -> segment.getStatus().isDone())
+                        .collect(Collectors.toList());
 
-        // Get any transfers that failed.
+        // Get all the transfers that failed.
         List<CurrentTransferSegment> failed = doneTransfers.stream()
                 .filter(segment -> segment.getStatus().join().getSegmentState().equals(FAILED))
                 .collect(Collectors.toList());
@@ -127,7 +132,8 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         // Case 1: The transfer has occurred -> Create a new layout with a restored node, merge if possible.
         if (!transferredSegments.isEmpty()) {
 
-            log.info("State transfer on {}: Transferred segments: {}.", currentNode, transferredSegments);
+            log.info("State transfer on {}: Transferred segments: {}.", currentNode,
+                    transferredSegments);
 
             RedundancyCalculator calculator = new RedundancyCalculator(currentNode);
 
@@ -191,28 +197,40 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 new StateTransferManager(streamLog, runtime.getParameters().getBulkReadSize());
 
         // Create lambda that, given a runtime, creates the log unit clients map.
-        LogUnitClientMap map = (CorfuRuntime rt) ->
-                rt.getLayoutView().getLayout().getAllActiveServers()
-                        .stream().map(server ->
-                        new SimpleEntry<>(server, rt.getLayoutView().getRuntimeLayout().getLogUnitClient(server)))
-                        .collect(Collectors.toMap(SimpleEntry::getKey, SimpleEntry::getValue));
+        LogUnitClientMap map = (CorfuRuntime currentRuntime) -> {
+            Layout currentLayout = currentRuntime.getLayoutView().getLayout();
+            Set<String> allActiveServers = currentLayout.getAllActiveServers();
+
+            return allActiveServers.stream().map(server -> {
+                RuntimeLayout runtimeLayout = currentRuntime.getLayoutView().getRuntimeLayout();
+                return new Tuple<>(server, runtimeLayout.getLogUnitClient(server));
+            }).collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
+        };
 
         // Create the initial state map.
         ImmutableList<CurrentTransferSegment> stateList =
                 redundancyCalculator.createStateList(layout);
 
-
         log.info("State transfer on {}: Initial state list: {}", currentNode, stateList);
 
         while (RedundancyCalculator.requiresRedundancyRestoration(layout, currentNode) ||
                 RedundancyCalculator.requiresMerge(layout, currentNode)) {
-            // Initialize a transfer for each segment and update the map.
+            StateTransferBatchProcessorData batchProcessorData = new StateTransferBatchProcessorData(
+                    streamLog,
+                    runtime.getAddressSpaceView(),
+                    map.generate(runtime)
+            );
 
-            stateList = transferManager.handleTransfer(stateList,
-                    new StateTransferBatchProcessorData(streamLog,
-                            runtime.getAddressSpaceView(),
-                            map.generate(runtime)));
-            // Restore redundancy for the segments that are restored.
+            // Create a chain replication protocol batch processor.
+            ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(
+                    batchProcessorData.getStreamLog(),
+                    batchProcessorData.getAddressSpaceView()
+            );
+
+            // Perform a state transfer for each segment synchronously and update the map.
+            stateList = transferManager.handleTransfer(stateList, batchProcessor);
+
+            // Restore redundancy for the segments that were restored.
             // If possible, also merge the segments.
             RestoreStatus restoreStatus = restoreWithBackOff(stateList, runtime);
 

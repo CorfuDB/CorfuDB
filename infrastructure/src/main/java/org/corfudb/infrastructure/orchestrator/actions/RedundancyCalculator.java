@@ -79,16 +79,6 @@ public class RedundancyCalculator {
         return segment.getFirstStripe().getLogServers().contains(server);
     }
 
-    /**
-     * Retrieves a global committed offset from the cluster.
-     *
-     * @param layout  A layout.
-     * @param runtime An active corfu runtime.
-     * @return The address of a last committed record.
-     */
-    long retrieveGlobalCommittedOffset(Layout layout, CorfuRuntime runtime) {
-        return NON_ADDRESS;
-    }
 
     /**
      * Given a current layout and a restored transfer segment, create a new layout, that
@@ -100,7 +90,7 @@ public class RedundancyCalculator {
      */
     Layout restoreRedundancyForSegment(CurrentTransferSegment transferSegment, Layout layout) {
         List<LayoutSegment> segments = layout.getSegments().stream().map(layoutSegment -> {
-            if (layoutSegment.getEnd() == transferSegment.getEndAddress() + 1) {
+            if (layoutSegment.getEnd() == transferSegment.getEndAddress() + 1L) {
 
                 List<LayoutStripe> newStripes = layoutSegment.getStripes().stream().map(stripe -> {
 
@@ -133,7 +123,8 @@ public class RedundancyCalculator {
      * @param initLayout Initial layout.
      * @return A new, updated layout.
      */
-    public Layout updateLayoutAfterRedundancyRestoration(List<CurrentTransferSegment> segments, Layout initLayout) {
+    public Layout updateLayoutAfterRedundancyRestoration(List<CurrentTransferSegment> segments,
+                                                         Layout initLayout) {
         return segments
                 .stream()
                 .reduce(initLayout,
@@ -195,7 +186,8 @@ public class RedundancyCalculator {
             int secondSegmentIndex = 1;
             boolean serverPresent = IntStream
                     .range(firstSegmentIndex, secondSegmentIndex + 1).boxed().allMatch(index ->
-                            layout.getSegments().get(index).getFirstStripe().getLogServers().contains(server));
+                            layout.getSegments().get(index).getFirstStripe().getLogServers()
+                                    .contains(server));
             return serverPresent && Sets.difference(
                     layout.getSegments().get(secondSegmentIndex).getAllLogServers(),
                     layout.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
@@ -204,14 +196,15 @@ public class RedundancyCalculator {
 
 
     /**
-     * Given a sorted accumulated list,
+     * Given a sorted accumulated list of segments belonging to two epochs,
      * merges the next segment into the last added segment and returns a new list.
-     * @param nextSegment A next segment to merge into the list.
+     *
+     * @param nextSegment     A next segment to merge into the list.
      * @param accumulatedList An accumulated list of sorted and merged segments.
      * @return A new list.
      */
-    ImmutableList<AgedSegment> mergeSegmentToAccumulatedList(AgedSegment nextSegment,
-                                                                     ImmutableList<AgedSegment> accumulatedList) {
+    ImmutableList<AgedSegment> mergeSegmentToAccumulatedList
+    (AgedSegment nextSegment, ImmutableList<AgedSegment> accumulatedList) {
         if (accumulatedList.isEmpty()) {
             // If it's a first segment, add it to the list.
             return ImmutableList.of(nextSegment);
@@ -246,9 +239,13 @@ public class RedundancyCalculator {
                 if (!oldSegmentStatus.isDone() ||
                         oldSegmentStatus.join().getSegmentState().equals(FAILED) ||
                         oldSegmentStatus.join().getSegmentState().equals(RESTORED)) {
-                    mergedSegment = new AgedSegment(new CurrentTransferSegment(newSegment.segment
-                            .getStartAddress(),
-                            newSegment.segment.getEndAddress(), oldSegmentStatus), CURRENT_EPOCH);
+                    CurrentTransferSegment segment = CurrentTransferSegment
+                            .builder()
+                            .startAddress(newSegment.segment.getStartAddress())
+                            .endAddress(newSegment.segment.getEndAddress())
+                            .status(oldSegmentStatus)
+                            .build();
+                    mergedSegment = new AgedSegment(segment, CURRENT_EPOCH);
                 }
                 // Otherwise discard the old segment, merged segment is the new segment.
                 else {
@@ -273,20 +270,23 @@ public class RedundancyCalculator {
     }
 
     /**
-     * Merges two segment lists from the old and a new epochs.
+     * Merges two segment lists from the old and the new epochs.
      * If a new list is empty, restores all the transferred segments and creates a new list.
-     * If not, adds all the segments to the list, sorts it and then merges the segments that overlap.
+     * Otherwise, adds all the segments to the list,
+     * sorts it and then merges the segments if they overlap.
      * Non overlapping segments are both added. If the segments overlap a range
      * of a new segment is taken and the status of an old segment is taken only
      * if its still transferring, failed or restored.
+     *
      * @param oldList A list of segments before the epoch change.
      * @param newList A list of segments after the epoch change.
      * @return A new list, that reflects correctly the status of the transfer segments.
      */
     ImmutableList<CurrentTransferSegment> mergeLists(List<CurrentTransferSegment> oldList,
-                                                            List<CurrentTransferSegment> newList) {
+                                                     List<CurrentTransferSegment> newList) {
 
-        // If a new list is empty -> Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
+        // If a new list is empty ->
+        // Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
         if (newList.isEmpty()) {
             return ImmutableList.copyOf(oldList.stream().map(segment -> {
                 CompletableFuture<CurrentTransferSegmentStatus> status = segment.getStatus();
@@ -294,39 +294,47 @@ public class RedundancyCalculator {
                 CompletableFuture<CurrentTransferSegmentStatus> newStatus =
                         status.thenApply(oldStatus -> {
                             if (oldStatus.getSegmentState().equals(TRANSFERRED)) {
-                                return new CurrentTransferSegmentStatus(RESTORED, segment.getEndAddress());
+                                return CurrentTransferSegmentStatus
+                                        .builder()
+                                        .segmentState(RESTORED)
+                                        .totalTransferred(segment.computeTotalTransferred())
+                                        .build();
                             } else {
                                 return oldStatus;
                             }
                         });
-                return new CurrentTransferSegment(segment.getStartAddress(),
-                        segment.getEndAddress(), newStatus);
+                return CurrentTransferSegment
+                        .builder()
+                        .startAddress(segment.getStartAddress())
+                        .endAddress(segment.getEndAddress())
+                        .status(newStatus)
+                        .build();
 
             }).collect(Collectors.toList()));
         }
 
         // Group segments by age and sort them.
-        ImmutableList<AgedSegment> oldSegments =
-                ImmutableList.copyOf(oldList.stream()
-                        .map(segment -> new AgedSegment(segment, PREVIOUS_EPOCH))
-                        .collect(Collectors.toList()));
+        ImmutableList<AgedSegment> oldSegments = oldList
+                .stream()
+                .map(segment -> new AgedSegment(segment, PREVIOUS_EPOCH))
+                .collect(ImmutableList.toImmutableList());
 
-        ImmutableList<AgedSegment> newSegments =
-                ImmutableList.copyOf(newList.stream()
-                        .map(segment -> new AgedSegment(segment, CURRENT_EPOCH))
-                        .collect(Collectors.toList()));
+        ImmutableList<AgedSegment> newSegments = newList
+                .stream()
+                .map(segment -> new AgedSegment(segment, CURRENT_EPOCH))
+                .collect(ImmutableList.toImmutableList());
 
-        ImmutableList<AgedSegment> allSegments = ImmutableList.copyOf(new ImmutableList.Builder<AgedSegment>()
+        ImmutableList<AgedSegment> allSegments = new ImmutableList.Builder<AgedSegment>()
                 .addAll(oldSegments)
                 .addAll(newSegments)
                 .build()
                 .stream()
                 .sorted()
-                .collect(Collectors.toList()));
+                .collect(ImmutableList.toImmutableList());
 
         ImmutableList<AgedSegment> initList = ImmutableList.of();
 
-        // Merge the overlapping old and new segments and return the new list.
+        // Merge the old and the new segments and return the new list.
         return ImmutableList.copyOf(allSegments.stream()
                 .reduce(initList,
                         (accumulatedList, nextSegment) ->
