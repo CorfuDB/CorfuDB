@@ -1,42 +1,80 @@
 package org.corfudb.universe.universe.process;
 
-import com.google.common.collect.ImmutableMap;
+import lombok.Builder;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.group.cluster.Cluster.ClusterType;
+import org.corfudb.universe.group.cluster.process.ProcessCorfuCluster;
+import org.corfudb.universe.node.Node.NodeParams;
+import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 
-public class ProcessUniverse implements Universe {
-    private static final UnsupportedOperationException NOT_IMPLEMENTED =
-            new UnsupportedOperationException("Not implemented");
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * Represents PROCESS implementation of a {@link Universe}.
+ * <p>
+ * The following are the main functionalities provided by this class:
+ * </p>
+ * DEPLOY: first deploys corfu servers on a loacl machine (if not exist),
+ * then deploys the group (of corfu servers) on the local machine
+ * SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group}
+ * gracefully within the provided timeout
+ */
+@Slf4j
+public class ProcessUniverse extends AbstractUniverse<NodeParams, UniverseParams> {
+
+    private final AtomicBoolean destroyed = new AtomicBoolean(false);
+
+    @Builder
+    public ProcessUniverse(UniverseParams universeParams) {
+        super(universeParams);
+        init();
+    }
 
     @Override
     public Universe deploy() {
-        throw NOT_IMPLEMENTED;
+        log.info("Deploy the universe: {}", universeId);
+
+        deployGroups();
+
+        return this;
+    }
+
+    @Override
+    protected Group buildGroup(GroupParams<NodeParams> groupParams) {
+        if (groupParams.getType() == ClusterType.CORFU_CLUSTER) {
+            return ProcessCorfuCluster.builder()
+                    .universeParams(universeParams)
+                    .corfuClusterParams(ClassUtils.cast(groupParams))
+                    .build();
+        }
+
+        throw new UniverseException("Unknown node type");
     }
 
     @Override
     public void shutdown() {
-        throw NOT_IMPLEMENTED;
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
+
+        if (destroyed.getAndSet(true)) {
+            log.info("Can't shutdown `process` universe. Already destroyed");
+            return;
+        }
+
+        log.info("Shutdown the universe: {}, params: {}", universeId, groups.keySet());
+        shutdownGroups();
     }
 
     @Override
     public Universe add(GroupParams groupParams) {
-        throw NOT_IMPLEMENTED;
-    }
-
-    @Override
-    public UniverseParams getUniverseParams() {
-        throw NOT_IMPLEMENTED;
-    }
-
-    @Override
-    public ImmutableMap<String, Group> groups() {
-        throw NOT_IMPLEMENTED;
-    }
-
-    @Override
-    public Group getGroup(String groupName) {
-        throw NOT_IMPLEMENTED;
+        throw new UnsupportedOperationException("Not implemented");
     }
 }

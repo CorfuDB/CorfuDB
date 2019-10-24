@@ -4,6 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.optional.ssh.SSHExec;
 import org.apache.tools.ant.taskdefs.optional.ssh.Scp;
+import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
+
+import java.nio.file.Path;
 
 
 /**
@@ -31,11 +34,18 @@ public class RemoteOperationHelper {
      * @param localFile   local file
      * @param remoteDir   remote directory
      */
-    public void copyFile(String vmIpAddress, String userName, String password, String localFile, String remoteDir) {
+    public void copyFile(
+            String vmIpAddress, Credentials credentials, Path localFile, Path remoteDir) {
         Scp scp = new Scp();
 
-        scp.setLocalFile(localFile);
-        scp.setTodir(userName + ":" + password + "@" + vmIpAddress + ":" + remoteDir);
+        scp.setLocalFile(localFile.toString());
+
+        String remoteDirUrl = String.format(
+                "%s:%s@%s:%s",
+                credentials.getUsername(), credentials.getPassword(), vmIpAddress, remoteDir
+        );
+        scp.setTodir(remoteDirUrl);
+
         scp.setProject(PROJECT);
         scp.setTrust(true);
         log.info("Copying {} to {} on {}", localFile, remoteDir, vmIpAddress);
@@ -46,15 +56,14 @@ public class RemoteOperationHelper {
      * Execute a shell command on a remote vm
      *
      * @param vmIpAddress remote vm ip address
-     * @param userName    user name
-     * @param password    password
+     * @param credentials user credentials
      * @param command     shell command
      */
-    public void executeCommand(String vmIpAddress, String userName, String password, String command) {
+    public void executeCommand(String vmIpAddress, Credentials credentials, String command) {
         SSHExec sshExec = new SSHExec();
 
-        sshExec.setUsername(userName);
-        sshExec.setPassword(password);
+        sshExec.setUsername(credentials.getUsername());
+        sshExec.setPassword(credentials.getPassword());
         sshExec.setHost(vmIpAddress);
         sshExec.setCommand(command);
         sshExec.setProject(PROJECT);
@@ -67,11 +76,14 @@ public class RemoteOperationHelper {
      * Execute a shell command in sudo mode on a remote vm
      *
      * @param vmIpAddress remote vm ip address
-     * @param userName    user name
-     * @param password    password
+     * @param credentials user credentials
      * @param command     shell command
      */
-    public void executeSudoCommand(String vmIpAddress, String userName, String password, String command) {
-        executeCommand(vmIpAddress, userName, password, String.format("echo %s | sudo -S -p '' %s", password, command));
+    public void executeSudoCommand(String vmIpAddress, Credentials credentials, String command) {
+        String cmdLine = String.format(
+                "echo %s | sudo -S -p '' %s",
+                credentials.getPassword(), command
+        );
+        executeCommand(vmIpAddress, credentials, cmdLine);
     }
 }

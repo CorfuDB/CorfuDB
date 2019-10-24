@@ -82,9 +82,9 @@ public class VmStress implements Stress {
     private void executeOnVm(String cmdLine) {
         String ipAddress = getIpAddress();
 
-        commandHelper.executeCommand(ipAddress,
-                universeParams.getVmUserName(),
-                universeParams.getVmPassword(),
+        commandHelper.executeCommand(
+                ipAddress,
+                universeParams.getCredentials().getVmCredentials(),
                 cmdLine
         );
     }

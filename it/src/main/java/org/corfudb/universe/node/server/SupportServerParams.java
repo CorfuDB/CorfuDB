@@ -36,7 +36,7 @@ public class SupportServerParams implements NodeParams {
     @NonNull
     @Getter
     @EqualsAndHashCode.Exclude
-    private final Level logLevel = Level.DEBUG;
+    private final Level logLevel = Level.INFO;
 
     @NonNull
     @Getter
@@ -61,4 +61,7 @@ public class SupportServerParams implements NodeParams {
         return ImmutableSet.of(PORTS.get(getNodeType()));
     }
 
+    public boolean isEnabled() {
+        return !metricPorts.isEmpty();
+    }
 }
