@@ -19,7 +19,7 @@ import java.util.Set;
 
 @Builder(builderMethodName = "serverParamsBuilder")
 @AllArgsConstructor
-@EqualsAndHashCode(exclude = {"logLevel", "stopTimeout"})
+@EqualsAndHashCode
 @ToString
 public class CorfuServerParams implements NodeParams {
     @NonNull
@@ -42,6 +42,7 @@ public class CorfuServerParams implements NodeParams {
     @Default
     @NonNull
     @Getter
+    @EqualsAndHashCode.Exclude
     private final Level logLevel = Level.DEBUG;
 
     @NonNull
@@ -58,6 +59,7 @@ public class CorfuServerParams implements NodeParams {
     @Getter
     @Default
     @NonNull
+    @EqualsAndHashCode.Exclude
     private final Duration stopTimeout = Duration.ofSeconds(1);
 
     @Override
