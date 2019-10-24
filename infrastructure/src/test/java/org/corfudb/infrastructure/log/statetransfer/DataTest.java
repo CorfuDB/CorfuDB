@@ -25,8 +25,13 @@ public class DataTest {
         return addresses.stream().map(this::createStubRecord).collect(Collectors.toList());
     }
 
-    public Map<Long, ILogData> createStubMap(List<Long> addresses) {
-        return addresses.stream().map(addr -> new AbstractMap.SimpleEntry<>(addr, createStubRecord(addr)))
+    public Map<Long, ILogData> createStubMap(List<LogData> data) {
+        return data.stream().map(rec -> new AbstractMap.SimpleEntry<>(rec.getGlobalAddress(), (ILogData) rec))
+                .collect(Collectors.toMap(AbstractMap.SimpleEntry::getKey, AbstractMap.SimpleEntry::getValue));
+    }
+
+    public Map<Long, ILogData> createStubMapFromLongs(List<Long> data){
+        return data.stream().map(add -> new AbstractMap.SimpleEntry<>(add, createStubRecord(add)))
                 .collect(Collectors.toMap(AbstractMap.SimpleEntry::getKey, AbstractMap.SimpleEntry::getValue));
     }
 

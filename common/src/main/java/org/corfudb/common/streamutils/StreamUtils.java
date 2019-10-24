@@ -1,5 +1,9 @@
 package org.corfudb.common.streamutils;
 
+import com.google.common.collect.ImmutableList;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
 
 import java.util.Iterator;
@@ -25,14 +29,8 @@ public class StreamUtils {
 
         public StreamHeadAndTail() {
             this.head = Optional.empty();
-            this.tail = Stream.of();
+            this.tail = Stream.empty();
         }
-    }
-
-    private static StreamUtils ourInstance = new StreamUtils();
-
-    public static StreamUtils getInstance() {
-        return ourInstance;
     }
 
     private StreamUtils() {
@@ -71,13 +69,15 @@ public class StreamUtils {
                 return Optional.empty();
             }
         };
+
         if (iterator.hasNext()) {
-            return new StreamHeadAndTail<>(iterator.next(),
-                    Stream.generate(defaultTailGenerator)
-                            .filter(Optional::isPresent)
-                            .limit(bound - 1));
+            Stream<Optional<T>> limit = Stream
+                    .generate(defaultTailGenerator)
+                    .filter(Optional::isPresent)
+                    .limit(bound - 1);
+            return new StreamHeadAndTail<>(iterator.next(), limit);
         } else {
-            return new StreamHeadAndTail<>(Optional.empty(), Stream.empty());
+            return new StreamHeadAndTail<>();
         }
 
 

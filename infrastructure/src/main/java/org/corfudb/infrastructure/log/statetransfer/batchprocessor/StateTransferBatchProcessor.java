@@ -4,12 +4,15 @@ import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.SUCCEEDED;
 
 /**
  * An interface that every batch processor should implement.
@@ -27,17 +30,33 @@ public interface StateTransferBatchProcessor {
     /**
      * Appends records to the stream log.
      *
-     * @param dataEntries The list of entries (data or garbage).
-     * @return A result of a record append, with a number of total written addresses or a failure.
+     * @param readBatch The list of entries (data or garbage) as well as an optional
+     *                  node they were read from.
+     * @param streamlog An instance of stream log.
+     * @return A batch result of a record append.
      */
-    default Result<Long, BatchProcessorFailure>
-    writeRecords(List<LogData> dataEntries, StreamLog streamlog) {
-        return Result.of(() -> {
-            streamlog.append(dataEntries);
-            return (long) dataEntries.size();
-        }).mapError(e ->
-                BatchProcessorFailure.builder()
-                        .addresses(dataEntries.stream().map(IMetadata::getGlobalAddress).collect(Collectors.toList()))
-                        .throwable(e).build());
+    default BatchResult writeRecords(ReadBatch readBatch, StreamLog streamlog) {
+        List<Long> addresses = readBatch.getData().stream()
+                .map(IMetadata::getGlobalAddress)
+                .collect(Collectors.toList());
+
+        Result<BatchResult, RuntimeException> resultOfWrite = Result.of(() -> {
+            streamlog.append(readBatch.getData());
+            return BatchResult
+                    .builder()
+                    .addresses(addresses)
+                    .destinationServer(readBatch.getDestination())
+                    .status(SUCCEEDED)
+                    .build();
+        });
+        if (resultOfWrite.isError()) {
+            return BatchResult.builder()
+                    .addresses(addresses)
+                    .destinationServer(readBatch.getDestination())
+                    .status(FAILED)
+                    .build();
+        }
+        return resultOfWrite.get();
     }
+
 }

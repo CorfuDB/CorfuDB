@@ -35,11 +35,11 @@ class RemoveServersWithRoundRobinTest extends StreamTest {
                 .builder()
                 .allServers(ImmutableList.of("A", "B", "C"))
                 .failed(ImmutableList.of(CompletableFuture.completedFuture(
-                        new BatchResult(Result.error(BatchProcessorFailure.builder()
-                                .endpoint(Optional.of("B"))
+                        BatchResult.builder()
+                                .status(BatchResult.FailureStatus.FAILED)
                                 .addresses(ImmutableList.of(0L, 1L, 2L))
-                                .build()))
-                ))).build();
+                                .destinationServer(Optional.of("B"))
+                                .build()))).build();
         DynamicPolicyData dynamicPolicyData = createDynamicPolicyData(5,
                 LongStream.range(3L, 18L).boxed().collect(Collectors.toList()),
                 Optional.of(ImmutableList.of("A", "B", "C")),
@@ -69,10 +69,10 @@ class RemoveServersWithRoundRobinTest extends StreamTest {
         SlidingWindow window = SlidingWindow
                 .builder()
                 .failed(ImmutableList.of(CompletableFuture.completedFuture(
-                        new BatchResult(Result.error(BatchProcessorFailure.builder()
+                        BatchResult.builder()
                                 .addresses(ImmutableList.of(0L, 1L, 2L))
-                                .build()))
-                ))).build();
+                                .status(BatchResult.FailureStatus.FAILED)
+                                .build()))).build();
 
         DynamicPolicyData dynamicPolicyData = createDynamicPolicyData(5,
                 LongStream.range(3L, 18L).boxed().collect(Collectors.toList()),
@@ -83,19 +83,8 @@ class RemoveServersWithRoundRobinTest extends StreamTest {
         assertThat(dataAfter.getTail().collect(Collectors.toList())).isEmpty();
         assertThat(dataAfter.getSize()).isEqualTo(0L);
         assertThat(dataAfter.getSlidingWindow().getFailed().isEmpty()).isFalse();
-        List<List<Long>> failures =
-                dataAfter.getSlidingWindow()
-                        .getFailed().stream()
-                        .map(x -> x.join()
-                                .getResult().getError().getAddresses())
-                        .collect(Collectors.toList());
-        List<List<Long>> expected = ImmutableList.of(
-                new Batch(ImmutableList.of(0L, 1L, 2L), Optional.empty()),
-                new Batch(ImmutableList.of(3L, 4L, 5L, 6L, 7L), Optional.empty()),
-                new Batch(ImmutableList.of(8L, 9L, 10L, 11L, 12L), Optional.empty()),
-                new Batch(ImmutableList.of(13L, 14L, 15L, 16L, 17L), Optional.empty()))
-                .stream().map(x -> x.getAddresses()).collect(Collectors.toList());
-        assertThat(failures).isEqualTo(expected);
+        assertThat(dataAfter.getSlidingWindow()
+                .getFailed().size()).isEqualTo(4);
 
 
     }

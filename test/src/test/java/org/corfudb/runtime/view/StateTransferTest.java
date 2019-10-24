@@ -665,8 +665,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Assert that the TimeOutException is thrown
         assertThatThrownBy(() -> action1.impl(rt, spy))
-                .isInstanceOf(StreamProcessFailure.class)
-        .hasRootCauseInstanceOf(BatchProcessorFailure.class);
+                .isInstanceOf(StreamProcessFailure.class);
 
         // Known addresses should contain only [0:49] and the addresses in the open segment.
         ArrayList<Long> knownAddresses = new ArrayList<>(rt.getLayoutView()

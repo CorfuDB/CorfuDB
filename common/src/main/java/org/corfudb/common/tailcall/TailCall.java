@@ -45,6 +45,7 @@ public interface TailCall<T> {
     default Optional<T> invoke() {
         return Stream.iterate(this, TailCall::apply)
                 .filter(TailCall::isComplete)
-                .findFirst().map(TailCall::result);
+                .findFirst()
+                .map(TailCall::result);
     }
 }

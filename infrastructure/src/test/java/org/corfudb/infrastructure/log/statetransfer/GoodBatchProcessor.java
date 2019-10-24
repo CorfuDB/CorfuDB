@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.log.statetransfer;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 
 import java.util.Optional;
@@ -25,8 +24,11 @@ public class GoodBatchProcessor implements StateTransferBatchProcessor, DelayedE
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
         CompletableFuture<BatchResult> exec = CompletableFuture
-                .completedFuture(new BatchResult
-                        (Result.ok(new BatchResultData((long) batch.getAddresses().size()))));
+                .completedFuture(BatchResult
+                        .builder()
+                        .destinationServer(batch.getDestination())
+                        .addresses(batch.getAddresses()).build()
+                );
         return withDelayOf(() -> exec, delay.map(d -> (long)
                 (random.nextFloat() * d)).orElse(0L), ec);
     }

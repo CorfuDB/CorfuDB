@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.DataTest;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorError;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -37,7 +38,7 @@ class ProtocolBatchProcessorTest extends DataTest {
     void transferFull() {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
-        Map<Long, ILogData> stubMap = createStubMap(addresses);
+        Map<Long, ILogData> stubMap = createStubMap(stubList);
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
@@ -47,14 +48,14 @@ class ProtocolBatchProcessorTest extends DataTest {
         CompletableFuture<BatchResult> f =
                 batchProcessor.transfer(new Batch(addresses, Optional.empty()));
         BatchResult join = f.join();
-        assertThat(join.getResult().isValue()).isTrue();
-        assertThat(join.getResult().get().getAddressesTransferred()).isEqualTo((long) addresses.size());
+        assertThat(join.getStatus() == BatchResult.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(join.getAddresses()).isEqualTo(addresses);
     }
 
     @Test
     void transferFail() {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
-        Map<Long, ILogData> stubMap = createStubMap(addresses);
+        Map<Long, ILogData> stubMap = createStubMapFromLongs(addresses);
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         List<LogData> recordsFromStubMap = getRecordsFromStubMap(stubMap);
         StreamLog streamLog = mock(StreamLog.class);
@@ -66,28 +67,26 @@ class ProtocolBatchProcessorTest extends DataTest {
                 batchProcessor.transfer(new Batch(addresses, Optional.empty()));
         BatchResult join = f.join();
 
-        assertThat(join.getResult().isError()).isTrue();
-        assertThat(join.getResult().getError().getThrowable())
-                .isInstanceOf(BatchProcessorFailure.class);
+        assertThat(join.getStatus() == BatchResult.FailureStatus.FAILED).isTrue();
     }
 
     @Test
     void testReadRecordsSuccess() {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
-        Map<Long, ILogData> stubMap = createStubMap(addresses);
+        Map<Long, ILogData> stubMap = createStubMap(stubList);
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
         ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
-        CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> f =
-                batchProcessor.readRecords(addresses, 0);
-        Result<List<LogData>, BatchProcessorFailure> join = f.join();
+        CompletableFuture<ReadBatch> f =
+                batchProcessor.readRecords(new Batch(addresses, Optional.empty()), 0);
+        ReadBatch join = f.join();
         List<LogData> expected = getRecordsFromStubMap(stubMap);
-        assertThat(join.isValue()).isTrue();
-        assertThat(join.get()).isEqualTo(expected);
+        assertThat(join.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(join.getData()).isEqualTo(expected);
     }
 
 
@@ -101,9 +100,9 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> unreadAddresses = LongStream.range(0L, 10L).boxed().filter(x -> x % 2 != 0).collect(Collectors.toList());
 
         List<LogData> firstReadList = createStubList(readAddresses);
-        Map<Long, ILogData> firstReadMap = createStubMap(readAddresses);
+        Map<Long, ILogData> firstReadMap = createStubMap(firstReadList);
         List<LogData> secondReadList = createStubList(unreadAddresses);
-        Map<Long, ILogData> secondReadMap = createStubMap(unreadAddresses);
+        Map<Long, ILogData> secondReadMap = createStubMap(secondReadList);
 
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         StreamLog streamLog = mock(StreamLog.class);
@@ -119,12 +118,12 @@ class ProtocolBatchProcessorTest extends DataTest {
         ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
         ProtocolBatchProcessor spy = spy(batchProcessor);
 
-        CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> res =
-                spy.retryReadRecords(addresses, 0);
+        CompletableFuture<ReadBatch> res =
+                spy.retryReadRecords(Batch.builder().addresses(addresses).build(), 0);
 
-        Result<List<LogData>, BatchProcessorFailure> join = res.join();
-        assertThat(join.isValue()).isTrue();
-        assertThat(join.get()).isEqualTo(secondReturnedRecords);
+        ReadBatch join = res.join();
+        assertThat(join.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(join.getData()).isEqualTo(secondReturnedRecords);
 
     }
 
@@ -142,7 +141,7 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
 
         List<LogData> secondReadList = createStubList(addresses);
-        Map<Long, ILogData> secondReadMap = createStubMap(addresses);
+        Map<Long, ILogData> secondReadMap = createStubMap(secondReadList);
 
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         StreamLog streamLog = mock(StreamLog.class);
@@ -155,17 +154,14 @@ class ProtocolBatchProcessorTest extends DataTest {
             throw new TimeoutException();
         }).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
 
-        List<LogData> secondReturnedRecords = getRecordsFromStubMap(secondReadMap);
-
         ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
         ProtocolBatchProcessor spy = spy(batchProcessor);
 
-        CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> res =
-                spy.retryReadRecords(addresses, 0);
+        CompletableFuture<ReadBatch> res =
+                spy.retryReadRecords(Batch.builder().addresses(addresses).build(), 0);
 
-        Result<List<LogData>, BatchProcessorFailure> join = res.join();
-        assertThat(join.isError()).isTrue();
-        assertThat(join.getError().getThrowable()).isInstanceOf(RetryExhaustedException.class);
+        ReadBatch join = res.join();
+        assertThat(join.getStatus() == ReadBatch.FailureStatus.FAILED).isTrue();
 
     }
 
@@ -174,17 +170,17 @@ class ProtocolBatchProcessorTest extends DataTest {
     void checkReadRecordsComplete() {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
-        Map<Long, ILogData> stubMap = createStubMap(addresses);
+        Map<Long, ILogData> stubMap = createStubMap(stubList);
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
         ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
-        Result<List<LogData>, BatchProcessorError> res = batchProcessor.checkReadRecords(addresses, stubMap);
+        ReadBatch res = batchProcessor.checkReadRecords(addresses, stubMap, Optional.empty());
         List<LogData> expected = getRecordsFromStubMap(stubMap);
-        assertThat(res.isValue()).isTrue();
-        assertThat(res.get()).isEqualTo(expected);
+        assertThat(res.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(res.getData()).isEqualTo(expected);
     }
 
     @Test
@@ -193,15 +189,15 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> readAddresses = LongStream.range(0L, 10L).boxed().filter(x -> x % 2 == 0).collect(Collectors.toList());
         List<Long> unreadAddresses = LongStream.range(0L, 10L).boxed().filter(x -> x % 2 != 0).collect(Collectors.toList());
         List<LogData> stubList = createStubList(readAddresses);
-        Map<Long, ILogData> stubMap = createStubMap(readAddresses);
+        Map<Long, ILogData> stubMap = createStubMap(stubList);
         ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(readAddresses, readOptions);
         ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
-        Result<List<LogData>, BatchProcessorError> res = batchProcessor.checkReadRecords(addresses, stubMap);
-        assertThat(res.isError()).isTrue();
-        assertThat(res.getError().getAddresses()).isEqualTo(unreadAddresses);
+        ReadBatch res = batchProcessor.checkReadRecords(addresses, stubMap, Optional.empty());
+        assertThat(res.getStatus() == ReadBatch.FailureStatus.FAILED).isTrue();
+        assertThat(res.getFailedAddress()).isEqualTo(unreadAddresses);
     }
 }

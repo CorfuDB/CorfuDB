@@ -41,8 +41,8 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
 
         List<BatchResult> failedBatches = CFUtils.sequence(failed).join();
 
-        Set<String> failedServersSet = failedBatches.stream().map(batch -> batch
-                .getResult().getError().getEndpoint())
+        Set<String> failedServersSet = failedBatches.stream()
+                .map(BatchResult::getDestinationServer)
                 .filter(Optional::isPresent)
                 .map(Optional::get).collect(Collectors.toSet());
 
@@ -53,18 +53,14 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
         if (remainingServers.isEmpty()) {
             Stream<Optional<Batch>> newTail = Stream.empty();
             ImmutableList<CompletableFuture<BatchResult>> failedTail =
-                    ImmutableList.copyOf(tail.filter(Optional::isPresent)
-                            .map(batch -> {
-                                Batch scheduledBatch = batch.get();
-                                return CompletableFuture.completedFuture(new BatchResult(
-                                        Result.error(
-                                                BatchProcessorFailure.builder()
-                                                        .addresses(scheduledBatch.getAddresses())
-                                                        .endpoint(scheduledBatch.getDestination())
-                                                        .throwable(new IllegalStateException
-                                                                ("Remaining server list is empty")).build())));
-                            })
-                            .collect(Collectors.toList()));
+                    tail.filter(Optional::isPresent)
+                            .map(batch ->
+                                    CompletableFuture.completedFuture(
+                                            BatchResult
+                                                    .builder()
+                                                    .status(BatchResult.FailureStatus.FAILED)
+                                                    .build()))
+                            .collect(ImmutableList.toImmutableList());
             SlidingWindow newSlidingWindow = slidingWindow.toBuilder()
                     .allServers(remainingServers)
                     .failed(new ImmutableList
@@ -85,20 +81,23 @@ public class RemoveServersWithRoundRobin implements DynamicPolicy {
             // with the round robin policy.
             int failedBatchesSize = failedBatches.size();
             Stream<Optional<Batch>> rescheduledBatches = failedBatches.stream()
-                    .map(failedBatch -> {
-                        List<Long> addresses = failedBatch.getResult().getError().getAddresses();
-                        Optional<String> previousEndpoint = failedBatch.getResult().getError().getEndpoint();
-                        return Optional.of(new Batch(addresses, previousEndpoint));
-                    });
+                    .map(failedBatch -> Optional.of(failedBatch.toBatch()));
 
             AtomicInteger count = new AtomicInteger(0);
 
-            Stream<Optional<Batch>> newTail = Stream.concat(rescheduledBatches, tail)
-                    .map(batch -> batch.map(b -> new Batch(b.getAddresses(), Optional.of(remainingServers
-                            .get(count.getAndIncrement() % remainingServers.size())))));
+            Stream<Optional<Batch>> newTail = Stream
+                    .concat(rescheduledBatches, tail)
+                    .map(optBatch ->
+                            optBatch.map(batch -> {
+                                String scheduledNode = remainingServers
+                                        .get(count.getAndIncrement() % remainingServers.size());
+                                return new Batch(batch.getAddresses(), Optional.of(scheduledNode));
+                            }));
 
-
-            return new DynamicPolicyData(newTail, newSlidingWindow, data.getSize() + failedBatchesSize);
+            return new DynamicPolicyData(
+                    newTail,
+                    newSlidingWindow,
+                    data.getSize() + failedBatchesSize);
         }
 
     }

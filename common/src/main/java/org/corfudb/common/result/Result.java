@@ -141,9 +141,9 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
      */
     public <Q extends RuntimeException> Result<T, Q> mapError(Function<? super E, ? extends Q> function) {
         if (isError()) {
-            return new Result<>(null, function.apply(error));
+            return Result.error(function.apply(error));
         } else {
-            return new Result<>(get(), null);
+            return Result.ok(get());
         }
     }
 

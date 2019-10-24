@@ -2,15 +2,15 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatc
 
 import com.google.common.collect.Ordering;
 import com.google.common.collect.Sets;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResultData;
+import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorError;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -31,22 +31,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static lombok.Builder.*;
+import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
+
 /**
  * A batch processor that transfers non-committed addresses one batch at a time
  * via a replication protocol.
  */
 @Slf4j
+@Builder
 public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
     /**
      * Configurations for the retry logic.
      */
-    private static final int MAX_RETRIES = 3;
-    private static final Duration MAX_RETRY_TIMEOUT = Duration.ofSeconds(10);
-    private static final float RANDOM_FACTOR_BACKOFF = 0.5f;
+    @Default
+    private final int maxRetries = 3;
+    @Default
+    private final Duration maxRetryTimeout = Duration.ofSeconds(10);
+    @Default
+    private final float randomFactorBackoff = 0.5f;
 
     /**
-     *  Default read options for the replication protocol read.
+     * Default read options for the replication protocol read.
      */
     @Getter
     private static ReadOptions readOptions = ReadOptions.builder()
@@ -68,44 +75,52 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
-        CompletableFuture<Result<Long, BatchProcessorFailure>> protocolTransfer =
-                readRecords(batch.getAddresses(), 0)
-                        .thenApply(records ->
-                                records.flatMap(recs ->
-                                        writeRecords(recs, streamLog)));
-        return protocolTransfer
-                .thenApply(result ->
-                        new BatchResult(result.map(BatchResultData::new)
-                                .mapError(e -> BatchProcessorFailure.builder()
-                                        .throwable(e).build())))
-                .exceptionally(failure ->
-                        new BatchResult(Result.error(
-                                BatchProcessorFailure.builder()
-                                        .throwable(failure).build())));
+        return readRecords(batch, 0)
+                .thenApply(records -> writeRecords(records, streamLog))
+                .exceptionally(error -> BatchResult
+                        .builder()
+                        .status(FAILED)
+                        .destinationServer(batch.getDestination())
+                        .addresses(batch.getAddresses())
+                        .build()
+                );
     }
 
     /**
      * Reads data entries by utilizing the replication protocol. If there are errors, retries.
      *
-     * @param addresses The list of addresses.
+     * @param batch The batch of addresses to be read.
+     * @param retries The number of retries.
      * @return A result of reading records.
      */
-    CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> readRecords(List<Long> addresses,
-                                                                                int retries) {
-        return CompletableFuture.supplyAsync(() ->
-                Result.of(() -> addressSpaceView.simpleProtocolRead(addresses, readOptions))
-                        .mapError(BatchProcessorError::new))
+    CompletableFuture<ReadBatch> readRecords(Batch batch, int retries) {
+        return CompletableFuture
+                .supplyAsync(() -> {
+                            Supplier<Map<Long, ILogData>> readSupplier = () -> addressSpaceView
+                                    .simpleProtocolRead(batch.getAddresses(), readOptions);
+
+                            return Result
+                                    .of(readSupplier)
+                                    .mapError(BatchProcessorError::new);
+                        }
+                )
                 .thenApply(readResult ->
-                        readResult
-                                .flatMap(records -> checkReadRecords(addresses, records)))
+                        readResult.map(records -> checkReadRecords(
+                                batch.getAddresses(),
+                                records,
+                                batch.getDestination()
+                        ))
+                )
                 .thenCompose(checkedReadResult -> {
                     if (checkedReadResult.isError()) {
-                        return retryReadRecords(checkedReadResult.getError().getAddresses(),
-                                retries);
+                        return retryReadRecords(batch, retries);
                     } else {
-                        return CompletableFuture.completedFuture(checkedReadResult
-                                .mapError(e -> BatchProcessorFailure
-                                        .builder().throwable(e).build()));
+                        ReadBatch readBatch = checkedReadResult.get();
+                        if (readBatch.getStatus() == ReadBatch.FailureStatus.FAILED) {
+                            return retryReadRecords(readBatch.toBatch(), retries);
+                        } else {
+                            return CompletableFuture.completedFuture(readBatch);
+                        }
                     }
                 });
     }
@@ -113,34 +128,39 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     /**
      * Handle read errors. Exponential backoff policy is utilized.
      *
-     * @param addresses   Addresses to be retries.
+     * @param batch        Batch of addresses to be read.
      * @param retriesTried Configurable number of retries for the current batch.
      * @return Future of the result of the retry.
      */
-    CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> retryReadRecords
-    (List<Long> addresses, int retriesTried) {
-
+    CompletableFuture<ReadBatch> retryReadRecords
+    (Batch batch, int retriesTried) {
         try {
             AtomicInteger readRetries = new AtomicInteger(retriesTried);
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
-                if(readRetries.incrementAndGet() >= MAX_RETRIES){
+                if (readRetries.incrementAndGet() >= maxRetries) {
                     throw new RetryExhaustedException("Read retries are exhausted");
                 }
-                Supplier<CompletableFuture<Result<List<LogData>, BatchProcessorFailure>>> pipeline =
-                        () -> readRecords(addresses, readRetries.get());
+
+                Supplier<CompletableFuture<ReadBatch>> pipeline =
+                        () -> readRecords(batch, readRetries.get());
 
                 // If a pipeline completed exceptionally, than return the error.
-                CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> pipelineFuture =
+                CompletableFuture<ReadBatch> pipelineFuture =
                         pipeline.get().handle((result, exception) -> {
                             if (Optional.ofNullable(exception).isPresent()) {
-                                return Result.error(BatchProcessorFailure.builder().throwable(exception).build());
+                                return ReadBatch.builder()
+                                        .failedAddress(batch.getAddresses())
+                                        .destination(batch.getDestination())
+                                        .status(ReadBatch.FailureStatus.FAILED)
+                                        .build();
                             } else {
                                 return result;
                             }
                         });
                 // Join the result.
-                Result<List<LogData>, BatchProcessorFailure> joinResult = pipelineFuture.join();
-                if (joinResult.isError()) {
+                ReadBatch joinResult = pipelineFuture.join();
+
+                if (joinResult.getStatus() == ReadBatch.FailureStatus.FAILED) {
                     throw new RetryNeededException();
                 } else {
                     // If the result is not an error, return.
@@ -148,14 +168,18 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 }
 
             }).setOptions(retry -> {
-                retry.setMaxRetryThreshold(MAX_RETRY_TIMEOUT);
-                retry.setRandomPortion(RANDOM_FACTOR_BACKOFF);
+                retry.setMaxRetryThreshold(maxRetryTimeout);
+                retry.setRandomPortion(randomFactorBackoff);
             }).run();
             // Map to batch processor failure if an interrupt has occurred
             // or the retries were exhausted.
         } catch (InterruptedException | RetryExhaustedException ie) {
-            return CompletableFuture.completedFuture(
-                    Result.error(BatchProcessorFailure.builder().throwable(ie).build()));
+            log.error("Retries were exhausted.");
+            return CompletableFuture.completedFuture(ReadBatch
+                    .builder()
+                    .status(ReadBatch.FailureStatus.FAILED)
+                    .build()
+            );
         }
     }
 
@@ -163,25 +187,37 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      * Sanity check after the read is performed. If the number of records is not equal to the
      * intended, return with an error.
      *
-     * @param addresses  All addresses that has to be read.
-     * @param readResult A result of a read operation.
-     * @return A result containing either an error or data.
+     * @param addresses   All addresses that has to be read.
+     * @param readResult  A result of a read operation.
+     * @param destination An optional destination of the source of records.
+     * @return A read batch.
      */
-    Result<List<LogData>, BatchProcessorError> checkReadRecords(List<Long> addresses,
-                                                                Map<Long, ILogData> readResult) {
+    ReadBatch checkReadRecords(List<Long> addresses,
+                               Map<Long, ILogData> readResult,
+                               Optional<String> destination) {
         List<Long> transferredAddresses =
                 addresses.stream().filter(readResult::containsKey)
                         .collect(Collectors.toList());
         if (transferredAddresses.equals(addresses)) {
-            return Result.ok(readResult.entrySet().stream()
+            List<LogData> lodData = readResult.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> (LogData) entry.getValue()).collect(Collectors.toList()));
+                    .map(entry -> (LogData) entry.getValue()).collect(Collectors.toList());
+            return ReadBatch.builder()
+                    .data(lodData)
+                    .destination(destination)
+                    .status(ReadBatch.FailureStatus.SUCCEEDED)
+                    .build();
         } else {
             HashSet<Long> transferredSet = new HashSet<>(transferredAddresses);
             HashSet<Long> entireSet = new HashSet<>(addresses);
-            return Result.error(
-                    new BatchProcessorError
-                            (Ordering.natural().sortedCopy(Sets.difference(entireSet, transferredSet))));
+            List<Long> failedAddresses = Ordering
+                    .natural()
+                    .sortedCopy(Sets.difference(entireSet, transferredSet));
+            return ReadBatch.builder()
+                    .failedAddress(failedAddresses)
+                    .destination(destination)
+                    .status(ReadBatch.FailureStatus.FAILED)
+                    .build();
         }
     }
 }
