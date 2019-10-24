@@ -21,6 +21,7 @@ public class CorfuServerParamsTest {
                 .mode(CorfuServer.Mode.CLUSTER)
                 .persistence(CorfuServer.Persistence.DISK)
                 .stopTimeout(Duration.ofSeconds(123))
+                .serverVersion("1.0.0")
                 .build();
 
         CorfuServerParams p2 = CorfuServerParams.serverParamsBuilder()
@@ -30,6 +31,7 @@ public class CorfuServerParamsTest {
                 .mode(CorfuServer.Mode.CLUSTER)
                 .persistence(CorfuServer.Persistence.DISK)
                 .stopTimeout(Duration.ofSeconds(555))
+                .serverVersion("1.0.0")
                 .build();
 
         assertThat(p1).isEqualTo(p2);
