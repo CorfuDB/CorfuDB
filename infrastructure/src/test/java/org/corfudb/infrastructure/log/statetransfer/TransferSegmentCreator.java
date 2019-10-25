@@ -16,7 +16,7 @@ public interface TransferSegmentCreator {
         if (state == RESTORED || state == TRANSFERRED) {
             return CurrentTransferSegment
                     .builder()
-                    .completedStatus(
+                    .status(
                             CurrentTransferSegmentStatus
                                     .builder()
                                     .totalTransferred(end - start + 1)
@@ -29,7 +29,7 @@ public interface TransferSegmentCreator {
         } else {
             return CurrentTransferSegment
                     .builder()
-                    .completedStatus(
+                    .status(
                             CurrentTransferSegmentStatus
                                     .builder()
                                     .totalTransferred(0L)

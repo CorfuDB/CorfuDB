@@ -66,7 +66,7 @@ public class LayoutBasedTest {
     }
 
     public MockedSegment transformToMock(StateTransferManager.CurrentTransferSegment segment) {
-        return new MockedSegment(segment.getStartAddress(), segment.getEndAddress(), segment.getStatus().join());
+        return new MockedSegment(segment.getStartAddress(), segment.getEndAddress(), segment.getStatus());
     }
 
     public ImmutableList<MockedSegment> transformListToMock(List<StateTransferManager.CurrentTransferSegment> segments) {

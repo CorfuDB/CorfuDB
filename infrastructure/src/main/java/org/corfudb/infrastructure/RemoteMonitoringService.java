@@ -17,7 +17,7 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
-import org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -373,7 +373,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 // If layout was updated by correcting wrong epochs,
                 // we can't continue with failure detection,
                 // as the cluster state have changed.
-                if (!latestLayout.equals(ourLayout)){
+                if (!latestLayout.equals(ourLayout)) {
                     log.warn("Layout was updated by correcting wrong epochs. " +
                             "Cancel current round of failure detection.");
                     return DetectorTask.COMPLETED;
@@ -429,10 +429,9 @@ public class RemoteMonitoringService implements MonitoringService {
                 !layout.getUnresponsiveServers().contains(localEndpoint)) {
             log.info("Layout requires restoration: {}. Spawning task to merge segments on {}.",
                     layout, localEndpoint);
-            Supplier<Boolean> redundancyAction = () ->
-                    handleMergeSegments(
-                            localEndpoint, runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
-                    );
+            Supplier<Boolean> redundancyAction = () -> handleMergeSegments(
+                    localEndpoint, runtimeSingletonResource, layout, MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+            );
             mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
 
             return DetectorTask.COMPLETED;
@@ -446,14 +445,14 @@ public class RemoteMonitoringService implements MonitoringService {
 
 
     @VisibleForTesting
-    public DetectorTask restoreRedundancy(Layout layout){
+    public DetectorTask restoreRedundancy(Layout layout) {
         return restoreRedundancyAndMergeSegments(layout);
     }
 
     boolean handleMergeSegments(String localEndpoint,
                                 SingletonResource<CorfuRuntime> runtimeSingletonResource,
                                 Layout layout, Duration retryQueryTimeout
-    ){
+    ) {
         return ReconfigurationEventHandler.handleMergeSegments(
                 localEndpoint,
                 runtimeSingletonResource.get(), layout, retryQueryTimeout
@@ -722,7 +721,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * This function will attempt to seal the cluster with the epoch provided
      * by the layout parameter.
      *
-     * @param pollReport immutable poll report
+     * @param pollReport       immutable poll report
      * @param managementLayout mutable layout that will not be modified
      */
     private void sealWithLatestLayout(PollReport pollReport, Layout managementLayout) {

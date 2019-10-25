@@ -1,34 +1,21 @@
-package org.corfudb.infrastructure.orchestrator.actions;
+package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import org.corfudb.infrastructure.LayoutBasedTest;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
+import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
-import static org.corfudb.runtime.view.Layout.*;
-import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 

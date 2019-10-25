@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator.actions;
+package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -8,14 +8,13 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.LayoutBuilder;
 
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -23,9 +22,8 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
-import static org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator.SegmentAge.CURRENT_EPOCH;
-import static org.corfudb.infrastructure.orchestrator.actions.RedundancyCalculator.SegmentAge.PREVIOUS_EPOCH;
-import static org.corfudb.runtime.view.Address.NON_ADDRESS;
+import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.CURRENT_EPOCH;
+import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.PREVIOUS_EPOCH;
 
 /**
  * A class used to compute the transfer segments, as well as update the layout
@@ -123,8 +121,8 @@ public class RedundancyCalculator {
      * @param initLayout Initial layout.
      * @return A new, updated layout.
      */
-    public Layout updateLayoutAfterRedundancyRestoration(List<CurrentTransferSegment> segments,
-                                                         Layout initLayout) {
+    public Layout updateLayoutAfterRedundancyRestoration(
+            List<CurrentTransferSegment> segments, Layout initLayout) {
         return segments
                 .stream()
                 .reduce(initLayout,
@@ -231,14 +229,13 @@ public class RedundancyCalculator {
                     newSegment = lastAddedSegment;
                 }
 
-                CompletableFuture<CurrentTransferSegmentStatus> oldSegmentStatus =
-                        oldSegment.segment.getStatus();
+                CurrentTransferSegmentStatus oldSegmentStatus = oldSegment.segment.getStatus();
 
+                mergedSegment = newSegment;
                 // If the old segment is not done transferring, or restored -> update the segment
                 // with a new range and the old status.
-                if (!oldSegmentStatus.isDone() ||
-                        oldSegmentStatus.join().getSegmentState().equals(FAILED) ||
-                        oldSegmentStatus.join().getSegmentState().equals(RESTORED)) {
+                SegmentState segmentState = oldSegmentStatus.getSegmentState();
+                if (segmentState == FAILED || segmentState == RESTORED) {
                     CurrentTransferSegment segment = CurrentTransferSegment
                             .builder()
                             .startAddress(newSegment.segment.getStartAddress())
@@ -247,10 +244,7 @@ public class RedundancyCalculator {
                             .build();
                     mergedSegment = new AgedSegment(segment, CURRENT_EPOCH);
                 }
-                // Otherwise discard the old segment, merged segment is the new segment.
-                else {
-                    mergedSegment = newSegment;
-                }
+
 
                 return new ImmutableList.Builder<AgedSegment>()
                         .addAll(accumulatedListNoLastSegment)
@@ -282,27 +276,25 @@ public class RedundancyCalculator {
      * @param newList A list of segments after the epoch change.
      * @return A new list, that reflects correctly the status of the transfer segments.
      */
-    ImmutableList<CurrentTransferSegment> mergeLists(List<CurrentTransferSegment> oldList,
-                                                     List<CurrentTransferSegment> newList) {
+    public ImmutableList<CurrentTransferSegment> mergeLists(
+            List<CurrentTransferSegment> oldList, List<CurrentTransferSegment> newList) {
 
         // If a new list is empty ->
         // Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
         if (newList.isEmpty()) {
-            return ImmutableList.copyOf(oldList.stream().map(segment -> {
-                CompletableFuture<CurrentTransferSegmentStatus> status = segment.getStatus();
+            return oldList.stream().map(segment -> {
+                CurrentTransferSegmentStatus oldStatus = segment.getStatus();
 
-                CompletableFuture<CurrentTransferSegmentStatus> newStatus =
-                        status.thenApply(oldStatus -> {
-                            if (oldStatus.getSegmentState().equals(TRANSFERRED)) {
-                                return CurrentTransferSegmentStatus
-                                        .builder()
-                                        .segmentState(RESTORED)
-                                        .totalTransferred(segment.computeTotalTransferred())
-                                        .build();
-                            } else {
-                                return oldStatus;
-                            }
-                        });
+                CurrentTransferSegmentStatus newStatus = oldStatus;
+
+                if (oldStatus.getSegmentState() == TRANSFERRED) {
+                    newStatus = CurrentTransferSegmentStatus
+                            .builder()
+                            .segmentState(RESTORED)
+                            .totalTransferred(segment.computeTotalTransferred())
+                            .build();
+                }
+
                 return CurrentTransferSegment
                         .builder()
                         .startAddress(segment.getStartAddress())
@@ -310,7 +302,7 @@ public class RedundancyCalculator {
                         .status(newStatus)
                         .build();
 
-            }).collect(Collectors.toList()));
+            }).collect(ImmutableList.toImmutableList());
         }
 
         // Group segments by age and sort them.
@@ -335,13 +327,13 @@ public class RedundancyCalculator {
         ImmutableList<AgedSegment> initList = ImmutableList.of();
 
         // Merge the old and the new segments and return the new list.
-        return ImmutableList.copyOf(allSegments.stream()
+        return allSegments.stream()
                 .reduce(initList,
                         (accumulatedList, nextSegment) ->
                                 mergeSegmentToAccumulatedList(nextSegment, accumulatedList),
                         (list1, list2) -> list2)
                 .stream()
                 .map(agedSegment -> agedSegment.segment)
-                .collect(Collectors.toList()));
+                .collect(ImmutableList.toImmutableList());
     }
 }

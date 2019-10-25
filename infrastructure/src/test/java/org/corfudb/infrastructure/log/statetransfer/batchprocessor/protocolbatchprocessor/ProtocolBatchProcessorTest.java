@@ -41,7 +41,12 @@ class ProtocolBatchProcessorTest extends DataTest {
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         CompletableFuture<BatchResult> f =
                 batchProcessor.transfer(new Batch(addresses, Optional.empty()));
         BatchResult join = f.join();
@@ -59,7 +64,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         doThrow(new IllegalStateException()).when(streamLog).append(recordsFromStubMap);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         CompletableFuture<BatchResult> f =
                 batchProcessor.transfer(new Batch(addresses, Optional.empty()));
         BatchResult join = f.join();
@@ -77,7 +86,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         CompletableFuture<ReadBatch> f =
                 batchProcessor.readRecords(new Batch(addresses, Optional.empty()), 0);
         ReadBatch join = f.join();
@@ -112,7 +125,11 @@ class ProtocolBatchProcessorTest extends DataTest {
 
         List<LogData> secondReturnedRecords = getRecordsFromStubMap(secondReadMap);
 
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         ProtocolBatchProcessor spy = spy(batchProcessor);
 
         CompletableFuture<ReadBatch> res =
@@ -151,7 +168,11 @@ class ProtocolBatchProcessorTest extends DataTest {
             throw new TimeoutException();
         }).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
 
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         ProtocolBatchProcessor spy = spy(batchProcessor);
 
         CompletableFuture<ReadBatch> res =
@@ -173,7 +194,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(addresses, readOptions);
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         ReadBatch res = batchProcessor.checkReadRecords(addresses, stubMap, Optional.empty());
         List<LogData> expected = getRecordsFromStubMap(stubMap);
         assertThat(res.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
@@ -192,7 +217,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         doReturn(stubMap).when(addressSpaceView).simpleProtocolRead(readAddresses, readOptions);
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         ReadBatch res = batchProcessor.checkReadRecords(addresses, stubMap, Optional.empty());
         assertThat(res.getStatus() == ReadBatch.FailureStatus.FAILED).isTrue();
         assertThat(res.getFailedAddress()).isEqualTo(unreadAddresses);

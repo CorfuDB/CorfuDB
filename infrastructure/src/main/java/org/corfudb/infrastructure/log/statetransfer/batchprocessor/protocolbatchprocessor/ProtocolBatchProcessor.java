@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static lombok.Builder.*;
+import static lombok.Builder.Default;
 import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
 
 /**
@@ -68,11 +68,6 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     @Getter
     private final AddressSpaceView addressSpaceView;
 
-    public ProtocolBatchProcessor(StreamLog streamLog, AddressSpaceView addressSpaceView) {
-        this.streamLog = streamLog;
-        this.addressSpaceView = addressSpaceView;
-    }
-
     @Override
     public CompletableFuture<BatchResult> transfer(Batch batch) {
         return readRecords(batch, 0)
@@ -89,7 +84,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     /**
      * Reads data entries by utilizing the replication protocol. If there are errors, retries.
      *
-     * @param batch The batch of addresses to be read.
+     * @param batch   The batch of addresses to be read.
      * @param retries The number of retries.
      * @return A result of reading records.
      */

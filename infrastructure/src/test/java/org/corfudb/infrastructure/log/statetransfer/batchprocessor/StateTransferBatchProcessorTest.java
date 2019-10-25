@@ -28,12 +28,20 @@ class StateTransferBatchProcessorTest extends DataTest {
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
 
-        ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         BatchResult res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
         assertThat(res.getStatus() == BatchResult.FailureStatus.SUCCEEDED).isTrue();
         assertThat(res.getAddresses()).isEqualTo(addresses);
         doThrow(new IllegalStateException()).when(streamLog).append(stubList);
-        batchProcessor = new ProtocolBatchProcessor(streamLog, addressSpaceView);
+        batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .streamLog(streamLog)
+                .addressSpaceView(addressSpaceView)
+                .build();
         res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
         assertThat(res.getStatus() == BatchResult.FailureStatus.FAILED).isTrue();
         assertThat(res.getAddresses()).isEqualTo(addresses);

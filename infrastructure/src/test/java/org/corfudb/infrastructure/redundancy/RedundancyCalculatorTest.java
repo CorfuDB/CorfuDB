@@ -1,33 +1,27 @@
-package org.corfudb.infrastructure.orchestrator.actions;
+package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import org.corfudb.common.util.Tuple;
 import org.corfudb.infrastructure.LayoutBasedTest;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
+import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.time.Duration;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
@@ -264,7 +258,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
         ImmutableList<CurrentTransferSegment> oldList = ImmutableList.of(oldSegment);
         ImmutableList<CurrentTransferSegment> newList = ImmutableList.of(newSegment);
 
-        assertThat(calculator.mergeLists(oldList, newList).get(0).getStatus().join()
+        assertThat(calculator.mergeLists(oldList, newList).get(0).getStatus()
                 .getSegmentState())
                 .isEqualTo(FAILED);
     }
@@ -287,7 +281,6 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
         assertThat(calculator.mergeLists(oldList, newList)
                 .get(0)
                 .getStatus()
-                .join()
                 .getSegmentState()).isEqualTo(RESTORED);
 
     }
@@ -314,8 +307,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
 
         assertThat(calculator.mergeLists(ImmutableList.of(oldSegment), ImmutableList.of(newSegment))
                 .get(0)
-                .getStatus()
-                .join().getSegmentState()).isEqualTo(RESTORED);
+                .getStatus().getSegmentState()).isEqualTo(RESTORED);
 
         assertThat(calculator.mergeLists(ImmutableList.of(oldSegment), ImmutableList.of(newSegment))
                 .get(0).getStartAddress()).isEqualTo(3L);
@@ -332,7 +324,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
         assertThat(calculator.mergeLists(ImmutableList.of(oldSegment), ImmutableList.of(newSegment))
                 .get(0)
                 .getStatus()
-                .join().getSegmentState()).isEqualTo(RESTORED);
+                .getSegmentState()).isEqualTo(RESTORED);
     }
 
     @Test
@@ -346,7 +338,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
         assertThat(calculator.mergeLists(ImmutableList.of(oldSegment), ImmutableList.of(newSegment))
                 .get(0)
                 .getStatus()
-                .join().getSegmentState()).isEqualTo(RESTORED);
+                .getSegmentState()).isEqualTo(RESTORED);
     }
 
     @Test
@@ -359,7 +351,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
 
         assertThat(calculator.mergeLists(ImmutableList.of(oldSegment),
                 ImmutableList.of()).get(0).getStatus()
-                .join().getSegmentState()).isEqualTo(RESTORED);
+                .getSegmentState()).isEqualTo(RESTORED);
 
 
     }
@@ -416,13 +408,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
                 createTransferSegment(26L, 30L, RESTORED)
         );
 
-        assertThat(IntStream.range(0, resultList.size()).boxed().map(index ->
-                new Tuple<>(resultList.get(index), expected.get(index)))
-                .allMatch(tuple -> {
-                    return tuple.first.getStartAddress() == tuple.second.getStartAddress() &&
-                            tuple.first.getEndAddress() == tuple.second.getEndAddress() &&
-                            tuple.first.getStatus().join().getSegmentState() == tuple.first.getStatus().join().getSegmentState();
-                })).isTrue();
+        assertThat(resultList).isEqualTo(expected);
 
     }
 

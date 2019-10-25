@@ -9,7 +9,10 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
 import org.corfudb.infrastructure.orchestrator.RestoreAction;
+import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -28,6 +31,7 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -103,30 +107,28 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
      *
      * @param stateList A list that holds the state for every segment.
      */
-    RestoreStatus tryRestoreRedundancyAndMergeSegments(List<CurrentTransferSegment> stateList,
-                                                       Layout oldLayout,
-                                                       LayoutManagementView layoutManagementView) {
-        // Get all the transfers that are done.
-        List<CurrentTransferSegment> doneTransfers =
-                stateList.stream().filter(segment -> segment.getStatus().isDone())
-                        .collect(Collectors.toList());
+    RestoreStatus tryRestoreRedundancyAndMergeSegments(
+            List<CurrentTransferSegment> stateList, Layout oldLayout,
+            LayoutManagementView layoutManagementView) {
 
         // Get all the transfers that failed.
-        List<CurrentTransferSegment> failed = doneTransfers.stream()
-                .filter(segment -> segment.getStatus().join().getSegmentState().equals(FAILED))
+        List<CurrentTransferSegment> failed = stateList.stream()
+                .filter(segment -> segment.getStatus().getSegmentState() == FAILED)
                 .collect(Collectors.toList());
 
-        // Throw the first failure.
-        if (!failed.isEmpty()) {
-            throw failed.get(0).getStatus().join().getCauseOfFailure().get();
-        }
+        // Throw the first failure if present.
+        Optional<StreamProcessFailure> streamProcessFailure = failed.stream()
+                .findFirst()
+                .flatMap(ts -> ts.getStatus().getCauseOfFailure());
+
+        streamProcessFailure.ifPresent(failure -> {
+            throw failure;
+        });
 
         // Filter all the transfers that have been completed.
-        List<CurrentTransferSegment> transferredSegments
-                = doneTransfers.stream().filter(segment -> segment
-                .getStatus().join().getSegmentState().equals(TRANSFERRED))
+        List<CurrentTransferSegment> transferredSegments = stateList.stream()
+                .filter(segment -> segment.getStatus().getSegmentState() == TRANSFERRED)
                 .collect(Collectors.toList());
-
 
         // Case 1: The transfer has occurred -> Create a new layout with a restored node, merge if possible.
         if (!transferredSegments.isEmpty()) {
@@ -137,9 +139,8 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             RedundancyCalculator calculator = new RedundancyCalculator(currentNode);
 
             // Create a new layout after the segments are transferred
-            Layout newLayout =
-                    calculator.updateLayoutAfterRedundancyRestoration(
-                            transferredSegments, oldLayout);
+            Layout newLayout = calculator.updateLayoutAfterRedundancyRestoration(
+                    transferredSegments, oldLayout);
             log.info("State transfer on {}: New layout: {}.", currentNode, newLayout);
 
             // If segments can be merged, merge, if not, just reconfigure.
@@ -221,10 +222,11 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             );
 
             // Create a chain replication protocol batch processor.
-            ProtocolBatchProcessor batchProcessor = new ProtocolBatchProcessor(
-                    batchProcessorData.getStreamLog(),
-                    batchProcessorData.getAddressSpaceView()
-            );
+            ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                    .builder()
+                    .addressSpaceView(batchProcessorData.getAddressSpaceView())
+                    .streamLog(batchProcessorData.getStreamLog())
+                    .build();
 
             // Perform a state transfer for each segment synchronously and update the map.
             stateList = transferManager.handleTransfer(stateList, batchProcessor);
@@ -234,13 +236,10 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
             RestoreStatus restoreStatus = restoreWithBackOff(stateList, runtime);
 
             // Invalidate the layout.
-            if (restoreStatus.equals(RESTORED)) {
+            if (restoreStatus == RESTORED) {
 
                 log.info("State transfer on {}: Updating status map.", currentNode);
-                runtime.invalidateLayout();
-
-                // Get a new layout after the consensus is reached.
-                layout = runtime.getLayoutView().getLayout();
+                layout = runtime.invalidateLayout().join();
 
                 // Create a new map from the layout.
                 ImmutableList<CurrentTransferSegment>

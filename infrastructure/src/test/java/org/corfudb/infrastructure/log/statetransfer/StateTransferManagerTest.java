@@ -62,10 +62,11 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 );
 
         List<CurrentTransferSegmentStatus> statusesExpected =
-                segments.stream().map(segment -> segment.getStatus().join()).collect(Collectors.toList());
+                segments.stream().map(segment -> segment.getStatus()).collect(Collectors.toList());
 
-        List<Long> totalTransferredExpected =
-                segments.stream().map(segment -> segment.getStatus().join().getTotalTransferred()).collect(Collectors.toList());
+        List<Long> totalTransferredExpected = segments.stream()
+                        .map(segment -> segment.getStatus().getTotalTransferred())
+                        .collect(Collectors.toList());
 
         List<SimpleEntry<Long, Long>> rangesExpected =
                 segments.stream().map(segment -> new SimpleEntry<>(segment.getStartAddress(),
@@ -76,11 +77,13 @@ class StateTransferManagerTest implements TransferSegmentCreator {
 
         List<CurrentTransferSegmentStatus> statuses =
                 currentTransferSegments.stream()
-                        .map(segment -> segment.getStatus().join()).collect(Collectors.toList());
+                        .map(CurrentTransferSegment::getStatus)
+                        .collect(Collectors.toList());
 
         List<Long> totalTransferred =
                 currentTransferSegments.stream()
-                        .map(segment -> segment.getStatus().join().getTotalTransferred()).collect(Collectors.toList());
+                        .map(segment -> segment.getStatus()
+                                .getTotalTransferred()).collect(Collectors.toList());
 
         List<SimpleEntry<Long, Long>> ranges =
                 currentTransferSegments.stream().map(segment -> new SimpleEntry<>(segment.getStartAddress(),
@@ -99,9 +102,9 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         currentTransferSegments =
                 spy.handleTransfer(ImmutableList.of(transferSegment), new GoodBatchProcessor());
 
-        assertThat(currentTransferSegments.get(0).getStatus().join().getSegmentState())
+        assertThat(currentTransferSegments.get(0).getStatus().getSegmentState())
                 .isEqualTo(TRANSFERRED);
-        assertThat(currentTransferSegments.get(0).getStatus().join().getTotalTransferred())
+        assertThat(currentTransferSegments.get(0).getStatus().getTotalTransferred())
                 .isEqualTo(51L);
         // Some data is not present
         ImmutableList<Long> unknownData =
@@ -112,13 +115,13 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         currentTransferSegments =
                 spy.handleTransfer(ImmutableList.of(transferSegment), new GoodBatchProcessor());
 
-        assertThat(currentTransferSegments.get(0).getStatus().join().getSegmentState())
+        assertThat(currentTransferSegments.get(0).getStatus().getSegmentState())
                 .isEqualTo(TRANSFERRED);
 
         // Some data is not present and transfer fails
         currentTransferSegments =
                 spy.handleTransfer(ImmutableList.of(transferSegment), new FaultyBatchProcessor(10));
-        assertThat(currentTransferSegments.get(0).getStatus().join().getSegmentState())
+        assertThat(currentTransferSegments.get(0).getStatus().getSegmentState())
                 .isEqualTo(FAILED);
     }
 

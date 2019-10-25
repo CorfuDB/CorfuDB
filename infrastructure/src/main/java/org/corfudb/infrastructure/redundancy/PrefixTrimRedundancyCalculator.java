@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator.actions;
+package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -72,7 +72,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                 .builder()
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
-                                .completedStatus(restored)
+                                .status(restored)
                                 .build();
                     } else {
                         CurrentTransferSegmentStatus notTransferred = CurrentTransferSegmentStatus
@@ -85,7 +85,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                 .builder()
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
-                                .completedStatus(notTransferred)
+                                .status(notTransferred)
                                 .build();
                     }
 
