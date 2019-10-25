@@ -14,7 +14,6 @@ import java.util.*;
 
 @Slf4j
 public class SequencerPerformanceTest extends PerformanceTest{
-
     private long seed;
     private int randomBoundary;
     private long time;
