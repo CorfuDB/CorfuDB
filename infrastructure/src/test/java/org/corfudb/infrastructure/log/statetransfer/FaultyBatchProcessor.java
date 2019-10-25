@@ -1,10 +1,8 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
 import lombok.Getter;
-import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 
 import java.util.Optional;

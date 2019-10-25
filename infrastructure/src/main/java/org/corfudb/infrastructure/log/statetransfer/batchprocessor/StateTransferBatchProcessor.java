@@ -5,11 +5,9 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
-import org.corfudb.protocols.wireprotocol.IMetadata;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.SUCCEEDED;
@@ -36,9 +34,7 @@ public interface StateTransferBatchProcessor {
      * @return A batch result of a record append.
      */
     default BatchResult writeRecords(ReadBatch readBatch, StreamLog streamlog) {
-        List<Long> addresses = readBatch.getData().stream()
-                .map(IMetadata::getGlobalAddress)
-                .collect(Collectors.toList());
+        List<Long> addresses = readBatch.getAddresses();
 
         Result<BatchResult, RuntimeException> resultOfWrite = Result.of(() -> {
             streamlog.append(readBatch.getData());

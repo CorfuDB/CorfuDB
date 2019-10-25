@@ -7,10 +7,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferException;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorError;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -96,17 +96,15 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
 
                             return Result
                                     .of(readSupplier)
-                                    .mapError(BatchProcessorError::new);
+                                    .mapError(StateTransferException::new);
                         }
-                )
-                .thenApply(readResult ->
+                ).thenApply(readResult ->
                         readResult.map(records -> checkReadRecords(
                                 batch.getAddresses(),
                                 records,
                                 batch.getDestination()
                         ))
-                )
-                .thenCompose(checkedReadResult -> {
+                ).thenCompose(checkedReadResult -> {
                     if (checkedReadResult.isError()) {
                         return retryReadRecords(batch, retries);
                     } else {
@@ -136,22 +134,16 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                     throw new RetryExhaustedException("Read retries are exhausted");
                 }
 
-                Supplier<CompletableFuture<ReadBatch>> pipeline =
-                        () -> readRecords(batch, readRetries.get());
-
                 // If a pipeline completed exceptionally, than return the error.
-                CompletableFuture<ReadBatch> pipelineFuture =
-                        pipeline.get().handle((result, exception) -> {
-                            if (Optional.ofNullable(exception).isPresent()) {
-                                return ReadBatch.builder()
+                CompletableFuture<ReadBatch> pipelineFuture = readRecords(batch, readRetries.get())
+                        .handle((result, exception) -> Optional.ofNullable(exception)
+                                .map(e -> ReadBatch.builder()
                                         .failedAddress(batch.getAddresses())
                                         .destination(batch.getDestination())
                                         .status(ReadBatch.FailureStatus.FAILED)
-                                        .build();
-                            } else {
-                                return result;
-                            }
-                        });
+                                        .build())
+                                .orElse(result)
+                        );
                 // Join the result.
                 ReadBatch joinResult = pipelineFuture.join();
 

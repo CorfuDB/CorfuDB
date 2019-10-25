@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
+import lombok.EqualsAndHashCode.Exclude;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
@@ -92,7 +93,7 @@ public class StateTransferManager {
      */
     @Getter
     @ToString
-    @EqualsAndHashCode(exclude = "causeOfFailure")
+    @EqualsAndHashCode
     @Builder
     public static class CurrentTransferSegmentStatus {
         /**
@@ -109,6 +110,7 @@ public class StateTransferManager {
          * An optional cause of failure for this segment.
          */
         @Default
+        @Exclude
         private final Optional<StreamProcessFailure> causeOfFailure = Optional.empty();
     }
 

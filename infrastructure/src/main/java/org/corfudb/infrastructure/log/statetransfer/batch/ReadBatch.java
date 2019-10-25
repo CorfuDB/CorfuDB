@@ -4,10 +4,12 @@ import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static lombok.Builder.Default;
 
@@ -55,6 +57,16 @@ public class ReadBatch {
      */
     public Batch toBatch() {
         return new Batch(failedAddress, destination);
+    }
+
+    /**
+     * Get addresses from records.
+     * @return Addresses.
+     */
+    public List<Long> getAddresses() {
+        return data.stream()
+                .map(IMetadata::getGlobalAddress)
+                .collect(Collectors.toList());
     }
 
 

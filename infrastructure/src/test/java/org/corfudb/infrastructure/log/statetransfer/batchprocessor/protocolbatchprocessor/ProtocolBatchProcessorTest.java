@@ -1,12 +1,10 @@
 package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor;
 
-import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.DataTest;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.BatchProcessorFailure;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.AddressSpaceView;
@@ -139,12 +137,6 @@ class ProtocolBatchProcessorTest extends DataTest {
         assertThat(join.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
         assertThat(join.getData()).isEqualTo(secondReturnedRecords);
 
-    }
-
-    public CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> failFuture(Throwable throwable) {
-        CompletableFuture<Result<List<LogData>, BatchProcessorFailure>> future = new CompletableFuture<>();
-        future.completeExceptionally(throwable);
-        return future;
     }
 
     /**

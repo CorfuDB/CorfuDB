@@ -436,10 +436,10 @@ public class RemoteMonitoringService implements MonitoringService {
 
             return DetectorTask.COMPLETED;
         } else if (!mergeSegmentsTask.isDone()) {
-            log.debug("Merge segments task already in progress. Skipping spawning another task.");
+            log.trace("Merge segments task already in progress. Skipping spawning another task.");
             return DetectorTask.SKIPPED;
         }
-        log.debug("No segments to merge. Skipping step.");
+        log.trace("No segments to merge. Skipping step.");
         return DetectorTask.SKIPPED;
     }
 
@@ -451,8 +451,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
     boolean handleMergeSegments(String localEndpoint,
                                 SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                                Layout layout, Duration retryQueryTimeout
-    ) {
+                                Layout layout, Duration retryQueryTimeout) {
         return ReconfigurationEventHandler.handleMergeSegments(
                 localEndpoint,
                 runtimeSingletonResource.get(), layout, retryQueryTimeout
