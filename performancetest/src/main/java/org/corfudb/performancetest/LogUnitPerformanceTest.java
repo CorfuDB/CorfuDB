@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -11,17 +12,14 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 
 /**
  * Created by Nan Zhang and Lin Dong on 10/23/19.
  */
 
-public class LogUnitPerformanceTest {
-    private String endPoint = "localhost:9000";
-    private int metricsPort = 1000;
+@Slf4j
+public class LogUnitPerformanceTest extends PerformanceTest{
     private long seed = 1024;
     private int randomBoundary = 100;
     private Random random;
@@ -38,27 +36,10 @@ public class LogUnitPerformanceTest {
     private static final String ENTRY_SIZE = "logEntrySize";
 
     public LogUnitPerformanceTest() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        InputStream input = classLoader.getResourceAsStream("PerformanceTest.properties");
-
-        try {
-            PROPERTIES.load(input);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         random = new Random(seed);
         metricRegistry = CorfuRuntime.getDefaultMetrics();
         readTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-read");
         writeTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-write");
-    }
-
-    private CorfuRuntime initRuntime() {
-        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
-        parameters.setPrometheusMetricsPort(metricsPort);
-        CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(parameters);
-        corfuRuntime.addLayoutServer(endPoint);
-        corfuRuntime.connect();
-        return corfuRuntime;
     }
 
     /**
@@ -70,7 +51,6 @@ public class LogUnitPerformanceTest {
     @Test
     public void logunitSingleReadWrite() throws Exception {
         CorfuRuntime runtime = initRuntime();
-
         int numRequests = Integer.parseInt(PROPERTIES.getProperty(SINGLE_REQUEST, "100"));
         int readPercent = Integer.parseInt(PROPERTIES.getProperty(READ_PERCENT, "50"));
         int entrySize = Integer.parseInt(PROPERTIES.getProperty(ENTRY_SIZE, "2048"));

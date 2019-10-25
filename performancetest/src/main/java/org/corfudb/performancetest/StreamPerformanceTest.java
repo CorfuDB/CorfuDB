@@ -5,16 +5,12 @@ import com.codahale.metrics.Timer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
-import java.util.Properties;
 
 /**
  * Created by Nan Zhang and Lin Dong on 10/23/19.
  */
 
-public class StreamPerformanceTest {
-    private String endPoint = "localhost:9000";
-    private int metricsPort = 1000;
-    private static final Properties PROPERTIES = new Properties();
+public class StreamPerformanceTest extends PerformanceTest {
     static MetricRegistry metricRegistry;
     private static final String METRIC_PREFIX = "corfu-perf";
     private static final String STREAM_NAME = "stream-perf-it";
@@ -30,14 +26,6 @@ public class StreamPerformanceTest {
         metricRegistry = CorfuRuntime.getDefaultMetrics();
         producerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-single-producer");
         consumerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-single-consumer");
-    }
-    private CorfuRuntime initRuntime() {
-        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
-        parameters.setPrometheusMetricsPort(metricsPort);
-        CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(parameters);
-        corfuRuntime.addLayoutServer(endPoint);
-        corfuRuntime.connect();
-        return corfuRuntime;
     }
 
     /**
