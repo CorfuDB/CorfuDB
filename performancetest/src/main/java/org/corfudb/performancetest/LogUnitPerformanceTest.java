@@ -1,10 +1,7 @@
 package org.corfudb.performancetest;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -18,29 +15,13 @@ import java.util.*;
  * Created by Nan Zhang and Lin Dong on 10/23/19.
  */
 
-@Slf4j
 public class LogUnitPerformanceTest extends PerformanceTest{
-    private long seed = 1024;
-    private int randomBoundary = 100;
-    private Random random;
-    static MetricRegistry metricRegistry;
-    Timer readTimer;
-    Timer writeTimer;
-
-    private static final String METRIC_PREFIX = "corfu-perf";
-    private static final Properties PROPERTIES = new Properties();
+    private static final int randomBoundary = 100;
     private static final String READ_PERCENT = "logunitReadPercent";
     private static final String SINGLE_REQUEST = "logunitSingleRequests";
     private static final String BATCH_REQUEST = "logunitBatchRequests";
     private static final String BATCH_SIZE = "logunitBatchSize";
     private static final String ENTRY_SIZE = "logEntrySize";
-
-    public LogUnitPerformanceTest() {
-        random = new Random(seed);
-        metricRegistry = CorfuRuntime.getDefaultMetrics();
-        readTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-read");
-        writeTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-write");
-    }
 
     /**
      * tests write() and read() performance of logunit client,
@@ -60,15 +41,11 @@ public class LogUnitPerformanceTest extends PerformanceTest{
         byte[] payload = new byte[entrySize];
 
         for (int i = 0; i < numRequests; i++) {
-            if (writeTimer.getCount() == 0 || random.nextInt(randomBoundary) > readPercent) {
-                Timer.Context context = writeTimer.time();
+            if (address == 0 || random.nextInt(randomBoundary) > readPercent) {
                 client.write(address++, null, payload, Collections.emptyMap()).get();
-                context.stop();
             } else {
                 int pos = random.nextInt(address);
-                Timer.Context context = readTimer.time();
                 client.read(pos).get();
-                context.stop();
             }
         }
     }
@@ -90,8 +67,9 @@ public class LogUnitPerformanceTest extends PerformanceTest{
         LogUnitClient client = new LogUnitClient(runtime.getRouter(endPoint), 0L);
         byte[] payload = new byte[entrySize];
         int address = 0;
+        int writeCount = 0;
         for (int i = 0; i < numRequests; i++) {
-            if (writeTimer.getCount() == 0 || random.nextInt(randomBoundary) > readPercent) {
+            if (address == 0 || random.nextInt(randomBoundary) > readPercent) {
                 List<LogData> entries = new ArrayList<>();
                 for (int x = 0; x < batchSize; x++) {
                     ByteBuf b = Unpooled.buffer();
@@ -100,18 +78,15 @@ public class LogUnitPerformanceTest extends PerformanceTest{
                     ld.setGlobalAddress((long)address++);
                     entries.add(ld);
                 }
-                Timer.Context context = writeTimer.time();
+                writeCount++;
                 client.writeRange(entries).get();
-                context.stop();
             } else {
-                long start = random.nextInt((int) writeTimer.getCount()) * batchSize;
+                long start = random.nextInt(writeCount) * batchSize;
                 List<Long> addresses = new ArrayList<>();
                 for (long x = start; x < batchSize; x++) {
                     addresses.add(x);
                 }
-                Timer.Context context = readTimer.time();
                 client.readAll(addresses).get();
-                context.stop();
             }
         }
     }

@@ -6,12 +6,15 @@ import org.corfudb.runtime.CorfuRuntime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+import java.util.Random;
 
 @Slf4j
 public class PerformanceTest {
+    protected static final Properties PROPERTIES = new Properties();
     protected String endPoint;
     protected int metricsPort;
-    protected static final Properties PROPERTIES = new Properties();
+    protected Random random;
+
 
     public PerformanceTest() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -24,6 +27,7 @@ public class PerformanceTest {
         }
         metricsPort = Integer.parseInt(PROPERTIES.getProperty("sequencerMetricsPort", "1000"));
         endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
+        random = new Random();
     }
 
     protected CorfuRuntime initRuntime() {
