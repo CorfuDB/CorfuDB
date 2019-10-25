@@ -9,12 +9,11 @@ import java.util.*;
  */
 
 public class KeyValueManager {//1 char = 2B
-    int keyNum;
-    List<String> keySet;
-    Random random;
-    int valueSize;
-    int index;
-    private final static int SEEDSIZE = 26;
+    private int keyNum;
+    private List<String> keySet;
+    private Random random;
+    private int valueSize;
+    private int index;
 
     KeyValueManager(int keyNum, int valueSize) {
         this.keyNum = keyNum;

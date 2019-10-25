@@ -7,8 +7,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 
 /**
@@ -16,51 +14,30 @@ import java.util.*;
  */
 
 @Slf4j
-public class CorfuTablePerformanceTest {
-    private String endPoint = "localhost:9000";
-    private int metricsPort = 1000;
-    private long seed = 1024;
-    private int randomBoundary = 100;
-    private long time = 1000;
-    private int milliToSecond = 1000;
-    private int keyNum = 10;
-    private int valueSize = 1024;
+public class CorfuTablePerformanceTest extends PerformanceTest{
+    private long seed;
+    private int randomBoundary;
+    private long time;
+    private int milliToSecond;
+    private int keyNum;
+    private int valueSize;
     private CorfuRuntime runtime;
     private Random random;
-    private static final Properties PROPERTIES = new Properties();
     private KeyValueManager keyValueManager;
 
     public CorfuTablePerformanceTest() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        InputStream input = classLoader.getResourceAsStream("PerformanceTest.properties");
-        try {
-            PROPERTIES.load(input);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         loadProperties();
         random = new Random(seed);
         keyValueManager = new org.corfudb.performancetest.KeyValueManager(keyNum, valueSize);
     }
 
     private void loadProperties()  {
-        metricsPort = Integer.parseInt(PROPERTIES.getProperty("tableMetricsPort", "1000"));
-        endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
         seed = Long.parseLong(PROPERTIES.getProperty("tableSeed", "1024"));
         randomBoundary = Integer.parseInt(PROPERTIES.getProperty("tableRandomBoundary","10"));
         time = Long.parseLong(PROPERTIES.getProperty("tableTime", "100"));
         milliToSecond = Integer.parseInt(PROPERTIES.getProperty("milliToSecond", "1000"));
         keyNum = Integer.parseInt(PROPERTIES.getProperty("keyNum", "10"));
         valueSize = Integer.parseInt(PROPERTIES.getProperty("valueSize", "1024"));
-    }
-
-    private CorfuRuntime initRuntime() {
-        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder().build();
-        parameters.setPrometheusMetricsPort(metricsPort);
-        CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(parameters);
-        corfuRuntime.addLayoutServer(endPoint);
-        corfuRuntime.connect();
-        return corfuRuntime;
     }
 
     private CorfuTable<String, String> buildTable(String name) {
@@ -115,37 +92,31 @@ public class CorfuTablePerformanceTest {
         }
     }
 
-    @Test
-    public void CorfuTable10Thread1Table() throws InterruptedException {
-        runtime = initRuntime();
-        CorfuTable<String, String>
-                corfuTable = buildTable("table1");
-        Thread[] threads = new Thread[10];
+    private void runTableOps(int numThreads, int numTables) throws InterruptedException {
+        CorfuTable<String, String>[] corfuTables = new CorfuTable[numTables];
+        for (int i = 0; i < numTables; i++) {
+            corfuTables[i] = buildTable("table" + i);
+        }
+        Thread[] threads = new Thread[numThreads];
         long start = System.currentTimeMillis();
-        for (int i = 0; i < 10; i++) {
-            threads[i] = createThread(corfuTable, start);
+        for (int i = 0; i < numThreads; i++) {
+            threads[i] = createThread(corfuTables[i], start);
             threads[i].start();
         }
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < numThreads; i++) {
             threads[i].join();
         }
     }
 
     @Test
+    public void CorfuTable10Thread1Table() throws InterruptedException {
+        runtime = initRuntime();
+        runTableOps(1, 10);
+    }
+
+    @Test
     public void CorfuTable10Thread10Table() throws InterruptedException {
         runtime = initRuntime();
-        CorfuTable<String, String>[] corfuTables = new CorfuTable[10];
-        for (int i = 0; i < 10; i++) {
-            corfuTables[i] = buildTable("table" + i);
-        }
-        Thread[] threads = new Thread[10];
-        long start = System.currentTimeMillis();
-        for (int i = 0; i < 10; i++) {
-            threads[i] = createThread(corfuTables[i], start);
-            threads[i].start();
-        }
-        for (int i = 0; i < 10; i++) {
-            threads[i].join();
-        }
+        runTableOps(10, 10);
     }
 }
