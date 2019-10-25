@@ -13,7 +13,7 @@
 
     <logger name="ch.qos.logback" level="off" additivity="false"/>
 
-    <root level="info">
+    <root level="error">
         <appender-ref ref="stdout"/>
     </root>
 </configuration>

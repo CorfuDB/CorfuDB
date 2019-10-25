@@ -9,6 +9,7 @@ import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseParams;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -18,20 +19,16 @@ import java.util.concurrent.ConcurrentMap;
 @Getter
 @ToString(callSuper = true)
 public class VmUniverseParams extends UniverseParams {
+
     @NonNull
     private final String vSphereUrl;
     @NonNull
-    private final String vSphereUsername;
-    @NonNull
-    private final String vSpherePassword;
-    @NonNull
-    private final String vSphereHost;
+    private final List<String> vSphereHost;
+
+    private final VmCredentialsParams credentials;
+
     @NonNull
     private final String templateVMName;
-    @NonNull
-    private final String vmUserName;
-    @NonNull
-    private final String vmPassword;
     @NonNull
     private final ConcurrentMap<String, String> vmIpAddresses;
     @NonNull
@@ -56,26 +53,51 @@ public class VmUniverseParams extends UniverseParams {
     @Default
     private final Duration readinessTimeout = Duration.ofSeconds(3);
 
-
     @Builder
-    public VmUniverseParams(String vSphereUrl, String vSphereUsername, String vSpherePassword,
-                            String vSphereHost, String templateVMName, String vmUserName, String vmPassword,
-                            ConcurrentMap<String, String> vmIpAddresses, String networkName) {
-        super(networkName, new ConcurrentHashMap<>());
+    public VmUniverseParams(
+            VmCredentialsParams credentials, String vSphereUrl, List<String> vSphereHost,
+            String templateVMName, ConcurrentMap<String, String> vmIpAddresses, String networkName,
+            boolean cleanUpEnabled) {
+        super(networkName, new ConcurrentHashMap<>(), cleanUpEnabled);
         this.vSphereUrl = vSphereUrl;
-        this.vSphereUsername = vSphereUsername;
-        this.vSpherePassword = vSpherePassword;
         this.vSphereHost = vSphereHost;
-
         this.templateVMName = templateVMName;
-        this.vmUserName = vmUserName;
-        this.vmPassword = vmPassword;
         this.vmIpAddresses = vmIpAddresses;
+        this.credentials = credentials;
     }
 
 
     public VmUniverseParams updateIpAddress(String vmName, String ipAddress) {
         vmIpAddresses.put(vmName, ipAddress);
         return this;
+    }
+
+    /**
+     * VM credentials stored in a property file (vm.credentials.properties)
+     * The file format:
+     * <pre>
+     * vsphere.username=vSphereUser
+     * vsphere.password=vSpherePassword
+     *
+     * vm.username=vmPass
+     * vm.password=vmUser
+     * </pre>
+     */
+    @Builder
+    @Getter
+    public static class VmCredentialsParams {
+        @NonNull
+        private final Credentials vmCredentials;
+        @NonNull
+        private final Credentials vSphereCredentials;
+    }
+
+    @Builder
+    @Getter
+    public static class Credentials {
+        @NonNull
+        private final String username;
+        @NonNull
+        private final String password;
     }
 }

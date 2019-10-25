@@ -4,17 +4,17 @@ import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.NetworkConfig;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.group.cluster.docker.DockerCorfuCluster;
 import org.corfudb.universe.group.cluster.docker.DockerSupportCluster;
 import org.corfudb.universe.logging.LoggingParams;
-import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
-import org.corfudb.common.util.ClassUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Represents Docker implementation of a {@link Universe}.
  */
 @Slf4j
-public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniverseParams> {
+public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams> {
     /**
      * Docker parameter --network=host doesn't work in mac machines,
      * FakeDns is used to solve the issue, it resolves a dns record (which is a node name) to loopback address always.
@@ -43,7 +43,8 @@ public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniversePa
         super(universeParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+
+        init();
     }
 
     /**
@@ -72,6 +73,11 @@ public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniversePa
     public void shutdown() {
         log.info("Shutdown docker universe: {}", universeId.toString());
 
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
+
         if (destroyed.getAndSet(true)) {
             log.warn("Docker universe already destroyed");
             return;
@@ -95,7 +101,7 @@ public class DockerUniverse extends AbstractUniverse<Node.NodeParams, UniversePa
     }
 
     @Override
-    protected Cluster buildGroup(GroupParams<Node.NodeParams> groupParams) {
+    protected Cluster buildGroup(GroupParams<NodeParams> groupParams) {
 
         switch (groupParams.getType()) {
 

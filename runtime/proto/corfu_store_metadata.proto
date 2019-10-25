@@ -20,8 +20,9 @@ message TableName {
 
 // Descriptor to provide self describing schemas for the records.
 message TableDescriptors {
-    google.protobuf.DescriptorProto keyDescriptor = 1;
-    google.protobuf.DescriptorProto valueDescriptor = 2;
+    // File Descriptor protobufs map.
+    // Contains file descriptors of key, value, metadata and their dependencies.
+    map<string, google.protobuf.FileDescriptorProto> fileDescriptors = 1;
 }
 
 // Metadata.

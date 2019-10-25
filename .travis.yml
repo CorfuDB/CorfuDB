@@ -16,14 +16,14 @@ before_install: |
     -q
 
 
-install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C
+install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
 jobs:
   include:
   - stage: Tests
     name: Unit Tests
     script:
-    - ./mvnw clean test -T 1C -Dtest.travisBuild=true
+    - ./mvnw clean test -pl \!samples -T 1C -Dtest.travisBuild=true
   - script:
     - ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests

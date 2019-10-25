@@ -9,11 +9,13 @@ import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.universe.node.stress.Stress;
+import org.corfudb.universe.node.server.process.CorfuProcessManager;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.IpTablesUtil;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
 
@@ -22,25 +24,30 @@ import java.util.List;
  */
 @Slf4j
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
-    private static final String CORFU_INFRASTRUCTURE_JAR = String.format(
-            "./target/corfu/infrastructure-%s-shaded.jar", getAppVersion()
-    );
 
     @NonNull
     private final VirtualMachine vm;
     @NonNull
     private final String ipAddress;
+    @NonNull
     private final RemoteOperationHelper commandHelper;
     @NonNull
     private final VmStress stress;
+    @NonNull
+    private final CorfuProcessManager processManager;
 
     @Builder
-    public VmCorfuServer(VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams, VmStress stress) {
+    public VmCorfuServer(
+            VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams,
+            VmStress stress) {
         super(params, universeParams);
         this.vm = vm;
         this.ipAddress = getIpAddress();
         this.stress = stress;
         commandHelper = RemoteOperationHelper.getInstance();
+
+        Path corfuDir = Paths.get("~");
+        this.processManager = new CorfuProcessManager(corfuDir, params, getNetworkInterface());
     }
 
     /**
@@ -50,15 +57,14 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public CorfuServer deploy() {
-        executeCommand("mkdir -p ./" + params.getName());
-        executeCommand("mkdir -p ./" + params.getStreamLogDir());
+        executeCommand(processManager.createServerDirCommand());
+        executeCommand(processManager.createStreamLogDirCommand());
 
         commandHelper.copyFile(
                 ipAddress,
-                universeParams.getVmUserName(),
-                universeParams.getVmPassword(),
-                CORFU_INFRASTRUCTURE_JAR,
-                "./" + params.getName() + "/corfu-server.jar"
+                universeParams.getCredentials().getVmCredentials(),
+                params.getInfrastructureJar(),
+                processManager.getServerJar()
         );
 
         start();
@@ -108,8 +114,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     public void pause() {
         log.info("Pausing the VM Corfu server: {}", params.getName());
 
-        String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -STOP";
-        executeCommand(cmd);
+        executeCommand(processManager.pauseCommand());
     }
 
     /**
@@ -118,12 +123,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public void start() {
         // Compose command line for starting Corfu
-        StringBuilder cmdLine = new StringBuilder();
-        cmdLine.append("sh -c 'nohup java -cp ./" + params.getName() + "/*.jar org.corfudb.infrastructure.CorfuServer ");
-        cmdLine.append(getCommandLineParams());
-        cmdLine.append(" > /tmp/corfu.log 2>&1 &'");
-
-        executeCommand(cmdLine.toString());
+        String cmd = String.format(
+                "sh -c '%s'",
+                processManager.startCommand(getCommandLineParams())
+        );
+        executeCommand(cmd);
     }
 
     /**
@@ -168,9 +172,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public void resume() {
         log.info("Resuming the corfu server: {}", params.getName());
-
-        String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -CONT";
-        executeCommand(cmd);
+        executeCommand(processManager.resumeCommand());
     }
 
     /**
@@ -179,9 +181,9 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     private void executeCommand(String cmdLine) {
         String ipAddress = getIpAddress();
 
-        commandHelper.executeCommand(ipAddress,
-                universeParams.getVmUserName(),
-                universeParams.getVmPassword(),
+        commandHelper.executeCommand(
+                ipAddress,
+                universeParams.getCredentials().getVmCredentials(),
                 cmdLine
         );
     }
@@ -192,9 +194,9 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     private void executeSudoCommand(String cmdLine) {
         String ipAddress = getIpAddress();
 
-        commandHelper.executeSudoCommand(ipAddress,
-                universeParams.getVmUserName(),
-                universeParams.getVmPassword(),
+        commandHelper.executeSudoCommand(
+                ipAddress,
+                universeParams.getCredentials().getVmCredentials(),
                 cmdLine
         );
     }
@@ -216,7 +218,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         log.info("Stop corfu server on vm: {}, params: {}", params.getVmName(), params);
 
         try {
-            executeCommand("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -15");
+            executeCommand(processManager.stopCommand());
         } catch (Exception e) {
             String err = String.format("Can't STOP corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
@@ -232,7 +234,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     public void kill() {
         log.info("Kill the corfu server. Params: {}", params);
         try {
-            executeCommand("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -9");
+            executeCommand(processManager.killCommand());
         } catch (Exception e) {
             String err = String.format("Can't KILL corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
@@ -264,7 +266,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * so on, whatever used by the application.
      */
     private void removeAppDir() {
-        executeCommand(String.format("rm -rf ./%s", params.getName()));
+        executeCommand(processManager.removeServerDirCommand());
     }
 
     @Override
