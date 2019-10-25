@@ -1,5 +1,9 @@
 package org.corfudb.universe.scenario;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -13,10 +17,6 @@ import org.junit.Test;
 
 import java.time.Duration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-
 public class HandOfGodIT extends GenericIntegrationTest {
 
     /**
@@ -29,9 +29,12 @@ public class HandOfGodIT extends GenericIntegrationTest {
      */
     @Test(timeout = 300000)
     public void handOfGodTest() {
-        getScenario().describe((fixture, testCase) -> {
-            ClientParams clientFixture = fixture.getClient();
-            CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
+        workflow(wf -> {
+            wf.deploy();
+
+            ClientParams clientFixture = ClientParams.builder().build();
+            CorfuCluster corfuCluster = wf.getUniverse()
+                    .getGroup(wf.getFixture().data().getGroupParamByIndex(0).getName());
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
@@ -40,46 +43,45 @@ public class HandOfGodIT extends GenericIntegrationTest {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
-            testCase.it("Should force remove two nodes from cluster", data -> {
-                CorfuServer server0 = corfuCluster.getServerByIndex(0);
-                CorfuServer server1 = corfuCluster.getServerByIndex(1);
-                CorfuServer server2 = corfuCluster.getServerByIndex(2);
+            //Should force remove two nodes from cluster
+            CorfuServer server0 = corfuCluster.getServerByIndex(0);
+            CorfuServer server1 = corfuCluster.getServerByIndex(1);
+            CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
-                // Sequentially kill two nodes
-                server1.kill();
-                server2.kill();
+            // Sequentially kill two nodes
+            server1.kill();
+            server2.kill();
 
-                // Force remove the dead nodes
-                corfuClient.getManagementView().forceRemoveNode(
-                        server1.getEndpoint(),
-                        clientFixture.getNumRetry(),
-                        clientFixture.getTimeout(),
-                        clientFixture.getPollPeriod()
-                );
+            // Force remove the dead nodes
+            corfuClient.getManagementView().forceRemoveNode(
+                    server1.getEndpoint(),
+                    clientFixture.getNumRetry(),
+                    clientFixture.getTimeout(),
+                    clientFixture.getPollPeriod()
+            );
 
-                corfuClient.getManagementView().forceRemoveNode(
-                        server2.getEndpoint(),
-                        clientFixture.getNumRetry(),
-                        clientFixture.getTimeout(),
-                        clientFixture.getPollPeriod()
-                );
+            corfuClient.getManagementView().forceRemoveNode(
+                    server2.getEndpoint(),
+                    clientFixture.getNumRetry(),
+                    clientFixture.getTimeout(),
+                    clientFixture.getPollPeriod()
+            );
 
-                // Verify layout contains only the node that is up
-                corfuClient.invalidateLayout();
-                Layout layout = corfuClient.getLayout();
-                assertThat(layout.getAllActiveServers()).containsExactly(server0.getEndpoint());
+            // Verify layout contains only the node that is up
+            corfuClient.invalidateLayout();
+            Layout layout = corfuClient.getLayout();
+            assertThat(layout.getAllActiveServers()).containsExactly(server0.getEndpoint());
 
-                // Verify cluster status is STABLE
-                ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+            // Verify cluster status is STABLE
+            ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+            assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
-                ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(20));
+            ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(20));
 
-                // Verify data path working
-                for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
-                    assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
-                }
-            });
+            // Verify data path working
+            for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
+                assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
+            }
 
             corfuClient.shutdown();
         });
