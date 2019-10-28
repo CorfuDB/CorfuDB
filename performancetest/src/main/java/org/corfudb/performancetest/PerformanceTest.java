@@ -9,12 +9,18 @@ import java.io.InputStream;
 import java.util.Properties;
 import java.util.Random;
 
+/**
+ * Created by Lin Dong on 10/25/19.
+ */
+
 @Slf4j
 public class PerformanceTest {
     protected static final Properties PROPERTIES = new Properties();
     protected String endPoint;
     protected int metricsPort;
     protected Random random;
+    protected String reportPath;
+    protected String reportInterval;
 
     public PerformanceTest() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -27,18 +33,19 @@ public class PerformanceTest {
         }
         metricsPort = Integer.parseInt(PROPERTIES.getProperty("sequencerMetricsPort", "1000"));
         endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
+        reportPath = PROPERTIES.getProperty("reportPath", "/Users/lidong/metrics");
+        reportInterval = PROPERTIES.getProperty("reportInterval", "10");
         random = new Random();
     }
 
     protected void setMetricsReportFlags(String testName) {
         System.setProperty("corfu.local.metrics.collection", "true");
-        System.setProperty("corfu.metrics.csv.interval", "1");
-        String metricsPath = "/Users/lidong/metrics/" + testName;
-        File logPath = new File(metricsPath);
+        System.setProperty("corfu.metrics.csv.interval", reportInterval);
+        File logPath = new File(reportPath);
         if (!logPath.exists()) {
             logPath.mkdir();
         }
-        System.setProperty("corfu.metrics.csv.folder", metricsPath);
+        System.setProperty("corfu.metrics.csv.folder", reportPath);
     }
 
     protected CorfuRuntime initRuntime() {
