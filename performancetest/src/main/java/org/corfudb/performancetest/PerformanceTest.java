@@ -17,6 +17,7 @@ import java.util.Random;
 public class PerformanceTest {
     protected static final Properties PROPERTIES = new Properties();
     protected String endPoint;
+    protected String port;
     protected int metricsPort;
     protected Random random;
     protected String reportPath;
@@ -32,7 +33,8 @@ public class PerformanceTest {
             log.error(e.toString());
         }
         metricsPort = Integer.parseInt(PROPERTIES.getProperty("sequencerMetricsPort", "1000"));
-        endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
+        port = PROPERTIES.getProperty("port", "9000");
+        endPoint = "localhost:" + port;
         reportPath = PROPERTIES.getProperty("reportPath", "/Users/lidong/metrics");
         reportInterval = PROPERTIES.getProperty("reportInterval", "10");
         random = new Random();
@@ -66,7 +68,7 @@ public class PerformanceTest {
 
     protected void killServer() throws IOException, InterruptedException {
         ProcessBuilder kill = new ProcessBuilder();
-        kill.command("sh", "-c", "kill $(lsof -t -i:9000)");
+        kill.command("sh", "-c", "kill $(lsof -t -i:" + port + ")");
         Process killP = kill.start();
         killP.waitFor();
     }
