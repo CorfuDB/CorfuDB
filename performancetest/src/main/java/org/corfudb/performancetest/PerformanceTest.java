@@ -48,7 +48,7 @@ public class PerformanceTest {
 
     protected void killServer() throws IOException, InterruptedException {
         ProcessBuilder kill = new ProcessBuilder();
-        kill.command("kill $(lsof -t -i:9000)");
+        kill.command("sh", "-c", "kill $(lsof -t -i:9000)");
         Process killP = kill.start();
         killP.waitFor();
     }
