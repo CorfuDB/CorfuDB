@@ -43,22 +43,10 @@ import static org.assertj.core.api.Assertions.fail;
  * reading a large stream from a fresh runtime).
  */
 public class StreamAddressDiscoveryIT extends AbstractIT {
-
-    private CorfuRuntime createDefaultRuntimeUsingFollowBackpointers() {
-        CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT);
-        runtime.getParameters().setFollowBackpointersEnabled(true);
-        return runtime;
-    }
-
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT);
-        runtime.getParameters().setFollowBackpointersEnabled(false);
         runtime.getParameters().setStreamBatchSize(PARAMETERS.NUM_ITERATIONS_LOW);
         return runtime;
-    }
-
-    private long readFromNewRuntimeFollowingBackpointers(String streamName, int expectedSize) {
-        return readFromNewRuntime(createDefaultRuntimeUsingFollowBackpointers(), streamName, expectedSize);
     }
 
     private long readFromNewRuntimeUsingAddressMaps(String streamName, int expectedSize) {
@@ -146,19 +134,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                 table1.put(i, String.valueOf(i));
             }
 
-            // Read S1 from new runtime (following backpointers)
-            long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers(stream1Name,
-                    PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
-                    + totalTimeFollowBackpointers);
-
             // Read S1 from new runtime (retrieving address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
             System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
-
-            assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
         } finally {
             shutdownCorfuServer(server);
         }
@@ -182,11 +162,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         // Create Server & Runtime
         Process server = runDefaultServer();
 
-        // Writer runtime (follow backpointers)
-        CorfuRuntime rt1w = createDefaultRuntimeUsingFollowBackpointers();
-
         // Writer runtime (retrieve stream address map)
-        CorfuRuntime rt2w = createDefaultRuntimeUsingAddressMaps();
+        CorfuRuntime rtw = createDefaultRuntimeUsingAddressMaps();
 
         // Fixed Thread Pool
         final int numThreads = 10;
@@ -195,70 +172,37 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         try {
             System.out.println("**** Start multi-threaded benchmark");
 
-            CorfuTable<Integer, String> table = rt1w.getObjectsView().build()
+            CorfuTable<Integer, String> table = rtw.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                     })
                     .setStreamName("streamTable")
                     .open();
 
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            Long startTime = System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
 
             for (int i = 0; i < numKeys; i++) {
                 final int value = i;
                 executor.submit(() -> {
-                    rt1w.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                    rtw.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
                     table.put(value, String.valueOf(value));
-                    rt1w.getObjectsView().TXEnd();
+                    rtw.getObjectsView().TXEnd();
                 });
             }
 
             executor.shutdown();
             executor.awaitTermination(2, TimeUnit.MINUTES);
             System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
-                            " %s ms (for follow backpointers)",
-                    numThreads, numKeys, (System.currentTimeMillis() - startTime)));
-
-            CorfuTable<Integer, String> table2 = rt2w.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
-                    .setStreamName("streamTable")
-                    .open();
-
-            ExecutorService executor2 = Executors.newFixedThreadPool(numThreads);
-            startTime = System.currentTimeMillis();
-
-            for (int i = 0; i < numKeys; i++) {
-                final int value = i;
-                executor2.submit(() -> {
-                    rt2w.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-                    table2.put(value, String.valueOf(value));
-                    rt2w.getObjectsView().TXEnd();
-                });
-            }
-
-            executor2.shutdown();
-            executor2.awaitTermination(2, TimeUnit.MINUTES);
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for stream address maps)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
-
-            // Read from fresh runtime (follow backpointers)
-            long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
-                    numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
-                    + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
             System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
-
-            assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
         } finally {
-            rt1w.shutdown();
-            rt2w.shutdown();
+            rtw.shutdown();
             shutdownCorfuServer(server);
         }
     }
@@ -275,24 +219,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         Map<CorfuRuntime, CorfuTable<Integer, String>> runtimeToTable = new HashMap<>();
-        List<CorfuRuntime> runtimesFollowBackpointers = new ArrayList<>();
         List<CorfuRuntime> runtimesAddressMaps = new ArrayList<>();
 
         // Fixed Thread Pool
         final int numThreads = 10;
         final int numClients = 10;
         final int numKeys = PARAMETERS.NUM_ITERATIONS_LARGE;
-
-        for (int i = 0; i < numClients; i++) {
-            CorfuRuntime rt = createDefaultRuntimeUsingFollowBackpointers().setCacheDisabled(false);
-            CorfuTable<Integer, String> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
-                    .setStreamName("streamTable")
-                    .open();
-            runtimeToTable.put(rt, table);
-            runtimesFollowBackpointers.add(rt);
-        }
 
         for (int i = 0; i < numClients; i++) {
             CorfuRuntime rt = createDefaultRuntimeUsingAddressMaps();
@@ -308,37 +240,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         try {
             System.out.println("**** Start multi-threaded benchmark");
 
-            // RUNTIME FOLLOW BACKPOINTERS (WRITE)
+            // RUNTIME ADDRESS MAPS (WRITE)
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            Long startTime = System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
 
             int runtimeIndex = 0;
-            for (int i = 0; i < numKeys; i++) {
-                if (runtimeIndex >= numClients) {
-                    runtimeIndex = 0;
-                }
-                final CorfuRuntime rt = runtimesFollowBackpointers.get(runtimeIndex);
-                CorfuTable<Integer, String> table = runtimeToTable.get(rt);
-                final int value = i;
-                executor.submit(() -> {
-                    rt.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-                    table.put(value, String.valueOf(value));
-                    rt.getObjectsView().TXEnd();
-                });
-                runtimeIndex++;
-            }
-
-            executor.shutdown();
-            executor.awaitTermination(2, TimeUnit.MINUTES);
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
-                            " %s ms (for follow backpointers)",
-                    numThreads, numKeys, (System.currentTimeMillis() - startTime)));
-
-            // RUNTIME ADDRESS MAPS (WRITE)
-            executor = Executors.newFixedThreadPool(numThreads);
-            startTime = System.currentTimeMillis();
-
-            runtimeIndex = 0;
             for (int i = 0; i < numKeys; i++) {
                 if (runtimeIndex >= numClients) {
                     runtimeIndex = 0;
@@ -360,24 +266,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                             " %s ms (for stream address maps)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
-            // Read from fresh runtime (follow backpointers)
-            long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
-                    numKeys);
-            System.out.println("**** Total time new runtime to sync stream (following backpointers): "
-                    + totalTimeFollowBackpointers);
-
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
             System.out.println("**** Total time new runtime to sync stream (address maps): "
                     + totalTimeAddressMaps);
-
-            assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
         } finally {
-            for(CorfuRuntime rt : runtimesFollowBackpointers) {
-                rt.shutdown();
-            }
-
             for(CorfuRuntime rt : runtimesAddressMaps) {
                 rt.shutdown();
             }
@@ -399,11 +293,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         // Writer Runtime
         CorfuRuntime rt1 = createDefaultRuntime();
 
-        // Reader Runtime (following backpointers)
-        CorfuRuntime rt2 = createDefaultRuntimeUsingFollowBackpointers();
-
         // Reader Runtime (stream address maps)
-        CorfuRuntime rt3 = createDefaultRuntimeUsingAddressMaps();
+        CorfuRuntime rt2 = createDefaultRuntimeUsingAddressMaps();
 
         // Fixed Thread Pool
         final int numThreads = 10;
@@ -420,7 +311,6 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
             ExecutorService executor2 = Executors.newFixedThreadPool(numThreads);
-            ExecutorService executor3 = Executors.newFixedThreadPool(numThreads);
 
             Long startTime = System.currentTimeMillis();
 
@@ -439,7 +329,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in: %s ms",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
-            // Read from fresh runtime (following backpointers)
+            // Read from fresh runtime (stream address map)
             CorfuTable<Integer, String> table2 = rt2.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                     })
@@ -459,47 +349,18 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             executor2.shutdown();
             executor2.awaitTermination(2, TimeUnit.MINUTES);
 
-            long followBackpointersTime = System.currentTimeMillis() - startTime;
-
-            System.out.println(String.format("**** New runtime read (following backpointers) completed in: %s ms",
-                    followBackpointersTime));
-
-            assertThat(table2.size()).isEqualTo(numKeys);
-
-            // Read from fresh runtime (stream address map)
-            CorfuTable<Integer, String> table3 = rt3.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
-                    .setStreamName("streamTable")
-                    .open();
-
-            startTime = System.currentTimeMillis();
-            for (int i = 0; i < numKeys; i++) {
-                final int value = i;
-                executor3.submit(() -> {
-                    rt3.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-                    assertThat(table3.get(value)).isEqualTo(String.valueOf(value));
-                    rt3.getObjectsView().TXEnd();
-                });
-            }
-
-            executor3.shutdown();
-            executor3.awaitTermination(2, TimeUnit.MINUTES);
-
             long addressMapTime = System.currentTimeMillis() - startTime;
 
             System.out.println(String.format("**** New runtime read (stream address maps) completed in: %s ms",
                     addressMapTime));
 
-            assertThat(table3.size()).isEqualTo(numKeys);
-            assertThat(addressMapTime).isLessThanOrEqualTo(followBackpointersTime);
+            assertThat(table2.size()).isEqualTo(numKeys);
         } catch(Exception e) {
             System.out.println("**** Exception: " + e);
             // Exception
         } finally {
             rt1.shutdown();
             rt2.shutdown();
-            rt3.shutdown();
             shutdownCorfuServer(server);
         }
     }

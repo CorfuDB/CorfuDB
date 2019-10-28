@@ -10,14 +10,14 @@ import org.junit.Test;
 import java.time.Duration;
 
 /**
- * Tests the BackpointerStreamView
+ * Tests the AbstractStreamView
  * <p>
  * Created by zlokhandwala on 5/24/17.
  */
 public abstract class AbstractStreamViewTest extends AbstractViewTest {
 
-    public AbstractStreamViewTest(boolean followBackpointers) {
-        super(followBackpointers);
+    public AbstractStreamViewTest() {
+        super();
     }
 
     /**

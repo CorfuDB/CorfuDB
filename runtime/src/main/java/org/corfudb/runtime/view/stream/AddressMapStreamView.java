@@ -22,7 +22,7 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
  * A stream's address space is discovered by requesting to the
  * sequencer, the map of all addresses belonging to this stream.
  *
- * Notice that, unlike the BackpointerStreamView, addresses are discovered
+ * Notice that addresses are discovered
  * in a single call to the sequencer, therefore, entries are not read
  * in advance. For this reason, when iterating over the stream (getNextEntry)
  * we perform batch reads, which significantly reduces the number of RPCs to

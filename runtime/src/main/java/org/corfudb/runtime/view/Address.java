@@ -84,9 +84,4 @@ public class Address {
      * to be consistent, a initial position already "consumed" is -1L
      */
     public static final long NEVER_READ = -1L;
-
-    /** Indicates that the previous entry in the stream belongs
-     * to another stream.
-     */
-    public static final long COW_BACKPOINTER = -7L;
 }

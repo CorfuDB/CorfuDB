@@ -120,28 +120,12 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             return null;
         }
 
-        // Pop the context if it has changed.
-        if (getCurrentContext().getGlobalPointer()
-                >= getCurrentContext().maxGlobalAddress) {
-            final T last = streamContexts.pollFirst();
-            log.trace("Completed context {}@{}, removing.",
-                    last.id, last.maxGlobalAddress);
-        }
-
         // Get the next entry from the underlying implementation.
         ILogData entry = getNextEntry(getCurrentContext(), maxGlobal);
 
         if (entry != null) {
             // Update the pointer.
             updatePointer(entry);
-
-            // Process the next entry, checking if the context has changed.
-            // If the context has changed, we read again, since this entry
-            // does not contain any data, and we need to follow the new
-            // context.
-            if (processEntryForContext(entry)) {
-                return nextUpTo(maxGlobal);
-            }
         }
 
         // Return the entry.
@@ -161,8 +145,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                     last.id, last.maxGlobalAddress);
         }
 
-        final List<ILogData> entries = getNextEntries(getCurrentContext(), maxGlobal,
-                this::doesEntryUpdateContext);
+        final List<ILogData> entries = getNextEntries(getCurrentContext(), maxGlobal);
 
         // Nothing read, nothing to process.
         if (entries.size() == 0) {
@@ -172,23 +155,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                 getCurrentContext().setGlobalPointer(maxGlobal);
             }
             return entries;
-        }
-
-        // Check if the last entry updates the context.
-        if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
-
-            // Remove the entry which updates the context
-            entries.remove(entries.size() - 1);
-
-            // do a read again, which will consume the inner context
-            entries.addAll(remainingUpTo(maxGlobal));
-
-            // and now read again, in case the context returned, to make
-            // sure we get up to maxGlobal.
-            entries.addAll(remainingUpTo(maxGlobal));
         }
 
         // Otherwise update the pointer
@@ -230,22 +196,14 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
     /** Retrieve the next entries in the stream, given the context.
      *
-     * <p>This function is designed to implement a bulk read. In a bulk read,
-     * one of the entries may cause the context to change - the implementation
-     * should check if the entry changes the context and stop reading
-     * if this occurs, returning the entry that caused contextCheckFn to return
-     * true.
-     *
+     * <p>This function is designed to implement a bulk read.
      * <p>The default implementation simply calls getNextEntry.
      *
      * @param context           The context to retrieve the next entry from.
      * @param maxGlobal         The maximum global address to read to.
-     * @param contextCheckFn    A function which returns true if the entry changes the
-     *                          stream context.
      * @return                  A list of the next entries for this context
      */
-    protected List<ILogData> getNextEntries(T context, long maxGlobal,
-                                                     Function<ILogData, Boolean> contextCheckFn) {
+    protected List<ILogData> getNextEntries(T context, long maxGlobal) {
         final List<ILogData> dataList = new ArrayList<>();
         ILogData thisData;
 
@@ -257,26 +215,9 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // Update the pointer, because the underlying implementation
             // will expect it to be updated when we call getNextEntry() again.
             updatePointer(thisData);
-
-            // If this entry changes the context, don't continue reading.
-            if (contextCheckFn.apply(thisData)) {
-                break;
-            }
-
         }
 
         return dataList;
-    }
-
-    /** Check whether the given entry updates the context.
-     *
-     * @param data  The entry to check.
-     * @return      True, if the entry will update the context.
-     */
-    protected boolean doesEntryUpdateContext(final ILogData data) {
-        return data.hasBackpointer(getCurrentContext().id)
-                && data.getBackpointer(getCurrentContext().id)
-                        .equals(Address.COW_BACKPOINTER);
     }
 
     /** Update the global pointer, given an entry.
@@ -292,25 +233,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // of the pointer.
             getCurrentContext().setGlobalPointer(data.getGlobalAddress());
         }
-    }
-
-    /** Check if the given entry adds a new context, and update
-     * the global pointer.
-     *
-     * <p>If it does, add it to the context stack. Otherwise,
-     * pop the context.
-     *
-     * <p>It is important that this method be called in order, since
-     * it updates the global pointer and can change the global pointer.
-     *
-     * @param data  The entry to process.
-     * @return      True, if this entry adds a context.
-     */
-    protected boolean processEntryForContext(final ILogData data) {
-        if (data != null) {
-            final Object payload = data.getPayload(runtime);
-        }
-        return false;
     }
 
     /** Get the current context.
