@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -78,7 +79,9 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
     }
 
     @Test
-    public void CorfuTable1Thread1Table() {
+    public void CorfuTable1Thread1Table() throws IOException, InterruptedException {
+        setMetricsReportFlags("corfutable-1-1");
+        Process server = runServer();
         runtime = initRuntime();
         CorfuTable<String, String>
                 corfuTable = buildTable("table1");
@@ -90,6 +93,7 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
             putTable(corfuTable, random.nextInt(randomBoundary));
             getTable(corfuTable, random.nextInt(randomBoundary));
         }
+        killServer();
     }
 
     private void runTableOps(int numThreads, int numTables) throws InterruptedException {
@@ -109,14 +113,20 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
     }
 
     @Test
-    public void CorfuTable10Thread1Table() throws InterruptedException {
+    public void CorfuTable10Thread1Table() throws InterruptedException, IOException {
+        setMetricsReportFlags("corfutable-10-1");
+        Process server = runServer();
         runtime = initRuntime();
         runTableOps(1, 10);
+        killServer();
     }
 
     @Test
-    public void CorfuTable10Thread10Table() throws InterruptedException {
+    public void CorfuTable10Thread10Table() throws InterruptedException, IOException {
+        setMetricsReportFlags("corfutable-10-10");
+        Process server = runServer();
         runtime = initRuntime();
         runTableOps(10, 10);
+        killServer();
     }
 }

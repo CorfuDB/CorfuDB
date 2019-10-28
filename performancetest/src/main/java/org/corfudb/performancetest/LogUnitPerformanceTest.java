@@ -31,6 +31,8 @@ public class LogUnitPerformanceTest extends PerformanceTest{
      */
     @Test
     public void logunitSingleReadWrite() throws Exception {
+        setMetricsReportFlags("logunit-single");
+        Process server = runServer();
         CorfuRuntime runtime = initRuntime();
         int numRequests = Integer.parseInt(PROPERTIES.getProperty(SINGLE_REQUEST, "100"));
         int readPercent = Integer.parseInt(PROPERTIES.getProperty(READ_PERCENT, "50"));
@@ -48,6 +50,7 @@ public class LogUnitPerformanceTest extends PerformanceTest{
                 client.read(pos).get();
             }
         }
+        killServer();
     }
 
     /**
@@ -58,6 +61,8 @@ public class LogUnitPerformanceTest extends PerformanceTest{
      */
     @Test
     public void logunitRangeReadWrite() throws Exception {
+        setMetricsReportFlags("logunit-range");
+        Process server = runServer();
         CorfuRuntime runtime = initRuntime();
         int numRequests = Integer.parseInt(PROPERTIES.getProperty(BATCH_REQUEST, "50"));
         int batchSize = Integer.parseInt(PROPERTIES.getProperty(BATCH_SIZE, "15"));
@@ -89,5 +94,6 @@ public class LogUnitPerformanceTest extends PerformanceTest{
                 client.readAll(addresses).get();
             }
         }
+        killServer();
     }
 }

@@ -4,6 +4,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
+import java.io.IOException;
+
 /**
  * Created by Nan Zhang and Lin Dong on 10/23/19.
  */
@@ -21,7 +23,9 @@ public class StreamPerformanceTest extends PerformanceTest {
      * This test does not check correctness.
      */
     @Test
-    public void streamSingleProducer() {
+    public void streamSingleProducer() throws IOException, InterruptedException {
+        setMetricsReportFlags("stream-single");
+        Process server = runServer();
         CorfuRuntime runtime = initRuntime();
         int objectNum = Integer.parseInt(PROPERTIES.getProperty(OBJECT_NUM, "256"));
         int objectSize = Integer.parseInt(PROPERTIES.getProperty(OBJECT_SIZE, "4096"));
@@ -38,6 +42,7 @@ public class StreamPerformanceTest extends PerformanceTest {
                 counter++;
             }
         }
+        killServer();
     }
 
     /**
@@ -47,7 +52,9 @@ public class StreamPerformanceTest extends PerformanceTest {
      * This test does not check correctness.
      */
     @Test
-    public void streamMultipleProducers() {
+    public void streamMultipleProducers() throws IOException, InterruptedException {
+        setMetricsReportFlags("stream-multiple");
+        Process server = runServer();
         CorfuRuntime runtime = initRuntime();
         int objectNum = Integer.parseInt(PROPERTIES.getProperty(OBJECT_NUM, "256"));
         int objectSize = Integer.parseInt(PROPERTIES.getProperty(OBJECT_SIZE, "4096"));
@@ -67,6 +74,7 @@ public class StreamPerformanceTest extends PerformanceTest {
                 counter++;
             }
         }
+        killServer();
     }
 
     private void populateStream(CorfuRuntime runtime, int objectNum, byte[] payload) {

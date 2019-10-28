@@ -3,6 +3,7 @@ package org.corfudb.performancetest;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
@@ -14,7 +15,6 @@ public class PerformanceTest {
     protected String endPoint;
     protected int metricsPort;
     protected Random random;
-
 
     public PerformanceTest() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -28,6 +28,17 @@ public class PerformanceTest {
         metricsPort = Integer.parseInt(PROPERTIES.getProperty("sequencerMetricsPort", "1000"));
         endPoint = PROPERTIES.getProperty("endPoint", "localhost:9000");
         random = new Random();
+    }
+
+    protected void setMetricsReportFlags(String testName) {
+        System.setProperty("corfu.local.metrics.collection", "true");
+        System.setProperty("corfu.metrics.csv.interval", "1");
+        String metricsPath = "/Users/lidong/metrics/" + testName;
+        File logPath = new File(metricsPath);
+        if (!logPath.exists()) {
+            logPath.mkdir();
+        }
+        System.setProperty("corfu.metrics.csv.folder", metricsPath);
     }
 
     protected CorfuRuntime initRuntime() {

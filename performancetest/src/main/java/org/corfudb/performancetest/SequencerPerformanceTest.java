@@ -67,14 +67,7 @@ public class SequencerPerformanceTest extends PerformanceTest{
 
     @Test
     public void sequencerPerformanceTest() throws IOException, InterruptedException {
-        System.setProperty("corfu.local.metrics.collection", "true");
-        System.setProperty("corfu.metrics.csv.interval", "1");
-        String metricsPath = "/Users/lidong/metrics/sequencer";
-        File logPath = new File(metricsPath);
-        if (!logPath.exists()) {
-            logPath.mkdir();
-        }
-        System.setProperty("corfu.metrics.csv.folder", metricsPath);
+        setMetricsReportFlags("sequencer");
         Process server = runServer();
         runtime = initRuntime();
         long start = System.currentTimeMillis();
@@ -82,7 +75,6 @@ public class SequencerPerformanceTest extends PerformanceTest{
             if ((System.currentTimeMillis() - start) / milliToSecond > time) {
                 break;
             }
-            //System.out.println("sequencer query=================");
             tokenQuery(runtime, random.nextInt(randomBoundary));
             tokenTx(runtime, random.nextInt(randomBoundary));
         }
