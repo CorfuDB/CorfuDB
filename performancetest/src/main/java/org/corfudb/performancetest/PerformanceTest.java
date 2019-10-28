@@ -38,4 +38,18 @@ public class PerformanceTest {
         corfuRuntime.connect();
         return corfuRuntime;
     }
+
+    protected Process runServer() throws IOException {
+        ProcessBuilder builder = new ProcessBuilder();
+        builder.command("./scripts/run.sh");
+        Process corfuServerProcess = builder.start();
+        return corfuServerProcess;
+    }
+
+    protected void killServer() throws IOException, InterruptedException {
+        ProcessBuilder kill = new ProcessBuilder();
+        kill.command("kill $(lsof -t -i:9000)");
+        Process killP = kill.start();
+        killP.waitFor();
+    }
 }

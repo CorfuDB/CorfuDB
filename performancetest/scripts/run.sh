@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-./run_corfuserver.sh -ms 9000
+./scripts/run_corfuserver.sh -ms 9000 &

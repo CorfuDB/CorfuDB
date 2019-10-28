@@ -66,18 +66,18 @@ public class SequencerPerformanceTest extends PerformanceTest{
     }
 
     @Test
-    public void sequencerPerformanceTest() throws IOException {
-        ProcessBuilder builder = new ProcessBuilder();
-        builder.command("./scripts/run.sh");
-        Process corfuServerProcess = builder.start();
+    public void sequencerPerformanceTest() throws IOException, InterruptedException {
+        Process server = runServer();
         runtime = initRuntime();
         long start = System.currentTimeMillis();
         while (true) {
             if ((System.currentTimeMillis() - start) / milliToSecond > time) {
                 break;
             }
+            System.out.println("sequencer query=================");
             tokenQuery(runtime, random.nextInt(randomBoundary));
             tokenTx(runtime, random.nextInt(randomBoundary));
         }
+        killServer();
     }
 }
