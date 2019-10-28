@@ -6,6 +6,8 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -23,7 +25,6 @@ public class SequencerPerformanceTest extends PerformanceTest{
 
     public SequencerPerformanceTest() {
         loadProperties();
-        runtime = initRuntime();
         random = new Random(seed);
     }
 
@@ -65,7 +66,11 @@ public class SequencerPerformanceTest extends PerformanceTest{
     }
 
     @Test
-    public void sequencerPerformanceTest() {
+    public void sequencerPerformanceTest() throws IOException {
+        ProcessBuilder builder = new ProcessBuilder();
+        builder.command("./scripts/run.sh");
+        Process corfuServerProcess = builder.start();
+        runtime = initRuntime();
         long start = System.currentTimeMillis();
         while (true) {
             if ((System.currentTimeMillis() - start) / milliToSecond > time) {

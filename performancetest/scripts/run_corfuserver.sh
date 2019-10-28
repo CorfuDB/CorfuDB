@@ -5,7 +5,6 @@ if [ "$JAVA_HOME" != "" ]; then
 else
   JAVA=java #java
 fi
-echo $JAVA
 
 CORFUDBBINDIR="${CORFUDBBINDIR:-/usr/bin}" #/usr/bin
 CORFUDB_PREFIX="${CORFUDBBINDIR}/.." #/usr/bin/..
@@ -18,13 +17,12 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )" #/Users/lidong/vmware_proj/CorfuDB/scripts
 
-if ls "${DIR}"/../target/*.jar > /dev/null 2>&1; then
+if ls "${DIR}"/../../target/*.jar > /dev/null 2>&1; then
   # echo "Running from development source"
   CLASSPATH=("${DIR}"/../../infrastructure/target/infrastructure-*-shaded.jar)
 else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
-echo $CLASSPATH
 
 # Windows (cygwin) support
 case "`uname`" in
