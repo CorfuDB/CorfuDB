@@ -17,7 +17,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
 import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 
 import java.util.List;
 import java.util.Optional;
@@ -71,7 +71,7 @@ public class StateTransferManager {
          */
         private final long endAddress;
         /**
-         * A future that hold the status of a transfer of a segment.
+         * A future that holds the status of a transfer of a segment.
          */
         private final CurrentTransferSegmentStatus status;
 
@@ -127,7 +127,7 @@ public class StateTransferManager {
     }
 
     /**
-     * A data class that represent a status of a segment to be transferred.
+     * A data class that represents a status of a segment to be transferred.
      */
     @Getter
     @ToString
@@ -138,7 +138,7 @@ public class StateTransferManager {
          * A state of a segment.
          */
         @Default
-        private final SegmentState segmentState = RESTORED;
+        private final SegmentState segmentState = NOT_TRANSFERRED;
         /**
          * Total number of records transferred for this segment.
          */
@@ -149,7 +149,7 @@ public class StateTransferManager {
          */
         @Default
         @Exclude
-        private final Optional<StreamProcessFailure> causeOfFailure = Optional.empty();
+        private final Optional<TransferSegmentFailure> causeOfFailure = Optional.empty();
     }
 
     @Getter
@@ -255,15 +255,15 @@ public class StateTransferManager {
      * @return A completed future containing a result of total number of addresses transferred
      * or an exception.
      */
-    CompletableFuture<Result<Long, StreamProcessFailure>> synchronousStateTransfer(
+    CompletableFuture<Result<Long, TransferSegmentFailure>> synchronousStateTransfer(
             StateTransferBatchProcessor batchProcessor, Stream<Batch> batchStream) {
-        Result<Long, StreamProcessFailure> accumulatedResult = Result.ok(0L);
+        Result<Long, TransferSegmentFailure> accumulatedResult = Result.ok(0L);
 
-        Result<Long, StreamProcessFailure> resultOfTransfer =
+        Result<Long, TransferSegmentFailure> resultOfTransfer =
                 batchStream.reduce(accumulatedResult, (resultSoFar, nextBatch) -> {
                     BatchResult batchResult = batchProcessor.transfer(nextBatch).join();
                     if (batchResult.getStatus() == BatchResult.FailureStatus.FAILED) {
-                        return Result.error(new StreamProcessFailure());
+                        return Result.error(new TransferSegmentFailure());
                     } else {
                         return resultSoFar
                                 .map(sumSoFar -> sumSoFar + batchResult.getBatch().getAddresses()
@@ -283,13 +283,13 @@ public class StateTransferManager {
      * @return An updated segment status.
      */
     CurrentTransferSegmentStatus createStatusBasedOnTransferResult(
-            Result<Long, StreamProcessFailure> result, long totalNeeded) {
+            Result<Long, TransferSegmentFailure> result, long totalNeeded) {
 
-        Result<Long, StreamProcessFailure> checkedResult = result.flatMap(totalTransferred -> {
+        Result<Long, TransferSegmentFailure> checkedResult = result.flatMap(totalTransferred -> {
             if (totalTransferred != totalNeeded) {
                 String error = "Needed: " + totalNeeded + ", but transferred: " + totalTransferred;
 
-                return Result.error(new StreamProcessFailure(new IllegalStateException(error)));
+                return Result.error(new TransferSegmentFailure(new IllegalStateException(error)));
             } else {
                 return Result.ok(totalTransferred);
             }

@@ -12,7 +12,8 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
- * A redundancy calculator that also considers a prefix trim.
+ * A redundancy calculator that reads the global trim mark before creating a list of
+ * segments to transfer.
  */
 public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
 

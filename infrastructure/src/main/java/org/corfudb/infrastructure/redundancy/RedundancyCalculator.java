@@ -26,7 +26,7 @@ import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.Segment
 import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.PREVIOUS_EPOCH;
 
 /**
- * A class used to compute the transfer segments, as well as update the layout
+ * A class used to compute the transfer segments, as well as the layout
  * after the redundancy restoration.
  */
 @AllArgsConstructor

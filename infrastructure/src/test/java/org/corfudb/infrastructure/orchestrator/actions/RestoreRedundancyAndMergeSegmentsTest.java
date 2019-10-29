@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.orchestrator.actions;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -60,7 +60,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
         assertThatThrownBy(() ->
                 action.tryRestoreRedundancyAndMergeSegments(failed, testLayout, layoutManagementView))
-                .isInstanceOf(StreamProcessFailure.class);
+                .isInstanceOf(TransferSegmentFailure.class);
     }
 
     // list with non transferred entities

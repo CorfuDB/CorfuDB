@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 
 import java.util.Optional;
 
@@ -34,7 +34,7 @@ public interface TransferSegmentCreator {
                                     .builder()
                                     .totalTransferred(0L)
                                     .segmentState(state)
-                                    .causeOfFailure(Optional.of(new StreamProcessFailure()))
+                                    .causeOfFailure(Optional.of(new TransferSegmentFailure()))
                                     .build()
                     )
                     .startAddress(start)
@@ -43,7 +43,7 @@ public interface TransferSegmentCreator {
         }
     }
 
-    default CurrentTransferSegmentStatus createStatus(SegmentState state, long total, Optional<StreamProcessFailure> fail) {
+    default CurrentTransferSegmentStatus createStatus(SegmentState state, long total, Optional<TransferSegmentFailure> fail) {
         return CurrentTransferSegmentStatus.builder().totalTransferred(total).segmentState(state).causeOfFailure(fail).build();
     }
 

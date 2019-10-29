@@ -9,7 +9,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
@@ -120,11 +120,11 @@ public class RestoreRedundancyMergeSegments extends Action {
                 .collect(Collectors.toList());
 
         // Throw the first failure if present.
-        Optional<StreamProcessFailure> streamProcessFailure = failed.stream()
+        Optional<TransferSegmentFailure> TransferSegmentFailure = failed.stream()
                 .findFirst()
                 .flatMap(ts -> ts.getStatus().getCauseOfFailure());
 
-        streamProcessFailure.ifPresent(failure -> {
+        TransferSegmentFailure.ifPresent(failure -> {
             throw failure;
         });
 

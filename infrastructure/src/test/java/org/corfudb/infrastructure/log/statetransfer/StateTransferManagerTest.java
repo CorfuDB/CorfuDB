@@ -5,7 +5,7 @@ import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
+import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 import org.junit.jupiter.api.Test;
 
 import java.util.AbstractMap.SimpleEntry;
@@ -133,7 +133,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 new StateTransferManager(streamLog, 10);
 
         // Success
-        Result<Long, StreamProcessFailure> result = Result.ok(200L);
+        Result<Long, TransferSegmentFailure> result = Result.ok(200L);
         long totalNeeded = 200L;
         CurrentTransferSegmentStatus status =
                 stateTransferManager.createStatusBasedOnTransferResult(result, totalNeeded);
@@ -145,7 +145,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         assertThat(status.getSegmentState()).isEqualTo(FAILED);
         assertThat(status.getTotalTransferred()).isEqualTo(0L);
         // Failure
-        result = Result.error(new StreamProcessFailure());
+        result = Result.error(new TransferSegmentFailure());
         status = stateTransferManager.createStatusBasedOnTransferResult(result, totalNeeded);
         assertThat(status.getSegmentState()).isEqualTo(FAILED);
         assertThat(status.getTotalTransferred()).isEqualTo(0L);
