@@ -278,6 +278,10 @@ public class MetricsUtils {
         }
     }
 
+    public static void incConditionalCounter(@NonNull Counter counter, long amount) {
+        incConditionalCounter(metricsCollectionEnabled, counter, amount);
+    }
+
     public static void incConditionalCounter(boolean enabled, @NonNull Counter counter, long amount) {
         if (enabled) {
             counter.inc(amount);
@@ -288,24 +292,14 @@ public class MetricsUtils {
      * return a gauge on direct memory used by netty's PooledByteBufAllocator
      */
     private static Gauge<Long> getNettyPooledDirectMemGauge() {
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory();
-            }
-        };
+        return () -> PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory();
     }
 
     /**
      * return a gauge on heap memory used by netty's PooledByteBufAllocator
      */
     private static Gauge<Long> getNettyPooledHeapMemGauge() {
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory();
-            }
-        };
+        return () -> PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory();
     }
 
     /**
@@ -347,14 +341,11 @@ public class MetricsUtils {
     private static Gauge<Long> getSizeGauge(Object object) {
         WeakReference<Object> toBeMeasuredObject = new WeakReference<>(object);
 
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                final Object objectOfInterest = toBeMeasuredObject.get();
-                return (objectOfInterest != null) ?
-                        sizeOf.deepSizeOf(objectOfInterest) :
-                        0L;
-            }
+        return () -> {
+            final Object objectOfInterest = toBeMeasuredObject.get();
+            return (objectOfInterest != null) ?
+                    sizeOf.deepSizeOf(objectOfInterest) :
+                    0L;
         };
     }
 
