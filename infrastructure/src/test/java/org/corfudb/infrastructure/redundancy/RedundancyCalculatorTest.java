@@ -5,13 +5,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import org.corfudb.infrastructure.LayoutBasedTest;
+import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
-import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
-import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -24,17 +22,20 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
+import static org.corfudb.runtime.view.Address.NOT_FOUND;
 import static org.corfudb.runtime.view.Layout.LayoutStripe;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
-public class RedundancyCalculatorTest extends LayoutBasedTest implements TransferSegmentCreator {
+public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements TransferSegmentCreator {
 
     @Test
     public void testSegmentContainsServer() {
@@ -451,6 +452,29 @@ public class RedundancyCalculatorTest extends LayoutBasedTest implements Transfe
                 Arrays.asList(new LayoutStripe(Arrays.asList("B", "localhost"))));
         assertThat(RedundancyCalculator
                 .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)), "localhost")).isTrue();
+
+    }
+
+    @Test
+    public void testSegmentVerification() {
+        CurrentTransferSegmentStatus status = CurrentTransferSegmentStatus.builder().build();
+
+        // start can't be < 0L.
+        assertThatThrownBy(() ->
+                CurrentTransferSegment.builder()
+                        .startAddress(NON_ADDRESS)
+                        .endAddress(0)
+                        .status(status)
+                        .build()).isInstanceOf(IllegalStateException.class);
+
+        // status should be defined.
+        assertThatThrownBy(() ->
+                CurrentTransferSegment.builder()
+                        .startAddress(0L)
+                        .endAddress(1L)
+                        .status(null)
+                        .build()).isInstanceOf(IllegalStateException.class);
+
 
     }
 

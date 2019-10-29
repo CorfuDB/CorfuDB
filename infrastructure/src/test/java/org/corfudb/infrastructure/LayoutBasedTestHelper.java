@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 
-public class LayoutBasedTest {
+public class LayoutBasedTestHelper {
     private static String servers = "A|B|C";
 
     public Layout createTestLayout(List<Layout.LayoutSegment> segments){

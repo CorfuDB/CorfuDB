@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
-import org.corfudb.infrastructure.LayoutBasedTest;
+import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,7 +19,7 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
-public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTest implements TransferSegmentCreator {
+public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTestHelper implements TransferSegmentCreator {
 
 
     @Test

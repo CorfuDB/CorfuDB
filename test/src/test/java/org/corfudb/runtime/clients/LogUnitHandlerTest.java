@@ -1,15 +1,39 @@
 package org.corfudb.runtime.clients;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.assertj.core.api.Assertions;
+import org.assertj.core.api.Condition;
+import org.corfudb.format.Types;
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.configuration.ServerConfigurator;
+import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -27,35 +51,11 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
-import org.assertj.core.api.Assertions;
-import org.assertj.core.api.Condition;
-import org.corfudb.format.Types;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.runtime.exceptions.QuotaExceededException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.DataOutrankedException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ValueAdoptedException;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 12/14/15.
@@ -89,7 +89,9 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .build();
-        LogUnitServer server = new LogUnitServer(serverContext);
+
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        LogUnitServer server = serverConfigurator.getLogUnitServer();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
                 .build();
@@ -169,7 +171,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .withCauseInstanceOf(OverwriteException.class);
 
         // "Restart the logging unit
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        LogUnitServer server2 = serverConfigurator.getLogUnitServer();
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -196,7 +199,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setServerRouter(serverRouter)
                 .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
                 .build();
-        LogUnitServer server = new LogUnitServer(sc);
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        LogUnitServer server = serverConfigurator.getLogUnitServer();
         serverRouter.addServer(server);
 
         final long address0 = 0L;
@@ -243,7 +247,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.compact().get();
 
         // For logunit cache flush
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        LogUnitServer server2 = serverConfigurator.getLogUnitServer();
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -255,7 +260,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
     @Test
     public void flushLogUnitCache() throws Exception {
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        LogUnitServer server2 = serverConfigurator.getLogUnitServer();
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -323,22 +329,23 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         client.write(0, new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
-        assertThat(r.getType()) .isEqualTo(DataType.DATA);
+        assertThat(r.getType()).isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
                 .isEqualTo(testString);
 
         try {
-            ILogData data = createEmptyData(0, DataType.RANK_ONLY,  new IMetadata.DataRank(2)).getSerialized();
+            ILogData data = createEmptyData(0, DataType.RANK_ONLY, new IMetadata.DataRank(2)).getSerialized();
             client.write(data).get();
             fail();
         } catch (Exception e) {
             // expected
             assertEquals(ValueAdoptedException.class, e.getCause().getClass());
-            ValueAdoptedException ex = (ValueAdoptedException)e.getCause();
+            ValueAdoptedException ex = (ValueAdoptedException) e.getCause();
             ReadResponse read = ex.getReadResponse();
             LogData log = read.getAddresses().get(0l);
             assertThat(log.getType()).isEqualTo(DataType.DATA);
-            assertThat(log.getPayload(new CorfuRuntime())).isEqualTo(testString);;
+            assertThat(log.getPayload(new CorfuRuntime())).isEqualTo(testString);
+            ;
         }
         r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType()).isEqualTo(DataType.DATA);
@@ -472,7 +479,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         file.getChannel().read(metaDataBuf);
         metaDataBuf.flip();
 
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        LogUnitServer server2 = serverConfigurator.getLogUnitServer();
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -493,6 +501,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
      * Testing that the clientId/ThreadId is persisted and that two
      * LogData entries are equal if they have the same runtime and are coming
      * from the same thread.
+     *
      * @throws Exception
      */
     @Test
@@ -515,6 +524,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     /**
      * Ensure that same LogData payload written by two different thread
      * are not equals
+     *
      * @throws Exception
      */
     @Test
@@ -536,6 +546,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     /**
      * Ensure that same LogData payload written by two different client
      * are not equals
+     *
      * @throws Exception
      */
     @Test
@@ -557,6 +568,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
     /**
      * Ensure log unit client can query log tail.
+     *
      * @throws Exception
      */
     @Test
@@ -571,11 +583,12 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         CompletableFuture<TailsResponse> cf = client.getLogTail();
         long tail = cf.get().getLogTail();
-        assertThat(tail).isEqualTo(numEntries-1);
+        assertThat(tail).isEqualTo(numEntries - 1);
     }
 
     /**
      * Ensure log unit client can query stream's address space and log address space.
+     *
      * @throws Exception
      */
     @Test

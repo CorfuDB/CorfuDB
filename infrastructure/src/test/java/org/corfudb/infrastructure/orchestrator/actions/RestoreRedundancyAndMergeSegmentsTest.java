@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
-import org.corfudb.infrastructure.LayoutBasedTest;
+import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
@@ -25,7 +25,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 
-public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTest implements TransferSegmentCreator {
+public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper implements TransferSegmentCreator {
 
     // empty list
     @Test

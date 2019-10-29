@@ -5,7 +5,6 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -24,7 +23,7 @@ public class LogUnitServerCache {
     private final LoadingCache<Long, ILogData> dataCache;
     private final StreamLog streamLog;
 
-    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
+    public LogUnitServerCache(LogUnitServer.LogUnitParameters config, StreamLog streamLog) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
                 .<Long, ILogData>weigher((addr, logData) -> logData.getSizeEstimate())

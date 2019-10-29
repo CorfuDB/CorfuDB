@@ -5,10 +5,10 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.log.InMemoryStreamLog;
+import org.corfudb.infrastructure.configuration.CorfuConfig;
+import org.corfudb.infrastructure.configuration.ServerConfigurator;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
-import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -34,7 +34,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
@@ -72,12 +71,13 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
  * . When the entry is complete, a written flag is set in the flags field.
  */
 @Slf4j
+@Builder
 public class LogUnitServer extends AbstractServer {
 
     /**
      * The options map.
      */
-    private final LogUnitServerConfig config;
+    private final LogUnitParameters config;
 
     /**
      * The server context of the node.
@@ -111,50 +111,6 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public List<ExecutorService> getExecutors() {
         return Collections.singletonList(executor);
-    }
-
-    /**
-     * Returns a new LogUnitServer.
-     *
-     * @param serverContext context object providing settings and objects
-     */
-    public LogUnitServer(ServerContext serverContext) {
-        this.serverContext = serverContext;
-        this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
-                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
-
-        if (config.isMemoryMode()) {
-            log.warn("Log unit opened in-memory mode (Maximum size={}). "
-                    + "This should be run for testing purposes only. "
-                    + "If you exceed the maximum size of the unit, old entries will be "
-                    + "AUTOMATICALLY trimmed. "
-                    + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
-            streamLog = new InMemoryStreamLog();
-        } else {
-            streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
-        }
-
-        dataCache = new LogUnitServerCache(config, streamLog);
-        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
-
-        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
-    }
-
-    public LogUnitServer(ServerContext serverContext, StreamLog streamLog){
-        this.serverContext = serverContext;
-        this.executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
-                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
-        this.streamLog = streamLog;
-        this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        this.dataCache = new LogUnitServerCache(config, streamLog);
-        this.batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
-        logCleaner = new StreamLogCompaction(streamLog,
-                10,
-                45,
-                TimeUnit.MINUTES,
-                ServerContext.SHUTDOWN_TIMER);
     }
 
     /**
@@ -244,8 +200,8 @@ public class LogUnitServer extends AbstractServer {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 }, executor).exceptionally(ex -> {
-                    handleException(ex, ctx, msg, r);
-                    return null;
+            handleException(ex, ctx, msg, r);
+            return null;
         });
     }
 
@@ -415,15 +371,14 @@ public class LogUnitServer extends AbstractServer {
                         log.info("LogUnit Server Reset.");
                         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
                     }).exceptionally(ex -> {
-                        handleException(ex, ctx, msg, r);
-                        return null;
-                    });
+                handleException(ex, ctx, msg, r);
+                return null;
+            });
         } else {
             log.info("LogUnit Server Reset request received but reset already done.");
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         }
     }
-
 
 
     /**
@@ -476,11 +431,11 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Log unit server configuration class
+     * Log unit server parameters.
      */
     @Builder
     @Getter
-    public static class LogUnitServerConfig {
+    public static class LogUnitParameters {
         private final double cacheSizeHeapRatio;
         private final long maxCacheSize;
         private final boolean memoryMode;
@@ -490,13 +445,14 @@ public class LogUnitServer extends AbstractServer {
         /**
          * Parse legacy configuration options
          *
-         * @param opts legacy config
+         * @param corfuConfig A global corfu config.
          * @return log unit configuration
          */
-        public static LogUnitServerConfig parse(Map<String, Object> opts) {
+        public static LogUnitParameters parse(CorfuConfig corfuConfig) {
+            Map<String, Object> opts = corfuConfig.getConfig();
             double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
 
-            return LogUnitServerConfig.builder()
+            return LogUnitParameters.builder()
                     .cacheSizeHeapRatio(cacheSizeHeapRatio)
                     .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
                     .memoryMode(Boolean.valueOf(opts.get("--memory").toString()))

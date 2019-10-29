@@ -52,11 +52,10 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
      */
     public ImmutableList<CurrentTransferSegment> createStateList(Layout layout) {
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
-
         return layout.getSegments()
                 .stream()
-                // filter the segments that end before the trim mark and are not open.
-                .filter(segment -> segment.getEnd() >= trimMark && segment.getEnd() != NON_ADDRESS)
+                // filter the segments that start before the trim mark or are not open.
+                .filter(segment -> segment.getEnd() != NON_ADDRESS && segment.getEnd() >= trimMark)
                 .map(segment -> {
                     long segmentStart = Math.max(segment.getStart(), trimMark);
                     long segmentEnd = segment.getEnd() - 1L;
@@ -74,7 +73,8 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                 .endAddress(segmentEnd)
                                 .status(restored)
                                 .build();
-                    } else {
+                    }
+                    else {
                         CurrentTransferSegmentStatus notTransferred = CurrentTransferSegmentStatus
                                 .builder()
                                 .segmentState(NOT_TRANSFERRED)

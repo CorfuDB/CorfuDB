@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -14,7 +13,23 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.CorfuConfig;
+import org.corfudb.infrastructure.configuration.ServerConfigurator;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
+import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Version;
 
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
@@ -23,27 +38,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
-import org.corfudb.infrastructure.log.InMemoryStreamLog;
-import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
-import org.corfudb.security.tls.SslContextConstructor;
-import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Utils;
-import org.corfudb.util.Version;
 
 
 /**
@@ -73,49 +67,35 @@ public class CorfuServerNode implements AutoCloseable {
      */
     public CorfuServerNode(@Nonnull ServerContext serverContext) {
 
-        LogUnitServerConfig config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        StreamLog streamLog;
-        if (config.isMemoryMode()) {
-            log.warn("Log unit opened in-memory mode (Maximum size={}). "
-                    + "This should be run for testing purposes only. "
-                    + "If you exceed the maximum size of the unit, old entries will be "
-                    + "AUTOMATICALLY trimmed. "
-                    + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
-            streamLog = new InMemoryStreamLog();
-        }
-        else{
-            streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
-        }
+        this(serverContext, createServerMap(serverContext));
+    }
 
-        ImmutableMap<Class, AbstractServer> servers = ImmutableMap.<Class, AbstractServer>builder()
-                .put(BaseServer.class, new BaseServer(serverContext))
-                .put(SequencerServer.class, new SequencerServer(serverContext))
-                .put(LayoutServer.class, new LayoutServer(serverContext))
-                .put(LogUnitServer.class, new LogUnitServer(serverContext, streamLog))
-                .put(ManagementServer.class, new ManagementServer(serverContext, streamLog))
-                .build();
-
+    public CorfuServerNode(@NonNull ServerContext serverContext,
+                           @NonNull Map<Class, AbstractServer> serverMap) {
         this.serverContext = serverContext;
-        this.serverMap = servers;
-        router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
+        this.serverMap = serverMap;
+        this.router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
         this.serverContext.setServerRouter(router);
         this.close = new AtomicBoolean(false);
     }
 
     /**
-     * Corfu Server initialization.
+     * Given a server context create a map from class to a server.
      *
-     * @param serverContext Initialized Server Context.
-     * @param serverMap     Server Map with all components.
+     * @param context Corfu server context.
+     * @return A map.
      */
-    public CorfuServerNode(@Nonnull ServerContext serverContext,
-                           @Nonnull Map<Class, AbstractServer> serverMap) {
-        this.serverContext = serverContext;
-        this.serverMap = serverMap;
-        router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
-        this.serverContext.setServerRouter(router);
-        this.close = new AtomicBoolean(false);
+    private static ImmutableMap<Class, AbstractServer> createServerMap(ServerContext context) {
+        CorfuConfig globalConfig = new CorfuConfig(context);
+        ServerConfigurator configurator = new ServerConfigurator(globalConfig);
+
+        return ImmutableMap.<Class, AbstractServer>builder()
+                .put(BaseServer.class, new BaseServer(context))
+                .put(SequencerServer.class, new SequencerServer(context))
+                .put(LayoutServer.class, new LayoutServer(context))
+                .put(LogUnitServer.class, configurator.getLogUnitServer())
+                .put(ManagementServer.class, configurator.getManagementServer())
+                .build();
     }
 
     /**
@@ -127,8 +107,8 @@ public class CorfuServerNode implements AutoCloseable {
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
-                (String)serverContext.getServerConfig().get("--address"),
-                Integer.parseInt((String)serverContext.getServerConfig().get("<port>")));
+                (String) serverContext.getServerConfig().get("--address"),
+                Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
 
         return bindFuture.syncUninterruptibly();
     }

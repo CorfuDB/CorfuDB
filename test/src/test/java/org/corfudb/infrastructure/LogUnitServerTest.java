@@ -4,11 +4,16 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.assertj.core.api.Assertions;
 import org.corfudb.format.Types;
+import org.corfudb.infrastructure.configuration.ServerConfigurator;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LogUnitException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
@@ -24,8 +29,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
 import static org.junit.Assert.fail;
 
 /**
@@ -35,12 +40,19 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
     public AbstractServer getDefaultServer() {
-        return new LogUnitServer(new ServerContextBuilder().build());
+        ServerConfigurator serverConfigurator = new ServerConfigurator(new ServerContextBuilder().build());
+        return serverConfigurator.getLogUnitServer();
+    }
+
+    public LogUnitServer getLogUnitServer(ServerContext context) {
+        ServerConfigurator serverConfigurator = new ServerConfigurator(context);
+        return serverConfigurator.getLogUnitServer();
     }
 
     /**
      * Waits for the log unit batch writer to drain the operation queue and
      * reply to all requests.
+     *
      * @param lu log unit to wait for
      */
     static void waitForLogUnit(LogUnitServer lu) throws Exception {
@@ -54,7 +66,8 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkOverwritesFail() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+
+        LogUnitServer s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -104,7 +117,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void cantOpenReadOnlyLogFiles() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -112,9 +125,12 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
 
-        final long LOW_ADDRESS = 0L; final String low_payload = "0";
-        final long MID_ADDRESS = 100L; final String mid_payload = "100";
-        final long HIGH_ADDRESS = 10000000L; final String high_payload = "100000";
+        final long LOW_ADDRESS = 0L;
+        final String low_payload = "0";
+        final long MID_ADDRESS = 100L;
+        final String mid_payload = "100";
+        final long HIGH_ADDRESS = 10000000L;
+        final String high_payload = "100000";
         final String streamName = "a";
         //write at 0, 100 & 10_000_000
         rawWrite(LOW_ADDRESS, low_payload, streamName);
@@ -126,12 +142,12 @@ public class LogUnitServerTest extends AbstractServerTest {
         try {
             File serviceDirectory = new File(serviceDir);
             serviceDirectory.setWritable(false);
-        } catch(SecurityException e) {
-            fail("Should not hit security exception"+e.toString());
+        } catch (SecurityException e) {
+            fail("Should not hit security exception" + e.toString());
         }
 
         try {
-            LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+            LogUnitServer s2 = getLogUnitServer(new ServerContextBuilder()
                     .setLogPath(serviceDir)
                     .setMemory(false)
                     .build());
@@ -149,7 +165,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -157,9 +173,12 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
 
-        final long LOW_ADDRESS = 0L; final String low_payload = "0";
-        final long MID_ADDRESS = 100L; final String mid_payload = "100";
-        final long HIGH_ADDRESS = 10000000L; final String high_payload =
+        final long LOW_ADDRESS = 0L;
+        final String low_payload = "0";
+        final long MID_ADDRESS = 100L;
+        final String mid_payload = "100";
+        final long HIGH_ADDRESS = 10000000L;
+        final String high_payload =
                 "100000";
         final String streamName = "a";
 
@@ -176,7 +195,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         s1.shutdown();
 
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s2 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -211,7 +230,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -219,27 +238,28 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
 
-        final long START_ADDRESS = 0L; final String low_payload = "0";
+        final long START_ADDRESS = 0L;
+        final String low_payload = "0";
         final int num_iterations_very_low = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
         final String streamName = "a";
 
         for (int i = 0; i < num_iterations_very_low; i++)
-            rawWrite(START_ADDRESS+i, low_payload+i, streamName);
+            rawWrite(START_ADDRESS + i, low_payload + i, streamName);
 
         waitForLogUnit(s1);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s1)
-                .containsDataAtAddress(START_ADDRESS+i);
+                    .containsDataAtAddress(START_ADDRESS + i);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s1)
-                .matchesDataAtAddress(START_ADDRESS+i, (low_payload+i)
-                    .getBytes());
+                    .matchesDataAtAddress(START_ADDRESS + i, (low_payload + i)
+                            .getBytes());
 
         s1.shutdown();
 
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s2 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -248,30 +268,30 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s2)
-                    .containsDataAtAddress(START_ADDRESS+i);
+                    .containsDataAtAddress(START_ADDRESS + i);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s2)
-                    .matchesDataAtAddress(START_ADDRESS+i, (low_payload+i)
+                    .matchesDataAtAddress(START_ADDRESS + i, (low_payload + i)
                             .getBytes());
 
         for (int i = 0; i < num_iterations_very_low; i++)
-            rawWrite(START_ADDRESS+num_iterations_very_low+i, low_payload+i, streamName);
+            rawWrite(START_ADDRESS + num_iterations_very_low + i, low_payload + i, streamName);
 
         waitForLogUnit(s2);
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s2)
                     .containsDataAtAddress
-                            (START_ADDRESS+num_iterations_very_low+i);
+                            (START_ADDRESS + num_iterations_very_low + i);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s2)
                     .matchesDataAtAddress
-                            (START_ADDRESS+num_iterations_very_low+i,
-                                    (low_payload+i)
-                            .getBytes());
+                            (START_ADDRESS + num_iterations_very_low + i,
+                                    (low_payload + i)
+                                            .getBytes());
 
-        LogUnitServer s3 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s3 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -280,23 +300,23 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s3)
-                    .containsDataAtAddress(START_ADDRESS+i);
+                    .containsDataAtAddress(START_ADDRESS + i);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s3)
-                    .matchesDataAtAddress(START_ADDRESS+i, (low_payload+i)
+                    .matchesDataAtAddress(START_ADDRESS + i, (low_payload + i)
                             .getBytes());
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s3)
                     .containsDataAtAddress
-                            (START_ADDRESS+num_iterations_very_low+i);
+                            (START_ADDRESS + num_iterations_very_low + i);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s3)
                     .matchesDataAtAddress
-                            (START_ADDRESS+num_iterations_very_low+i,
-                                    (low_payload+i)
+                            (START_ADDRESS + num_iterations_very_low + i,
+                                    (low_payload + i)
                                             .getBytes());
 
     }
@@ -315,7 +335,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         final long trimMark = 15000L;
         UUID streamID = UUID.randomUUID();
 
-        LogUnitServer logUnitServer = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer logUnitServer = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -348,7 +368,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
 
         // Instantiate new log unit server (restarts) so the log is read and address maps are rebuilt.
-        LogUnitServer newServer = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer newServer = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -372,7 +392,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkUnCachedWrites() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -388,14 +408,14 @@ public class LogUnitServerTest extends AbstractServerTest {
         final Long globalAddress = 0L;
         m.setGlobalAddress(globalAddress);
         Map<UUID, Long> uuidLongMap = new HashMap();
-        UUID uuid = new UUID(1,1);
+        UUID uuid = new UUID(1, 1);
         final Long address = 5L;
         uuidLongMap.put(uuid, address);
         m.setBackpointerMap(uuidLongMap);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         waitForLogUnit(s1);
 
-        s1 = new LogUnitServer(new ServerContextBuilder()
+        s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -440,7 +460,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         fileChannel.force(true);
     }
 
-    @Test (expected = RuntimeException.class)
+    @Test(expected = RuntimeException.class)
     public void testInvalidLogVersion() throws Exception {
         // Create a log file with an invalid version
         String tempDir = PARAMETERS.TEST_TEMP_DIR;
@@ -451,10 +471,10 @@ public class LogUnitServerTest extends AbstractServerTest {
         builder.setMemory(false);
         builder.setLogPath(tempDir);
         ServerContext context = builder.build();
-        LogUnitServer logunit = new LogUnitServer(context);
+        LogUnitServer logunit = getLogUnitServer(context);
     }
 
-    @Test (expected = RuntimeException.class)
+    @Test(expected = RuntimeException.class)
     public void testVerifyWithNoVerifyLog() throws Exception {
         boolean noVerify = true;
 
@@ -468,7 +488,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         builder.setLogPath(tempDir);
         builder.setNoVerify(!noVerify);
         ServerContext context = builder.build();
-        LogUnitServer logunit = new LogUnitServer(context);
+        LogUnitServer logunit = getLogUnitServer(context);
     }
 
 
@@ -476,7 +496,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkOverwriteExceptionIsNotThrownWhenTheRankIsHigher() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -535,7 +555,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
 
         // and now without the local cache
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s2 = getLogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());

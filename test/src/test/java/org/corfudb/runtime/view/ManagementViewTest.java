@@ -28,9 +28,11 @@ import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -983,7 +985,6 @@ public class ManagementViewTest extends AbstractViewTest {
             bootstrapAllServers(l);
 
             corfuRuntime = getRuntime(l).connect();
-
             setAggressiveTimeouts(l, corfuRuntime,
                     getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
             setAggressiveDetectorTimeouts(SERVERS.PORT_0);

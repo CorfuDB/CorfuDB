@@ -160,7 +160,7 @@ public class RedundancyCalculator {
             int firstSegmentIndex = 0;
             int secondSegmentIndex = 1;
             Layout copy = new Layout(layout);
-            LayoutStripe firstStripe = copy.getSegments().get(0).getFirstStripe();
+            LayoutStripe firstStripe = copy.getFirstSegment().getFirstStripe();
             firstStripe.getLogServers().add(server);
             return Sets.difference(
                     copy.getSegments().get(secondSegmentIndex).getAllLogServers(),

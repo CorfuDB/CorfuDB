@@ -23,7 +23,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
-public class RemoteMonitoringServiceTest extends LayoutBasedTest{
+public class RemoteMonitoringServiceTest extends LayoutBasedTestHelper{
 
     @Test
     public void testRestoreRedundancyTrigger(){

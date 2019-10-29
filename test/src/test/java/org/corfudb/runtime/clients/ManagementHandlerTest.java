@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.configuration.ServerConfigurator;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
@@ -47,7 +48,9 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setServerRouter(serverRouter)
                 .setPort(SERVERS.PORT_0)
                 .build();
-        server = new ManagementServer(serverContext, mock(StreamLog.class));
+
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        server = serverConfigurator.getManagementServer();
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
@@ -55,7 +58,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
-                .add(new LogUnitServer(serverContext))
+                .add(serverConfigurator.getLogUnitServer())
                 .add(new BaseServer(serverContext))
                 .build();
     }

@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.corfudb.infrastructure.configuration.ServerConfigurator;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -29,14 +30,20 @@ public class LogUnitCacheTest extends AbstractServerTest {
     private static final double MIN_HEAP_RATIO = 0.1;
     private static final double MAX_HEAP_RATIO = 0.9;
 
+    public LogUnitServer createServer(ServerContext serverContext) {
+        ServerConfigurator serverConfigurator = new ServerConfigurator(serverContext);
+        return serverConfigurator.getLogUnitServer();
+    }
+
     @Override
     public AbstractServer getDefaultServer() {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        return new LogUnitServer(new ServerContextBuilder()
+        ServerConfigurator serverConfigurator = new ServerConfigurator(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
+        return serverConfigurator.getLogUnitServer();
     }
 
     /**
@@ -95,7 +102,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
         Random r = new Random(System.currentTimeMillis());
         double randomCacheRatio = MIN_HEAP_RATIO + (MAX_HEAP_RATIO - MIN_HEAP_RATIO) * r.nextDouble();
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = createServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setCacheSizeHeapRatio(String.valueOf(randomCacheRatio))

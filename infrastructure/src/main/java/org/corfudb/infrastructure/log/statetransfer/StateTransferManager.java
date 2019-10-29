@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -29,7 +30,6 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
-import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
  * A class responsible for managing a state transfer on the current node.
@@ -60,31 +60,52 @@ public class StateTransferManager {
     @Getter
     @ToString
     @Builder
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class CurrentTransferSegment {
         /**
          * Start address of a segment.
          */
-        @Default
-        private final long startAddress = NON_ADDRESS;
+        private final long startAddress;
         /**
          * End address of a segment.
          */
-        @Default
-        private final long endAddress = NON_ADDRESS;
+        private final long endAddress;
         /**
          * A future that hold the status of a transfer of a segment.
          */
-        @Default
-        @NonNull
         private final CurrentTransferSegmentStatus status;
 
         /**
          * If end address and start address are valid, compute the total number of transferred.
+         * Otherwise, if an end address is -1L -> Nothing to compute, return 0L.
          *
          * @return Sum of total transferred.
          */
         public long computeTotalTransferred() {
+            if(endAddress == -1L){
+                return 0L;
+            }
             return endAddress - startAddress + 1L;
+        }
+
+
+        public static class CurrentTransferSegmentBuilder {
+
+            public void verify() {
+                if (startAddress < 0L) {
+                    throw new IllegalStateException(
+                            String.format("Start %s can not be negative.", startAddress));
+                }
+
+                if (status == null) {
+                    throw new IllegalStateException("Status should be defined.");
+                }
+            }
+
+            public CurrentTransferSegment build() {
+                verify();
+                return new CurrentTransferSegment(startAddress, endAddress, status);
+            }
         }
     }
 
@@ -187,9 +208,7 @@ public class StateTransferManager {
                         Stream<Batch> batchStream = Lists
                                 .partition(unknownAddressesInRange, batchSize)
                                 .stream()
-                                .map(groupedAddresses ->
-                                        new Batch(groupedAddresses, Optional.empty()
-                                        )
+                                .map(groupedAddresses -> new Batch(groupedAddresses, Optional.empty())
                                 );
                         // Execute state transfer synchronously.
                         newStatus = synchronousStateTransfer(batchProcessor, batchStream)

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
+import static org.corfudb.util.MetricsUtils.sizeOf;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
@@ -145,7 +146,7 @@ public class ServerContext implements AutoCloseable {
     @Getter (AccessLevel.PACKAGE)
     private final NodeLocator nodeLocator;
 
-    @Getter (AccessLevel.PACKAGE)
+    @Getter (AccessLevel.PUBLIC)
     private final String localEndpoint;
 
     @Getter
@@ -201,12 +202,12 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 1 : threadCount;
     }
 
-    int getLogunitThreadCount() {
+    public int getLogunitThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
         return threadCount == null ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
     }
 
-    int getManagementServerThreadCount() {
+    public int getManagementServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
         return threadCount == null ? 4 : threadCount;
     }
