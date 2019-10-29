@@ -1,12 +1,9 @@
 package org.corfudb.infrastructure.log.statetransfer.batch;
 
-import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-
-import java.util.Optional;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.SUCCEEDED;
 
@@ -27,7 +24,7 @@ public class BatchResult {
     }
 
     @Default
-    private final Batch batch = new Batch(ImmutableList.of(), Optional.empty());
+    private final Batch batch = Batch.builder().build();
     @Default
     private final FailureStatus status = SUCCEEDED;
 
