@@ -40,15 +40,14 @@ public interface StateTransferBatchProcessor {
             streamlog.append(readBatch.getData());
             return BatchResult
                     .builder()
-                    .addresses(addresses)
-                    .destinationServer(readBatch.getDestination())
+                    .batch(new Batch(addresses, readBatch.getDestination()))
                     .status(SUCCEEDED)
                     .build();
         });
         if (resultOfWrite.isError()) {
-            return BatchResult.builder()
-                    .addresses(addresses)
-                    .destinationServer(readBatch.getDestination())
+            return BatchResult
+                    .builder()
+                    .batch(new Batch(addresses, readBatch.getDestination()))
                     .status(FAILED)
                     .build();
         }

@@ -12,7 +12,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -168,10 +167,18 @@ public final class CFUtils {
 
     public static <T> CompletableFuture<T> runFutureAfter(Supplier<CompletableFuture<T>> future,
                                                           ScheduledExecutorService scheduledExecutorService,
-                                                          long millis) throws InterruptedException, ExecutionException {
-        scheduledExecutorService.schedule(() ->
-                true, millis, TimeUnit.MILLISECONDS).get();
-        return future.get();
+                                                          long millis) {
+        CompletableFuture<T> resultFuture = new CompletableFuture<>();
+        try {
+            scheduledExecutorService.schedule(() ->
+                    true, millis, TimeUnit.MILLISECONDS).get();
+        } catch (InterruptedException | ExecutionException e) {
+            resultFuture.completeExceptionally(e);
+            return resultFuture;
+        }
+
+        resultFuture.complete(future.get().join());
+        return resultFuture;
     }
 
     /**

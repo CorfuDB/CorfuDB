@@ -647,9 +647,10 @@ public class StateTransferTest extends AbstractViewTest {
                         .map(x -> (LogData) x)
                         .collect(Collectors.toList()), rt.getParameters().getBulkReadSize());
 
-        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
+
         StreamLog streamLog = getLogUnit(SERVERS.PORT_1).getStreamLog();
         StreamLog spy = spy(streamLog);
+        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1, spy);
 
         // Throw time out on all the addresses after 50.
         final long cutOffAddress = 50L;
@@ -663,7 +664,7 @@ public class StateTransferTest extends AbstractViewTest {
         });
 
         // Assert that the TimeOutException is thrown
-        assertThatThrownBy(() -> action1.impl(rt, spy))
+        assertThatThrownBy(() -> action1.impl(rt))
                 .isInstanceOf(StreamProcessFailure.class);
 
         // Known addresses should contain only [0:49] and the addresses in the open segment.
@@ -693,7 +694,7 @@ public class StateTransferTest extends AbstractViewTest {
             return set;
         }).when(spy).getKnownAddressesInRange(0L, start - 1);
 
-        action1.impl(rt, spy);
+        action1.impl(rt);
 
         knownAddresses = new ArrayList<>(rt.getLayoutView()
                 .getRuntimeLayout()
@@ -772,10 +773,11 @@ public class StateTransferTest extends AbstractViewTest {
             testStream.append("testPayload".getBytes());
         }
 
-        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1);
-        final RestoreRedundancyMergeSegments action2 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_2);
         StreamLog streamLog1 = getLogUnit(SERVERS.PORT_1).getStreamLog();
         StreamLog streamLog2 = getLogUnit(SERVERS.PORT_1).getStreamLog();
+        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1, streamLog1);
+        final RestoreRedundancyMergeSegments action2 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_2, streamLog2);
+
 
         List<CompletableFuture<Void>> futures = new ArrayList();
 
@@ -795,7 +797,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         futures.add(CompletableFuture.runAsync(() -> {
             try {
-                action1.impl(rt1, streamLog1);
+                action1.impl(rt1);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -803,7 +805,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         futures.add(CompletableFuture.runAsync(() -> {
             try {
-                action2.impl(rt2, streamLog2);
+                action2.impl(rt2);
             } catch (Exception e) {
                 e.printStackTrace();
             }

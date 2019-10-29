@@ -6,7 +6,6 @@ import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.SUCCEEDED;
@@ -28,19 +27,17 @@ public class BatchResult {
     }
 
     @Default
-    private final List<Long> addresses = ImmutableList.of();
-    @Default
-    private final Optional<String> destinationServer = Optional.empty();
+    private final Batch batch = new Batch(ImmutableList.of(), Optional.empty());
     @Default
     private final FailureStatus status = SUCCEEDED;
 
     /**
-     * Transform this batch result into a new batch.
+     * Gets the batch from this batch result.
      *
      * @return An instance of batch.
      */
-    public Batch toBatch() {
-        return new Batch(addresses, destinationServer);
+    public Batch getBatch() {
+        return batch;
     }
 
 }

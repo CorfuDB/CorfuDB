@@ -1,24 +1,22 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
-
 import com.google.common.collect.ImmutableList;
-
-import java.util.List;
-import java.util.UUID;
-
-import javax.annotation.Nonnull;
-import javax.annotation.concurrent.NotThreadSafe;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.NotThreadSafe;
+import java.util.List;
+import java.util.UUID;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 
 /**
@@ -48,12 +46,12 @@ public class AddNodeWorkflow implements IWorkflow {
      *
      * @param request request to add a node
      */
-    public AddNodeWorkflow(AddNodeRequest request) {
+    public AddNodeWorkflow(AddNodeRequest request, StreamLog streamLog) {
         this.id = UUID.randomUUID();
         this.request = request;
         actions = ImmutableList.of(new BootstrapNode(),
                 new AddNodeToLayout(),
-                new RestoreRedundancyMergeSegments(request.getEndpoint()));
+                new RestoreRedundancyMergeSegments(request.getEndpoint(), streamLog));
     }
 
     @Override

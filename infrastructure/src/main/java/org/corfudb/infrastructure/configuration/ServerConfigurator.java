@@ -34,8 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 
 /**
- * This class is used to create the corfu servers from the shared context
- * that share the same resources.
+ * This class is used to configure and create the corfu servers that share the same resources.
  */
 @Slf4j
 public class ServerConfigurator {
@@ -43,6 +42,9 @@ public class ServerConfigurator {
     private final CorfuConfig corfuConfig;
 
     // Log Unit related configuration
+    private final long streamCompactionInitialDelay = 10L;
+    private final long streamCompactionPeriod = 45L;
+    private final TimeUnit streamCompactionUnits = TimeUnit.MINUTES;
     private StreamLog streamLog;
     private LogUnitParameters params;
     private BatchProcessor batchProcessor;
@@ -51,6 +53,15 @@ public class ServerConfigurator {
     private LogUnitServer logUnitServer;
 
     // Management Server related configuration
+
+    /**
+     * The number of tries to be made to execute any RPC request before the runtime gives up and
+     * invokes the systemDownHandler.
+     * This is set to 60  based on the fact that the sleep duration between RPC retries is
+     * defaulted to 1 second in the Runtime parameters. This gives the Runtime a total of 1 minute
+     * to make progress. Else the ongoing task is aborted.
+     */
+    private final int systemDownHandlerTriggerLimit = 60;
     private ManagementAgent managementAgent;
     private CorfuRuntime managementServerRuntime;
     private SingletonResource<CorfuRuntime> singletonResourceRuntime;
@@ -88,6 +99,7 @@ public class ServerConfigurator {
         return streamLog;
     }
 
+
     private BatchProcessor getBatchProcessor() {
         if (batchProcessor != null) {
             return batchProcessor;
@@ -102,8 +114,8 @@ public class ServerConfigurator {
             return streamLogCompaction;
         }
         streamLogCompaction = new StreamLogCompaction(getStreamLog(),
-                10, 45,
-                TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+                streamCompactionInitialDelay, streamCompactionPeriod,
+                streamCompactionUnits, ServerContext.SHUTDOWN_TIMER);
         return streamLogCompaction;
     }
 
@@ -138,21 +150,14 @@ public class ServerConfigurator {
         return logUnitServer;
     }
 
-    /**
-     * The number of tries to be made to execute any RPC request before the runtime gives up and
-     * invokes the systemDownHandler.
-     * This is set to 60  based on the fact that the sleep duration between RPC retries is
-     * defaulted to 1 second in the Runtime parameters. This gives the Runtime a total of 1 minute
-     * to make progress. Else the ongoing task is aborted.
-     */
     private CorfuRuntime getManagementServerRuntime() {
         if (managementServerRuntime != null) {
             return managementServerRuntime;
         }
-        int systemDownHandlerTriggerLimit = 60;
-        CorfuRuntimeParameters params = corfuConfig.getContext().getManagementRuntimeParameters();
-        params.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
-        managementServerRuntime = CorfuRuntime.fromParameters(params);
+        CorfuRuntimeParameters corfuParams = corfuConfig.getContext()
+                .getManagementRuntimeParameters();
+        corfuParams.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
+        managementServerRuntime = CorfuRuntime.fromParameters(corfuParams);
         return managementServerRuntime;
     }
 

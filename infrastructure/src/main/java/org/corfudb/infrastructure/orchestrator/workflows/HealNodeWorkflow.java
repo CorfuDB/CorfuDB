@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ImmutableList;
-
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
@@ -27,11 +27,11 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
 
     private final HealNodeRequest request;
 
-    public HealNodeWorkflow(HealNodeRequest healNodeRequest) {
-        super(new AddNodeRequest(healNodeRequest.getEndpoint()));
+    public HealNodeWorkflow(HealNodeRequest healNodeRequest, StreamLog streamLog) {
+        super(new AddNodeRequest(healNodeRequest.getEndpoint()), streamLog);
         this.request = healNodeRequest;
         this.actions = ImmutableList.of(new HealNodeToLayout(),
-                new RestoreRedundancyMergeSegments(request.getEndpoint()));
+                new RestoreRedundancyMergeSegments(request.getEndpoint(), streamLog));
     }
 
     @Override

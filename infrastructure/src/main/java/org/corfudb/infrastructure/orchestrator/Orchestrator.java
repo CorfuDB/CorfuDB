@@ -12,8 +12,8 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
-import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
@@ -21,23 +21,21 @@ import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import javax.annotation.Nonnull;
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -119,7 +117,7 @@ public class Orchestrator {
                 query(msg, ctx, r);
                 break;
             case ADD_NODE:
-                workflow = new AddNodeWorkflow((AddNodeRequest) orchReq.getRequest());
+                workflow = new AddNodeWorkflow((AddNodeRequest) orchReq.getRequest(), streamLog);
                 dispatch(workflow, msg, ctx, r);
                 break;
             case REMOVE_NODE:
@@ -127,7 +125,7 @@ public class Orchestrator {
                 dispatch(workflow, msg, ctx, r);
                 break;
             case HEAL_NODE:
-                workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest());
+                workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest(), streamLog);
                 dispatch(workflow, msg, ctx, r);
                 break;
             case FORCE_REMOVE_NODE:
@@ -135,7 +133,8 @@ public class Orchestrator {
                 dispatch(workflow, msg, ctx, r);
                 break;
             case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
-                workflow = new RestoreRedundancyMergeSegmentsWorkflow((RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest());
+                workflow = new RestoreRedundancyMergeSegmentsWorkflow(
+                        (RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest(), streamLog);
                 dispatch(workflow, msg, ctx, r);
                 break;
             default:
@@ -241,12 +240,7 @@ public class Orchestrator {
 
                 log.debug("run: Started action {} for workflow {}", action.getName(), workflow.getId());
                 long actionStart = System.currentTimeMillis();
-                if(action instanceof RestoreAction){
-                    ((RestoreAction) action).execute(rt, streamLog, actionRetry);
-                }
-                else{
-                    action.execute(rt, actionRetry);
-                }
+                action.execute(rt, actionRetry);
                 long actionEnd = System.currentTimeMillis();
                 log.info("run: finished action {} for workflow {} in {} ms",
                         action.getName(), workflow.getId(), actionEnd - actionStart);

@@ -28,8 +28,8 @@ public class GoodBatchProcessor implements StateTransferBatchProcessor, DelayedE
         CompletableFuture<BatchResult> exec = CompletableFuture
                 .completedFuture(BatchResult
                         .builder()
-                        .destinationServer(batch.getDestination())
-                        .addresses(batch.getAddresses()).build()
+                        .batch(batch)
+                        .build()
                 );
         return withDelayOf(() -> exec, delay.map(d -> (long)
                 (random.nextFloat() * d)).orElse(0L), ec);

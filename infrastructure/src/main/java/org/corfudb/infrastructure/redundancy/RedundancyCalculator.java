@@ -53,18 +53,7 @@ public class RedundancyCalculator {
 
         @Override
         public int compareTo(AgedSegment other) {
-            return (int) (this.getSegment().getStartAddress() -
-                    other.getSegment().getStartAddress());
-        }
-
-        /**
-         * Whether a current segment overlaps with this segment.
-         *
-         * @param other Other segment.
-         * @return True, if overlap.
-         */
-        boolean overlapsWith(AgedSegment other) {
-            return other.getSegment().getStartAddress() <= this.getSegment().getEndAddress();
+            return segment.compareTo(other.segment);
         }
     }
 
@@ -90,23 +79,32 @@ public class RedundancyCalculator {
         List<LayoutSegment> segments = layout.getSegments().stream().map(layoutSegment -> {
             if (layoutSegment.getEnd() == transferSegment.getEndAddress() + 1L) {
 
-                List<LayoutStripe> newStripes = layoutSegment.getStripes().stream().map(stripe -> {
+                List<LayoutStripe> newStripes = layoutSegment.getStripes()
+                        .stream()
+                        .map(stripe -> {
 
-                    if (layoutSegment.getFirstStripe().equals(stripe)) {
-                        return new LayoutStripe(
-                                new ImmutableList.Builder<String>()
-                                        .addAll(stripe.getLogServers()).add(server).build());
-                    }
+                            if (layoutSegment.getFirstStripe().equals(stripe)) {
+                                ImmutableList<String> servers = new ImmutableList
+                                        .Builder<String>()
+                                        .addAll(stripe.getLogServers())
+                                        .add(server)
+                                        .build();
 
-                    return stripe;
+                                return new LayoutStripe(servers);
+                            }
 
-                }).collect(Collectors.toList());
+                            return stripe;
 
-                return new LayoutSegment(layoutSegment.getReplicationMode(),
-                        layoutSegment.getStart(), layoutSegment.getEnd(), newStripes);
+                        })
+                        .collect(Collectors.toList());
+
+                return new LayoutSegment(
+                        layoutSegment.getReplicationMode(), layoutSegment.getStart(),
+                        layoutSegment.getEnd(), newStripes);
             } else {
-                return new LayoutSegment(layoutSegment.getReplicationMode(),
-                        layoutSegment.getStart(), layoutSegment.getEnd(), layoutSegment.getStripes());
+                return new LayoutSegment(
+                        layoutSegment.getReplicationMode(), layoutSegment.getStart(),
+                        layoutSegment.getEnd(), layoutSegment.getStripes());
             }
         }).collect(Collectors.toList());
         Layout newLayout = new Layout(layout);
@@ -183,9 +181,15 @@ public class RedundancyCalculator {
             int firstSegmentIndex = 0;
             int secondSegmentIndex = 1;
             boolean serverPresent = IntStream
-                    .range(firstSegmentIndex, secondSegmentIndex + 1).boxed().allMatch(index ->
-                            layout.getSegments().get(index).getFirstStripe().getLogServers()
-                                    .contains(server));
+                    .range(firstSegmentIndex, secondSegmentIndex + 1)
+                    .boxed()
+                    .allMatch(index -> layout
+                            .getSegments()
+                            .get(index)
+                            .getFirstStripe()
+                            .getLogServers()
+                            .contains(server));
+
             return serverPresent && Sets.difference(
                     layout.getSegments().get(secondSegmentIndex).getAllLogServers(),
                     layout.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
@@ -210,13 +214,12 @@ public class RedundancyCalculator {
             // Get the last added segment.
             int size = accumulatedList.size();
             AgedSegment lastAddedSegment = accumulatedList.get(size - 1);
-            ImmutableList<AgedSegment> accumulatedListNoLastSegment =
-                    ImmutableList.copyOf(accumulatedList.stream()
-                            .filter(segment -> !segment
-                                    .equals(lastAddedSegment))
-                            .collect(Collectors.toList()));
+            ImmutableList<AgedSegment> accumulatedListNoLastSegment = accumulatedList
+                    .stream()
+                    .filter(segment -> !segment.equals(lastAddedSegment))
+                    .collect(ImmutableList.toImmutableList());
             // If the segments overlap:
-            if (lastAddedSegment.overlapsWith(nextSegment)) {
+            if (lastAddedSegment.segment.overlapsWith(nextSegment.segment)) {
                 AgedSegment oldSegment;
                 AgedSegment newSegment;
                 AgedSegment mergedSegment;

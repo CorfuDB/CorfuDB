@@ -61,7 +61,7 @@ public class StateTransferManager {
     @ToString
     @Builder
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
-    public static class CurrentTransferSegment {
+    public static class CurrentTransferSegment implements Comparable<CurrentTransferSegment> {
         /**
          * Start address of a segment.
          */
@@ -75,6 +75,24 @@ public class StateTransferManager {
          */
         private final CurrentTransferSegmentStatus status;
 
+        @Override
+        public int compareTo(CurrentTransferSegment other) {
+            return (int) (this.getStartAddress() -
+                    other.getStartAddress());
+        }
+
+
+        /**
+         * Whether a current segment overlaps with another segment.
+         *
+         * @param other Other segment.
+         * @return True, if overlap.
+         */
+        public boolean overlapsWith(CurrentTransferSegment other) {
+            return other.getStartAddress() <= this.getEndAddress();
+        }
+
+
         /**
          * If end address and start address are valid, compute the total number of transferred.
          * Otherwise, if an end address is -1L -> Nothing to compute, return 0L.
@@ -82,7 +100,7 @@ public class StateTransferManager {
          * @return Sum of total transferred.
          */
         public long computeTotalTransferred() {
-            if(endAddress == -1L){
+            if (endAddress == -1L) {
                 return 0L;
             }
             return endAddress - startAddress + 1L;
@@ -249,7 +267,8 @@ public class StateTransferManager {
                         return Result.error(new StreamProcessFailure());
                     } else {
                         return resultSoFar
-                                .map(sumSoFar -> sumSoFar + batchResult.getAddresses().size());
+                                .map(sumSoFar -> sumSoFar + batchResult.getBatch().getAddresses()
+                                        .size());
                     }
                 }, (oldSum, newSum) -> newSum);
 
@@ -269,7 +288,7 @@ public class StateTransferManager {
 
         Result<Long, StreamProcessFailure> checkedResult = result.flatMap(totalTransferred -> {
             if (totalTransferred != totalNeeded) {
-                String error = "Needed " + totalNeeded + " but transferred " + totalTransferred;
+                String error = "Needed: " + totalNeeded + ", but transferred: " + totalTransferred;
 
                 return Result.error(new StreamProcessFailure(new IllegalStateException(error)));
             } else {

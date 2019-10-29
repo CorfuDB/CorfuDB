@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.orchestrator.actions;
 
 import com.google.common.collect.ImmutableList;
+import lombok.Builder;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.Tuple;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.StreamProcessFailure;
-import org.corfudb.infrastructure.orchestrator.RestoreAction;
+import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
@@ -47,13 +47,19 @@ import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyM
  * missing. It transfers multiple segments at once and opens the segments that have been transferred.
  */
 @Slf4j
-public class RestoreRedundancyMergeSegments extends RestoreAction {
+@Builder
+@Getter
+public class RestoreRedundancyMergeSegments extends Action {
 
     @Getter
     private final String currentNode;
 
-    public RestoreRedundancyMergeSegments(String currentNode) {
+    @Getter
+    private final StreamLog streamLog;
+
+    public RestoreRedundancyMergeSegments(String currentNode, StreamLog streamLog) {
         this.currentNode = currentNode;
+        this.streamLog = streamLog;
     }
 
 
@@ -62,43 +68,40 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
         NOT_RESTORED
     }
 
-    private static final int RETRY_BASE = 3;
-    private static final int BACKOFF_DURATION_SECONDS = 10;
-    private static final int EXTRA_WAIT_MILLIS = 20;
-    private static final float RANDOM_PART = 0.5f;
+    private final int retryBase = 3;
+    private final int backoffDurationSeconds = 10;
+    private final int extraWaitMillis = 20;
+    private final float randomPart = 0.5f;
+    private final int restoreRetries = 3;
 
-    private static final Consumer<ExponentialBackoffRetry> RETRY_SETTINGS = settings -> {
-        settings.setBase(RETRY_BASE);
-        settings.setExtraWait(EXTRA_WAIT_MILLIS);
+    private final Consumer<ExponentialBackoffRetry> retrySettings = settings -> {
+        settings.setBase(retryBase);
+        settings.setExtraWait(extraWaitMillis);
         settings.setBackoffDuration(Duration.ofSeconds(
-                BACKOFF_DURATION_SECONDS));
-        settings.setRandomPortion(RANDOM_PART);
+                backoffDurationSeconds));
+        settings.setRandomPortion(randomPart);
     };
 
     RestoreStatus restoreWithBackOff(List<CurrentTransferSegment> stateList,
                                      CorfuRuntime runtime) throws Exception {
-        AtomicInteger retries = new AtomicInteger(3);
-        try {
-            return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
-                try {
+        AtomicInteger retries = new AtomicInteger(restoreRetries);
+        return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
+            try {
 
-                    runtime.invalidateLayout();
-                    Layout oldLayout = runtime.getLayoutView().getLayout();
-                    LayoutManagementView layoutManagementView = runtime.getLayoutManagementView();
-                    return tryRestoreRedundancyAndMergeSegments(stateList, oldLayout, layoutManagementView);
-                } catch (WrongEpochException | QuorumUnreachableException | OutrankedException e) {
-                    log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
-                    if (retries.decrementAndGet() < 0) {
-                        log.error("Retries exhausted.");
-                        throw new RetryExhaustedException("Retries exhausted.");
-                    } else {
-                        throw new RetryNeededException();
-                    }
+                runtime.invalidateLayout();
+                Layout oldLayout = runtime.getLayoutView().getLayout();
+                LayoutManagementView layoutManagementView = runtime.getLayoutManagementView();
+                return tryRestoreRedundancyAndMergeSegments(stateList, oldLayout, layoutManagementView);
+            } catch (WrongEpochException | QuorumUnreachableException | OutrankedException e) {
+                log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
+                if (retries.decrementAndGet() < 0) {
+                    log.error("Retries exhausted.");
+                    throw new RetryExhaustedException("Retries exhausted.");
+                } else {
+                    throw new RetryNeededException();
                 }
-            }).setOptions(RETRY_SETTINGS).run();
-        } catch (Exception e) {
-            throw e;
-        }
+            }
+        }).setOptions(retrySettings).run();
 
     }
 
@@ -182,7 +185,7 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
     }
 
     @Override
-    public void impl(@Nonnull CorfuRuntime runtime, @NonNull StreamLog streamLog) throws Exception {
+    public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
 
         // Refresh layout.
         runtime.invalidateLayout();
@@ -197,14 +200,16 @@ public class RestoreRedundancyMergeSegments extends RestoreAction {
                 new StateTransferManager(streamLog, runtime.getParameters().getBulkReadSize());
 
         // Create lambda that, given a runtime, creates the log unit clients map.
-        LogUnitClientMap map = (CorfuRuntime currentRuntime) -> {
-            Layout currentLayout = currentRuntime.getLayoutView().getLayout();
+        LogUnitClientMap map = (CorfuRuntime rt) -> {
+            Layout currentLayout = rt.getLayoutView().getLayout();
             Set<String> allActiveServers = currentLayout.getAllActiveServers();
 
-            return allActiveServers.stream().map(server -> {
-                RuntimeLayout runtimeLayout = currentRuntime.getLayoutView().getRuntimeLayout();
-                return new Tuple<>(server, runtimeLayout.getLogUnitClient(server));
-            }).collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
+            return allActiveServers.stream()
+                    .map(server -> {
+                        RuntimeLayout runtimeLayout = rt.getLayoutView().getRuntimeLayout();
+                        return new Tuple<>(server, runtimeLayout.getLogUnitClient(server));
+                    })
+                    .collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
         };
 
         // Create the initial state map.

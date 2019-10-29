@@ -10,6 +10,7 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
@@ -39,10 +40,12 @@ public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
      *
      * @param request request to restore redundancy and merge a segment.
      */
-    public RestoreRedundancyMergeSegmentsWorkflow(RestoreRedundancyMergeSegmentsRequest request) {
+    public RestoreRedundancyMergeSegmentsWorkflow(
+            RestoreRedundancyMergeSegmentsRequest request, StreamLog streamLog) {
         this.id = UUID.randomUUID();
         this.request = request;
-        this.actions = ImmutableList.of(new RestoreRedundancyMergeSegments(request.getEndpoint()));
+        this.actions = ImmutableList.of(
+                new RestoreRedundancyMergeSegments(request.getEndpoint(), streamLog));
     }
 
     @Override

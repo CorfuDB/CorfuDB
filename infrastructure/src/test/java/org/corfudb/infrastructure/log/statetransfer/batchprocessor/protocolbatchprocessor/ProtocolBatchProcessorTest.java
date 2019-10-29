@@ -49,7 +49,7 @@ class ProtocolBatchProcessorTest extends DataTest {
                 batchProcessor.transfer(new Batch(addresses, Optional.empty()));
         BatchResult join = f.join();
         assertThat(join.getStatus() == BatchResult.FailureStatus.SUCCEEDED).isTrue();
-        assertThat(join.getAddresses()).isEqualTo(addresses);
+        assertThat(join.getBatch().getAddresses()).isEqualTo(addresses);
     }
 
     @Test

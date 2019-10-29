@@ -12,6 +12,6 @@ public class StreamProcessFailure extends StateTransferException {
     }
 
     public StreamProcessFailure() {
-
+        super();
     }
 }

@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableList;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CFUtils;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
@@ -38,9 +37,10 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
 
         Token prefixToken = new Token(layout.getEpoch(), trimMark - 1);
-        CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
+        runtime.getLayoutView().getRuntimeLayout(layout)
                 .getLogUnitClient(endpoint)
-                .prefixTrim(prefixToken));
+                .prefixTrim(prefixToken)
+                .join();
         return trimMark;
     }
 
@@ -73,8 +73,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                                 .endAddress(segmentEnd)
                                 .status(restored)
                                 .build();
-                    }
-                    else {
+                    } else {
                         CurrentTransferSegmentStatus notTransferred = CurrentTransferSegmentStatus
                                 .builder()
                                 .segmentState(NOT_TRANSFERRED)

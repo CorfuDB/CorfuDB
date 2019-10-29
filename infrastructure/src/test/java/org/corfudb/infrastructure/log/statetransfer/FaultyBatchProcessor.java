@@ -46,8 +46,8 @@ public class FaultyBatchProcessor implements StateTransferBatchProcessor, Delaye
             exec = CompletableFuture
                     .completedFuture(BatchResult
                             .builder()
-                            .destinationServer(batch.getDestination())
-                            .addresses(batch.getAddresses()).build()
+                            .batch(batch)
+                            .build()
                     );
         }
         return withDelayOf(() -> exec,

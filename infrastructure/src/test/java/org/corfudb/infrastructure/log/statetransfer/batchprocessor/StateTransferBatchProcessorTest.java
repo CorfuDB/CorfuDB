@@ -35,7 +35,7 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .build();
         BatchResult res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
         assertThat(res.getStatus() == BatchResult.FailureStatus.SUCCEEDED).isTrue();
-        assertThat(res.getAddresses()).isEqualTo(addresses);
+        assertThat(res.getBatch().getAddresses()).isEqualTo(addresses);
         doThrow(new IllegalStateException()).when(streamLog).append(stubList);
         batchProcessor = ProtocolBatchProcessor
                 .builder()
@@ -44,6 +44,6 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .build();
         res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
         assertThat(res.getStatus() == BatchResult.FailureStatus.FAILED).isTrue();
-        assertThat(res.getAddresses()).isEqualTo(addresses);
+        assertThat(res.getBatch().getAddresses()).isEqualTo(addresses);
     }
 }

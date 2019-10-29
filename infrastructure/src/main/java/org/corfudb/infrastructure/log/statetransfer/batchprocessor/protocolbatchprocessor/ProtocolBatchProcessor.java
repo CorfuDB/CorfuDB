@@ -75,8 +75,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 .exceptionally(error -> BatchResult
                         .builder()
                         .status(FAILED)
-                        .destinationServer(batch.getDestination())
-                        .addresses(batch.getAddresses())
+                        .batch(batch)
                         .build()
                 );
     }
@@ -183,7 +182,8 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                                Map<Long, ILogData> readResult,
                                Optional<String> destination) {
         List<Long> transferredAddresses =
-                addresses.stream().filter(readResult::containsKey)
+                addresses.stream()
+                        .filter(readResult::containsKey)
                         .collect(Collectors.toList());
         if (transferredAddresses.equals(addresses)) {
             List<LogData> lodData = readResult.entrySet().stream()

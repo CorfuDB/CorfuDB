@@ -212,8 +212,8 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Attempts to merge the last 2 segments.
-     *
+     * Attempts to merge all the segments of the layout starting from the last two.
+     * Once the remaining segments can no longer be merged, attempts consensus on a new layout.
      * @param currentLayout Current layout
      * @throws OutrankedException if consensus is outranked.
      */
