@@ -12,6 +12,7 @@
         <module>common</module>
         <module>format</module>
         <module>cmdlets</module>
+        <module>corfudb-tools</module>
         <module>test</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
