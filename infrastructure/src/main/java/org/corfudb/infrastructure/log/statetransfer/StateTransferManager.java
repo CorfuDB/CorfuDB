@@ -77,8 +77,7 @@ public class StateTransferManager {
 
         @Override
         public int compareTo(CurrentTransferSegment other) {
-            return (int) (this.getStartAddress() -
-                    other.getStartAddress());
+            return Long.compare(this.getStartAddress(), other.getStartAddress());
         }
 
 
