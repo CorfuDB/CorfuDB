@@ -15,7 +15,7 @@ import java.util.Set;
 
 @Builder
 @Getter
-@EqualsAndHashCode(exclude = {"numRetry", "timeout", "pollPeriod"})
+@EqualsAndHashCode
 public class ClientParams implements NodeParams {
 
     @Default
@@ -34,6 +34,7 @@ public class ClientParams implements NodeParams {
      */
     @Default
     @NonNull
+    @EqualsAndHashCode.Exclude
     private final int numRetry = 5;
 
     /**
@@ -41,6 +42,7 @@ public class ClientParams implements NodeParams {
      */
     @Default
     @NonNull
+    @EqualsAndHashCode.Exclude
     private final Duration timeout = Duration.ofSeconds(30);
 
     /**
@@ -48,9 +50,11 @@ public class ClientParams implements NodeParams {
      */
     @Default
     @NonNull
+    @EqualsAndHashCode.Exclude
     private final Duration pollPeriod = Duration.ofMillis(50);
 
     @Default
+    @EqualsAndHashCode.Exclude
     private final int order = 0;
 
     @Override

@@ -307,13 +307,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     protected boolean processEntryForContext(final ILogData data) {
         if (data != null) {
-            try {
-                final Object payload = data.getPayload(runtime);
-            } catch (Throwable e) {
-                log.error("Exception caught at address {}, {}, {}",
-                        data.getGlobalAddress(), data.getStreams(), data.getType());
-                throw e;
-            }
+            final Object payload = data.getPayload(runtime);
         }
         return false;
     }

@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.3.0.20191022222708.9701</version>
+        <version>0.3.0.20191029055306.5281</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -127,7 +127,10 @@
                             <consoleOutput>true</consoleOutput>
                             <failsOnError>true</failsOnError>
                             <configLocation>${session.executionRootDirectory}/test_checks.xml</configLocation>
-                            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                            <sourceDirectories>
+                                <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+                                <sourceDirectory>${project.build.testSourceDirectory}</sourceDirectory>
+                            </sourceDirectories>
                         </configuration>
                         <goals>
                             <goal>check</goal>

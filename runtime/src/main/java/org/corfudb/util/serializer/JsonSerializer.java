@@ -70,7 +70,7 @@ public class JsonSerializer implements ISerializer {
                     return gson.fromJson(r, Class.forName(className));
                 }
             } catch (IOException | ClassNotFoundException ie) {
-                log.error("Exception during deserialization! WHY WHY WHAAAAY", ie);
+                log.error("Exception during deserialization!", ie);
                 throw new RuntimeException(ie);
             }
         }
@@ -111,7 +111,7 @@ public class JsonSerializer implements ISerializer {
                     gson.toJson(o, o.getClass(), osw);
                 }
             } catch (IOException ie) {
-                log.error("Exception during serialization! WHY WHY WHY", ie);
+                log.error("Exception during serialization!", ie);
             }
         }
     }
