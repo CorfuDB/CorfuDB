@@ -66,7 +66,8 @@ public class LogEntry implements ICorfuSerializable {
      */
     public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt) {
         try {
-            LogEntryType let = typeMap.get(b.readByte());
+            byte type = b.readByte();
+            LogEntryType let = typeMap.get(type);
             LogEntry l = let.entryType.newInstance();
             l.type = let;
             l.runtime = rt;
