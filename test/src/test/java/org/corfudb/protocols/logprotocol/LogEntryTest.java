@@ -16,7 +16,67 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-public class MultiObjectSMREntryTest {
+public class LogEntryTest {
+
+    @Test
+    public void seekToEndSMREntry () {
+        // Create a buffer with two serialized SMR entries
+        // skip the first entry (with seekToEnd) and attempt to deserialize the
+        // rest of the buffer, which should yield the second SMR entry
+        SMREntry smr1 = new SMREntry("method", new Object[]{}, Serializers.PRIMITIVE);
+        SMREntry smr2 = new SMREntry("method", new Object[]{"arg1"}, Serializers.PRIMITIVE);
+
+        ByteBuf buf = Unpooled.buffer();
+
+        Serializers.CORFU.serialize(smr1, buf);
+        Serializers.CORFU.serialize(smr2, buf);
+
+        SMREntry.seekToEnd(buf);
+        SMREntry recoveredEntry = (SMREntry) Serializers.CORFU.deserialize(buf, null);
+        assertThat(recoveredEntry).isEqualTo(smr2);
+        buf.resetReaderIndex();
+        recoveredEntry = (SMREntry) Serializers.CORFU.deserialize(buf, null);
+        assertThat(recoveredEntry).isEqualTo(smr1);
+
+        // Verify that both entries can be skipped
+        buf.resetReaderIndex();
+        SMREntry.seekToEnd(buf);
+        SMREntry.seekToEnd(buf);
+        assertThat(buf.readerIndex()).isEqualTo(buf.writerIndex());
+    }
+
+    @Test
+    public void seekToEndMultiSMREntry() {
+        // Create a buffer with two serialized MultiSMR entries
+        // skip the first entry (with seekToEnd) and attempt to deserialize the
+        // rest of the buffer, which should yield the second MultiSMR entry
+        SMREntry smr1 = new SMREntry("method", new Object[]{}, Serializers.PRIMITIVE);
+        SMREntry smr2 = new SMREntry("method", new Object[]{"arg1"}, Serializers.PRIMITIVE);
+        MultiSMREntry multiSMR1 = new MultiSMREntry();
+        MultiSMREntry multiSMR2 = new MultiSMREntry();
+
+        multiSMR1.addTo(smr1);
+        multiSMR1.addTo(smr1);
+        multiSMR2.addTo(smr2);
+
+        ByteBuf buf = Unpooled.buffer();
+
+        Serializers.CORFU.serialize(multiSMR1, buf);
+        Serializers.CORFU.serialize(multiSMR2, buf);
+
+        MultiSMREntry.seekToEnd(buf);
+        MultiSMREntry recoveredMultiSMR = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+        assertThat(recoveredMultiSMR).isEqualTo(multiSMR2);
+        buf.resetReaderIndex();
+        recoveredMultiSMR = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+        assertThat(recoveredMultiSMR).isEqualTo(multiSMR1);
+
+        // Verify that both entries can be skipped
+        buf.resetReaderIndex();
+        MultiSMREntry.seekToEnd(buf);
+        MultiSMREntry.seekToEnd(buf);
+        assertThat(buf.readerIndex()).isEqualTo(buf.writerIndex());
+    }
 
     @Test
     public void testLazyDeserialization() {
