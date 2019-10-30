@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.3.0.20191029055306.5281</version>
+    <version>0.3.0.20191030234407.6487</version>
 
     <modules>
         <module>infrastructure</module>
@@ -12,6 +12,7 @@
         <module>common</module>
         <module>format</module>
         <module>cmdlets</module>
+        <module>corfudb-tools</module>
         <module>test</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
