@@ -158,19 +158,48 @@ public class SMRGarbageEntry extends LogEntry {
      * Merge garbage information from another SMRGarbageEntry instance.
      *
      * @param other another SMRGarbageEntry instance. It may be modified.
-     * @return De-duplicated garbage information.
+     * @return de-duplicated SMRGarbageEntry from parameter.
      */
     public SMRGarbageEntry merge(SMRGarbageEntry other) {
         List<UUID> streamToDelete = new ArrayList<>();
         other.getAllGarbageRecords().forEach((streamId, garbageMap) -> {
-            if (garbageMap.size() > 0) {
-                streamIdToGarbageMap.computeIfAbsent(streamId, id -> new ConcurrentHashMap<>());
+            if (garbageMap.isEmpty()) {
+                streamToDelete.add(streamId);
+            } else {
+                Map<Integer, SMRGarbageRecord> gm = streamIdToGarbageMap.computeIfAbsent(
+                        streamId, id -> new ConcurrentHashMap<>());
+                garbageMap.keySet().removeAll(gm.keySet());
+                // GarbageMap may become empty due to removeAll.
+                if (garbageMap.isEmpty()) {
+                    streamToDelete.add(streamId);
+                } else {
+                    streamIdToGarbageMap.get(streamId).putAll(garbageMap);
+                }
+            }
+        });
 
-                // get relative complement
-                garbageMap.keySet().removeAll(streamIdToGarbageMap.get(streamId).keySet());
-                streamIdToGarbageMap.get(streamId).putAll(garbageMap);
+        other.getAllGarbageRecords().keySet().removeAll(streamToDelete);
+        return other;
+    }
 
-                // garbageMap may become empty due to removeAll
+    /**
+     * Deduplicate another SMRGarbageEntry instance based on the current instance.
+     * Similar to {@link this#merge(SMRGarbageEntry)}, but does not change the current instance.
+     *
+     * @param other another SMRGarbageEntry instance. It may be modified.
+     * @return de-duplicated SMRGarbageEntry from parameter.
+     */
+    public SMRGarbageEntry dedup(SMRGarbageEntry other) {
+        List<UUID> streamToDelete = new ArrayList<>();
+        other.getAllGarbageRecords().forEach((streamId, garbageMap) -> {
+            if (garbageMap.isEmpty()) {
+                streamToDelete.add(streamId);
+            } else {
+                Map<Integer, SMRGarbageRecord> gm = streamIdToGarbageMap.get(streamId);
+                if (gm != null) {
+                    garbageMap.keySet().removeAll(gm.keySet());
+                }
+                // GarbageMap may become empty due to removeAll.
                 if (garbageMap.isEmpty()) {
                     streamToDelete.add(streamId);
                 }

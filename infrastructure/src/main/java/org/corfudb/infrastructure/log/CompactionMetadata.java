@@ -11,7 +11,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
 
-import java.util.List;
+import java.util.Collection;
 
 /**
  * Per-segment metadata for compaction.
@@ -62,7 +62,7 @@ class CompactionMetadata {
      *
      * @param entries entries appended to log which contains size information
      */
-    void updateTotalPayloadSize(List<LogData> entries) {
+    void updateTotalPayloadSize(Collection<LogData> entries) {
         for (LogData logData : entries) {
             if (logData.getType() == DataType.COMPACTED) {
                 continue;
@@ -90,7 +90,7 @@ class CompactionMetadata {
      * @param garbageEntries garbage entries appended to log,
      *                       which contains garbage size information
      */
-    void updateGarbageSize(List<SMRGarbageEntry> garbageEntries) {
+    void updateGarbageSize(Collection<SMRGarbageEntry> garbageEntries) {
         for (SMRGarbageEntry garbageEntry : garbageEntries) {
             updateBoundedGarbageSize(garbageEntry);
             updateTotalGarbageSize(garbageEntry);
