@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -66,7 +67,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
     public void append(long address, LogData entry) {
         try {
             SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
-            SMRGarbageEntry uniqueGarbageEntry = mergeGarbageEntry(address, garbageEntry);
+            SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
 
             // If no new garbage entry, don't append to garbage log file.
             if (uniqueGarbageEntry.isEmpty()) {
@@ -80,6 +81,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
             }
 
             writeRecord(address, entry, segmentLock);
+            mergeGarbageEntry(address, uniqueGarbageEntry);
             compactionMetaData.updateGarbageSize(Collections.singletonList(uniqueGarbageEntry));
             log.trace("append[{}]: Written one garbage entry to disk.", address);
 
@@ -107,13 +109,13 @@ public class GarbageLogSegment extends AbstractLogSegment {
                 return;
             }
 
-            List<SMRGarbageEntry> uniqueGarbageEntries = new ArrayList<>();
+            Map<Long, SMRGarbageEntry> uniqueGarbageEntries = new HashMap<>();
             List<LogData> uniqueGarbageLogData = new ArrayList<>();
 
             for (LogData entry : entries) {
+                long address = entry.getGlobalAddress();
                 SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
-                SMRGarbageEntry uniqueGarbageEntry = mergeGarbageEntry(
-                        entry.getGlobalAddress(), garbageEntry);
+                SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
 
                 // If no new garbage info, don't append to garbage log file.
                 if (uniqueGarbageEntry.isEmpty()) {
@@ -126,12 +128,13 @@ public class GarbageLogSegment extends AbstractLogSegment {
                     entry = new LogData(DataType.GARBAGE, uniqueGarbageEntry);
                 }
 
-                uniqueGarbageEntries.add(uniqueGarbageEntry);
+                uniqueGarbageEntries.put(address, uniqueGarbageEntry);
                 uniqueGarbageLogData.add(entry);
             }
 
             writeRecords(uniqueGarbageLogData, segmentLock);
-            compactionMetaData.updateGarbageSize(uniqueGarbageEntries);
+            uniqueGarbageEntries.forEach(this::mergeGarbageEntry);
+            compactionMetaData.updateGarbageSize(uniqueGarbageEntries.values());
 
         } catch (ClosedChannelException cce) {
             log.warn("append: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
@@ -145,27 +148,32 @@ public class GarbageLogSegment extends AbstractLogSegment {
     }
 
     /**
+     * De-duplicate the garbage entry from the current garbage entry information.
+     *
+     * @param address         global address of the garbage info entry
+     * @param newGarbageEntry new garbage entry sent from client
+     * @return de-duplicated new garbage entry
+     */
+    private SMRGarbageEntry dedupGarbageEntry(long address, SMRGarbageEntry newGarbageEntry) {
+        SMRGarbageEntry garbageEntry = garbageEntryMap.get(address);
+        return garbageEntry == null ? newGarbageEntry : garbageEntry.dedup(newGarbageEntry);
+    }
+
+    /**
      * Merge the new garbage entry into the garbage entry map and return the de-duplicated
      * new garbage entry.
      *
-     * @param address         global address of the garbage info entry.
-     * @param newGarbageEntry new garbage entry sent from client.
-     * @return de-duplicated new garbage entry after merging.
+     * @param address         global address of the garbage info entry
+     * @param newGarbageEntry new garbage entry sent from client
      */
-    private SMRGarbageEntry mergeGarbageEntry(long address, SMRGarbageEntry newGarbageEntry) {
-        // Use atomicReference as a container to bypass final variable restriction in lambda expression.
-        AtomicReference<SMRGarbageEntry> uniqueGarbageEntry = new AtomicReference<>(newGarbageEntry);
-
+    private void mergeGarbageEntry(long address, SMRGarbageEntry newGarbageEntry) {
         garbageEntryMap.compute(address, (addr, garbageEntry) -> {
             if (garbageEntry == null) {
-                uniqueGarbageEntry.set(newGarbageEntry);
                 return newGarbageEntry;
             }
-            uniqueGarbageEntry.set(garbageEntry.merge(newGarbageEntry));
+            garbageEntry.merge(newGarbageEntry);
             return garbageEntry;
         });
-
-        return uniqueGarbageEntry.get();
     }
 
     /**
