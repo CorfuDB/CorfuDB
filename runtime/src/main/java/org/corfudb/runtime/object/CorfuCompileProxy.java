@@ -151,7 +151,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
 
-        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+        final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
         timerAccess = metrics.timer(CorfuComponent.OBJECT + "access");
         timerLogWrite = metrics.timer(CorfuComponent.OBJECT + "log-write");
         timerTxn = metrics.timer(CorfuComponent.OBJECT + "txn");
