@@ -6,7 +6,6 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
@@ -16,23 +15,17 @@ import java.util.*;
 
 @Slf4j
 public class SequencerPerformanceTest extends PerformanceTest{
-    private long seed;
-    private int randomBoundary;
-    private long time;
-    private int milliToSecond;
-    private CorfuRuntime runtime;
-    private Random random;
+    private final long seed;
+    private final int randomBoundary;
+    private final long time;
+    public static final int MILLI_TO_SECOND = 1000;
+    private final Random random;
 
     public SequencerPerformanceTest() {
-        loadProperties();
-        random = new Random(seed);
-    }
-
-    private void loadProperties() {
         seed = Long.parseLong(PROPERTIES.getProperty("sequencerSeed", "1024"));
         randomBoundary = Integer.parseInt(PROPERTIES.getProperty("sequencerRandomBoundary", "100"));
         time = Long.parseLong(PROPERTIES.getProperty("sequencerTime", "100"));
-        milliToSecond = Integer.parseInt(PROPERTIES.getProperty("milliToSecond", "1000"));
+        random = new Random(seed);
     }
 
     private void tokenQuery(CorfuRuntime corfuRuntime, int numRequest) {
@@ -69,10 +62,10 @@ public class SequencerPerformanceTest extends PerformanceTest{
     public void sequencerPerformanceTest() throws IOException, InterruptedException {
         setMetricsReportFlags("sequencer");
         Process server = runServer();
-        runtime = initRuntime();
+        CorfuRuntime runtime = initRuntime();
         long start = System.currentTimeMillis();
         while (true) {
-            if ((System.currentTimeMillis() - start) / milliToSecond > time) {
+            if ((System.currentTimeMillis() - start) / MILLI_TO_SECOND > time) {
                 break;
             }
             tokenQuery(runtime, random.nextInt(randomBoundary));

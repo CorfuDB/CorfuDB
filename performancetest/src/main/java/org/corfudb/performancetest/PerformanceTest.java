@@ -16,12 +16,12 @@ import java.util.Random;
 @Slf4j
 public class PerformanceTest {
     protected static final Properties PROPERTIES = new Properties();
-    protected String endPoint;
-    protected String port;
-    protected int metricsPort;
-    protected Random random;
-    protected String reportPath;
-    protected String reportInterval;
+    protected final String endPoint;
+    protected final String port;
+    protected final int metricsPort;
+    protected final Random random;
+    protected final String reportPath;
+    protected final String reportInterval;
 
     public PerformanceTest() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
@@ -43,7 +43,8 @@ public class PerformanceTest {
     protected void setMetricsReportFlags(String testName) {
         System.setProperty("corfu.local.metrics.collection", "true");
         System.setProperty("corfu.metrics.csv.interval", reportInterval);
-        File logPath = new File(reportPath);
+        String testReportPath = reportPath + testName;
+        File logPath = new File(testReportPath);
         if (!logPath.exists()) {
             logPath.mkdir();
         }
