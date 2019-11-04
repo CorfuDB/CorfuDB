@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Spliterator;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -12,7 +13,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 
@@ -191,15 +194,12 @@ public interface IStreamView extends
      */
     long getTotalUpdates();
 
-    /**
-     * Get the compaction mark of this stream.
-     * @return compaction mark.
-     */
     long getCompactionMark();
 
-    /**
-     * Set the compaction mark of this stream.
-     * @param compactionMark updated compaction mark address.  
-     */
-    void setCompactionMark(long compactionMark);
+    default void compactionMarkCheck(long snapshot) {
+        long compactionMark = getCompactionMark();
+        if (compactionMark > snapshot) {
+            throw new TrimmedException(String.format("snapshot: %d, compaction mark: %d", snapshot, compactionMark));
+        }
+    }
 }

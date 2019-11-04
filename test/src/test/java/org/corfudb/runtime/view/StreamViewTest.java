@@ -1,15 +1,27 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
+import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
+import org.corfudb.protocols.logprotocol.SMRLogEntry;
+import org.corfudb.protocols.logprotocol.SMRRecord;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
 
 /**
  * Created by mwei on 1/8/16.
@@ -20,7 +32,14 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Before
     public void setRuntime() throws Exception {
-        r = getDefaultRuntime().connect();
+        ServerContextBuilder serverContextBuilder = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setCompactionPolicyType("GARBAGE_SIZE_FIRST")
+                .setSegmentGarbageRatioThreshold("0")
+                .setSegmentGarbageSizeThresholdMB("0");
+
+        r = getDefaultRuntime(serverContextBuilder).connect();
     }
 
     @Test
@@ -319,5 +338,46 @@ public class StreamViewTest extends AbstractViewTest {
         // change the stream pointer
         assertThat(sv.previous()).isNull();
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(Address.NON_ADDRESS);
+    }
+
+    @Test
+    public void testCompactionMark() {
+        UUID streamId = CorfuRuntime.getStreamID("stream A");
+        IStreamView sv = r.getStreamsView().get(streamId);
+
+        final int entryNum = RECORDS_PER_SEGMENT + 1;
+
+        // writes data to global address
+        for (int i = 0 ; i <= entryNum; ++i) {
+            SMRRecord smrRecord = new SMRRecord("hi", new Object[]{("hello" + i)}, Serializers.JSON);
+            SMRLogEntry smrLogEntry = new SMRLogEntry();
+            smrLogEntry.addTo(streamId, Collections.singletonList(smrRecord));
+            sv.append(smrLogEntry);
+        }
+
+        // write one synthesized garbage decision
+        final long markerAddress = 3L;
+        final int smrEntrySize = 0;
+        SMRGarbageRecord garbageRecord = new SMRGarbageRecord(markerAddress, smrEntrySize);
+        SMRGarbageEntry smrGarbageEntry = new SMRGarbageEntry();
+        smrGarbageEntry.add(streamId, 0, garbageRecord);
+        smrGarbageEntry.setGlobalAddress(1L);
+        GarbageInformer.GarbageBatch garbageBatch =
+                new GarbageInformer.GarbageBatch(Collections.singletonList(smrGarbageEntry));
+        GarbageInformer garbageInformer = new GarbageInformer(r);
+        garbageInformer.sendGarbageBatch(garbageBatch);
+
+        // run compaction on LogUnit servers
+        getLogUnit(SERVERS.PORT_0).runCompaction();
+        getRuntime().getAddressSpaceView().resetCaches();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+
+        // Assert skipping compacted entry
+        sv.seek(0L);
+        sv.next();
+        ILogData data = sv.next();
+        SMRLogEntry logEntry = (SMRLogEntry) data.getPayload(r);
+        assertThat(logEntry.getSMRUpdates(streamId).get(0).getSMRArguments())
+                .isEqualTo(new Object[]{("hello" + 2)});
     }
 }

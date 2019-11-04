@@ -10,7 +10,9 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -53,6 +55,7 @@ import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 
@@ -71,6 +74,11 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     private final Cache<Long, ILogData> readCache;
+
+    @Getter
+    @Setter
+    private AtomicLong compactionMark = new AtomicLong(Address.NON_ADDRESS);
+
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
             .waitForHole(true)
             .clientCacheable(true)
@@ -131,13 +139,6 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Remove all log entries that are less than the trim mark
-     */
-    public void gc(long trimMark) {
-        readCache.asMap().entrySet().removeIf(e -> e.getKey() < trimMark);
-    }
-
-    /**
      * Reset all in-memory caches.
      */
     public void resetCaches() {
@@ -171,8 +172,8 @@ public class AddressSpaceView extends AbstractView {
      * @param stripeIndex  the index of one stripe in layout.
      * @param garbageEntries a collection of garbageEntries which contain garbage decisions.
      */
-    public void sparseTrim(RuntimeLayout runtimeLayout, int stripeIndex,
-                           Collection<SMRGarbageEntry> garbageEntries) {
+    public void writeGarbage(RuntimeLayout runtimeLayout, int stripeIndex,
+                             Collection<SMRGarbageEntry> garbageEntries) {
         List<LogData> garbageDataList =
                 garbageEntries.stream().map(garbageEntry -> {
 
@@ -194,22 +195,15 @@ public class AddressSpaceView extends AbstractView {
         CompletableFuture[] futures = new CompletableFuture[numUnits];
 
         for (int i = 0; i < numUnits; ++i) {
-            log.trace("sparseTrimming [{}]: {}/{}", servers, i + 1, numUnits);
+            log.trace("writing garbage [{}]: {}/{}", servers, i + 1, numUnits);
             String server = servers.get(i);
             futures[i] = CompletableFuture.runAsync(() -> writeGarbageToLogUnit(runtimeLayout, server,
                     garbageDataList));
         }
 
-        for (int i = 0; i < numUnits; ++i) {
-            try {
-                futures[i].get();
-                log.trace("sparseTrimmed one server[{}]", servers.get(i));
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
+        CompletableFuture.allOf(futures);
 
-        log.trace("sparseTrim complete[{}]", servers);
+        log.trace("writeGarbage complete[{}]", servers);
     }
 
     private void writeGarbageToLogUnit(RuntimeLayout runtimeLayout, String logUnitServer,
@@ -410,7 +404,7 @@ public class AddressSpaceView extends AbstractView {
                 List<Long> batch = getBatch(nextRead, addresses);
                 log.trace("read: request address {}, read batch {}", nextRead, batch);
                 Map<Long, ILogData> mapAddresses = read(batch, options);
-                data = mapAddresses.get(nextRead);
+                data = mapAddresses.getOrDefault(nextRead, LogData.getCompacted(nextRead));
             }
 
             return data;
@@ -592,7 +586,7 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Given the input data, deduce which addresses have been trimmed.
+     * Given the input data, deduce which addresses have been compacted.
      *
      * @param allData data on which the operation will be performed
      * @return the list of addresses that have been compacted
@@ -618,7 +612,7 @@ public class AddressSpaceView extends AbstractView {
                     + address + " on read");
         }
 
-        return logData.getType() != DataType.COMPACTED;
+        return !logData.isCompacted();
     }
 
     /**

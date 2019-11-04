@@ -55,10 +55,6 @@ public class StreamTest extends AbstractTransactionsTest {
     private final int READ_PERCENT = 80;
     private final int MAX_PERCENT = 100;
 
-    private Token getTrimMark(CorfuRuntime rt, long seq) {
-        return new Token(rt.getLayoutView().getLayout().getEpoch(), seq);
-    }
-
     @Before
     public void setHoleFillNoWait() {
         getRuntime().getParameters().setHoleFillTimeout(Duration.ZERO);
