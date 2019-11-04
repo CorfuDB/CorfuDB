@@ -22,6 +22,8 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
+
 /**
  * A segment manger which manages stream and garbage segment mappings.
  * <p>

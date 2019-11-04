@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -27,8 +28,7 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
+
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
@@ -270,5 +270,14 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<Boolean> resetLogUnit(long epoch) {
         return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.payloadMsg(epoch));
+    }
+
+    /**
+     * Send a request to run compaction. Compaction should be run periodically at the LogUnit server. This function
+     * triggers compaction externally for test purpose.
+     */
+    @VisibleForTesting
+    public CompletableFuture<Void> compact() {
+        return sendMessageWithFuture(CorfuMsgType.RUN_COMPACTION.msg());
     }
 }

@@ -7,7 +7,6 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
@@ -70,9 +69,15 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         log.trace("Read[{}]: chain {}/{}", globalAddress, numUnits, numUnits);
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
-        ILogData peekResult = CFUtils.getUninterruptibly(runtimeLayout
+        ReadResponse readResponse = CFUtils.getUninterruptibly(runtimeLayout
                 .getLogUnitClient(globalAddress, numUnits - 1)
-                .read(globalAddress)).getAddresses().get(globalAddress);
+                .read(globalAddress));
+
+        // Compaction mark is updated when the LogUnit servers run compaction. The client learns compaction mark when
+        // it is piggy back in read response.
+        updateCompactionMark(runtimeLayout.getRuntime(), readResponse.getCompactionMark());
+
+        ILogData peekResult = readResponse.getAddresses().get(globalAddress);
 
         return peekResult.isEmpty() ? null : peekResult;
     }
@@ -119,7 +124,11 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
         // Merge the read responses from different log unit servers
         Map<Long, LogData> readResult = futures.stream()
-                .map(future -> CFUtils.getUninterruptibly(future).getAddresses())
+                .map(future -> {
+                    ReadResponse readResponse = CFUtils.getUninterruptibly(future);
+                    updateCompactionMark(runtimeLayout.getRuntime(), readResponse.getCompactionMark());
+                    return readResponse.getAddresses();
+                })
                 .reduce(new HashMap<>(), (map1, map2) -> {
                     map1.putAll(map2);
                     return map1;
@@ -239,9 +248,13 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         log.warn("Recover[{}]: read chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch()
                 , globalAddress),
                 1, numUnits);
-        ILogData ld = CFUtils.getUninterruptibly(runtimeLayout
-                .getLogUnitClient(globalAddress, 0)
-                .read(globalAddress)).getAddresses().getOrDefault(globalAddress, null);
+        ReadResponse readResponse = CFUtils
+                .getUninterruptibly(runtimeLayout.getLogUnitClient(globalAddress, 0)
+                .read(globalAddress));
+
+        updateCompactionMark(runtimeLayout.getRuntime(), readResponse.getCompactionMark());
+        ILogData ld = readResponse.getAddresses().getOrDefault(globalAddress, null);
+
         // If nothing was at the head, this is a bug and we
         // should fail with a runtime exception, as there
         // was nothing to recover - if the head was removed

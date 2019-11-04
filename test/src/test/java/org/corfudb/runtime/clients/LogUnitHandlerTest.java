@@ -53,6 +53,7 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -432,7 +433,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
 
         client.write(0, null, testString, Collections.emptyMap()).get();
-        client.write(StreamLogParams.RECORDS_PER_SEGMENT + 1, null,
+        client.write(RECORDS_PER_SEGMENT + 1, null,
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry

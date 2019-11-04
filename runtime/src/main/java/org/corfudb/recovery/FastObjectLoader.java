@@ -429,7 +429,6 @@ public class FastObjectLoader {
     private void cleanUpForRetry() {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
-        runtime.getStreamsView().getStreamCache().clear();
 
         // Re ask for the Head, if it changes while we were trying.
         findAndSetLogHead();
@@ -472,6 +471,8 @@ public class FastObjectLoader {
                 log.warn("applyForEachAddress[address={}] is empty");
                 break;
             case RANK_ONLY:
+                break;
+            case GARBAGE:
                 break;
             case COMPACTED:
                 break;
@@ -527,7 +528,6 @@ public class FastObjectLoader {
                         RecoveryUtils.fastLoaderReadOptions);
 
                 invokeNecromancer(range, logDataProcessor);
-
             } catch (Exception ex) {
                 log.warn("Error loading data", ex);
                 handleRetry();
