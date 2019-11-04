@@ -2,6 +2,7 @@ package org.corfudb.recovery;
 
 import org.assertj.core.data.MapEntry;
 import org.corfudb.CustomSerializer;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -21,6 +22,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -31,8 +33,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
 
 
 /**
@@ -51,8 +53,13 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         key_count++;
     }
 
+    private <T extends Map<String, String>> void populateMapWithSameKey(T map) {
+        map.put("key", "value" + key_count);
+        key_count++;
+    }
+
     <T extends Map> void populateMaps(int numMaps, CorfuRuntime rt, Class<T> type, boolean reset,
-                                      int keyPerMap) {
+                                      int keyPerMap, boolean sameKey) {
         if (reset) {
             maps.clear();
             key_count = 0;
@@ -64,7 +71,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
             );
 
             for(int j = 0; j < keyPerMap; j++) {
-                populateMapWithNextKey(currentMap);
+                if (sameKey) {
+                    populateMapWithSameKey(currentMap);
+                } else {
+                    populateMapWithNextKey(currentMap);
+                }
             }
         }
     }
@@ -132,6 +143,28 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThatStreamTailsAreCorrect(streamTails);
     }
 
+    private void startCompaction() {
+        // send garbage decisions to LogUnit servers.
+        getRuntime().getGarbageInformer().gcUnsafe();
+
+        // run compaction on LogUnit servers
+        getLogUnit(SERVERS.PORT_0).runCompaction();
+        getRuntime().getAddressSpaceView().resetCaches();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+    }
+
+    @Before
+    public void setRuntime() throws Exception {
+        ServerContextBuilder serverContextBuilder = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setCompactionPolicyType("GARBAGE_SIZE_FIRST")
+                .setSegmentGarbageRatioThreshold("0")
+                .setSegmentGarbageSizeThresholdMB("0");
+
+        getDefaultRuntime(serverContextBuilder).connect();
+    }
+
     /** Test that the maps are reloaded after runtime.connect()
      *
      * By checking the version of the underlying objects, we ensure that
@@ -144,15 +177,24 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canReloadMaps() throws Exception {
-        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2, false);
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
     }
 
     @Test
+    public void canReloadMapsAfterSparseTrim() throws Exception {
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, RECORDS_PER_SEGMENT + 1, true);
+
+        startCompaction();
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt2);
+    }
+
+    @Test
     public void canReadWithCacheDisable() throws Exception {
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2, false);
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .setCacheDisabled(true)
@@ -178,7 +220,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canReadHoles() throws Exception {
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2, false);
 
         LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(getDefaultConfigurationString());
@@ -189,7 +231,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         LogData hole1 = LogData.getHole(getDefaultRuntime().getSequencerView().next().getToken());
         luc.write(hole1);
 
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1, false);
 
         seq.nextToken(null, 1);
         LogData hole2 = LogData.getHole(getDefaultRuntime().getSequencerView().next().getToken());
@@ -218,7 +260,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canRollBack() throws Exception {
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2, false);
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
         Map<String, String> map1Prime = Helpers.createMap("Map0", rt2, CorfuTable.class);
@@ -236,7 +278,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void canLoadWithCustomBulkRead() throws Exception {
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE, false);
 
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
@@ -252,7 +294,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void canFindTailsRecoverSequencerMode() throws Exception {
-        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2, false);
 
         Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
         assertThatStreamTailsAreCorrect(streamTails);
@@ -260,7 +302,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void canReadRankOnlyEntries() throws Exception {
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2, false);
 
         LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(getDefaultConfigurationString());
@@ -272,14 +314,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .getSerialized();
         luc.write(data).get();
 
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1, false);
 
         address = seq.nextToken(Collections.emptyList(),1).get().getSequence();
         data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
                 .getSerialized();
         luc.write(data).get();
 
-        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1, false);
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
@@ -288,7 +330,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void ignoreStreamForRuntimeButNotStreamTails() throws Exception {
-        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME, false);
 
         // Create a new runtime with fastloader
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
@@ -306,11 +348,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void doNotReconstructTransactionStreams() throws Exception {
-        addSingleServer(SERVERS.PORT_0);
         CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
-        populateMaps(SOME, rt1, CorfuTable.class, true, 2);
+        populateMaps(SOME, rt1, CorfuTable.class, true, 2, false);
 
         rt1.getObjectsView().TXBegin();
         maps.get("Map1").put("k4", "v4");
@@ -331,12 +372,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void doReconstructTransactionStreamTail() throws Exception {
-        addSingleServer(SERVERS.PORT_0);
         CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
 
-        populateMaps(SOME, rt1, CorfuTable.class, true, 2);
+        populateMaps(SOME, rt1, CorfuTable.class, true, 2, false);
         int mapCount = maps.size();
 
         rt1.getObjectsView().TXBegin();
@@ -577,7 +617,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void whiteListMode() throws Exception {
-        populateMaps(MORE, getDefaultRuntime(), CorfuTable.class, true, SOME);
+        populateMaps(MORE, getDefaultRuntime(), CorfuTable.class, true, SOME, false);
 
         List<String> streamsToLoad = new ArrayList<>();
         streamsToLoad.add("Map1");
@@ -595,7 +635,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void whiteListModeWithCheckPoint() throws Exception {
-        populateMaps(MORE, getDefaultRuntime(), CorfuTable.class, true, SOME);
+        populateMaps(MORE, getDefaultRuntime(), CorfuTable.class, true, SOME, false);
 
         checkPointAll(getDefaultRuntime());
 

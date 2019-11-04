@@ -2,12 +2,6 @@ package org.corfudb.runtime.object;
 
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
 import org.corfudb.protocols.logprotocol.SMRRecord;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.util.Collections;
 import java.util.List;
@@ -15,6 +9,14 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.IStreamView;
+
 
 /**
  * StreamViewSMRAdapter wraps a stream and implements the ISMRStream API over
@@ -48,7 +50,8 @@ public class StreamViewSMRAdapter implements ISMRStream {
         this.streamView = streamView;
     }
 
-    public List<SMRRecord> dataMapper(ILogData logData) {
+
+    private List<SMRRecord> dataMapper(ILogData logData) {
         List<SMRRecord> updates = ((SMRLogEntry) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
         ISMRStream.addLocatorToSMRRecords(updates, logData.getGlobalAddress(), streamView.getId());
         return updates;
@@ -63,10 +66,10 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public List<SMRRecord> remainingUpTo(long maxGlobal) {
         return streamView.remainingUpTo(maxGlobal).stream()
                 .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof SMRLogEntry
-                        || m.hasCheckpointMetadata())
+                .filter(m -> m.getPayload(runtime) instanceof SMRLogEntry)
                 .map(this::dataMapper)
                 .flatMap(List::stream)
+                .filter(record -> !record.isCompacted())
                 .collect(Collectors.toList());
     }
 
