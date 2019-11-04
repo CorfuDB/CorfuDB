@@ -3,7 +3,6 @@ package org.corfudb.runtime.view.stream;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -14,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.runtime.view.StreamOptions;
@@ -100,17 +98,18 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
-        return removeFromQueue(context.readQueue);
+        return removeFromQueue(context.readQueue, maxGlobal);
     }
 
     /**
      * Remove next entry from the queue.
      *
      * @param queue queue of entries.
+     * @param snapshot snapshot timestamp.
      * @return next available entry. or null if there are no more entries
      *         or remaining entries are not part of this stream.
      */
-    protected abstract ILogData removeFromQueue(NavigableSet<Long> queue);
+    protected abstract ILogData removeFromQueue(NavigableSet<Long> queue, long snapshot);
 
     /**
      * {@inheritDoc}
@@ -198,25 +197,46 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @param address       address to read.
      * @param readStartTime start time of the range of reads.
+     * @param snapshot      snapshot of this read.
      * @return log data at the address.
      */
     @Deprecated
-    protected ILogData read(final long address, long readStartTime) {
+    protected ILogData forceRead(final long address, long readStartTime, long snapshot) {
+        // check compaction mark before access address space view. This check prevents unnecessary address space view
+        // read.
+        compactionMarkCheck(snapshot);
+        ILogData logData;
+
         if (System.currentTimeMillis() - readStartTime <
                 runtime.getParameters().getHoleFillTimeout().toMillis()) {
-            return runtime.getAddressSpaceView().read(address, readOptions);
+            logData = runtime.getAddressSpaceView().read(address, readOptions);
+        } else {
+            ReadOptions options = readOptions.toBuilder()
+                    .waitForHole(false)
+                    .build();
+            logData = runtime.getAddressSpaceView().read(address, options);
         }
 
-        ReadOptions options = readOptions.toBuilder()
-                .waitForHole(false)
-                .build();
-        return runtime.getAddressSpaceView().read(address, options);
+        // check compaction mark after address space view read. The compaction mark may be updated after address
+        // space view read.
+        compactionMarkCheck(snapshot);
+        return logData;
     }
 
     @NonNull
-    protected List<ILogData> readAll(@NonNull List<Long> addresses) {
+    protected List<ILogData> readAll(@NonNull List<Long> addresses, long snapshot) {
+        // check compaction mark before access address space view. This check prevents unnecessary address space view
+        // read.
+        compactionMarkCheck(snapshot);
+
         Map<Long, ILogData> dataMap =
                 runtime.getAddressSpaceView().read(addresses, readOptions);
+
+        // check compaction mark after address space view read. The compaction mark may be updated after address
+        // space view read.
+        compactionMarkCheck(snapshot);
+
+
         // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
         // to all requested addresses, for this reason we must filter out data entries not included (null).
         // Also, we need to preserve ordering for checkpoint logic.
@@ -260,7 +280,7 @@ public abstract class AbstractQueuedStreamView extends
                 .collect(Collectors.toList());
 
         // The list to store read results in
-        List<ILogData> readFrom = readAll(toRead).stream()
+        List<ILogData> readFrom = readAll(toRead, maxGlobal).stream()
                 .filter(x -> x.getType() == DataType.DATA)
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
@@ -446,8 +466,15 @@ public abstract class AbstractQueuedStreamView extends
      *  {@inheritDoc}
      *
      **/
-    protected ILogData read(final long address) {
-        return runtime.getAddressSpaceView().read(address, readOptions);
+    protected ILogData read(long address, long snapshot) {
+        // checks compaction mark to prevent unnecessary address space view read
+        compactionMarkCheck(snapshot);
+
+        ILogData logData = runtime.getAddressSpaceView().read(address, readOptions);
+
+        // checks compaction mark again after address space view read which may updates compaction mark.
+        compactionMarkCheck(snapshot);
+        return logData;
     }
 
     /**
@@ -459,10 +486,19 @@ public abstract class AbstractQueuedStreamView extends
      * @param nextRead current address of interest
      * @param addresses batch of addresses to read (bring into the cache) in case there is a cache miss (includes
      *                  nextRead)
+     * @param snapshot snapshot timestamp.
      * @return data for current 'address' of interest.
      */
-    protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
-        return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+    protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses, long snapshot) {
+        // checks compaction mark to prevent unnecessary address space view read
+        compactionMarkCheck(snapshot);
+
+        ILogData logData = runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+
+        // checks compaction mark again after address space view read which may updates compaction mark.
+        compactionMarkCheck(snapshot);
+
+        return logData;
     }
 
     /**
@@ -502,6 +538,9 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
+        // check compaction mark to prevent unnecessary stream view resolution
+        compactionMarkCheck(oldPointer - 1L);
+
         // Otherwise, the previous entry should be resolved, so get
         // one less than the current.
         Long prevAddress = context
@@ -525,9 +564,15 @@ public abstract class AbstractQueuedStreamView extends
         context.readQueue.clear();
 
         if (prevAddress != null) {
+            // check compaction mark
+            compactionMarkCheck(prevAddress);
+
             log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
+
             context.setGlobalPointer(prevAddress);
-            return read(prevAddress);
+
+            // The ILogData returned by previous() would be used for rollback.
+            return read(prevAddress, prevAddress);
         }
 
         // The stream hasn't been checkpointed and we need to
@@ -550,7 +595,9 @@ public abstract class AbstractQueuedStreamView extends
         if (Address.nonAddress(context.getGlobalPointer())) {
             return null;
         }
-        return read(context.getGlobalPointer());
+
+        // The ILogData returned by current() would be used for rollback.
+        return read(context.getGlobalPointer(), context.getGlobalPointer());
     }
 
     /**
