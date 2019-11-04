@@ -33,7 +33,7 @@ public class LayoutBasedTestHelper {
     public class MockedSegment {
         public final long startAddress;
         public final long endAddress;
-        public StateTransferManager.CurrentTransferSegmentStatus status;
+        public StateTransferManager.TransferSegmentStatus status;
     }
 
     public Layout createNonPresentLayout() {
@@ -65,11 +65,11 @@ public class LayoutBasedTestHelper {
                 segment2, layout.getSegment(4L)));
     }
 
-    public MockedSegment transformToMock(StateTransferManager.CurrentTransferSegment segment) {
+    public MockedSegment transformToMock(StateTransferManager.TransferSegment segment) {
         return new MockedSegment(segment.getStartAddress(), segment.getEndAddress(), segment.getStatus());
     }
 
-    public ImmutableList<MockedSegment> transformListToMock(List<StateTransferManager.CurrentTransferSegment> segments) {
+    public ImmutableList<MockedSegment> transformListToMock(List<StateTransferManager.TransferSegment> segments) {
         return ImmutableList.copyOf(segments.stream().map(this::transformToMock).collect(Collectors.toList()));
     }
 

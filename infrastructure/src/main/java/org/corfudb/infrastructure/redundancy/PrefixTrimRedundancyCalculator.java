@@ -5,8 +5,8 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
@@ -51,7 +51,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
      * @param layout A current layout.
      * @return A list of transfer segments.
      */
-    public ImmutableList<CurrentTransferSegment> createStateList(Layout layout) {
+    public ImmutableList<TransferSegment> createStateList(Layout layout) {
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
         return layout.getSegments()
                 .stream()
@@ -62,26 +62,26 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
                     long segmentEnd = segment.getEnd() - 1L;
 
                     if (segmentContainsServer(segment, getServer())) {
-                        CurrentTransferSegmentStatus restored = CurrentTransferSegmentStatus
+                        TransferSegmentStatus restored = TransferSegmentStatus
                                 .builder()
                                 .segmentState(RESTORED)
                                 .totalTransferred(segmentEnd - segmentStart + 1L)
                                 .build();
 
-                        return CurrentTransferSegment
+                        return TransferSegment
                                 .builder()
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
                                 .status(restored)
                                 .build();
                     } else {
-                        CurrentTransferSegmentStatus notTransferred = CurrentTransferSegmentStatus
+                        TransferSegmentStatus notTransferred = TransferSegmentStatus
                                 .builder()
                                 .segmentState(NOT_TRANSFERRED)
                                 .totalTransferred(0L)
                                 .build();
 
-                        return CurrentTransferSegment
+                        return TransferSegment
                                 .builder()
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)

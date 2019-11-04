@@ -1,24 +1,26 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 
 import java.util.Optional;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
+
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.*;
 
 public interface TransferSegmentCreator {
-    default CurrentTransferSegment createTransferSegment(long start,
-                                                         long end,
-                                                         SegmentState state) {
+    default TransferSegment createTransferSegment(long start,
+                                                  long end,
+                                                  SegmentState state) {
         if (state == RESTORED || state == TRANSFERRED) {
-            return CurrentTransferSegment
+            return TransferSegment
                     .builder()
                     .status(
-                            CurrentTransferSegmentStatus
-                                    .builder()
+                            builder()
                                     .totalTransferred(end - start + 1)
                                     .segmentState(state)
                                     .build()
@@ -27,11 +29,9 @@ public interface TransferSegmentCreator {
                     .endAddress(end)
                     .build();
         } else {
-            return CurrentTransferSegment
+            return TransferSegment
                     .builder()
-                    .status(
-                            CurrentTransferSegmentStatus
-                                    .builder()
+                    .status(builder()
                                     .totalTransferred(0L)
                                     .segmentState(state)
                                     .causeOfFailure(Optional.of(new TransferSegmentFailure()))
@@ -43,8 +43,8 @@ public interface TransferSegmentCreator {
         }
     }
 
-    default CurrentTransferSegmentStatus createStatus(SegmentState state, long total, Optional<TransferSegmentFailure> fail) {
-        return CurrentTransferSegmentStatus.builder().totalTransferred(total).segmentState(state).causeOfFailure(fail).build();
+    default TransferSegmentStatus createStatus(SegmentState state, long total, Optional<TransferSegmentFailure> fail) {
+        return builder().totalTransferred(total).segmentState(state).causeOfFailure(fail).build();
     }
 
 }

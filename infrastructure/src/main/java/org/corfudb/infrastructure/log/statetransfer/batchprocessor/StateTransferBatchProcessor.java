@@ -2,52 +2,52 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.SUCCEEDED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.SUCCEEDED;
 
 /**
- * An interface that every batch processor should implement.
+ * An interface that every state transfer batch processor should implement.
  */
 public interface StateTransferBatchProcessor {
 
     /**
-     * Transfer a batch and give back a future of a batch result.
+     * Invoke a transfer given a transferBatchRequest and return a future of a transferBatchResponse.
      *
-     * @param batch A batch to transfer.
-     * @return A future of a batch result.
+     * @param transferBatchRequest A request to transfer a batch of addresses.
+     * @return A result of a transfer.
      */
-    CompletableFuture<BatchResult> transfer(Batch batch);
+    CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest);
 
     /**
      * Appends records to the stream log.
      *
-     * @param readBatch The list of entries (data or garbage) as well as an optional
+     * @param readBatch The list of log entries as well as an optional
      *                  node they were read from.
-     * @param streamlog An instance of stream log.
-     * @return A batch result of a record append.
+     * @param streamlog A stream log interface.
+     * @return A transferBatchResponse, a final result of a transfer.
      */
-    default BatchResult writeRecords(ReadBatch readBatch, StreamLog streamlog) {
+    default TransferBatchResponse writeRecords(ReadBatch readBatch, StreamLog streamlog) {
         List<Long> addresses = readBatch.getAddresses();
 
-        Result<BatchResult, RuntimeException> resultOfWrite = Result.of(() -> {
+        Result<TransferBatchResponse, RuntimeException> resultOfWrite = Result.of(() -> {
             streamlog.append(readBatch.getData());
-            return BatchResult
+            return TransferBatchResponse
                     .builder()
-                    .batch(new Batch(addresses, readBatch.getDestination()))
+                    .transferBatchRequest(new TransferBatchRequest(addresses, readBatch.getDestination()))
                     .status(SUCCEEDED)
                     .build();
         });
         if (resultOfWrite.isError()) {
-            return BatchResult
+            return TransferBatchResponse
                     .builder()
-                    .batch(new Batch(addresses, readBatch.getDestination()))
+                    .transferBatchRequest(new TransferBatchRequest(addresses, readBatch.getDestination()))
                     .status(FAILED)
                     .build();
         }

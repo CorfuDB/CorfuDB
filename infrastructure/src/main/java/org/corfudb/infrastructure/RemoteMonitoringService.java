@@ -425,6 +425,12 @@ public class RemoteMonitoringService implements MonitoringService {
     private DetectorTask restoreRedundancyAndMergeSegments(Layout layout) {
         String localEndpoint = serverContext.getLocalEndpoint();
 
+        // Check that the task is not currently running.
+        if(!mergeSegmentsTask.isDone()){
+            log.trace("Merge segments task already in progress. Skipping spawning another task.");
+            return DetectorTask.SKIPPED;
+        }
+
         // Check that the current node requires the merge of segments,
         // also verify that the node is healed (not present in the unresponsive list).
         if (RedundancyCalculator.requiresMerge(layout, localEndpoint) &&
@@ -437,10 +443,8 @@ public class RemoteMonitoringService implements MonitoringService {
             mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
 
             return DetectorTask.COMPLETED;
-        } else if (!mergeSegmentsTask.isDone()) {
-            log.trace("Merge segments task already in progress. Skipping spawning another task.");
-            return DetectorTask.SKIPPED;
         }
+
         log.trace("No segments to merge. Skipping step.");
         return DetectorTask.SKIPPED;
     }

@@ -8,8 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferException;
-import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -32,11 +32,12 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static lombok.Builder.Default;
-import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.FAILED;
 
 /**
- * A batch processor that transfers non-committed addresses one batch at a time
- * via a replication protocol.
+ * A transferBatchRequest processor that transfers non-committed addresses one transferBatchRequest at a time
+ * via a replication protocol. A non-committed address is the one that belongs to the
+ * part of an address space that is inconsistent.
  */
 @Slf4j
 @Builder
@@ -69,13 +70,13 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     private final AddressSpaceView addressSpaceView;
 
     @Override
-    public CompletableFuture<BatchResult> transfer(Batch batch) {
-        return readRecords(batch, 0)
+    public CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest) {
+        return readRecords(transferBatchRequest, 0)
                 .thenApply(records -> writeRecords(records, streamLog))
-                .exceptionally(error -> BatchResult
+                .exceptionally(error -> TransferBatchResponse
                         .builder()
                         .status(FAILED)
-                        .batch(batch)
+                        .transferBatchRequest(transferBatchRequest)
                         .build()
                 );
     }
@@ -83,15 +84,15 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     /**
      * Reads data entries by utilizing the replication protocol. If there are errors, retries.
      *
-     * @param batch   The batch of addresses to be read.
+     * @param transferBatchRequest   The transferBatchRequest of addresses to be read.
      * @param retries The number of retries.
      * @return A result of reading records.
      */
-    CompletableFuture<ReadBatch> readRecords(Batch batch, int retries) {
+    CompletableFuture<ReadBatch> readRecords(TransferBatchRequest transferBatchRequest, int retries) {
         return CompletableFuture
                 .supplyAsync(() -> {
                             Supplier<Map<Long, ILogData>> readSupplier = () -> addressSpaceView
-                                    .simpleProtocolRead(batch.getAddresses(), readOptions);
+                                    .simpleProtocolRead(transferBatchRequest.getAddresses(), readOptions);
 
                             return Result
                                     .of(readSupplier)
@@ -99,17 +100,17 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                         }
                 ).thenApply(readResult ->
                         readResult.map(records -> checkReadRecords(
-                                batch.getAddresses(),
+                                transferBatchRequest.getAddresses(),
                                 records,
-                                batch.getDestination()
+                                transferBatchRequest.getDestination()
                         ))
                 ).thenCompose(checkedReadResult -> {
                     if (checkedReadResult.isError()) {
-                        return retryReadRecords(batch, retries);
+                        return retryReadRecords(transferBatchRequest, retries);
                     } else {
                         ReadBatch readBatch = checkedReadResult.get();
                         if (readBatch.getStatus() == ReadBatch.FailureStatus.FAILED) {
-                            return retryReadRecords(readBatch.toBatch(), retries);
+                            return retryReadRecords(readBatch.createRequest(), retries);
                         } else {
                             return CompletableFuture.completedFuture(readBatch);
                         }
@@ -120,12 +121,12 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     /**
      * Handle read errors. Exponential backoff policy is utilized.
      *
-     * @param batch        Batch of addresses to be read.
-     * @param retriesTried Configurable number of retries for the current batch.
+     * @param transferBatchRequest        TransferBatchRequest of addresses to be read.
+     * @param retriesTried Configurable number of retries for the current transferBatchRequest.
      * @return Future of the result of the retry.
      */
     CompletableFuture<ReadBatch> retryReadRecords
-    (Batch batch, int retriesTried) {
+    (TransferBatchRequest transferBatchRequest, int retriesTried) {
         try {
             AtomicInteger readRetries = new AtomicInteger(retriesTried);
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
@@ -134,11 +135,11 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 }
 
                 // If a pipeline completed exceptionally, than return the error.
-                CompletableFuture<ReadBatch> pipelineFuture = readRecords(batch, readRetries.get())
+                CompletableFuture<ReadBatch> pipelineFuture = readRecords(transferBatchRequest, readRetries.get())
                         .handle((result, exception) -> Optional.ofNullable(exception)
                                 .map(e -> ReadBatch.builder()
-                                        .failedAddress(batch.getAddresses())
-                                        .destination(batch.getDestination())
+                                        .failedAddresses(transferBatchRequest.getAddresses())
+                                        .destination(transferBatchRequest.getDestination())
                                         .status(ReadBatch.FailureStatus.FAILED)
                                         .build())
                                 .orElse(result)
@@ -157,8 +158,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 retry.setMaxRetryThreshold(maxRetryTimeout);
                 retry.setRandomPortion(randomFactorBackoff);
             }).run();
-            // Map to batch processor failure if an interrupt has occurred
-            // or the retries were exhausted.
+
         } catch (InterruptedException | RetryExhaustedException ie) {
             log.error("Retries were exhausted.");
             return CompletableFuture.completedFuture(ReadBatch
@@ -201,7 +201,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                     .natural()
                     .sortedCopy(Sets.difference(entireSet, transferredSet));
             return ReadBatch.builder()
-                    .failedAddress(failedAddresses)
+                    .failedAddresses(failedAddresses)
                     .destination(destination)
                     .status(ReadBatch.FailureStatus.FAILED)
                     .build();

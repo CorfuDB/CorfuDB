@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.DataTest;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -18,7 +18,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
-class StateTransferBatchProcessorTest extends DataTest {
+class StateTransferTransferBatchRequestProcessorTest extends DataTest {
 
     @Test
     void writeRecords() {
@@ -33,9 +33,9 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .streamLog(streamLog)
                 .addressSpaceView(addressSpaceView)
                 .build();
-        BatchResult res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
-        assertThat(res.getStatus() == BatchResult.FailureStatus.SUCCEEDED).isTrue();
-        assertThat(res.getBatch().getAddresses()).isEqualTo(addresses);
+        TransferBatchResponse res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
+        assertThat(res.getStatus() == TransferBatchResponse.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
         doThrow(new IllegalStateException()).when(streamLog).append(stubList);
         batchProcessor = ProtocolBatchProcessor
                 .builder()
@@ -43,7 +43,7 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
-        assertThat(res.getStatus() == BatchResult.FailureStatus.FAILED).isTrue();
-        assertThat(res.getBatch().getAddresses()).isEqualTo(addresses);
+        assertThat(res.getStatus() == TransferBatchResponse.FailureStatus.FAILED).isTrue();
+        assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
     }
 }

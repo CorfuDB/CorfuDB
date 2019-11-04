@@ -14,8 +14,12 @@ import java.util.stream.Collectors;
 import static lombok.Builder.Default;
 
 /**
- * A batch of data read from the cluster (or from a specific node) and
- * an optional destination server where the corresponding data is located.
+ * A result of a read that contains:
+ * - {@link #data} - a piece of data read from the cluster (or from a specific node).
+ * - {@link #failedAddresses} - a list of addresses, for which the data was not read.
+ * - {@link #destination } - an optional destination server where the corresponding data is present,
+ * if not read via a replication protocol.
+ * - {@link #status} - a status describing a result of a read -- success or failure.
  */
 @Getter
 @ToString
@@ -27,7 +31,7 @@ public class ReadBatch {
     }
 
     /**
-     * A complete batch of a data read from the cluster (or from a specific node).
+     * A batch of log data read from the cluster (or from a specific node).
      */
     @Default
     private final List<LogData> data = ImmutableList.of();
@@ -36,10 +40,10 @@ public class ReadBatch {
      * Addresses for which the data was not read.
      */
     @Default
-    private final List<Long> failedAddress = ImmutableList.of();
+    private final List<Long> failedAddresses = ImmutableList.of();
     /**
-     * This is field is optional because the batch can be read from the cluster
-     * consistency protocol rather than from the specific destination.
+     * A destination endpoint. This field is optional because the log data
+     * can be read using the cluster consistency protocol rather than from a specific destination.
      */
     @Default
     private final Optional<String> destination = Optional.empty();
@@ -51,12 +55,12 @@ public class ReadBatch {
     private final FailureStatus status = FailureStatus.SUCCEEDED;
 
     /**
-     * Transform this read batch into a new batch.
+     * Creates a transferBatchRequest from {@link #failedAddresses} and {@link #destination}.
      *
-     * @return An instance of batch.
+     * @return An instance of transferBatchRequest.
      */
-    public Batch toBatch() {
-        return new Batch(failedAddress, destination);
+    public TransferBatchRequest createRequest() {
+        return new TransferBatchRequest(failedAddresses, destination);
     }
 
     /**

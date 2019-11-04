@@ -1,9 +1,10 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
+import org.corfudb.util.CFUtils;
 
 import java.util.Optional;
 import java.util.Random;
@@ -12,13 +13,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.BatchResult.FailureStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.FAILED;
 
 /**
  * A faulty batch processor that fails every {@link #batchFailureOrder transfer}.
  */
 @Getter
-public class FaultyBatchProcessor implements StateTransferBatchProcessor, DelayedExecution {
+public class FaultyBatchProcessor implements StateTransferBatchProcessor {
 
     private final AtomicInteger totalProcessed = new AtomicInteger(0);
     private final Optional<Long> delay;
@@ -38,19 +39,19 @@ public class FaultyBatchProcessor implements StateTransferBatchProcessor, Delaye
 
 
     @Override
-    public CompletableFuture<BatchResult> transfer(Batch batch) {
-        CompletableFuture<BatchResult> exec;
+    public CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest) {
+        CompletableFuture<TransferBatchResponse> exec;
         if (totalProcessed.getAndIncrement() % batchFailureOrder == 0) {
-            exec = CompletableFuture.completedFuture(BatchResult.builder().status(FAILED).build());
+            exec = CompletableFuture.completedFuture(TransferBatchResponse.builder().status(FAILED).build());
         } else {
             exec = CompletableFuture
-                    .completedFuture(BatchResult
+                    .completedFuture(TransferBatchResponse
                             .builder()
-                            .batch(batch)
+                            .transferBatchRequest(transferBatchRequest)
                             .build()
                     );
         }
-        return withDelayOf(() -> exec,
-                delay.map(d -> (long) (random.nextFloat() * d)).orElse(0L), ec);
+        return CFUtils.runFutureAfter(() -> exec, ec, delay.map(d -> (long)
+                (random.nextFloat() * d)).orElse(0L));
     }
 }

@@ -7,7 +7,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegmentStatus;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
@@ -48,7 +48,7 @@ public class RedundancyCalculator {
     @ToString
     @EqualsAndHashCode
     public static class AgedSegment implements Comparable<AgedSegment> {
-        private final CurrentTransferSegment segment;
+        private final TransferSegment segment;
         private final SegmentAge age;
 
         @Override
@@ -75,7 +75,7 @@ public class RedundancyCalculator {
      * @param layout          A current layout.
      * @return A new, updated layout.
      */
-    Layout restoreRedundancyForSegment(CurrentTransferSegment transferSegment, Layout layout) {
+    Layout restoreRedundancyForSegment(TransferSegment transferSegment, Layout layout) {
         List<LayoutSegment> segments = layout.getSegments().stream().map(layoutSegment -> {
             if (layoutSegment.getEnd() == transferSegment.getEndAddress() + 1L) {
 
@@ -120,7 +120,7 @@ public class RedundancyCalculator {
      * @return A new, updated layout.
      */
     public Layout updateLayoutAfterRedundancyRestoration(
-            List<CurrentTransferSegment> segments, Layout initLayout) {
+            List<TransferSegment> segments, Layout initLayout) {
         return segments
                 .stream()
                 .reduce(initLayout,
@@ -232,14 +232,14 @@ public class RedundancyCalculator {
                     newSegment = lastAddedSegment;
                 }
 
-                CurrentTransferSegmentStatus oldSegmentStatus = oldSegment.segment.getStatus();
+                TransferSegmentStatus oldSegmentStatus = oldSegment.segment.getStatus();
 
                 mergedSegment = newSegment;
                 // If the old segment is not done transferring, or restored -> update the segment
                 // with a new range and the old status.
                 SegmentState segmentState = oldSegmentStatus.getSegmentState();
                 if (segmentState == FAILED || segmentState == RESTORED) {
-                    CurrentTransferSegment segment = CurrentTransferSegment
+                    TransferSegment segment = TransferSegment
                             .builder()
                             .startAddress(newSegment.segment.getStartAddress())
                             .endAddress(newSegment.segment.getEndAddress())
@@ -279,26 +279,26 @@ public class RedundancyCalculator {
      * @param newList A list of segments after the epoch change.
      * @return A new list, that reflects correctly the status of the transfer segments.
      */
-    public ImmutableList<CurrentTransferSegment> mergeLists(
-            List<CurrentTransferSegment> oldList, List<CurrentTransferSegment> newList) {
+    public ImmutableList<TransferSegment> mergeLists(
+            List<TransferSegment> oldList, List<TransferSegment> newList) {
 
         // If a new list is empty ->
         // Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
         if (newList.isEmpty()) {
             return oldList.stream().map(segment -> {
-                CurrentTransferSegmentStatus oldStatus = segment.getStatus();
+                TransferSegmentStatus oldStatus = segment.getStatus();
 
-                CurrentTransferSegmentStatus newStatus = oldStatus;
+                TransferSegmentStatus newStatus = oldStatus;
 
                 if (oldStatus.getSegmentState() == TRANSFERRED) {
-                    newStatus = CurrentTransferSegmentStatus
+                    newStatus = TransferSegmentStatus
                             .builder()
                             .segmentState(RESTORED)
                             .totalTransferred(segment.computeTotalTransferred())
                             .build();
                 }
 
-                return CurrentTransferSegment
+                return TransferSegment
                         .builder()
                         .startAddress(segment.getStartAddress())
                         .endAddress(segment.getEndAddress())

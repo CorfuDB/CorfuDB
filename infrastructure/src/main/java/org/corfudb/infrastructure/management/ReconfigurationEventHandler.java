@@ -136,7 +136,7 @@ public class ReconfigurationEventHandler {
      * @param retryQueryTimeout Timeout to poll for workflow status.
      * @return True if workflow completed successfully. False otherwise.
      */
-    public static boolean handleMergeSegments(@NonNull String currentEndpoint,
+    public static boolean handleMergeSegments(@Nonnull String currentEndpoint,
                                               @Nonnull CorfuRuntime runtime,
                                               @Nonnull Layout layout,
                                               @Nonnull Duration retryQueryTimeout) {

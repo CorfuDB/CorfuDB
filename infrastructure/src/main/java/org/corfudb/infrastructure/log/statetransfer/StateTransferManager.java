@@ -14,8 +14,9 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.batch.Batch;
-import org.corfudb.infrastructure.log.statetransfer.batch.BatchResult;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 
@@ -26,9 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
 
 /**
@@ -61,7 +60,7 @@ public class StateTransferManager {
     @ToString
     @Builder
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
-    public static class CurrentTransferSegment implements Comparable<CurrentTransferSegment> {
+    public static class TransferSegment implements Comparable<TransferSegment> {
         /**
          * Start address of a segment.
          */
@@ -73,10 +72,10 @@ public class StateTransferManager {
         /**
          * A future that holds the status of a transfer of a segment.
          */
-        private final CurrentTransferSegmentStatus status;
+        private final TransferSegmentStatus status;
 
         @Override
-        public int compareTo(CurrentTransferSegment other) {
+        public int compareTo(TransferSegment other) {
             return Long.compare(this.getStartAddress(), other.getStartAddress());
         }
 
@@ -87,16 +86,17 @@ public class StateTransferManager {
          * @param other Other segment.
          * @return True, if overlap.
          */
-        public boolean overlapsWith(CurrentTransferSegment other) {
+        public boolean overlapsWith(TransferSegment other) {
             return other.getStartAddress() <= this.getEndAddress();
         }
 
 
         /**
-         * If end address and start address are valid, compute the total number of transferred.
+         * If end address and start address are valid, compute the total number
+         * of transferred addresses.
          * Otherwise, if an end address is -1L -> Nothing to compute, return 0L.
          *
-         * @return Sum of total transferred.
+         * @return Sum of total addresses transferred.
          */
         public long computeTotalTransferred() {
             if (endAddress == -1L) {
@@ -106,7 +106,7 @@ public class StateTransferManager {
         }
 
 
-        public static class CurrentTransferSegmentBuilder {
+        public static class TransferSegmentBuilder {
 
             public void verify() {
                 if (startAddress < 0L) {
@@ -119,9 +119,9 @@ public class StateTransferManager {
                 }
             }
 
-            public CurrentTransferSegment build() {
+            public TransferSegment build() {
                 verify();
-                return new CurrentTransferSegment(startAddress, endAddress, status);
+                return new TransferSegment(startAddress, endAddress, status);
             }
         }
     }
@@ -133,7 +133,7 @@ public class StateTransferManager {
     @ToString
     @EqualsAndHashCode
     @Builder
-    public static class CurrentTransferSegmentStatus {
+    public static class TransferSegmentStatus {
         /**
          * A state of a segment.
          */
@@ -181,20 +181,20 @@ public class StateTransferManager {
      * Performs the state transfer for the current transfer segments and also
      * updates their state as a result.
      *
-     * @param currentTransferSegments A list of the segment currently present in the system.
-     * @param batchProcessor          An instance of a batch processor.
+     * @param transferSegments A list of the segment currently present in the system.
+     * @param batchProcessor   An instance of a batch processor.
      * @return A list with the updated transfer segments.
      */
-    public ImmutableList<CurrentTransferSegment> handleTransfer
-    (List<CurrentTransferSegment> currentTransferSegments,
+    public ImmutableList<TransferSegment> handleTransfer
+    (List<TransferSegment> transferSegments,
      StateTransferBatchProcessor batchProcessor) {
 
-        return currentTransferSegments.stream().map(segment -> {   // For each of the segments:
-                    CurrentTransferSegmentStatus newStatus = segment.getStatus();
+        return transferSegments.stream().map(segment -> {   // For each of the segments:
+                    TransferSegmentStatus newStatus = segment.getStatus();
 
                     // If a segment is not transferred -> transfer.
                     if (newStatus.getSegmentState() != NOT_TRANSFERRED) {
-                        return CurrentTransferSegment
+                        return TransferSegment
                                 .builder()
                                 .startAddress(segment.getStartAddress())
                                 .endAddress(segment.getEndAddress())
@@ -212,20 +212,19 @@ public class StateTransferManager {
                     if (unknownAddressesInRange.isEmpty()) {
                         long totalTransferred = segment.computeTotalTransferred();
 
-                        newStatus =
-                                CurrentTransferSegmentStatus
-                                        .builder()
-                                        .segmentState(TRANSFERRED)
-                                        .totalTransferred(totalTransferred)
-                                        .build();
+                        newStatus = TransferSegmentStatus
+                                .builder()
+                                .segmentState(TRANSFERRED)
+                                .totalTransferred(totalTransferred)
+                                .build();
                     } else {
                         // Get total number of addresses needed to transfer.
                         long numAddressesToTransfer = unknownAddressesInRange.size();
-                        // Create a batch stream.
-                        Stream<Batch> batchStream = Lists
+                        // Create a transferBatchRequest stream.
+                        Stream<TransferBatchRequest> batchStream = Lists
                                 .partition(unknownAddressesInRange, batchSize)
                                 .stream()
-                                .map(groupedAddresses -> new Batch(groupedAddresses, Optional.empty())
+                                .map(groupedAddresses -> new TransferBatchRequest(groupedAddresses, Optional.empty())
                                 );
                         // Execute state transfer synchronously.
                         newStatus = synchronousStateTransfer(batchProcessor, batchStream)
@@ -235,7 +234,7 @@ public class StateTransferManager {
                     }
                     // If a segment contains some other status -> return.
 
-                    return CurrentTransferSegment
+                    return TransferSegment
                             .builder()
                             .startAddress(segment.getStartAddress())
                             .endAddress(segment.getEndAddress())
@@ -248,25 +247,28 @@ public class StateTransferManager {
     }
 
     /**
-     * Given a batch processor and a stream of batches, execute the state transfer.
+     * Given a batch processor and a stream of batch requests, execute the state transfer.
      *
      * @param batchProcessor An instance of a batch processor.
-     * @param batchStream    A stream of batches.
+     * @param batchStream    A stream of batch requests.
      * @return A completed future containing a result of total number of addresses transferred
      * or an exception.
      */
     CompletableFuture<Result<Long, TransferSegmentFailure>> synchronousStateTransfer(
-            StateTransferBatchProcessor batchProcessor, Stream<Batch> batchStream) {
+            StateTransferBatchProcessor batchProcessor, Stream<TransferBatchRequest> batchStream) {
         Result<Long, TransferSegmentFailure> accumulatedResult = Result.ok(0L);
 
         Result<Long, TransferSegmentFailure> resultOfTransfer =
                 batchStream.reduce(accumulatedResult, (resultSoFar, nextBatch) -> {
-                    BatchResult batchResult = batchProcessor.transfer(nextBatch).join();
-                    if (batchResult.getStatus() == BatchResult.FailureStatus.FAILED) {
+                    TransferBatchResponse transferBatchResponse =
+                            batchProcessor.transfer(nextBatch).join();
+                    if (transferBatchResponse.getStatus() == FailureStatus.FAILED) {
                         return Result.error(new TransferSegmentFailure());
                     } else {
                         return resultSoFar
-                                .map(sumSoFar -> sumSoFar + batchResult.getBatch().getAddresses()
+                                .map(sumSoFar -> sumSoFar + transferBatchResponse
+                                        .getTransferBatchRequest()
+                                        .getAddresses()
                                         .size());
                     }
                 }, (oldSum, newSum) -> newSum);
@@ -282,7 +284,7 @@ public class StateTransferManager {
      * @param totalNeeded A total number of records that must be transferred.
      * @return An updated segment status.
      */
-    CurrentTransferSegmentStatus createStatusBasedOnTransferResult(
+    TransferSegmentStatus createStatusBasedOnTransferResult(
             Result<Long, TransferSegmentFailure> result, long totalNeeded) {
 
         Result<Long, TransferSegmentFailure> checkedResult = result.flatMap(totalTransferred -> {
@@ -296,17 +298,17 @@ public class StateTransferManager {
         });
 
         if (checkedResult.isError()) {
-            return CurrentTransferSegmentStatus
+            return TransferSegmentStatus
                     .builder()
                     .totalTransferred(0L)
-                    .segmentState(FAILED)
+                    .segmentState(SegmentState.FAILED)
                     .causeOfFailure(Optional.of(checkedResult.getError()))
                     .build();
         } else {
-            return CurrentTransferSegmentStatus
+            return TransferSegmentStatus
                     .builder()
                     .totalTransferred(checkedResult.get())
-                    .segmentState(TRANSFERRED)
+                    .segmentState(SegmentState.TRANSFERRED)
                     .build();
         }
     }

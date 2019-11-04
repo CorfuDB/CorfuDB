@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.Tuple;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
-import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessorData;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 import org.corfudb.infrastructure.orchestrator.Action;
@@ -37,7 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
 import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.RESTORED;
@@ -82,7 +81,7 @@ public class RestoreRedundancyMergeSegments extends Action {
         settings.setRandomPortion(randomPart);
     };
 
-    RestoreStatus restoreWithBackOff(List<CurrentTransferSegment> stateList,
+    RestoreStatus restoreWithBackOff(List<TransferSegment> stateList,
                                      CorfuRuntime runtime) throws Exception {
         AtomicInteger retries = new AtomicInteger(restoreRetries);
         return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
@@ -111,11 +110,11 @@ public class RestoreRedundancyMergeSegments extends Action {
      * @param stateList A list that holds the state for every segment.
      */
     RestoreStatus tryRestoreRedundancyAndMergeSegments(
-            List<CurrentTransferSegment> stateList, Layout oldLayout,
+            List<TransferSegment> stateList, Layout oldLayout,
             LayoutManagementView layoutManagementView) {
 
         // Get all the transfers that failed.
-        List<CurrentTransferSegment> failed = stateList.stream()
+        List<TransferSegment> failed = stateList.stream()
                 .filter(segment -> segment.getStatus().getSegmentState() == FAILED)
                 .collect(Collectors.toList());
 
@@ -129,7 +128,7 @@ public class RestoreRedundancyMergeSegments extends Action {
         });
 
         // Filter all the transfers that have been completed.
-        List<CurrentTransferSegment> transferredSegments = stateList.stream()
+        List<TransferSegment> transferredSegments = stateList.stream()
                 .filter(segment -> segment.getStatus().getSegmentState() == TRANSFERRED)
                 .collect(Collectors.toList());
 
@@ -213,24 +212,19 @@ public class RestoreRedundancyMergeSegments extends Action {
         };
 
         // Create the initial state map.
-        ImmutableList<CurrentTransferSegment> stateList =
+        ImmutableList<TransferSegment> stateList =
                 redundancyCalculator.createStateList(layout);
 
         log.info("State transfer on {}: Initial state list: {}", currentNode, stateList);
 
         while (RedundancyCalculator.requiresRedundancyRestoration(layout, currentNode) ||
                 RedundancyCalculator.requiresMerge(layout, currentNode)) {
-            StateTransferBatchProcessorData batchProcessorData = new StateTransferBatchProcessorData(
-                    streamLog,
-                    runtime.getAddressSpaceView(),
-                    map.generate(runtime)
-            );
 
             // Create a chain replication protocol batch processor.
             ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
                     .builder()
-                    .addressSpaceView(batchProcessorData.getAddressSpaceView())
-                    .streamLog(batchProcessorData.getStreamLog())
+                    .addressSpaceView(runtime.getAddressSpaceView())
+                    .streamLog(streamLog)
                     .build();
 
             // Perform a state transfer for each segment synchronously and update the map.
@@ -247,7 +241,7 @@ public class RestoreRedundancyMergeSegments extends Action {
                 layout = runtime.invalidateLayout().join();
 
                 // Create a new map from the layout.
-                ImmutableList<CurrentTransferSegment>
+                ImmutableList<TransferSegment>
                         newLayoutStateList = redundancyCalculator.createStateList(layout);
 
                 // Merge the new and the old list into the current list.

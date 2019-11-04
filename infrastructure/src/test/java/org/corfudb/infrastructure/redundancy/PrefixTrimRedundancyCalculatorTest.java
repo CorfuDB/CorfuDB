@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.redundancy;
 import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
-import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
@@ -33,7 +32,6 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTestHelper im
 
 
         Layout layout = createNonPresentLayout();
-
         // node is not present anywhere -> all segments should be scheduled.
         doReturn(-1L).when(spy)
                 .setTrimOnNewLogUnit(layout, runtime, "localhost");
@@ -45,7 +43,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTestHelper im
                 new MockedSegment(2L, 3L,
                         createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
 
-        ImmutableList<CurrentTransferSegment> result = spy
+        ImmutableList<TransferSegment> result = spy
                 .createStateList(layout);
 
         assertThat(transformListToMock(result)).isEqualTo(expected);
@@ -89,7 +87,7 @@ public class PrefixTrimRedundancyCalculatorTest extends LayoutBasedTestHelper im
                         new MockedSegment(3L, 3L, createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
 
 
-        List<CurrentTransferSegment> result = spy
+        List<TransferSegment> result = spy
                 .createStateList(layout);
 
         assertThat(transformListToMock(result)).isEqualTo(expected);

@@ -15,7 +15,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.CurrentTransferSegment;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
@@ -35,7 +35,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
         Layout testLayout = createTestLayout(Arrays.asList(segment));
-        ArrayList<CurrentTransferSegment> emptyList = new ArrayList<>();
+        ArrayList<TransferSegment> emptyList = new ArrayList<>();
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
         RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
@@ -52,7 +52,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
         Layout testLayout = createTestLayout(Arrays.asList(segment));
-        List<CurrentTransferSegment> failed = Arrays.asList(
+        List<TransferSegment> failed = Arrays.asList(
                 createTransferSegment(0L, 5L, FAILED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
@@ -70,7 +70,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
         Layout testLayout = createTestLayout(Arrays.asList(segment));
-        List<CurrentTransferSegment> notTransferred = Arrays.asList( createTransferSegment(0L, 5L, NOT_TRANSFERRED));
+        List<TransferSegment> notTransferred = Arrays.asList( createTransferSegment(0L, 5L, NOT_TRANSFERRED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
@@ -91,7 +91,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment2 =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 10L, 15L, Arrays.asList(stripe2));
         Layout testLayout = createTestLayout(Arrays.asList(segment, segment2));
-        List<CurrentTransferSegment> restored = Arrays.asList( createTransferSegment(0L, 9L, SegmentState.RESTORED));
+        List<TransferSegment> restored = Arrays.asList( createTransferSegment(0L, 9L, SegmentState.RESTORED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
@@ -122,7 +122,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment2 =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 10L, 15L, Arrays.asList(stripe2));
         Layout testLayout = createTestLayout(Arrays.asList(segment, segment2));
-        List<CurrentTransferSegment> transferred = Arrays.asList( createTransferSegment(0L, 9L, TRANSFERRED));
+        List<TransferSegment> transferred = Arrays.asList( createTransferSegment(0L, 9L, TRANSFERRED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
@@ -149,7 +149,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment2 =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 10L, 15L, Arrays.asList(stripe2));
         Layout testLayout = createTestLayout(Arrays.asList(segment, segment2));
-        List<CurrentTransferSegment> transferred = Arrays.asList( createTransferSegment(0L, 9L, TRANSFERRED));
+        List<TransferSegment> transferred = Arrays.asList( createTransferSegment(0L, 9L, TRANSFERRED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
