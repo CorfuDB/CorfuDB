@@ -5,11 +5,15 @@ import com.google.protobuf.Message;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import lombok.Builder;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.ObjectsView;
@@ -23,33 +27,22 @@ import org.corfudb.runtime.view.TableRegistry;
  *
  * Created by zlokhandwala on 2019-08-05.
  */
+@Slf4j
+@Builder
 public class TxBuilder {
-
+    @NonNull
     private final ObjectsView objectsView;
+    @NonNull
     private final TableRegistry tableRegistry;
+    @NonNull
     private final String namespace;
-    private Timestamp timestamp;
-    private final List<Runnable> operations;
-
-    /**
-     * Creates a new TxBuilder.
-     *
-     * @param objectsView   ObjectsView from the Corfu client.
-     * @param tableRegistry Table Registry.
-     * @param namespace     Namespace boundary defined for the transaction.
-     */
-    @Nonnull
-    TxBuilder(@Nonnull final ObjectsView objectsView,
-              @Nonnull final TableRegistry tableRegistry,
-              @Nonnull final String namespace) {
-        this.objectsView = objectsView;
-        this.tableRegistry = tableRegistry;
-        this.namespace = namespace;
-        this.operations = new ArrayList<>();
-    }
+    @Builder.Default
+    private final List<Runnable> operations = new ArrayList<>();
+    @Builder.Default
+    private final int numRetries = 3;
 
     private <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> getTable(@Nonnull final String tableName) {
+    Table<K, V, M> getTable(@NonNull final String tableName) {
         return this.tableRegistry.getTable(this.namespace, tableName);
     }
 
@@ -63,16 +56,14 @@ public class TxBuilder {
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
      */
-    @Nonnull
+    @NonNull
     public <K extends Message, V extends Message, M extends Message>
-    TxBuilder create(@Nonnull final String tableName,
-                     @Nonnull final K key,
-                     @Nonnull final V value,
+    TxBuilder create(@NonNull final String tableName,
+                     @NonNull final K key,
+                     @NonNull final V value,
                      @Nullable final M metadata) {
         Table<K, V, M> table = getTable(tableName);
-        operations.add(() -> {
-            table.create(key, value, metadata);
-        });
+        operations.add(() -> table.create(key, value, metadata));
         return this;
     }
 
@@ -86,11 +77,11 @@ public class TxBuilder {
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
      */
-    @Nonnull
+    @NonNull
     public <K extends Message, V extends Message, M extends Message>
-    TxBuilder update(@Nonnull final String tableName,
-                     @Nonnull final K key,
-                     @Nonnull final V value,
+    TxBuilder update(@NonNull final String tableName,
+                     @NonNull final K key,
+                     @NonNull final V value,
                      @Nullable final M metadata) {
         Table<K, V, M> table = getTable(tableName);
         operations.add(() -> {
@@ -109,14 +100,14 @@ public class TxBuilder {
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
      */
-    @Nonnull
+    @NonNull
     public <K extends Message, V extends Message, M extends Message>
-    TxBuilder touch(@Nonnull final String tableName,
-                    @Nonnull final K key) {
+    TxBuilder touch(@NonNull final String tableName,
+                    @NonNull final K key) {
         Table<K, V, M> table = getTable(tableName);
         operations.add(() -> {
-            //TODO: Validate the get is executed.
-            CorfuRecord<V, M> record = table.get(key);
+            // This get isn't validated for execution.
+            table.get(key);
         });
         return this;
     }
@@ -130,16 +121,16 @@ public class TxBuilder {
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
      */
-    @Nonnull
+    @NonNull
     public <K extends Message, V extends Message, M extends Message>
-    TxBuilder delete(@Nonnull final String tableName,
-                     @Nonnull final K key) {
+    TxBuilder delete(@NonNull final String tableName,
+                     @NonNull final K key) {
         Table<K, V, M> table = getTable(tableName);
         operations.add(() -> table.delete(key));
         return this;
     }
 
-    private void txBegin() {
+    private void txBegin(final Timestamp timestamp) {
         Transaction.TransactionBuilder transactionBuilder = this.objectsView
                 .TXBuild()
                 .type(TransactionType.OPTIMISTIC);
@@ -174,11 +165,24 @@ public class TxBuilder {
      * @param timestamp Timestamp to commit the transaction on.
      */
     public void commit(final Timestamp timestamp) {
-        this.timestamp = timestamp;
-        try {
-            txBegin();
-            operations.forEach(Runnable::run);
-        } finally {
+        int numRetriesRemaining = numRetries;
+        while (numRetriesRemaining > 0) {
+            numRetriesRemaining--;
+            try {
+                txBegin(timestamp);
+                operations.forEach(Runnable::run);
+            } catch (TransactionAbortedException txAbort) {
+                if (txAbort.getAbortCause() == AbortCause.SEQUENCER_OVERFLOW &&
+                    timestamp == null) {
+                    // If in spite of corfu picking the latest timestamp, the transaction
+                    // fails with a sequencer overflow, auto-retry a few times.
+                    log.info("TxBuilder::commit failed on SEQUENCER_OVERFLOW: will retry {} times",
+                            numRetriesRemaining);
+                    continue;
+                }
+                log.info("TxBuilder::commit failed due to SEQUENCER_OVERFLOW:");
+                throw txAbort;
+            }
             txEnd();
             operations.clear();
         }

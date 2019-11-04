@@ -131,12 +131,12 @@ public class CorfuStore {
      * @param namespace Namespace of the tables involved in the transaction.
      * @return Returns a transaction builder instance.
      */
-    @Nonnull
-    public TxBuilder tx(@Nonnull final String namespace) {
-        return new TxBuilder(
-                this.runtime.getObjectsView(),
-                this.runtime.getTableRegistry(),
-                namespace);
+    public TxBuilder tx(final String namespace) {
+        return TxBuilder.builder()
+                .objectsView(runtime.getObjectsView())
+                .tableRegistry(runtime.getTableRegistry())
+                .namespace(namespace)
+                .build();
     }
 
     /**
