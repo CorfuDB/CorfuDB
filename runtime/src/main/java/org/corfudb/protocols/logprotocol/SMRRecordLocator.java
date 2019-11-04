@@ -14,7 +14,6 @@ import org.corfudb.util.serializer.ICorfuSerializable;
 
 import java.util.UUID;
 
-
 @ToString
 @AllArgsConstructor
 @NoArgsConstructor
