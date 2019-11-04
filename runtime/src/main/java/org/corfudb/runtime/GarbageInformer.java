@@ -13,37 +13,45 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.view.Layout;
 
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class GarbageInformer {
+
 
     private final static Duration GC_PERIOD = Duration.ofSeconds(15);
     private final static int RECEIVING_QUEUE_CAPACITY = 5_000;
     private final static int SENDING_QUEUE_CAPACITY = 20;
     private final static int BATCH_SIZE = 100;
 
+    // parameters about drainExecutor which is a single-thread pool
+    private final static int CORE_POOL_SIZE = 1;
+    private final static int MAX_POOL_SIZE = 1;
+    private final static long KEEP_ALIVE_TIME = 0L;
+
     private final CorfuRuntime rt;
 
-    // executor to drain garbageReceivingQueue when it is full.
-    private final ExecutorService drainExecutor = Executors.newSingleThreadExecutor(
-            new ThreadFactoryBuilder().setDaemon(true)
-                    .setNameFormat("GarbageInformerDrain")
-                    .build());
+    // executor to drain garbageReceivingQueue when it is full
+    private final ExecutorService drainExecutor =
+            new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(3, true),
+                    new ThreadFactoryBuilder().setDaemon(true).setNameFormat("GarbageInformerDrain").build());
 
     /**
      * The queue to receive single garbage decisions from ObjectView
@@ -56,8 +64,8 @@ public class GarbageInformer {
      * The queue to sending merged garbage decision to LogUnit servers
      */
     @Getter
-    private final BlockingDeque<GarbageBatch> garbageSendingDeque =
-            new LinkedBlockingDeque<>(SENDING_QUEUE_CAPACITY);
+    private final Deque<GarbageBatch> garbageSendingDeque =
+            new ArrayDeque<>(SENDING_QUEUE_CAPACITY);
 
     private final ScheduledExecutorService gcScheduler = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setDaemon(true)
@@ -80,8 +88,8 @@ public class GarbageInformer {
         Random rand = new Random();
 
         // periodically to drain garbageReceivingQueue and send garbage decisions to LogUnit servers.
-        // Randomized initial delay prevents all runtime send garbage decision simultaneously.
-        gcScheduler.scheduleWithFixedDelay(this::gc,
+        // Randomized initial delay prevents all runtime clients send garbage decisions simultaneously.
+        gcScheduler.scheduleWithFixedDelay(this::submitGCTask,
                 GC_PERIOD.getSeconds() + rand.nextInt((int) GC_PERIOD.getSeconds()),
                 GC_PERIOD.getSeconds(),
                 TimeUnit.SECONDS);
@@ -96,12 +104,12 @@ public class GarbageInformer {
     }
 
     /**
-     * Adds a list of SMRRecordLocators whose associated SMRRecords are marked as garbage by the same global address.
-     *
-     * @param markerAddress The global address marks the garbage.
+     * Adds a list of SMRRecordLocators whose associated SMRRecords are marked
+     * as garbage by the same global address.
+     *  @param markerAddress The global address marks the garbage.
      * @param locators      A list of locators whose associated SMRRecords are marked as garbage.
      */
-    public void add(long markerAddress, List<SMRRecordLocator> locators) {
+    public void addUnsafe(long markerAddress, List<SMRRecordLocator> locators) {
         // sanity check
         if (locators.isEmpty()) {
             return;
@@ -109,21 +117,20 @@ public class GarbageInformer {
 
         List<SMRGarbageEntry> garbageEntries = generateGarbageEntries(markerAddress, locators);
 
-        // synchronization to prevent concurrent access to garbageReceivingQueue to maintain order by marker address.
-        synchronized (this) {
-            try {
-                for (SMRGarbageEntry garbageEntry : garbageEntries) {
-                    boolean success = garbageReceivingQueue.offer(garbageEntry);
-                    if (!success) {
-                        drainExecutor.submit(this::gc);
-                        garbageReceivingQueue.put(garbageEntry);
-                    }
+        try {
+            for (SMRGarbageEntry garbageEntry : garbageEntries) {
+                garbageReceivingQueue.put(garbageEntry);
+                // Drains garbageReceivingQueue once it is full.
+                // This check prevents blocking a client for a whole cycle.
+                if (garbageReceivingQueue.size() >= RECEIVING_QUEUE_CAPACITY) {
+                    submitGCTask();
                 }
-            } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuInterruptedError(
-                        "Interrupted during adding locators to GarbageInformer", ie);
             }
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError(
+                    "Interrupted during adding locators to GarbageInformer", ie);
         }
+
     }
 
     private List<SMRGarbageEntry> generateGarbageEntries(long markerAddress,
@@ -148,34 +155,42 @@ public class GarbageInformer {
         return new ArrayList<>(garbage.values());
     }
 
+    public void submitGCTask() {
+        try {
+            drainExecutor.execute(this::gcUnsafe);
+        } catch (RejectedExecutionException ex) {
+            log.trace("drain executor reject execution");
+        }
+    }
+
     /**
      * Drains garbage decisions from receiving queue and sends them to LogUnit servers.
      */
-    public synchronized void gc() {
-        // drains sending queue first when it reaches the capacity limit.
-        if (garbageSendingDeque.size() >= SENDING_QUEUE_CAPACITY) {
-            log.debug("GarbageInformer: Drains sending queue");
-            sendGarbage();
+    @VisibleForTesting
+    public void gcUnsafe() {
+        while (garbageSendingDeque.size() < SENDING_QUEUE_CAPACITY) {
+            List<SMRGarbageEntry> garbageEntries = new ArrayList<>();
+            int drainedNum = garbageReceivingQueue.drainTo(garbageEntries, BATCH_SIZE);
+
+            // checks drainNum to prevent empty garbage batch
+            if (drainedNum == 0) {
+                break;
+            }
+
+            GarbageBatch garbageBatch = new GarbageBatch(compressGarbage(garbageEntries));
+            garbageSendingDeque.offer(garbageBatch);
+
+            if (drainedNum < BATCH_SIZE) {
+                break;
+            }
         }
 
-        // If garbageSendingDeque is still full, gives up drain garbageReceivingQueue.
-        if (garbageSendingDeque.size() >= SENDING_QUEUE_CAPACITY) {
-            log.debug("GarbageInformer: Stop drains receiving queue because sending queue is full");
-            return;
-        }
+        log.debug("GarbageInformer: Drains sending queue");
+        sendGarbage();
+    }
 
-        // TODO(xin): fill lastMarker in future commits.
-        Map<UUID, Long> lastMarkers = new HashMap<>();
-
+    private Collection<SMRGarbageEntry> compressGarbage(List<SMRGarbageEntry> garbageEntries) {
         Map<Long, SMRGarbageEntry> addressToGarbage = new HashMap<>();
-
-        List<SMRGarbageEntry> garbageEntries = new ArrayList<>();
-        garbageReceivingQueue.drainTo(garbageEntries, BATCH_SIZE);
-
-        if (garbageEntries.isEmpty()) {
-            log.trace("Garbage Informer has nothing to send");
-            return;
-        }
 
         for (SMRGarbageEntry garbageEntry : garbageEntries) {
             long globalAddress = garbageEntry.getGlobalAddress();
@@ -187,9 +202,7 @@ public class GarbageInformer {
             }
         }
 
-        GarbageBatch garbageBatch = new GarbageBatch(addressToGarbage.values(), lastMarkers);
-        garbageSendingDeque.offer(garbageBatch);
-        sendGarbage();
+        return addressToGarbage.values();
     }
 
     private void sendGarbage() {
@@ -228,13 +241,13 @@ public class GarbageInformer {
 
             // send GarbageEntry batch.
             stripIndexToGarbageEntries.forEach((stripeIndex, garbageEntries) ->
-                    rt.getAddressSpaceView().sparseTrim(rt.getLayoutView().getRuntimeLayout(), stripeIndex,
+                    rt.getAddressSpaceView().writeGarbage(rt.getLayoutView().getRuntimeLayout(), stripeIndex,
                             garbageEntries)
             );
 
             // TODO(xin): Inform LogUnits about the last markers.
             return null;
-        }, true);
+        }, false);
     }
 
     /**
@@ -246,7 +259,6 @@ public class GarbageInformer {
     @Data
     public static class GarbageBatch {
         final Collection<SMRGarbageEntry> garbageEntries;
-        final Map<UUID, Long> lastMarkers;
     }
 }
 

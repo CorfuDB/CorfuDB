@@ -18,9 +18,6 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
-
-    public final static LogData EMPTY = new LogData(DataType.EMPTY);
-
     public static final int NOT_KNOWN = -1;
 
     @Getter

@@ -56,7 +56,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     }
 
     @Override
-    protected ILogData removeFromQueue(NavigableSet<Long> queue) {
+    protected ILogData removeFromQueue(NavigableSet<Long> queue, long snapshot) {
         boolean readNext;
         ILogData ld = null;
         Long currentRead;
@@ -74,7 +74,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // the stream's full address map, without reading the actual data), entries can be read in
             // batches whenever we have a cache miss. This allows next reads
             // to be serviced immediately, rather than reading one entry at a time.
-            ld = read(currentRead, queue);
+            ld = read(currentRead, queue, snapshot);
 
             if (queue == getCurrentContext().readQueue && ld != null) {
                 // Validate that the data entry belongs to this stream, otherwise, skip.
@@ -83,6 +83,9 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
                     addToResolvedQueue(getCurrentContext(), currentRead, ld);
                     readNext = false;
+                } else if (ld.isCompacted() && ld.containsStream(this.id)) {
+                    log.trace("getNextEntry[{}]: the data for address {} is compacted. Skip.", this, currentRead);
+                    readNext = true;
                 } else {
                     log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
                             this, currentRead);
@@ -160,7 +163,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     }
 
     private boolean isAddressToBackpointerResolved(long startAddress, UUID streamId) {
-        ILogData d = read(startAddress);
+        ILogData d = read(startAddress, Long.MAX_VALUE);
 
         if (d.hasBackpointer(streamId)) {
             long previousAddress = d.getBackpointer(streamId);
