@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.AbstractObjectTest;
@@ -14,7 +15,15 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
 
     @Before
     public void becomeCorfuApp() {
-        getDefaultRuntime();
+
+        ServerContextBuilder serverContextBuilder = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setCompactionPolicyType("GARBAGE_SIZE_FIRST")
+                .setSegmentGarbageRatioThreshold("0")
+                .setSegmentGarbageSizeThresholdMB("0");
+
+        getDefaultRuntime(serverContextBuilder);
     }
 
     /**
@@ -48,9 +57,8 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
     /**
      * Utility method to start a snapshot TX
      */
-    protected void SnapshotTXBegin() {
-        // By default, begin a snapshot at address 2L
-        Token t2 = new Token(0l, 2l);
+    protected void SnapshotTXBeginWithTimestamp(long snapshotTimestamp) {
+        Token t2 = new Token(0l, snapshotTimestamp);
         TokenResponse s2 = new TokenResponse(t2, Collections.emptyMap());
 
         if (getRuntime().getAddressSpaceView().peek(t2.getSequence()) == null) {
@@ -60,7 +68,15 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
         
         getRuntime().getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
-                .snapshot(new Token(0L, 2L))
+                .snapshot(new Token(0L, snapshotTimestamp))
+                .build()
+                .begin();
+    }
+
+
+    protected void SnapshotTXBegin() {
+        getRuntime().getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
                 .build()
                 .begin();
     }

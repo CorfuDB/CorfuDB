@@ -39,7 +39,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     }
 
     @Override
-    protected ILogData removeFromQueue(NavigableSet<Long> queue) {
+    protected ILogData removeFromQueue(NavigableSet<Long> queue, long snapshot) {
         boolean readNext;
         Long thisRead;
         ILogData ld;
@@ -52,8 +52,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
 
             thisRead = queue.pollFirst();
-
-            ld = read(thisRead);
+            ld = read(thisRead, snapshot);
 
             if (queue == getCurrentContext().readQueue && ld != null) {
                 addToResolvedQueue(getCurrentContext(), thisRead);
@@ -99,10 +98,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // Read the current address
             ILogData d;
-
             log.trace("followBackpointers: readAddress[{}]", currentAddress);
-            d = read(currentAddress, readStartTime);
-
+            d = forceRead(currentAddress, readStartTime, maxGlobal);
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {

@@ -11,6 +11,7 @@ import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.ICorfuHashable;
@@ -22,10 +23,12 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
 
 /**
  * Created by mwei on 11/16/16.
@@ -894,5 +897,56 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         assertThat(rt.getSequencerView().query().getSequence()).isEqualTo(currentTail + 2);
         assertThat(get("k1")).isEqualTo("v1");
         assertThat(get("k2")).isEqualTo("v2");
+    }
+
+    @Test
+    public void snapshotReadBeforeCompactionMark() {
+        final int entryNum = RECORDS_PER_SEGMENT;
+
+        t(1, () -> put("k" , "v0"));    // TS = 0
+        t(1, () -> put("k" , "v1"));    // TS = 1
+        t(1, () -> put("k" , "v2"));    // TS = 2
+
+        t(2, this::TXBegin);
+        t(2, () -> get("k"));           // thread2 syncs to TS = 2
+
+        final int timestamp = 3;
+        for (int i = timestamp; i <= entryNum; ++i) {
+            AtomicInteger version = new AtomicInteger(i);
+            t(1, () -> put("k" , "v" + version.get()));
+        }
+
+        // run compaction
+        t(1, () -> getRuntime().getGarbageInformer().gcUnsafe());
+        t(1, () -> getLogUnit(SERVERS.PORT_0).runCompaction()); // compactionMark = RECORD_PER_SEGMENT
+        getRuntime().getAddressSpaceView().resetCaches();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+
+        t(2, () -> get("k"))
+                .assertThrows().hasCauseInstanceOf(TrimmedException.class);
+        t(2, this::TXEnd);
+    }
+
+    @Test
+    public void snapshotReadAfterCompactionMark() {
+        final int entryNum = RECORDS_PER_SEGMENT;
+        for (int i = 0; i <= entryNum; ++i) {
+            AtomicInteger version = new AtomicInteger(i);
+            t(1, () -> put("k" , "v" + version.get()));
+        }
+
+        t(1, this::SnapshotTXBegin);
+
+        // run compaction
+
+        t(1, () -> getRuntime().getGarbageInformer().gcUnsafe());
+        t(1, () -> getLogUnit(SERVERS.PORT_0).runCompaction());
+        getRuntime().getAddressSpaceView().resetCaches();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+
+
+        t(1, () -> get("k"))
+                .assertResult().isEqualTo("v" + entryNum); // SnapshotTimeStamp = RECORDS_PER_SEGMENT
+        t(1, this::TXEnd);
     }
 }

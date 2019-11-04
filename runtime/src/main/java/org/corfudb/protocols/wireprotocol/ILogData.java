@@ -140,6 +140,20 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     default boolean isData() { return  getType() == DataType.DATA; }
 
     /**
+     * Return true if and only if the entry represents a compacted address.
+     */
+    default boolean isCompacted() {
+        return getType() == DataType.COMPACTED;
+    }
+
+    /**
+     * Return true if and only if the entry represents a garbage decision.
+     */
+    default boolean isGarbage() {
+        return getType() == DataType.GARBAGE;
+    }
+
+    /**
      * Return the serialized size of an object
      *
      * @param obj the entry's payload object
