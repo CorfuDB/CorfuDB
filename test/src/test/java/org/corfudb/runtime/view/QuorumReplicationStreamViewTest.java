@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -14,7 +15,14 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
     @Before
     @Override
     public void setRuntime() throws Exception {
-        r = getDefaultRuntime().connect();
+        ServerContextBuilder serverContextBuilder = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setCompactionPolicyType("GARBAGE_SIZE_FIRST")
+                .setSegmentGarbageRatioThreshold("0")
+                .setSegmentGarbageSizeThresholdMB("0");
+
+        r = getDefaultRuntime(serverContextBuilder).connect();
         // First commit a layout that uses Quorum Replication
         Layout newLayout = r.getLayoutView().getLayout();
         newLayout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
@@ -90,6 +98,12 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
     public void streamWithHoleFill()
             throws Exception {
         super.streamWithHoleFill();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testCompactionMark() {
+        super.testCompactionMark();
     }
 
 }

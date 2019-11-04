@@ -38,6 +38,7 @@ import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 
 import org.corfudb.util.NodeLocator;
+import org.eclipse.jetty.server.Server;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -237,6 +238,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         new TestServer(port).addToTest(port, this);
     }
 
+    public void addSingleServer(int port, ServerContextBuilder serverContextBuilder) {
+        new TestServer(serverContextBuilder.setPort(port).build().getServerConfig()).addToTest(port, this);
+    }
+
 
     /** Get a instance of a test server, which provides access to the underlying components and server router.
      *
@@ -363,6 +368,13 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public CorfuRuntime getDefaultRuntime() {
         if (!testServerMap.containsKey(getEndpoint(SERVERS.PORT_0))) {
             addSingleServer(SERVERS.PORT_0);
+        }
+        return getRuntime().connect();
+    }
+
+    public CorfuRuntime getDefaultRuntime(ServerContextBuilder serverContextBuilder) {
+        if (!testServerMap.containsKey(getEndpoint(SERVERS.PORT_0))) {
+            addSingleServer(SERVERS.PORT_0, serverContextBuilder);
         }
         return getRuntime().connect();
     }
@@ -497,6 +509,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     public Integer getPort(String endpoint) {
         return Integer.parseInt(endpoint.split(":")[1]);
+    }
+
+    public ServerContext getServerContext(int port) {
+        return getServer(port).serverContext;
     }
 
     // Private

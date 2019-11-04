@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.StreamOptions;
 import org.junit.Test;
+
+import java.time.Duration;
 
 /**
  * Tests the BackpointerStreamView
@@ -163,5 +166,35 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
         // Fetch Stream B and verify backpointer count (which requires 1 read = 1 entry)
         svB.remainingUpTo(totalEntries);
         assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getTotalUpdates()).isEqualTo(1L);
+    }
+
+    final int trimMark = PARAMETERS.NUM_ITERATIONS_LOW / 2;
+    final int traverseMark = PARAMETERS.NUM_ITERATIONS_LOW / 4;
+
+    private IStreamView traverseStreamBeforeTrimMark()
+            throws InterruptedException {
+
+        CorfuRuntime runtime = getDefaultRuntime();
+        StreamOptions options = StreamOptions.builder()
+                .build();
+        IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"), options);
+        final long epoch = 0L;
+        final Duration waitForTrim = Duration.ofSeconds(5);
+
+        // Populate stream with NUM_ITERATIONS_LOW entries
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+            sv.append(String.valueOf(i).getBytes());
+        }
+
+        // Traverse stream until syncMark
+        for (int i = 0; i < traverseMark; i++) {
+            assertThat(sv.hasNext()).isTrue();
+            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            assertThat(new String(payLoad).equals(String.valueOf(i)))
+                    .isTrue();
+            assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
+        }
+
+        return sv;
     }
 }
