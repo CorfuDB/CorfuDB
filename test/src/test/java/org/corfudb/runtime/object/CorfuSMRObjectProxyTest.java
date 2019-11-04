@@ -283,7 +283,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         Map<String, String> test2 = r.getObjectsView().build()
                 .setType(SMRMap.class)
                 .setStreamName("test")
-                .setSerializer(Serializers.JSON)
+                .setSerializer(Serializers.getDefaultSerializer())
                 .open();
 
         ObjectsView.ObjectID mapId = new ObjectsView.
