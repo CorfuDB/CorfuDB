@@ -141,7 +141,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject, garbageInformer);
+                wrapperObject, garbageInformer, rt);
 
 
         final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
@@ -204,7 +204,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
             }
         }
 
-        throw new TrimmedException();
+        throw new TrimmedException(String.format("Encounter TrimmedException %d times during Non-transactional " +
+                "object access.", rt.getParameters().getTrimRetry()));
     }
 
     /**

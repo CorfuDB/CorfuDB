@@ -168,27 +168,6 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void testSparseTrim() {
-        setupNodes();
-        CorfuRuntime rt = getRuntime().connect();
-        Long markerAddress = 0L;
-        int smrRecordSize = 0;
-        UUID streamId = UUID.randomUUID();
-        int index = 0;
-
-        SMRGarbageRecord garbageRecord = new SMRGarbageRecord(markerAddress, smrRecordSize);
-        SMRGarbageEntry smrGarbageEntry = new SMRGarbageEntry();
-        smrGarbageEntry.add(streamId, index, garbageRecord);
-        smrGarbageEntry.setGlobalAddress(1L);
-
-        GarbageInformer.GarbageBatch garbageBatch =
-                new GarbageInformer.GarbageBatch(Collections.singletonList(smrGarbageEntry), null);
-
-        GarbageInformer garbageInformer = new GarbageInformer(rt);
-        garbageInformer.sendGarbageBatch(garbageBatch);
-    }
-
-    @Test
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks() throws Exception {
         setupNodes();
