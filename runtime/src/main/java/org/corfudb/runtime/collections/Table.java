@@ -3,14 +3,8 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -79,9 +73,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         this.fullyQualifiedTableName = fullyQualifiedTableName;
         this.metadataOptions = Optional.ofNullable(metadataSchema)
                 .map(schema -> MetadataOptions.builder()
-                                              .metadataEnabled(true)
-                                              .defaultMetadataInstance(schema)
-                                              .build())
+                        .metadataEnabled(true)
+                        .defaultMetadataInstance(schema)
+                        .build())
                 .orElse(MetadataOptions.builder().build());
 
         this.corfuTable = corfuRuntime.getObjectsView().build()
@@ -193,7 +187,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 CorfuRecord<V, M> previous = corfuTable.get(key);
                 M previousMetadata = Optional.ofNullable(previous)
                         .map(CorfuRecord::getMetadata)
-                        .orElse((M)metadataOptions.getDefaultMetadataInstance());
+                        .orElse((M) metadataOptions.getDefaultMetadataInstance());
                 validateVersion(previousMetadata, metadata);
                 newMetadata = getNewMetadata(previousMetadata, metadata);
             }
@@ -225,12 +219,36 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
+     * Clears the table.
+     */
+    public void clear() {
+        boolean beganNewTxn = false;
+        try {
+            beganNewTxn = TxBegin();
+            corfuTable.clear();
+        } finally {
+            if (beganNewTxn) {
+                TxEnd();
+            }
+        }
+    }
+
+    /**
      * Count of records in the table.
      *
      * @return Count of records.
      */
     int count() {
         return corfuTable.size();
+    }
+
+    /**
+     * Keyset of the table.
+     *
+     * @return Returns a keyset.
+     */
+    Set<K> keySet() {
+        return corfuTable.keySet();
     }
 
     /**
@@ -241,7 +259,29 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      */
     @Nonnull
     Collection<CorfuRecord<V, M>> scanAndFilter(@Nonnull final Predicate<CorfuRecord<V, M>> p) {
-        return new ArrayList<>(corfuTable.scanAndFilter(p));
+        return corfuTable.scanAndFilter(p);
+    }
+
+    /**
+     * Scan and filter by entry.
+     *
+     * @param entryPredicate Predicate to filter the entries.
+     * @return Collection of filtered entries.
+     */
+    @Nonnull
+    List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
+            @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
+        return corfuTable.scanAndFilterByEntry(recordEntry ->
+                entryPredicate.test(new CorfuStoreEntry<>(
+                        recordEntry.getKey(),
+                        recordEntry.getValue().getPayload(),
+                        recordEntry.getValue().getMetadata())))
+                .parallelStream()
+                .map(entry -> new CorfuStoreEntry<>(
+                        entry.getKey(),
+                        entry.getValue().getPayload(),
+                        entry.getValue().getMetadata()))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -261,7 +301,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .collect(Collectors.toList());
     }
 
-    Set<Descriptors.FieldDescriptor.Type> versionTypes = new HashSet<>(Arrays.asList(
+    private Set<Descriptors.FieldDescriptor.Type> versionTypes = new HashSet<>(Arrays.asList(
             Descriptors.FieldDescriptor.Type.INT32,
             Descriptors.FieldDescriptor.Type.INT64,
             Descriptors.FieldDescriptor.Type.UINT32,
@@ -270,16 +310,16 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             Descriptors.FieldDescriptor.Type.SFIXED64
     ));
 
-    private <M extends Message> void validateVersion(@Nullable M previousMetadata,
-                                                     @Nullable M userMetadata) {
+    private void validateVersion(@Nullable M previousMetadata,
+                                 @Nullable M userMetadata) {
         // TODO: do a lookup instead of a search if possible
         for (Descriptors.FieldDescriptor fieldDescriptor : userMetadata.getDescriptorForType().getFields()) {
             if (!fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getVersion()) {
                 continue;
             }
             if (!versionTypes.contains(fieldDescriptor.getType())) {
-                throw new IllegalArgumentException("Version field needs to be an Integer or Long type."+
-                " Current type="+fieldDescriptor.getType());
+                throw new IllegalArgumentException("Version field needs to be an Integer or Long type." +
+                        " Current type=" + fieldDescriptor.getType());
             }
             long validatingVersion = (long) userMetadata.getField(fieldDescriptor);
             if (validatingVersion <= 0) {
@@ -295,8 +335,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         }
     }
 
-    private <M extends Message> M getNewMetadata(@Nonnull M previousMetadata,
-                                                 @Nullable M userMetadata) {
+    private M getNewMetadata(@Nonnull M previousMetadata,
+                             @Nullable M userMetadata) {
         M.Builder builder = previousMetadata.toBuilder();
         for (Descriptors.FieldDescriptor fieldDescriptor : previousMetadata.getDescriptorForType().getFields()) {
             if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getVersion()) {
@@ -305,7 +345,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         Optional.ofNullable(previousMetadata.getField(fieldDescriptor))
                                 .map(previousVersion -> ((Long) previousVersion) + 1)
                                 .orElse(0L));
-            } else if (userMetadata != null){
+            } else if (userMetadata != null) {
                 builder.setField(fieldDescriptor, userMetadata.getField(fieldDescriptor));
             }
         }

@@ -22,12 +22,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.google.protobuf.DescriptorProtos.*;
-import static com.google.protobuf.Descriptors.*;
+import static com.google.protobuf.DescriptorProtos.DescriptorProto;
+import static com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import static com.google.protobuf.DescriptorProtos.FileDescriptorSet;
+import static com.google.protobuf.Descriptors.DescriptorValidationException;
+import static com.google.protobuf.Descriptors.FileDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.test.SampleAppliance.*;
-import static org.corfudb.test.SampleSchema.*;
+import static org.corfudb.test.SampleAppliance.Appliance;
+import static org.corfudb.test.SampleSchema.FirewallRule;
 import static org.corfudb.test.SampleSchema.ManagedResources;
 
 /**
@@ -134,13 +137,16 @@ public class CorfuStoreTest extends AbstractViewTest {
 
         // Execute Query. (Scan and filter)
         final int sixty = 60;
-        assertThat(q.executeQuery(tableName, record -> ((EventInfo) record.getPayload()).getEventTime() >= sixty)
-                .getResult()
-                .size())
+
+        QueryResult<CorfuStoreEntry<Uuid, EventInfo, ManagedResources>> queryResult =
+                q.executeQuery(tableName, record -> ((EventInfo) record.getPayload()).getEventTime() >= sixty);
+        assertThat(queryResult.getResult().size())
                 .isEqualTo(count - sixty);
 
         assertThat(q.count(tableName, timestamp)).isEqualTo(1);
         assertThat(q.count(tableName)).isEqualTo(count + 1);
+
+        assertThat(q.keySet(tableName, null)).hasSize(count + 1);
 
         assertThat(corfuStore.listTables(nsxManager))
                 .containsExactly(CorfuStoreMetadata.TableName.newBuilder()
