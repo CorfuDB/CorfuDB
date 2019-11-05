@@ -20,7 +20,9 @@ public interface ILocatorStore<T> {
 
     /**
      * Clear this store.
+     * @param latestClearLocator
+     *
      * @return stored locators.
      */
-    List<SMRRecordLocator> clearUnsafe();
+    List<SMRRecordLocator> clearUnsafe(@NonNull SMRRecordLocator latestClearLocator);
 }

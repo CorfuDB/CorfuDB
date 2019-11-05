@@ -466,7 +466,7 @@ public class CorfuTable<K ,V> implements
 
     @DontInstrument
     protected List<Object> identifyClearGarbage(Object locator) {
-        return new ArrayList<>(locatorStore.clearUnsafe());
+        return new ArrayList<>(locatorStore.clearUnsafe((SMRRecordLocator) locator));
     }
 
     /** {@inheritDoc} */
