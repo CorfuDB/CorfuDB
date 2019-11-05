@@ -730,7 +730,7 @@ public class SMRMap<K, V>
     @DontInstrument
     @Override
     public List<Object> identifyClearGarbage(Object locator) {
-        return new ArrayList<>(locatorStore.clearUnsafe());
+        return new ArrayList<>(locatorStore.clearUnsafe((SMRRecordLocator) locator));
     }
 
     @DontInstrument
