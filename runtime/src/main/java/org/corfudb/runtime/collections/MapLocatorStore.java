@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import lombok.NonNull;
+import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.protocols.logprotocol.SMRRecordLocator;
 
 import java.util.ArrayList;
@@ -16,6 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 class MapLocatorStore<T> implements ILocatorStore<T> {
     // Keys have 1:1 mapping to SMRRecord
     private final Map<T, SMRRecordLocator> keyToSMRRecordLocator = new ConcurrentHashMap<>();
+
+    // locator to host locator of last clear operation
+    private SMRRecordLocator latestClearLocator = null;
 
     public static final List<SMRRecordLocator> EMPTY_LIST = new ArrayList<>();
 
@@ -35,9 +39,15 @@ class MapLocatorStore<T> implements ILocatorStore<T> {
      * {@inheritDoc}
      */
     @Override
-    public List<SMRRecordLocator> clearUnsafe() {
+    public List<SMRRecordLocator> clearUnsafe(@NonNull SMRRecordLocator clearLocator) {
         List<SMRRecordLocator> garbage = new ArrayList<>(keyToSMRRecordLocator.values());
         keyToSMRRecordLocator.clear();
+
+        if (latestClearLocator != null) {
+            garbage.add(latestClearLocator);
+        }
+
+        latestClearLocator = clearLocator;
         return garbage;
     }
 }
