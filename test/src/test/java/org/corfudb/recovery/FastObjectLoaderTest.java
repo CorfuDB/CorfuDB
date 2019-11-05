@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -145,7 +146,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     private void startCompaction() {
         // send garbage decisions to LogUnit servers.
-        getRuntime().getGarbageInformer().gcUnsafe();
+        getRuntime().getGarbageInformer().submitGCTask();
 
         // run compaction on LogUnit servers
         getLogUnit(SERVERS.PORT_0).runCompaction();
