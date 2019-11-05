@@ -25,7 +25,7 @@ import static lombok.Builder.Default;
 @ToString
 @Builder
 public class ReadBatch {
-    public enum FailureStatus {
+    public enum ReadStatus {
         SUCCEEDED,
         FAILED
     }
@@ -52,7 +52,7 @@ public class ReadBatch {
      * A status of success or failure after read was performed.
      */
     @Default
-    private final FailureStatus status = FailureStatus.SUCCEEDED;
+    private final ReadStatus status = ReadStatus.SUCCEEDED;
 
     /**
      * Creates a transferBatchRequest from {@link #failedAddresses} and {@link #destination}.
@@ -64,7 +64,7 @@ public class ReadBatch {
     }
 
     /**
-     * Get addresses from records.
+     * Get addresses of the successfully transferred records.
      * @return Addresses.
      */
     public List<Long> getAddresses() {

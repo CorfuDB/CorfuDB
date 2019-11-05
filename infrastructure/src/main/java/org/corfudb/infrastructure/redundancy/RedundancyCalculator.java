@@ -149,7 +149,7 @@ public class RedundancyCalculator {
      *
      * @param layout Current layout.
      * @param server The current node.
-     * @return True is there is a redundancy restoration is needed.
+     * @return True if there is a redundancy restoration is needed.
      */
     public static boolean requiresMerge(Layout layout, String server) {
         if (layout.getSegments().size() == 1) {

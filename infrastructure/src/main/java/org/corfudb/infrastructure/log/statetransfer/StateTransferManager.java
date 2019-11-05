@@ -16,7 +16,7 @@ import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
-import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus;
+import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
 
@@ -62,15 +62,15 @@ public class StateTransferManager {
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class TransferSegment implements Comparable<TransferSegment> {
         /**
-         * Start address of a segment.
+         * Start address of a segment range to transfer (inclusive).
          */
         private final long startAddress;
         /**
-         * End address of a segment.
+         * End address of a segment range to transfer (inclusive).
          */
         private final long endAddress;
         /**
-         * A future that holds the status of a transfer of a segment.
+         * A status of a transfer of a segment.
          */
         private final TransferSegmentStatus status;
 
@@ -87,7 +87,9 @@ public class StateTransferManager {
          * @return True, if overlap.
          */
         public boolean overlapsWith(TransferSegment other) {
-            return other.getStartAddress() <= this.getEndAddress();
+            return Optional.ofNullable(other)
+                    .map(otherSegment -> otherSegment.getStartAddress() <= this.getEndAddress())
+                    .orElse(false);
         }
 
 
@@ -262,7 +264,7 @@ public class StateTransferManager {
                 batchStream.reduce(accumulatedResult, (resultSoFar, nextBatch) -> {
                     TransferBatchResponse transferBatchResponse =
                             batchProcessor.transfer(nextBatch).join();
-                    if (transferBatchResponse.getStatus() == FailureStatus.FAILED) {
+                    if (transferBatchResponse.getStatus() == TransferStatus.FAILED) {
                         return Result.error(new TransferSegmentFailure());
                     } else {
                         return resultSoFar

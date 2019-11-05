@@ -34,7 +34,7 @@ class StateTransferTransferBatchRequestProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         TransferBatchResponse res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
-        assertThat(res.getStatus() == TransferBatchResponse.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(res.getStatus() == TransferBatchResponse.TransferStatus.SUCCEEDED).isTrue();
         assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
         doThrow(new IllegalStateException()).when(streamLog).append(stubList);
         batchProcessor = ProtocolBatchProcessor
@@ -43,7 +43,7 @@ class StateTransferTransferBatchRequestProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
-        assertThat(res.getStatus() == TransferBatchResponse.FailureStatus.FAILED).isTrue();
+        assertThat(res.getStatus() == TransferBatchResponse.TransferStatus.FAILED).isTrue();
         assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
     }
 }

@@ -13,7 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
 
 /**
  * A faulty batch processor that fails every {@link #batchFailureOrder transfer}.

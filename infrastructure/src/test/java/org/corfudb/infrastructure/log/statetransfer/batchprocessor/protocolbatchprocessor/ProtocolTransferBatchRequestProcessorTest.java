@@ -48,7 +48,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
         CompletableFuture<TransferBatchResponse> f =
                 batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty()));
         TransferBatchResponse join = f.join();
-        assertThat(join.getStatus() == TransferBatchResponse.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(join.getStatus() == TransferBatchResponse.TransferStatus.SUCCEEDED).isTrue();
         assertThat(join.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
     }
 
@@ -71,7 +71,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
                 batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty()));
         TransferBatchResponse join = f.join();
 
-        assertThat(join.getStatus() == TransferBatchResponse.FailureStatus.FAILED).isTrue();
+        assertThat(join.getStatus() == TransferBatchResponse.TransferStatus.FAILED).isTrue();
     }
 
     @Test
@@ -93,7 +93,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
                 batchProcessor.readRecords(new TransferBatchRequest(addresses, Optional.empty()), 0);
         ReadBatch join = f.join();
         List<LogData> expected = getRecordsFromStubMap(stubMap);
-        assertThat(join.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(join.getStatus() == ReadBatch.ReadStatus.SUCCEEDED).isTrue();
         assertThat(join.getData()).isEqualTo(expected);
     }
 
@@ -134,7 +134,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
                 spy.retryReadRecords(TransferBatchRequest.builder().addresses(addresses).build(), 0);
 
         ReadBatch join = res.join();
-        assertThat(join.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(join.getStatus() == ReadBatch.ReadStatus.SUCCEEDED).isTrue();
         assertThat(join.getData()).isEqualTo(secondReturnedRecords);
 
     }
@@ -171,7 +171,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
                 spy.retryReadRecords(TransferBatchRequest.builder().addresses(addresses).build(), 0);
 
         ReadBatch join = res.join();
-        assertThat(join.getStatus() == ReadBatch.FailureStatus.FAILED).isTrue();
+        assertThat(join.getStatus() == ReadBatch.ReadStatus.FAILED).isTrue();
 
     }
 
@@ -193,7 +193,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
                 .build();
         ReadBatch res = batchProcessor.checkReadRecords(addresses, stubMap, Optional.empty());
         List<LogData> expected = getRecordsFromStubMap(stubMap);
-        assertThat(res.getStatus() == ReadBatch.FailureStatus.SUCCEEDED).isTrue();
+        assertThat(res.getStatus() == ReadBatch.ReadStatus.SUCCEEDED).isTrue();
         assertThat(res.getData()).isEqualTo(expected);
     }
 
@@ -215,7 +215,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         ReadBatch res = batchProcessor.checkReadRecords(addresses, stubMap, Optional.empty());
-        assertThat(res.getStatus() == ReadBatch.FailureStatus.FAILED).isTrue();
+        assertThat(res.getStatus() == ReadBatch.ReadStatus.FAILED).isTrue();
         assertThat(res.getFailedAddresses()).isEqualTo(unreadAddresses);
     }
 }

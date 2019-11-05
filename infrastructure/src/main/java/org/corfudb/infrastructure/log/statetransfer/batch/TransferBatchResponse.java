@@ -5,7 +5,7 @@ import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.SUCCEEDED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
 
 /**
  * A result of a transfer. If completed successfully, contains a {@link #transferBatchRequest}
@@ -18,23 +18,15 @@ import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRe
 @EqualsAndHashCode
 public class TransferBatchResponse {
 
-    public enum FailureStatus {
+    public enum TransferStatus {
         SUCCEEDED,
         FAILED
     }
 
     @Default
+    @Getter
     private final TransferBatchRequest transferBatchRequest = TransferBatchRequest.builder().build();
     @Default
-    private final FailureStatus status = SUCCEEDED;
-
-    /**
-     * Gets a transferBatchRequest from this transferBatchResponse.
-     *
-     * @return An instance of transferBatchRequest.
-     */
-    public TransferBatchRequest getTransferBatchRequest() {
-        return transferBatchRequest;
-    }
+    private final TransferStatus status = SUCCEEDED;
 
 }

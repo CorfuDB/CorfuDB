@@ -449,7 +449,7 @@ public class LogUnitServer extends AbstractServer {
          * @return log unit configuration
          */
         public static LogUnitParameters parse(CorfuConfig corfuConfig) {
-            Map<String, Object> opts = corfuConfig.getConfig();
+            Map<String, Object> opts = corfuConfig.getContext().getServerConfig();
             double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
 
             return LogUnitParameters.builder()

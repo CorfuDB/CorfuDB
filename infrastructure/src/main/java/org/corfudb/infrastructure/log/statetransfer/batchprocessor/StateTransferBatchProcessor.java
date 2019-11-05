@@ -9,8 +9,8 @@ import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.SUCCEEDED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
 
 /**
  * An interface that every state transfer batch processor should implement.

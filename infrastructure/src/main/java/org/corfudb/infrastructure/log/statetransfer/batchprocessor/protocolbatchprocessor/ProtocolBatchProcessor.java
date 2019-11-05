@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static lombok.Builder.Default;
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.FailureStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
 
 /**
  * A transferBatchRequest processor that transfers non-committed addresses one transferBatchRequest at a time
@@ -109,7 +109,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                         return retryReadRecords(transferBatchRequest, retries);
                     } else {
                         ReadBatch readBatch = checkedReadResult.get();
-                        if (readBatch.getStatus() == ReadBatch.FailureStatus.FAILED) {
+                        if (readBatch.getStatus() == ReadBatch.ReadStatus.FAILED) {
                             return retryReadRecords(readBatch.createRequest(), retries);
                         } else {
                             return CompletableFuture.completedFuture(readBatch);
@@ -140,14 +140,14 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                                 .map(e -> ReadBatch.builder()
                                         .failedAddresses(transferBatchRequest.getAddresses())
                                         .destination(transferBatchRequest.getDestination())
-                                        .status(ReadBatch.FailureStatus.FAILED)
+                                        .status(ReadBatch.ReadStatus.FAILED)
                                         .build())
                                 .orElse(result)
                         );
                 // Join the result.
                 ReadBatch joinResult = pipelineFuture.join();
 
-                if (joinResult.getStatus() == ReadBatch.FailureStatus.FAILED) {
+                if (joinResult.getStatus() == ReadBatch.ReadStatus.FAILED) {
                     throw new RetryNeededException();
                 } else {
                     // If the result is not an error, return.
@@ -163,7 +163,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
             log.error("Retries were exhausted.");
             return CompletableFuture.completedFuture(ReadBatch
                     .builder()
-                    .status(ReadBatch.FailureStatus.FAILED)
+                    .status(ReadBatch.ReadStatus.FAILED)
                     .build()
             );
         }
@@ -192,7 +192,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
             return ReadBatch.builder()
                     .data(lodData)
                     .destination(destination)
-                    .status(ReadBatch.FailureStatus.SUCCEEDED)
+                    .status(ReadBatch.ReadStatus.SUCCEEDED)
                     .build();
         } else {
             HashSet<Long> transferredSet = new HashSet<>(transferredAddresses);
@@ -203,7 +203,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
             return ReadBatch.builder()
                     .failedAddresses(failedAddresses)
                     .destination(destination)
-                    .status(ReadBatch.FailureStatus.FAILED)
+                    .status(ReadBatch.ReadStatus.FAILED)
                     .build();
         }
     }

@@ -10,4 +10,6 @@ public class StateTransferException extends RuntimeException {
     public StateTransferException(Throwable cause) {
         super(cause);
     }
+
+    public StateTransferException(String message) {super(message); }
 }
