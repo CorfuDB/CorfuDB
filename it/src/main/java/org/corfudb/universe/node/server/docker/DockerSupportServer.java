@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 public class DockerSupportServer<N extends SupportServerParams> implements SupportServer {
     private static final String ALL_NETWORK_INTERFACES = "0.0.0.0";
     private static final String LINUX_OS = "linux";
-    private static final String PROMETHEUS_CONFIG_PATH = "/etc/prometheus/prometheus.yml";
+
     private static final Map<NodeType, String> IMAGE_NAME = ImmutableMap.<NodeType, String>builder()
             .put(NodeType.METRICS_SERVER, "prom/prometheus")
             .put(NodeType.SHELL_NODE, "ubuntu")
@@ -48,6 +48,11 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
     private static final Map<NodeType, String> CMD = ImmutableMap.<NodeType, String>builder()
             .put(NodeType.SHELL_NODE, "bash")
             .build();
+
+    @Default
+    @Getter
+    @NonNull
+    private final String prometheusConfigPath = "/etc/prometheus/prometheus.yml";
 
     @Getter
     @NonNull
@@ -94,7 +99,9 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
 
         HostConfig.Bind configurationFile = HostConfig.Bind.builder()
                 .from(createConfiguration(params.getMetricPorts()))
-                .to(PROMETHEUS_CONFIG_PATH).build();
+                .to(prometheusConfigPath)
+                .build();
+
         HostConfig hostConfig = HostConfig.builder()
                 .privileged(true)
                 .binds(configurationFile)
