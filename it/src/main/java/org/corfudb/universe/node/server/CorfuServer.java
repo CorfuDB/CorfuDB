@@ -2,6 +2,7 @@ package org.corfudb.universe.node.server;
 
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
+import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.universe.Universe;
 
 import java.util.List;
@@ -83,6 +84,8 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
     default String getEndpoint() {
         return getNetworkInterface() + ":" + getParams().getPort();
     }
+
+    LocalCorfuClient getLocalCorfuClient();
 
     enum Mode {
         SINGLE, CLUSTER

@@ -29,8 +29,6 @@ public class RemoteOperationHelper {
      * Copy a file from local computer to a remote computer
      *
      * @param vmIpAddress remote computer ip address
-     * @param userName    remote user
-     * @param password    remote password
      * @param localFile   local file
      * @param remoteDir   remote directory
      */

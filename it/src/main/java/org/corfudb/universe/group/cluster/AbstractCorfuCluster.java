@@ -41,7 +41,7 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams>
         log.info("Deploy corfu cluster. Params: {}", params);
 
         List<CompletableFuture<Node>> asyncDeployment = params
-                .<Node.NodeParams>getNodesParams()
+                .getNodesParams()
                 .stream()
                 .map(serverParams -> {
                     CorfuServer server = (CorfuServer) buildServer(serverParams);

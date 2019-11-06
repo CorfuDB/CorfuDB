@@ -6,9 +6,11 @@ import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.ContainerConfig;
 import com.spotify.docker.client.messages.ContainerCreation;
 import com.spotify.docker.client.messages.HostConfig;
+import com.spotify.docker.client.messages.IpamConfig;
 import com.spotify.docker.client.messages.PortBinding;
 import groovy.util.logging.Log4j;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.lang.StringUtils;
@@ -33,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Log4j
+@Builder
 public class DockerSupportServer<N extends SupportServerParams> implements SupportServer {
     private static final String ALL_NETWORK_INTERFACES = "0.0.0.0";
     private static final String LINUX_OS = "linux";
@@ -47,6 +50,7 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
             .build();
 
     @Getter
+    @NonNull
     protected final N params;
 
     @NonNull
@@ -63,22 +67,11 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
     private final SupportClusterParams clusterParams;
 
     @NonNull
+    @Default
     private final List<File> openedFiles = new ArrayList<>();
 
     @NonNull
     private final AtomicReference<String> ipAddress = new AtomicReference<>();
-
-
-    @Builder
-    public DockerSupportServer(DockerClient docker, DockerManager dockerManager,
-                               N params, SupportClusterParams clusterParams,
-                               UniverseParams universeParams) {
-        this.docker = docker;
-        this.dockerManager = dockerManager;
-        this.params = params;
-        this.clusterParams = clusterParams;
-        this.universeParams = universeParams;
-    }
 
     @Override
     public SupportServer deploy() {
@@ -88,8 +81,10 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
     }
 
     private ContainerConfig buildContainerConfig() {
-        List<String> ports = params.getPorts().stream()
-                .map(Objects::toString).collect(Collectors.toList());
+        List<String> ports = params.getPorts()
+                .stream()
+                .map(Objects::toString)
+                .collect(Collectors.toList());
         Map<String, List<PortBinding>> portBindings = new HashMap<>();
         for (String port : ports) {
             List<PortBinding> hostPorts = new ArrayList<>();
@@ -97,7 +92,7 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
             portBindings.put(port, hostPorts);
         }
 
-        HostConfig.Bind configurationFile =  HostConfig.Bind.builder()
+        HostConfig.Bind configurationFile = HostConfig.Bind.builder()
                 .from(createConfiguration(params.getMetricPorts()))
                 .to(PROMETHEUS_CONFIG_PATH).build();
         HostConfig hostConfig = HostConfig.builder()
@@ -118,13 +113,21 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
         try {
             String corfuRuntimeIp = "host.docker.internal";
             if (System.getProperty("os.name").compareToIgnoreCase(LINUX_OS) == 0) {
-                corfuRuntimeIp = docker.inspectNetwork(universeParams.getNetworkName())
-                                .ipam().config().stream().findFirst().get().gateway();
+                corfuRuntimeIp = docker
+                        .inspectNetwork(universeParams.getNetworkName())
+                        .ipam()
+                        .config()
+                        .stream()
+                        .findFirst()
+                        .map(IpamConfig::gateway)
+                        .orElseThrow(() -> new NodeException("Ip address not found"));
             }
             File tempConfiguration = File.createTempFile("prometheus", ".yml");
-            BufferedWriter writer = new BufferedWriter(new FileWriter(tempConfiguration));
-            writer.write(PromethousConfig.getConfig(corfuRuntimeIp, metricsPorts));
-            writer.flush();
+
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempConfiguration))) {
+                writer.write(PrometheusConfig.getConfig(corfuRuntimeIp, metricsPorts));
+                writer.flush();
+            }
             openedFiles.add(tempConfiguration);
             return tempConfiguration.getAbsolutePath();
         } catch (Exception e) {
