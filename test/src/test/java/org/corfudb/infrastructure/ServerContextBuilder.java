@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.corfudb.infrastructure.log.Compression.Codec;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**
@@ -46,6 +47,7 @@ public class ServerContextBuilder {
     String handshakeTimeout = "10";
     String prefix = "";
     String retention = "1000";
+    String compressionCodec = Codec.Type.LZ4.toString();
 
     String clusterId = "auto";
     boolean isTest = true;
@@ -65,7 +67,8 @@ public class ServerContextBuilder {
                 .put("--sequencer-cache-size", seqCache)
                 .put("--log-size-quota-percentage", logSizeLimitPercentage)
                 .put("--batch-size", batchSize)
-                .put("--metadata-retention", retention);
+                .put("--metadata-retention", retention)
+                .put("--compression-codec", compressionCodec);
         if (logPath != null) {
          builder.put("--log-path", logPath);
         }
