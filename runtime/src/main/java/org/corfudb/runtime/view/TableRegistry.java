@@ -13,6 +13,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -294,11 +295,14 @@ public class TableRegistry {
             addTypeToClassMap(defaultMetadataMessage);
         }
 
-        final String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-        final StreamingMap<K, V> streamingMap = tableOptions.getPersistentDataPath()
-                .map(path -> (StreamingMap<K, V>) new PersistedStreamingMap<K, V>(
-                        path, getPersistentMapOptions(), protobufSerializer, this.runtime))
-                .orElseGet(StreamingMapDecorator::new);
+        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
+        if (tableOptions.getPersistentDataPath().isPresent()) {
+            mapSupplier = () -> new PersistedStreamingMap<>(
+                    tableOptions.getPersistentDataPath().get(),
+                    getPersistentMapOptions(),
+                    protobufSerializer, this.runtime);
+        }
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
@@ -308,7 +312,7 @@ public class TableRegistry {
                 defaultMetadataMessage,
                 this.runtime,
                 this.protobufSerializer,
-                streamingMap);
+                mapSupplier);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass);

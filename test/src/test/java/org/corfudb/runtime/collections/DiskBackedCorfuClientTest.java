@@ -14,7 +14,6 @@ import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.Provide;
-import net.jqwik.api.ShrinkingMode;
 import net.jqwik.api.constraints.AlphaChars;
 import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
@@ -29,6 +28,7 @@ import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 import org.rocksdb.Env;
@@ -40,13 +40,13 @@ import org.rocksdb.SstFileManager;
 import java.io.InvalidObjectException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.AbstractMap;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -56,9 +56,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Disk-backed {@link StreamingMap} tests.
  */
-public class DiskBackedCorfuClientTest extends AbstractViewTest {
+public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoCloseable {
 
-    private final static Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap");
+    private final static Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap2");
     private final static int SAMPLE_SIZE = 100;
     private final static int NUM_OF_TRIES = 1;
     private final static int STRING_MIN = 5;
@@ -112,12 +112,12 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest {
     private CorfuTable<String, String> setupTable() {
         final Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap");
         final Options options = new Options().setCreateIfMissing(true);
-        final StreamingMap streamingMap = new PersistedStreamingMap<String, String>(
+        final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, String>(
                 persistedCacheLocation, options,
                 new PojoSerializer(String.class), getRuntime());
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setArguments(streamingMap)
+                .setArguments(mapSupplier)
                 .setStreamName("diskBackedMap")
                 .open();
     }
@@ -133,13 +133,12 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest {
                 new Options().setCreateIfMissing(true)
                         // The size is checked either during flush or compaction.
                         .setWriteBufferSize(FileUtils.ONE_KB);
-
+        final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, Pojo>(
+                persistedCacheLocation, options, new PojoSerializer(Pojo.class), getRuntime());
         CorfuTable<String, Pojo>
                 table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Pojo>>() {})
-                .setArguments(new PersistedStreamingMap<String, Pojo>(
-                        persistedCacheLocation, options,
-                        new PojoSerializer(Pojo.class), getRuntime()))
+                .setArguments(mapSupplier)
                 .setStreamName("diskBackedMap")
                 .open();
 
@@ -178,12 +177,11 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest {
                         // The size is checked either during flush or compaction.
                         .setWriteBufferSize(FileUtils.ONE_KB);
 
-        CorfuTable<String, String>
-                table = getDefaultRuntime().getObjectsView().build()
+        final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, String>(
+                persistedCacheLocation, options, Serializers.JSON, getRuntime());
+        final CorfuTable<String, String> table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setArguments(new PersistedStreamingMap<String, String>(
-                        persistedCacheLocation, options,
-                        Serializers.JSON, getRuntime()))
+                .setArguments(mapSupplier)
                 .setStreamName("diskBackedMap")
                 .open();
 
@@ -408,7 +406,6 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest {
     /**
      * Check {@link PersistedStreamingMap} integration with {@link CorfuStore}.
      */
-    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void dataStoreIntegration(
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String namespace,
             @ForAll @StringLength(min = STRING_MIN, max = STRING_MAX) @AlphaChars String tableName,
@@ -487,5 +484,11 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest {
                         .build());
 
         table.getUnderlyingObject().close();
+    }
+
+    @After
+    @Override
+    public void close() {
+        PersistedStreamingMap.closeAll();
     }
 }

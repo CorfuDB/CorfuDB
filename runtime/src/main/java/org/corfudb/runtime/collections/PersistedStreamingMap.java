@@ -18,8 +18,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -37,6 +39,7 @@ import java.util.stream.Stream;
  */
 @Slf4j
 public class PersistedStreamingMap<K, V> implements StreamingMap<K, V> {
+    private static final List<PersistedStreamingMap> openedResources = new ArrayList<>();
 
     private final AtomicInteger dataSetSize = new AtomicInteger();
     private final CorfuRuntime corfuRuntime;
@@ -48,13 +51,14 @@ public class PersistedStreamingMap<K, V> implements StreamingMap<K, V> {
                                  @NonNull ISerializer serializer,
                                  @NonNull CorfuRuntime corfuRuntime) {
         try {
-            FileUtils.deleteDirectory(dataPath.toFile());
+            RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.rocksDb = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
-        } catch (RocksDBException | IOException e) {
+        } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
         this.serializer = serializer;
         this.corfuRuntime = corfuRuntime;
+        openedResources.add(this);
     }
 
     /**
@@ -119,8 +123,6 @@ public class PersistedStreamingMap<K, V> implements StreamingMap<K, V> {
          */
         @Override
         public Entry<K, V> next() {
-            checkInvariants();
-
             if (hasNext()) {
                 current = next;
                 next = null;
@@ -302,7 +304,17 @@ public class PersistedStreamingMap<K, V> implements StreamingMap<K, V> {
         return Streams.stream(new RocksDbIterator(rocksIterator));
     }
 
-    public void close() {
+    private void closeRocksDb() {
         this.rocksDb.close();
+    }
+
+    @Override
+    public void close() {
+        closeRocksDb();
+        openedResources.remove(this);
+    }
+
+    public static void closeAll() {
+        openedResources.forEach(PersistedStreamingMap::closeRocksDb);
     }
 }

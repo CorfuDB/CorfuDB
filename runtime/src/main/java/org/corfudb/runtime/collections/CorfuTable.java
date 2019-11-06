@@ -211,51 +211,36 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
     /**
      * Generate a table with a given implementation for the {@link StreamingMap}.
      */
-    public CorfuTable(IndexRegistry<K, V> indices, StreamingMap<K, V> streamingMap) {
+    public CorfuTable(IndexRegistry<K, V> indices,
+                      Supplier<StreamingMap<K, V>> streamingMapSupplier) {
         indices.forEach(index -> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
             indexSpec.add(index);
         });
         log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
                 secondaryIndexes.keySet());
-        mainMap = streamingMap;
-    }
-
-    /**
-     * Generate a table with a given implementation for the {@link Map}.
-     */
-    public CorfuTable(IndexRegistry<K, V> indexRegistry, Map<K, V> mapImpl) {
-        this(indexRegistry, new StreamingMapDecorator<>(mapImpl));
+        mainMap = streamingMapSupplier.get();
     }
 
     /**
      * Generate a table with the given set of indexes.
      */
     public CorfuTable(IndexRegistry<K, V> indexRegistry) {
-        this(indexRegistry, new StreamingMapDecorator<>(new HashMap<>()));
+        this(indexRegistry, () -> new StreamingMapDecorator<>(new HashMap<>()));
     }
 
     /**
      * Generates a table with the given {@link Map} implementation and
      * without any secondary indexes.
      */
-    public CorfuTable(Map<K, V> mapImpl) {
-        this(IndexRegistry.empty(), mapImpl);
+    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+        this(IndexRegistry.empty(), streamingMapSupplier);
     }
-
-    /**
-     * Generates a table with the given {@link StreamingMap} implementation
-     * and without any secondary indexes.
-     */
-    public CorfuTable(StreamingMap<K, V> streamingMap) {
-        this(IndexRegistry.empty(), streamingMap);
-    }
-
     /**
      * Default constructor. Generates a table without any secondary indexes.
      */
     public CorfuTable() {
-        this(IndexRegistry.empty(), new StreamingMapDecorator<>(new HashMap<>()));
+        this(IndexRegistry.empty());
     }
 
     /** {@inheritDoc} */
