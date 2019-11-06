@@ -9,7 +9,6 @@ import org.corfudb.universe.group.cluster.CorfuClusterParams.CorfuClusterParamsB
 import org.corfudb.universe.group.cluster.SupportClusterParams;
 import org.corfudb.universe.group.cluster.SupportClusterParams.SupportClusterParamsBuilder;
 import org.corfudb.universe.logging.LoggingParams;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.ClientParams.ClientParamsBuilder;
