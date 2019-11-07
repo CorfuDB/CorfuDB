@@ -25,6 +25,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -75,9 +76,15 @@ public class AddressSpaceView extends AbstractView {
      */
     private final Cache<Long, ILogData> readCache;
 
+    static final private Duration GC_INTERVAL = Duration.ofMinutes(30);
+
     @Getter
     @Setter
     private AtomicLong compactionMark = new AtomicLong(Address.NON_ADDRESS);
+
+    private volatile long lastTrimMark = Address.NON_ADDRESS;
+
+    private volatile long lastTrimTime = -1L;
 
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
             .waitForHole(true)
@@ -143,6 +150,13 @@ public class AddressSpaceView extends AbstractView {
      */
     public void resetCaches() {
         readCache.invalidateAll();
+    }
+
+    /**
+     * Remove all log entries that are less than the trim mark
+     */
+    public void gc(long trimMark) {
+        readCache.asMap().entrySet().removeIf(e -> e.getKey() < trimMark);
     }
 
     /**
@@ -633,6 +647,12 @@ public class AddressSpaceView extends AbstractView {
         return result;
     }
 
+    /**
+     * Fetch garbage decisions from LogUnit servers.
+     *
+     * @param addresses an iterator of a collection of addresses to read.
+     * @return garbage decisions.
+     */
     @Nonnull
     public Map<Long, LogData> FetchGarbageEntries(Iterable<Long> addresses) {
         Iterable<List<Long>> batches = Iterables.partition(addresses,
@@ -681,4 +701,48 @@ public class AddressSpaceView extends AbstractView {
     Cache<Long, ILogData> getReadCache() {
         return readCache;
     }
+
+    /**
+     * Update compaction mark in the AddressSpaceView.
+     * Compaction mark could only monotonically grow.
+     * @param runtime         corfu runtime
+     * @param compactionMark  compaction mark
+     */
+    public void updateCompactionMark(CorfuRuntime runtime, long compactionMark) {
+        // Compaction mark could only monotonically grow.
+        runtime.getAddressSpaceView().getCompactionMark().getAndUpdate((address) -> {
+            if (address < compactionMark) {
+                log.trace("Compaction mark is updated to {}", compactionMark);
+
+                // garbage collection is trigger only when compaction mark grows, therefore
+                // triggerGC would NOT be invoked too frequently.
+                triggerGC();
+
+                return compactionMark;
+            } else {
+                return address;
+            }
+        });
+    }
+
+    private void triggerGC() {
+        if (Address.nonAddress(lastTrimMark))  {
+            lastTrimMark = compactionMark.get();
+            lastTrimTime = System.currentTimeMillis();
+        } else {
+            long ts = System.currentTimeMillis();
+
+            // The interval between two consecutive garbage collections should be greater
+            // than a cool down time
+            if (ts - lastTrimTime > GC_INTERVAL.toMillis()) {
+
+                // garbage collection is deferred for a cycle to prevent evict information
+                // which would be used shortly.
+                runtime.getGarbageCollector().gc(lastTrimMark);
+                lastTrimTime = ts;
+                lastTrimMark = compactionMark.get();
+            }
+        }
+    }
+
 }
