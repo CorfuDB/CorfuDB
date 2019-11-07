@@ -1,16 +1,11 @@
 package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.junit.Assert;
@@ -19,7 +14,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,11 +25,71 @@ import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.corfudb.runtime.view.Layout.LayoutStripe;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 
 public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements TransferSegmentCreator {
+
+    @Test
+    public void testCreateStateListTrimMarkNotMoved() {
+        RedundancyCalculator redundancyCalculator =
+                new RedundancyCalculator("localhost");
+
+        Layout layout = createNonPresentLayout();
+
+        ImmutableList<MockedSegment> expected = ImmutableList.of(
+                new MockedSegment(0L, 1L,
+                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())),
+                new MockedSegment(2L, 3L,
+                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
+
+        ImmutableList<TransferSegment> result = redundancyCalculator
+                .createStateList(layout, -1L);
+
+        assertThat(transformListToMock(result)).isEqualTo(expected);
+
+        layout = createPresentLayout();
+
+        expected = ImmutableList.of(
+                new MockedSegment(0L, 1L,
+                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())),
+                new MockedSegment(2L, 3L,
+                        createStatus(RESTORED, 2L, Optional.empty())));
+
+        result = redundancyCalculator.createStateList(layout, -1L);
+
+        assertThat(transformListToMock(result))
+                .isEqualTo(expected);
+    }
+
+    @Test
+    public void testCreateStateListTrimMarkIntersectsSegment() {
+        RedundancyCalculator redundancyCalculator =
+                new RedundancyCalculator("localhost");
+
+        Layout layout = createNonPresentLayout();
+
+        // node is not present anywhere, trim mark starts from the middle of a second segment ->
+        // transfer half of second and third segments
+        ImmutableList<MockedSegment> expected =
+                ImmutableList.of(
+                        new MockedSegment(3L, 3L,
+                                createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
+
+
+        List<TransferSegment> result = redundancyCalculator.createStateList(layout, 3L);
+
+        assertThat(transformListToMock(result)).isEqualTo(expected);
+
+        layout = createPresentLayout();
+
+        expected = ImmutableList.of(
+                new MockedSegment(3L, 3L,
+                        createStatus(RESTORED, 1L, Optional.empty())));
+
+        result = redundancyCalculator.createStateList(layout, 3L);
+
+        assertThat(transformListToMock(result)).isEqualTo(expected);
+
+    }
 
     @Test
     public void testSegmentContainsServer() {
@@ -90,7 +145,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
     }
 
     @Test
-    public void testCreateStateMap() {
+    public void testCreateStateListComplex() {
 
         LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
         LayoutStripe stripe2 = new LayoutStripe(Collections.singletonList("C"));
@@ -108,17 +163,10 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         Layout testLayout = createTestLayout(layoutSegments);
 
-        CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
-
-        PrefixTrimRedundancyCalculator calculator = new PrefixTrimRedundancyCalculator
-                ("localhost", corfuRuntime);
-
-        PrefixTrimRedundancyCalculator spy = spy(calculator);
-
-        doReturn(-1L).when(spy).setTrimOnNewLogUnit(testLayout, corfuRuntime, "localhost");
+        RedundancyCalculator calculator = new RedundancyCalculator("localhost");
 
         ImmutableList<TransferSegment> transferSegments =
-                spy.createStateList(testLayout);
+                calculator.createStateList(testLayout, -1L);
 
         MockedSegment presentSegment = new MockedSegment(0L,
                 20L,
@@ -322,17 +370,6 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
     }
 
-    @Builder
-    @AllArgsConstructor
-    @ToString
-    @EqualsAndHashCode
-    private static class SegmentData {
-        public final Map.Entry<Long, Long> range;
-        public boolean inProgress;
-        public boolean failed;
-        public SegmentState state;
-    }
-
     @Test
     public void testMergeComplex() {
         // old list:
@@ -429,6 +466,22 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                 TransferSegment.builder()
                         .startAddress(NON_ADDRESS)
                         .endAddress(0)
+                        .status(status)
+                        .build()).isInstanceOf(IllegalStateException.class);
+
+        // end can't be < 0L.
+        assertThatThrownBy(() ->
+                TransferSegment.builder()
+                        .startAddress(0)
+                        .endAddress(NON_ADDRESS)
+                        .status(status)
+                        .build()).isInstanceOf(IllegalStateException.class);
+
+        // start can't be greater than end.
+        assertThatThrownBy(() ->
+                TransferSegment.builder()
+                        .startAddress(3)
+                        .endAddress(2)
                         .status(status)
                         .build()).isInstanceOf(IllegalStateException.class);
 

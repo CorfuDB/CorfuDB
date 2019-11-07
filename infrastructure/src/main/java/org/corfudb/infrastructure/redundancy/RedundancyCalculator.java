@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
@@ -20,10 +21,12 @@ import java.util.stream.IntStream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.CURRENT_EPOCH;
 import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.PREVIOUS_EPOCH;
+import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
  * A class used to compute the transfer segments, as well as the layout
@@ -31,6 +34,10 @@ import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.Segment
  */
 @AllArgsConstructor
 public class RedundancyCalculator {
+
+    @NonNull
+    @Getter
+    private final String server;
 
     /**
      * A status that tells whether a transfer segment belongs to the current or a previous epoch.
@@ -56,11 +63,6 @@ public class RedundancyCalculator {
             return segment.compareTo(other.segment);
         }
     }
-
-
-    @NonNull
-    @Getter
-    private final String server;
 
     static boolean segmentContainsServer(LayoutSegment segment, String server) {
         return segment.getFirstStripe().getLogServers().contains(server);
@@ -334,6 +336,59 @@ public class RedundancyCalculator {
                         (list1, list2) -> list2)
                 .stream()
                 .map(agedSegment -> agedSegment.segment)
+                .collect(ImmutableList.toImmutableList());
+    }
+
+    /**
+     * Given a layout, and global trim mark creates an initial list
+     * of non-empty and bounded transfer segments.
+     *
+     * @param layout   A current layout.
+     * @param trimMark A current global trim mark.
+     * @return A list of transfer segments.
+     */
+    public ImmutableList<TransferSegment> createStateList(Layout layout, long trimMark) {
+        return layout.getSegments()
+                .stream()
+                // Keep all the segments after the trim mark, except the open one.
+                .filter(segment -> segment.getEnd() != NON_ADDRESS && segment.getEnd() >= trimMark)
+                .map(segment -> {
+                    // The transfer segment's start is the layout segment's start or a trim mark,
+                    // whichever is greater.
+                    long segmentStart = Math.max(segment.getStart(), trimMark);
+                    // The transfer segment's end should be inclusive.
+                    // It is the last address to transfer.
+                    long segmentEnd = segment.getEnd() - 1L;
+
+                    if (segmentContainsServer(segment, getServer())) {
+                        TransferSegmentStatus restored = TransferSegmentStatus
+                                .builder()
+                                .segmentState(RESTORED)
+                                .totalTransferred(segmentEnd - segmentStart + 1L)
+                                .build();
+
+                        return TransferSegment
+                                .builder()
+                                .startAddress(segmentStart)
+                                .endAddress(segmentEnd)
+                                .status(restored)
+                                .build();
+                    } else {
+                        TransferSegmentStatus notTransferred = TransferSegmentStatus
+                                .builder()
+                                .segmentState(NOT_TRANSFERRED)
+                                .totalTransferred(0L)
+                                .build();
+
+                        return TransferSegment
+                                .builder()
+                                .startAddress(segmentStart)
+                                .endAddress(segmentEnd)
+                                .status(notTransferred)
+                                .build();
+                    }
+
+                })
                 .collect(ImmutableList.toImmutableList());
     }
 }

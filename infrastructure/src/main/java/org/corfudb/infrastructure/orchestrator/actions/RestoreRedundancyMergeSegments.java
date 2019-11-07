@@ -11,8 +11,8 @@ import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 import org.corfudb.infrastructure.orchestrator.Action;
-import org.corfudb.infrastructure.redundancy.PrefixTrimRedundancyCalculator;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
@@ -195,6 +195,27 @@ public class RestoreRedundancyMergeSegments extends Action {
 
     }
 
+    /**
+     * Sets the trim mark on this endpoint's log unit and also perform a prefix trim.
+     *
+     * @param layout   A current layout.
+     * @param runtime  A current runtime.
+     * @param endpoint A current endpoint.
+     * @return A retrieved trim mark.
+     */
+    long setTrimOnNewLogUnit(Layout layout, CorfuRuntime runtime,
+                             String endpoint) {
+
+        long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
+
+        Token prefixToken = new Token(layout.getEpoch(), trimMark - 1);
+        runtime.getLayoutView().getRuntimeLayout(layout)
+                .getLogUnitClient(endpoint)
+                .prefixTrim(prefixToken)
+                .join();
+        return trimMark;
+    }
+
     @Nonnull
     @Override
     public String getName() {
@@ -210,16 +231,18 @@ public class RestoreRedundancyMergeSegments extends Action {
         log.info("State transfer on {}: Initial layout: {}", currentNode, layout);
 
         // Create a helper to perform the state calculations.
-        PrefixTrimRedundancyCalculator redundancyCalculator =
-                new PrefixTrimRedundancyCalculator(currentNode, runtime);
+        RedundancyCalculator redundancyCalculator = new RedundancyCalculator(currentNode);
 
         // Create a state transfer manager.
         StateTransferManager transferManager =
                 new StateTransferManager(streamLog, runtime.getParameters().getBulkReadSize());
 
+        // Trim a current stream log and retrieve a global trim mark.
+        long trimMark = setTrimOnNewLogUnit(layout, runtime, currentNode);
+
         // Create the initial state map.
         ImmutableList<TransferSegment> stateList =
-                redundancyCalculator.createStateList(layout);
+                redundancyCalculator.createStateList(layout, trimMark);
 
         log.info("State transfer on {}: Initial state list: {}", currentNode, stateList);
 
@@ -242,11 +265,17 @@ public class RestoreRedundancyMergeSegments extends Action {
             // Invalidate the layout.
             if (restoreStatus == RESTORED) {
                 log.info("State transfer on {}: Updating status map.", currentNode);
-                layout = runtime.invalidateLayout().join();
+
+                // Refresh layout.
+                runtime.invalidateLayout();
+                layout = runtime.getLayoutView().getLayout();
+
+                // Trim a current stream log and retrieve a global trim mark.
+                trimMark = setTrimOnNewLogUnit(layout, runtime, currentNode);
 
                 // Create a new map from the layout.
                 ImmutableList<TransferSegment>
-                        newLayoutStateList = redundancyCalculator.createStateList(layout);
+                        newLayoutStateList = redundancyCalculator.createStateList(layout, trimMark);
 
                 // Merge the new and the old lists into the current list.
                 stateList = redundancyCalculator.mergeLists(stateList, newLayoutStateList);
