@@ -2,19 +2,16 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.util.EnumMap;
-import java.util.concurrent.atomic.AtomicReference;
-
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.serializer.Serializers;
+
+import java.util.EnumMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Created by mwei on 8/15/16.

@@ -86,6 +86,7 @@ public class RestoreRedundancyMergeSegments extends WorkflowRequest {
                     .getRuntimeLayout().getManagementClient(nodeForWorkflow));
         }
         else{
+            log.warn("getOrchestrator: a server {} is not responding to pings", nodeForWorkflow);
             return Optional.empty();
         }
     }

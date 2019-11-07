@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.configuration;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchProcessor;
 import org.corfudb.infrastructure.LogUnitServer;
@@ -38,8 +39,9 @@ import static org.corfudb.infrastructure.management.ClusterStateContext.Heartbea
  */
 @Slf4j
 public class ServerConfigurator {
-    // Global configuration
-    private final CorfuConfig corfuConfig;
+    // Global server context
+    @Getter
+    private final ServerContext context;
 
     // Log Unit related configuration
     private final long streamCompactionInitialDelay = 10L;
@@ -64,20 +66,12 @@ public class ServerConfigurator {
     private final int systemDownHandlerTriggerLimit = 60;
     private ManagementAgent managementAgent;
     private CorfuRuntime managementServerRuntime;
-    private SingletonResource<CorfuRuntime> singletonResourceRuntime;
-    private ManagementServer managementServer;
     private HeartbeatCounter heartbeatCounter;
     private ClusterStateContext clusterStateContext;
-    private Orchestrator orchestrator;
 
     public ServerConfigurator(ServerContext context) {
-        this.corfuConfig = new CorfuConfig(context);
-        this.params = LogUnitParameters.parse(corfuConfig);
-    }
-
-    public ServerConfigurator(CorfuConfig corfuConfig) {
-        this.corfuConfig = corfuConfig;
-        this.params = LogUnitParameters.parse(corfuConfig);
+        this.context = context;
+        this.params = LogUnitParameters.parse(context);
     }
 
     private StreamLog getStreamLog() {
@@ -93,7 +87,7 @@ public class ServerConfigurator {
                     .convertToByteStringRepresentation(params.getMaxCacheSize()));
             streamLog = new InMemoryStreamLog();
         } else {
-            streamLog = new StreamLogFiles(corfuConfig.getContext(), params.isNoVerify());
+            streamLog = new StreamLogFiles(getContext(), params.isNoVerify());
         }
 
         return streamLog;
@@ -104,7 +98,7 @@ public class ServerConfigurator {
         if (batchProcessor != null) {
             return batchProcessor;
         }
-        batchProcessor = new BatchProcessor(getStreamLog(), corfuConfig.getContext().getServerEpoch(),
+        batchProcessor = new BatchProcessor(getStreamLog(), getContext().getServerEpoch(),
                 !params.isNoSync());
         return batchProcessor;
     }
@@ -133,13 +127,13 @@ public class ServerConfigurator {
             return logUnitServer;
         }
 
-        ExecutorService executor = Executors.newFixedThreadPool(corfuConfig.getContext()
+        ExecutorService executor = Executors.newFixedThreadPool(getContext()
                         .getLogunitThreadCount(),
                 new ServerThreadFactory("LogUnit-",
                         new ServerThreadFactory.ExceptionHandler()));
 
         logUnitServer = LogUnitServer.builder()
-                .serverContext(corfuConfig.getContext())
+                .serverContext(getContext())
                 .config(params)
                 .executor(executor)
                 .streamLog(getStreamLog())
@@ -154,7 +148,7 @@ public class ServerConfigurator {
         if (managementServerRuntime != null) {
             return managementServerRuntime;
         }
-        CorfuRuntimeParameters corfuParams = corfuConfig.getContext()
+        CorfuRuntimeParameters corfuParams = getContext()
                 .getManagementRuntimeParameters();
         corfuParams.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
         managementServerRuntime = CorfuRuntime.fromParameters(corfuParams);
@@ -162,7 +156,7 @@ public class ServerConfigurator {
     }
 
     private CorfuRuntime connect(CorfuRuntime runtime) {
-        Layout managementLayout = corfuConfig.getContext().copyManagementLayout();
+        Layout managementLayout = getContext().copyManagementLayout();
         if (managementLayout != null) {
             managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);
         }
@@ -181,10 +175,6 @@ public class ServerConfigurator {
     }
 
     private SingletonResource<CorfuRuntime> getSingletonResourceRuntime() {
-        if (singletonResourceRuntime != null) {
-            return singletonResourceRuntime;
-        }
-
         return SingletonResource.withInitial(() -> connect(getManagementServerRuntime()));
     }
 
@@ -202,7 +192,7 @@ public class ServerConfigurator {
         }
 
         ClusterState defaultView = ClusterState.builder()
-                .localEndpoint(corfuConfig.getContext().getLocalEndpoint())
+                .localEndpoint(getContext().getLocalEndpoint())
                 .nodes(ImmutableMap.of())
                 .unresponsiveNodes(ImmutableList.of())
                 .build();
@@ -219,33 +209,27 @@ public class ServerConfigurator {
         }
 
         FailureDetector failureDetector = new FailureDetector(getHeartbeatCounter(),
-                corfuConfig.getContext().getLocalEndpoint());
+                getContext().getLocalEndpoint());
 
         managementAgent = new ManagementAgent(
                 getSingletonResourceRuntime(),
-                corfuConfig.getContext(),
+                getContext(),
                 getClusterStateContext(),
                 failureDetector,
-                corfuConfig.getContext().copyManagementLayout());
+                getContext().copyManagementLayout());
         return managementAgent;
     }
 
     private Orchestrator getOrchestrator() {
-        if (orchestrator != null) {
-            return orchestrator;
-        }
         return new Orchestrator(
-                getSingletonResourceRuntime(), corfuConfig.getContext(), getStreamLog());
+                getSingletonResourceRuntime(), getContext(), getStreamLog());
     }
 
 
     public ManagementServer getManagementServer() {
-        if (managementServer != null) {
-            return managementServer;
-        }
 
-        ExecutorService executor = Executors.newFixedThreadPool(corfuConfig
-                        .getContext().getManagementServerThreadCount(),
+        ExecutorService executor = Executors.newFixedThreadPool(
+                getContext().getManagementServerThreadCount(),
                 new ServerThreadFactory("management-",
                         new ServerThreadFactory.ExceptionHandler()));
 
@@ -254,10 +238,10 @@ public class ServerConfigurator {
                         new ServerThreadFactory.ExceptionHandler()));
 
         return ManagementServer.builder()
-                .serverContext(corfuConfig.getContext())
+                .serverContext(getContext())
                 .executor(executor)
                 .heartbeatThread(heartbeatThread)
-                .failureHandlerPolicy(corfuConfig.getContext().getFailureHandlerPolicy())
+                .failureHandlerPolicy(getContext().getFailureHandlerPolicy())
                 .corfuRuntime(getSingletonResourceRuntime())
                 .clusterContext(getClusterStateContext())
                 .managementAgent(getManagementAgent())

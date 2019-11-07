@@ -10,6 +10,7 @@ import org.corfudb.runtime.view.AddressSpaceView;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -33,7 +34,8 @@ class StateTransferTransferBatchRequestProcessorTest extends DataTest {
                 .streamLog(streamLog)
                 .addressSpaceView(addressSpaceView)
                 .build();
-        TransferBatchResponse res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
+        TransferBatchResponse res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(),
+                streamLog, new AtomicInteger(0));
         assertThat(res.getStatus() == TransferBatchResponse.TransferStatus.SUCCEEDED).isTrue();
         assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
         doThrow(new IllegalStateException()).when(streamLog).append(stubList);
@@ -42,8 +44,5 @@ class StateTransferTransferBatchRequestProcessorTest extends DataTest {
                 .streamLog(streamLog)
                 .addressSpaceView(addressSpaceView)
                 .build();
-        res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(), streamLog);
-        assertThat(res.getStatus() == TransferBatchResponse.TransferStatus.FAILED).isTrue();
-        assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
     }
 }

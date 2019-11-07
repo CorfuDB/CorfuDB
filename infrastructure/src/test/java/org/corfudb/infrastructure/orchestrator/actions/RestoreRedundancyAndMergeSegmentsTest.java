@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.orchestrator.actions;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -16,10 +16,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.NOT_RESTORED;
 import static org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments.RestoreStatus.RESTORED;
 import static org.mockito.Mockito.doAnswer;
@@ -37,8 +37,10 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout testLayout = createTestLayout(Arrays.asList(segment));
         ArrayList<TransferSegment> emptyList = new ArrayList<>();
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
-
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
+        RestoreRedundancyMergeSegments action = RestoreRedundancyMergeSegments
+                .builder()
+                .streamLog(mock(StreamLog.class))
+                .currentNode("localhost").build();
         RestoreRedundancyMergeSegments.RestoreStatus status =
                 action.tryRestoreRedundancyAndMergeSegments(emptyList, testLayout, layoutManagementView);
         assertThat(status).isEqualTo(NOT_RESTORED);
@@ -57,10 +59,13 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
+        RestoreRedundancyMergeSegments action = RestoreRedundancyMergeSegments
+                .builder()
+                .streamLog(mock(StreamLog.class))
+                .currentNode("localhost").build();
         assertThatThrownBy(() ->
                 action.tryRestoreRedundancyAndMergeSegments(failed, testLayout, layoutManagementView))
-                .isInstanceOf(TransferSegmentFailure.class);
+                .isInstanceOf(TransferSegmentException.class);
     }
 
     // list with non transferred entities
@@ -70,11 +75,14 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, 10L, Arrays.asList(stripe));
         Layout testLayout = createTestLayout(Arrays.asList(segment));
-        List<TransferSegment> notTransferred = Arrays.asList( createTransferSegment(0L, 5L, NOT_TRANSFERRED));
+        List<TransferSegment> notTransferred = Arrays.asList(createTransferSegment(0L, 5L, NOT_TRANSFERRED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
+        RestoreRedundancyMergeSegments action = RestoreRedundancyMergeSegments
+                .builder()
+                .streamLog(mock(StreamLog.class))
+                .currentNode("localhost").build();
         RestoreRedundancyMergeSegments.RestoreStatus status =
                 action.tryRestoreRedundancyAndMergeSegments(notTransferred, testLayout, layoutManagementView);
         assertThat(status).isEqualTo(NOT_RESTORED);
@@ -91,7 +99,7 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment2 =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 10L, 15L, Arrays.asList(stripe2));
         Layout testLayout = createTestLayout(Arrays.asList(segment, segment2));
-        List<TransferSegment> restored = Arrays.asList( createTransferSegment(0L, 9L, SegmentState.RESTORED));
+        List<TransferSegment> restored = Arrays.asList(createTransferSegment(0L, 9L, SegmentState.RESTORED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
@@ -104,7 +112,10 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
             return null;
         }).when(layoutManagementView).mergeSegments(testLayout);
 
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
+        RestoreRedundancyMergeSegments action = RestoreRedundancyMergeSegments
+                .builder()
+                .streamLog(mock(StreamLog.class))
+                .currentNode("localhost").build();
         RestoreRedundancyMergeSegments.RestoreStatus status =
                 action.tryRestoreRedundancyAndMergeSegments(restored, testLayout, layoutManagementView);
         assertThat(status).isEqualTo(RESTORED);
@@ -122,14 +133,17 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment2 =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 10L, 15L, Arrays.asList(stripe2));
         Layout testLayout = createTestLayout(Arrays.asList(segment, segment2));
-        List<TransferSegment> transferred = Arrays.asList( createTransferSegment(0L, 9L, TRANSFERRED));
+        List<TransferSegment> transferred = Arrays.asList(createTransferSegment(0L, 9L, TRANSFERRED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
         Layout expectedLayout = new RedundancyCalculator("localhost").updateLayoutAfterRedundancyRestoration(transferred,
                 testLayout);
 
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
+        RestoreRedundancyMergeSegments action = RestoreRedundancyMergeSegments
+                .builder()
+                .streamLog(mock(StreamLog.class))
+                .currentNode("localhost").build();
         doNothing().when(layoutManagementView).mergeSegments(expectedLayout);
         RestoreRedundancyMergeSegments.RestoreStatus status =
                 action.tryRestoreRedundancyAndMergeSegments(transferred, testLayout, layoutManagementView);
@@ -149,14 +163,17 @@ public class RestoreRedundancyAndMergeSegmentsTest extends LayoutBasedTestHelper
         Layout.LayoutSegment segment2 =
                 new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 10L, 15L, Arrays.asList(stripe2));
         Layout testLayout = createTestLayout(Arrays.asList(segment, segment2));
-        List<TransferSegment> transferred = Arrays.asList( createTransferSegment(0L, 9L, TRANSFERRED));
+        List<TransferSegment> transferred = Arrays.asList(createTransferSegment(0L, 9L, TRANSFERRED));
 
         LayoutManagementView layoutManagementView = mock(LayoutManagementView.class);
 
         Layout expectedLayout = new RedundancyCalculator("localhost").updateLayoutAfterRedundancyRestoration(transferred,
                 testLayout);
 
-        RestoreRedundancyMergeSegments action = new RestoreRedundancyMergeSegments("localhost", mock(StreamLog.class));
+        RestoreRedundancyMergeSegments action = RestoreRedundancyMergeSegments
+                .builder()
+                .streamLog(mock(StreamLog.class))
+                .currentNode("localhost").build();
         doNothing().when(layoutManagementView).mergeSegments(expectedLayout);
         RestoreRedundancyMergeSegments.RestoreStatus status =
                 action.tryRestoreRedundancyAndMergeSegments(transferred, testLayout, layoutManagementView);

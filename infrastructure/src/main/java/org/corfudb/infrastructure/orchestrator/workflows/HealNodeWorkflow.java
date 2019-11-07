@@ -31,7 +31,10 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         super(new AddNodeRequest(healNodeRequest.getEndpoint()), streamLog);
         this.request = healNodeRequest;
         this.actions = ImmutableList.of(new HealNodeToLayout(),
-                new RestoreRedundancyMergeSegments(request.getEndpoint(), streamLog));
+                RestoreRedundancyMergeSegments.builder()
+                        .streamLog(streamLog)
+                        .currentNode(request.getEndpoint())
+                        .build());
     }
 
     @Override

@@ -1,35 +1,16 @@
 package org.corfudb.runtime.view;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
-import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
-import static org.corfudb.test.TestUtils.waitForLayoutChange;
-
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.spy;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
+import lombok.Getter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.statetransfer.streamprocessor.TransferSegmentFailure;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -47,8 +28,26 @@ import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import lombok.Getter;
 import org.mockito.Mockito;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
+import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
+import static org.corfudb.test.TestUtils.waitForLayoutChange;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 /**
  * Created by zlokhandwala on 2019-06-06.
@@ -88,7 +87,7 @@ public class StateTransferTest extends AbstractViewTest {
      * 1. Segment 1: 0 -> -1: Node 0, Node 1
      * 2. Add node Node 2
      */
-    public void verifyAddNode() throws Exception{
+    public void verifyAddNode() throws Exception {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         final long writtenAddressesBatch1 = 3L;
@@ -144,12 +143,12 @@ public class StateTransferTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-       assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
-       long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-       Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
-       Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
+        assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
+        Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-       assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
     }
 
     @Test
@@ -158,7 +157,7 @@ public class StateTransferTest extends AbstractViewTest {
      * 2. Segment 2: 3 -> infinity: Node 0, Node 1, Node 2
      * 2. Node 2 eventually restores itself to the layout and merges segments
      */
-    public void verifyRedundancyRestoration() throws Exception{
+    public void verifyRedundancyRestoration() throws Exception {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -199,12 +198,11 @@ public class StateTransferTest extends AbstractViewTest {
         testStream.append("testPayload".getBytes());
 
         ClusterStatusReport clusterStatus = null;
-        for(int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++){
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             clusterStatus = rt.getManagementView().getClusterStatus();
-            if(clusterStatus.getClusterStatus().equals(ClusterStatus.DB_SYNCING)){
+            if (clusterStatus.getClusterStatus().equals(ClusterStatus.DB_SYNCING)) {
                 Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
-            }
-            else{
+            } else {
                 break;
             }
         }
@@ -353,7 +351,7 @@ public class StateTransferTest extends AbstractViewTest {
         // If both of the segments were restored within the same epoch change concurrently, epoch's 3,
         // otherwise its 4.
         assertThat(rt.getLayoutView().getLayout().equals(expectedLayout1)
-        || rt.getLayoutView().getLayout()
+                || rt.getLayoutView().getLayout()
                 .equals(new LayoutBuilder(expectedLayout1).setEpoch(finalEpochAfterAdd + 1).build())).isTrue();
 
         long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
@@ -370,26 +368,26 @@ public class StateTransferTest extends AbstractViewTest {
      * Segment 1: 0 -> 3 (exclusive) Node 0
      * Segment 2: 3 -> 6 (exclusive) Node 0, Node 1
      * Segment 3: 6 -> infinity (exclusive) Node 0, Node 1
-     *
+     * <p>
      * Now a failed node, Node 2 is healed back which results in the following intermediary
      * states.
-     *
+     * <p>
      * First, last segment will be split.
      * Segment 1: 0 -> 3 (exclusive) Node 0
      * Segment 2: 3 -> 6 (exclusive) Node 0, Node 1
      * Segment 3: 6 -> 9 (exclusive) Node 0, Node 1
      * Segment 4: 9 -> infinity (exclusive) Node 0, Node 1, Node 2
-     *
+     * <p>
      * Then, healing carries out a cleaning task of merging the segments.
      * (transfer segment 1 to Node 1 and merge segments 1 and 2.)
      * Segment 1: 0 -> 6 (exclusive) Node 0, Node 1
      * Segment 2: 6 -> 9 (exclusive) Node 0, Node 1
      * Segment 3: 9 -> infinity (exclusive) Node 0, Node 1, Node 2
-     *
+     * <p>
      * And then:
      * Segment 1: 0 -> 9 (exclusive) Node 0, Node 1
      * Segment 2: 9 -> infinity (exclusive) Node 0, Node 1, Node 2
-     *
+     * <p>
      * At the end, the stable layout will be the following:
      * Segment 1: 0 -> infinity (exclusive) Node 0, Node 1, Node 2
      * Finally the stable layout is verified as well as the state transfer is verified by asserting
@@ -510,16 +508,16 @@ public class StateTransferTest extends AbstractViewTest {
     /**
      * This test verifies that if the adjacent segments have same number of servers,
      * state transfer should not happen, while merge segments can succeed.
-     *
+     * <p>
      * The test first creates a layout with 3 segments.
-     *
+     * <p>
      * Segment 1: 0 -> 5 (exclusive) Node 0, Node 1
      * Segment 2: 5 -> 10 (exclusive) Node 0, Node 1
      * Segment 3: 10 -> infinity (exclusive) Node 0, Node 1
-     *
+     * <p>
      * Now drop all the read response from Node 1, so that we make sure state transfer
      * will fail if it happens.
-     *
+     * <p>
      * Finally verify merge segments succeed with only one segment in the new layout.
      */
     @Test
@@ -650,13 +648,18 @@ public class StateTransferTest extends AbstractViewTest {
 
         StreamLog streamLog = getLogUnit(SERVERS.PORT_1).getStreamLog();
         StreamLog spy = spy(streamLog);
-        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1, spy);
+
+        final RestoreRedundancyMergeSegments action1 = RestoreRedundancyMergeSegments
+                .builder()
+                .currentNode(SERVERS.ENDPOINT_1)
+                .streamLog(spy)
+                .build();
 
         // Throw time out on all the addresses after 50.
         final long cutOffAddress = 50L;
         data.forEach(part -> {
 
-            if(part.get(0).getGlobalAddress() >= cutOffAddress){
+            if (part.get(0).getGlobalAddress() >= cutOffAddress) {
                 doAnswer(invocation -> {
                     throw new TimeoutException("Illegal State");
                 }).when(spy).append(part);
@@ -665,7 +668,7 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Assert that the TimeOutException is thrown
         assertThatThrownBy(() -> action1.impl(rt))
-                .isInstanceOf(TransferSegmentFailure.class);
+                .isInstanceOf(TransferSegmentException.class);
 
         // Known addresses should contain only [0:49] and the addresses in the open segment.
         ArrayList<Long> knownAddresses = new ArrayList<>(rt.getLayoutView()
@@ -775,8 +778,17 @@ public class StateTransferTest extends AbstractViewTest {
 
         StreamLog streamLog1 = getLogUnit(SERVERS.PORT_1).getStreamLog();
         StreamLog streamLog2 = getLogUnit(SERVERS.PORT_1).getStreamLog();
-        final RestoreRedundancyMergeSegments action1 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_1, streamLog1);
-        final RestoreRedundancyMergeSegments action2 = new RestoreRedundancyMergeSegments(SERVERS.ENDPOINT_2, streamLog2);
+
+        final RestoreRedundancyMergeSegments action1 = RestoreRedundancyMergeSegments
+                .builder()
+                .currentNode(SERVERS.ENDPOINT_1)
+                .streamLog(streamLog1)
+                .build();
+        final RestoreRedundancyMergeSegments action2 = RestoreRedundancyMergeSegments
+                .builder()
+                .currentNode(SERVERS.ENDPOINT_2)
+                .streamLog(streamLog2)
+                .build();
 
 
         List<CompletableFuture<Void>> futures = new ArrayList();

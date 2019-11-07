@@ -51,7 +51,10 @@ public class AddNodeWorkflow implements IWorkflow {
         this.request = request;
         actions = ImmutableList.of(new BootstrapNode(),
                 new AddNodeToLayout(),
-                new RestoreRedundancyMergeSegments(request.getEndpoint(), streamLog));
+                RestoreRedundancyMergeSegments.builder()
+                        .streamLog(streamLog)
+                        .currentNode(request.getEndpoint())
+                        .build());
     }
 
     @Override

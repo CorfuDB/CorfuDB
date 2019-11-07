@@ -10,6 +10,7 @@ import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A transferBatchRequest processor that succeeds on every {@link #transfer(TransferBatchRequest)} call.
@@ -23,7 +24,8 @@ public class SuccessfulBatchProcessor implements StateTransferBatchProcessor {
     public SuccessfulBatchProcessor(Optional<Long> delay) {
         this.delay = delay;
     }
-    public SuccessfulBatchProcessor(){
+
+    public SuccessfulBatchProcessor() {
         this.delay = Optional.empty();
     }
 
@@ -36,6 +38,6 @@ public class SuccessfulBatchProcessor implements StateTransferBatchProcessor {
                         .build()
                 );
         return CFUtils.runFutureAfter(() -> exec, ec, delay.map(d -> (long)
-                (random.nextFloat() * d)).orElse(0L));
+                (random.nextFloat() * d)).orElse(0L), TimeUnit.MILLISECONDS);
     }
 }

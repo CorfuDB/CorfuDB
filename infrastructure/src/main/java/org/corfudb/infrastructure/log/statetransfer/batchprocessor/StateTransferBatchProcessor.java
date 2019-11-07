@@ -1,15 +1,16 @@
 package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
-import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
-import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
 
 /**
@@ -28,30 +29,29 @@ public interface StateTransferBatchProcessor {
     /**
      * Appends records to the stream log.
      *
-     * @param readBatch The list of log entries as well as an optional
-     *                  node they were read from.
-     * @param streamlog A stream log interface.
+     * @param readBatch      The list of log entries as well as an optional
+     *                       node they were read from.
+     * @param streamlog      A stream log interface.
+     * @param overwriteExceptionsAllowed A total number of overwrite exceptions allowed.
      * @return A transferBatchResponse, a final result of a transfer.
      */
-    default TransferBatchResponse writeRecords(ReadBatch readBatch, StreamLog streamlog) {
+    default TransferBatchResponse writeRecords(
+            ReadBatch readBatch, StreamLog streamlog, AtomicInteger overwriteExceptionsAllowed) {
         List<Long> addresses = readBatch.getAddresses();
-
-        Result<TransferBatchResponse, RuntimeException> resultOfWrite = Result.of(() -> {
+        Optional<String> destination = readBatch.getDestination();
+        try {
             streamlog.append(readBatch.getData());
-            return TransferBatchResponse
-                    .builder()
-                    .transferBatchRequest(new TransferBatchRequest(addresses, readBatch.getDestination()))
-                    .status(SUCCEEDED)
-                    .build();
-        });
-        if (resultOfWrite.isError()) {
-            return TransferBatchResponse
-                    .builder()
-                    .transferBatchRequest(new TransferBatchRequest(addresses, readBatch.getDestination()))
-                    .status(FAILED)
-                    .build();
+        } catch (OverwriteException owe) {
+            // If the overwrite exceptions are no longer tolerated, rethrow.
+            if (overwriteExceptionsAllowed.decrementAndGet() == 0) {
+                throw owe;
+            }
         }
-        return resultOfWrite.get();
+        return TransferBatchResponse
+                .builder()
+                .transferBatchRequest(new TransferBatchRequest(addresses, destination))
+                .status(SUCCEEDED)
+                .build();
     }
 
 }

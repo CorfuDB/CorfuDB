@@ -86,8 +86,7 @@ public class CorfuServerNode implements AutoCloseable {
      * @return A map.
      */
     private static ImmutableMap<Class, AbstractServer> createServerMap(ServerContext context) {
-        CorfuConfig globalConfig = new CorfuConfig(context);
-        ServerConfigurator configurator = new ServerConfigurator(globalConfig);
+        ServerConfigurator configurator = new ServerConfigurator(context);
 
         return ImmutableMap.<Class, AbstractServer>builder()
                 .put(BaseServer.class, new BaseServer(context))

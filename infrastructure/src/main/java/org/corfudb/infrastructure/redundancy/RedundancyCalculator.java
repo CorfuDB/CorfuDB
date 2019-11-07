@@ -8,20 +8,20 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.LayoutBuilder;
 
 import java.util.List;
+import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.CURRENT_EPOCH;
 import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.PREVIOUS_EPOCH;
 
@@ -129,71 +129,68 @@ public class RedundancyCalculator {
     }
 
     /**
-     * Returns true if a given layout requires redundancy restoration.
+     * Returns true if a given server can restore redundancy for this layout.
+     * A particular server can restore redundancy for this layout if the segment is split
+     * and a set difference of log servers between any two adjacent segments contains this node.
+     * This ensures that the absence of a node in a layout is detected in any
+     * multiple split segment scenarios which results in the current node being absent
+     * closer to the beginning or to the end of a layout segment list.
      *
      * @param layout Current layout.
      * @param server Current server.
-     * @return True, if requires.
+     * @return True, if the server is not present in any segment.
      */
-    public static boolean requiresRedundancyRestoration(Layout layout, String server) {
+    public static boolean canRestoreRedundancy(Layout layout, String server) {
         if (layout.getSegments().size() == 1) {
             return false;
         } else {
-            return layout.getSegments().stream().anyMatch(segment -> !segment.getAllLogServers()
-                    .contains(server));
+
+            IntPredicate nodeNotPresent = currentIndex -> Sets.difference(
+                    layout.getSegments().get(currentIndex).getAllLogServers(),
+                    layout.getSegments().get(currentIndex - 1).getAllLogServers()
+            ).contains(server);
+
+            return IntStream.range(1, layout.getSegments().size())
+                    .boxed()
+                    .reduce(false,
+                            (nodePresentSoFar, currentIndex) ->
+                                    nodePresentSoFar || nodeNotPresent.test(currentIndex),
+                            (nodePresentBefore, nodePresentNow) ->
+                                    nodePresentBefore || nodePresentNow);
         }
     }
 
     /**
-     * Returns true if after adding a server to the first segment, the segments can be merged.
+     * Returns true if any server can merge the segments of this layout.
+     * Any server can merge the segments of this layout if the segment is split
+     * and a set difference of log servers between the first two adjacent segments is empty.
      *
      * @param layout Current layout.
-     * @param server The current node.
-     * @return True if there is a redundancy restoration is needed.
-     */
-    public static boolean requiresMerge(Layout layout, String server) {
-        if (layout.getSegments().size() == 1) {
-            return false;
-        } else {
-            int firstSegmentIndex = 0;
-            int secondSegmentIndex = 1;
-            Layout copy = new Layout(layout);
-            LayoutStripe firstStripe = copy.getFirstSegment().getFirstStripe();
-            firstStripe.getLogServers().add(server);
-            return Sets.difference(
-                    copy.getSegments().get(secondSegmentIndex).getAllLogServers(),
-                    copy.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
-        }
-    }
-
-    /**
-     * Returns true if the first and the second segments
-     * of this layout on this server can be merged into one.
-     *
-     * @param layout Current layout.
-     * @param server The current node.
      * @return True if the segments can be merged.
      */
-    public static boolean canMergeSegments(Layout layout, String server) {
+    public static boolean canMergeSegments(Layout layout) {
         if (layout.getSegments().size() == 1) {
             return false;
         } else {
             int firstSegmentIndex = 0;
             int secondSegmentIndex = 1;
-            boolean serverPresent = IntStream
-                    .range(firstSegmentIndex, secondSegmentIndex + 1)
-                    .boxed()
-                    .allMatch(index -> layout
-                            .getSegments()
-                            .get(index)
-                            .getFirstStripe()
-                            .getLogServers()
-                            .contains(server));
-
-            return serverPresent && Sets.difference(
+            return Sets.difference(
                     layout.getSegments().get(secondSegmentIndex).getAllLogServers(),
                     layout.getSegments().get(firstSegmentIndex).getAllLogServers()).isEmpty();
         }
+    }
+
+    /**
+     * Returns true if any layout restoration action is needed. A restoration action is needed
+     * when any server can merge the segments or a current server can restore a layout redundancy.
+     *
+     * @param layout Current layout.
+     * @param server Current server.
+     * @return True, if restoration action is needed.
+     */
+    public static boolean canRestoreRedundancyOrMergeSegments(Layout layout, String server) {
+        return RedundancyCalculator.canRestoreRedundancy(layout, server) ||
+                RedundancyCalculator.canMergeSegments(layout);
     }
 
 
@@ -237,7 +234,7 @@ public class RedundancyCalculator {
                 mergedSegment = newSegment;
                 // If the old segment is not done transferring, or restored -> update the segment
                 // with a new range and the old status.
-                SegmentState segmentState = oldSegmentStatus.getSegmentState();
+                TransferSegmentStatus.SegmentState segmentState = oldSegmentStatus.getSegmentState();
                 if (segmentState == FAILED || segmentState == RESTORED) {
                     TransferSegment segment = TransferSegment
                             .builder()

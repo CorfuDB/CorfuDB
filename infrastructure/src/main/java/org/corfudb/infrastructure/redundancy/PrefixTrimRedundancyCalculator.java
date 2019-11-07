@@ -7,8 +7,8 @@ import org.corfudb.runtime.view.Layout;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
@@ -46,7 +46,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
     }
 
     /**
-     * Given a layout, creates an initial list of transfer segments.
+     * Given a layout, creates an initial list of non-empty and bounded transfer segments.
      *
      * @param layout A current layout.
      * @return A list of transfer segments.
@@ -55,7 +55,7 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
         return layout.getSegments()
                 .stream()
-                // filter the segments that start before the trim mark or are not open.
+                // filter the segments that end before the trim mark and are not open.
                 .filter(segment -> segment.getEnd() != NON_ADDRESS && segment.getEnd() >= trimMark)
                 .map(segment -> {
                     long segmentStart = Math.max(segment.getStart(), trimMark);

@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.ReadBatchException;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 
@@ -12,6 +13,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static lombok.Builder.Default;
+import static lombok.EqualsAndHashCode.Exclude;
 
 /**
  * A result of a read that contains:
@@ -53,6 +55,13 @@ public class ReadBatch {
      */
     @Default
     private final ReadStatus status = ReadStatus.SUCCEEDED;
+
+    /**
+     * An optional exception after a read failed.
+     */
+    @Default
+    @Exclude
+    private final Optional<ReadBatchException> causeOfFailure = Optional.empty();
 
     /**
      * Creates a transferBatchRequest from {@link #failedAddresses} and {@link #destination}.

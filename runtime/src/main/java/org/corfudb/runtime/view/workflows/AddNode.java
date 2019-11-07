@@ -83,6 +83,7 @@ public class AddNode extends WorkflowRequest {
             Sleep.sleepUninterruptibly(pingInterval);
             log.info("Retrying to ping a current base server {} times.", i);
         }
+        log.warn("getOrchestrator: a server {} is not responding to pings", nodeForWorkflow);
         return Optional.empty();
 
     }

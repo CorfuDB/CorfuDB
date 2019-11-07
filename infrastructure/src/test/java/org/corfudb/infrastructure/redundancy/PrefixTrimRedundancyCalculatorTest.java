@@ -14,7 +14,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.*;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.*;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 

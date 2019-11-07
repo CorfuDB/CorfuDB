@@ -11,6 +11,7 @@ import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
@@ -52,6 +53,6 @@ public class FaultyBatchProcessor implements StateTransferBatchProcessor {
                     );
         }
         return CFUtils.runFutureAfter(() -> exec, ec, delay.map(d -> (long)
-                (random.nextFloat() * d)).orElse(0L));
+                (random.nextFloat() * d)).orElse(0L), TimeUnit.MILLISECONDS);
     }
 }

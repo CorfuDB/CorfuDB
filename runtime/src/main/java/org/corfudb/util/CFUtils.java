@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -16,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 9/15/15.
@@ -158,26 +158,43 @@ public final class CFUtils {
      * @return A completable future, which completes with a list of the results.
      */
     public static <T> CompletableFuture<List<T>> sequence(List<CompletableFuture<T>> futures) {
-        return CompletableFuture
-                .allOf(futures.toArray(new CompletableFuture<?>[futures.size()]))
-                .thenApply(x -> futures.stream()
-                        .map(CompletableFuture::join)
-                        .collect(Collectors.toList()));
+        return allOf(futures).thenCompose(empty -> {
+                    CompletableFuture<List<T>> aggregated = CompletableFuture
+                            .completedFuture(new ArrayList<>());
+
+                    for (CompletableFuture<T> future : futures) {
+                        aggregated = aggregated.thenCombine(future, (List<T> list, T value) -> {
+                            list.add(value);
+                            return list;
+                        });
+                    }
+
+                    return aggregated;
+                }
+        );
     }
 
+    /**
+     * Run a future after the provided number of delay time units.
+     *
+     * @param future                   A future wrapped into a supplier.
+     * @param scheduledExecutorService An instance of a scheduler.
+     * @param delay                    A number of units after which to schedule a future.
+     * @param units                    A units of delay.
+     * @param <T>                      A return type of the future.
+     * @return A completable future, which completes after the given number of delay units.
+     */
     public static <T> CompletableFuture<T> runFutureAfter(Supplier<CompletableFuture<T>> future,
                                                           ScheduledExecutorService scheduledExecutorService,
-                                                          long millis) {
+                                                          long delay,
+                                                          TimeUnit units) {
         CompletableFuture<T> resultFuture = new CompletableFuture<>();
-        try {
-            scheduledExecutorService.schedule(() ->
-                    true, millis, TimeUnit.MILLISECONDS).get();
-        } catch (InterruptedException | ExecutionException e) {
-            resultFuture.completeExceptionally(e);
-            return resultFuture;
-        }
-
-        resultFuture.complete(future.get().join());
+        scheduledExecutorService.schedule(() -> future.get()
+                .thenAccept(resultFuture::complete)
+                .exceptionally(result -> {
+                    resultFuture.completeExceptionally(result);
+                    return null;
+                }), delay, units);
         return resultFuture;
     }
 

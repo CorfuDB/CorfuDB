@@ -2,9 +2,9 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatc
 
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.DataTest;
+import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
-import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.AddressSpaceView;
@@ -27,7 +27,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
-class ProtocolTransferBatchRequestProcessorTest extends DataTest {
+class ProtocolBatchProcessorTest extends DataTest {
 
     @Test
     void transferFull() {
@@ -170,8 +170,7 @@ class ProtocolTransferBatchRequestProcessorTest extends DataTest {
         CompletableFuture<ReadBatch> res =
                 spy.retryReadRecords(TransferBatchRequest.builder().addresses(addresses).build(), 0);
 
-        ReadBatch join = res.join();
-        assertThat(join.getStatus() == ReadBatch.ReadStatus.FAILED).isTrue();
+        assertThat(res).isCompletedExceptionally();
 
     }
 

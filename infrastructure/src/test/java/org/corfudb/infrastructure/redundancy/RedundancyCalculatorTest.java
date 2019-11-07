@@ -6,9 +6,9 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
@@ -23,10 +23,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.RESTORED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.corfudb.runtime.view.Layout.LayoutStripe;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
@@ -59,67 +59,33 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
     @Test
     public void testRequiresRedundancyRestoration() {
-        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "localhost"));
+        LayoutStripe stripe0 = new LayoutStripe(Collections.singletonList("A"));
+        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
         LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("A", "B", "localhost"));
-        LayoutStripe stripe3 = new LayoutStripe(Arrays.asList("A"));
-
-        LayoutSegment segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
+        LayoutSegment segment0 = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
+                Collections.singletonList(stripe0));
+        LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
                 Collections.singletonList(stripe1));
-        LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
+        LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 6L, 9L,
                 Collections.singletonList(stripe2));
-        LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
-                Collections.singletonList(stripe3));
 
-        // Different sets
-        Layout layout = createTestLayout(Arrays.asList(segment, segment2));
-        assertThat(RedundancyCalculator.requiresRedundancyRestoration(layout, "localhost"))
+        // Not required, since A is present
+        Layout layout = createTestLayout(Arrays.asList(segment1, segment2));
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "A"))
                 .isFalse();
-        // Single segment
-        layout = createTestLayout(Collections.singletonList(segment));
-        assertThat(RedundancyCalculator.requiresRedundancyRestoration(layout, "localhost"))
+        // Not required, since the layout consists of only one segment
+        layout = createTestLayout(Collections.singletonList(segment1));
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "A"))
                 .isFalse();
-        layout = createTestLayout(Arrays.asList(segment2, segment3));
-        assertThat(RedundancyCalculator.requiresRedundancyRestoration(layout, "localhost"))
+        // Required, since node B is not present at the beginning
+        layout = createTestLayout(Arrays.asList(segment0, segment1, segment2));
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "B"))
+                .isTrue();
+        // Required, since localhost is not present in the second last segment
+        layout = createTestLayout(Arrays.asList(segment0, segment2));
+        assertThat(RedundancyCalculator.canRestoreRedundancy(layout, "localhost"))
                 .isTrue();
 
-
-    }
-
-    @Test
-    public void testRequiresMerge() {
-        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "localhost"));
-        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("A", "B", "localhost"));
-        LayoutSegment segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
-                Collections.singletonList(stripe1));
-        LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
-                Collections.singletonList(stripe2));
-
-        // Can't be merged
-        Layout layout = createTestLayout(Arrays.asList(segment, segment2));
-        assertThat(RedundancyCalculator.requiresMerge(layout, "localhost"))
-                .isFalse();
-
-        stripe1 = new LayoutStripe(Arrays.asList("A"));
-
-        segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
-                Collections.singletonList(stripe1));
-        segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
-                Collections.singletonList(stripe2));
-
-        layout = createTestLayout(Arrays.asList(segment, segment2));
-        assertThat(RedundancyCalculator.requiresMerge(layout, "localhost"))
-                .isFalse();
-
-        // Can be merged
-        stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
-        stripe2 = new LayoutStripe(Arrays.asList("A", "B", "localhost"));
-        segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
-                Collections.singletonList(stripe1));
-        segment2 = new LayoutSegment(CHAIN_REPLICATION, 3L, 6L,
-                Collections.singletonList(stripe2));
-        layout = createTestLayout(Arrays.asList(segment, segment2));
-        assertThat(RedundancyCalculator.requiresMerge(layout, "localhost"))
-                .isTrue();
 
     }
 
@@ -417,29 +383,29 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
         LayoutSegment segment = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(new LayoutStripe(Arrays.asList("localhost"))));
         assertThat(RedundancyCalculator
-                .canMergeSegments(createTestLayout(Arrays.asList(segment)), "localhost")).isFalse();
+                .canMergeSegments(createTestLayout(Arrays.asList(segment)))).isFalse();
     }
 
     @Test
-    public void testCanMergeSegmentsServerNonPresent() {
+    public void testCanMergeSegmentsServersNonPresent() {
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(new LayoutStripe(Arrays.asList("localhost", "B"))));
 
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(new LayoutStripe(Arrays.asList("C", "A"))));
         assertThat(RedundancyCalculator
-                .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)), "localhost")).isFalse();
+                .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)))).isFalse();
     }
 
     @Test
-    public void testCanMergeEmptyNonEmptySetDifference() {
+    public void testCanMergeSegmentsServerNotPresent() {
         LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(new LayoutStripe(Arrays.asList("localhost", "B"))));
 
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(new LayoutStripe(Arrays.asList("C", "B", "localhost"))));
         assertThat(RedundancyCalculator
-                .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)), "localhost")).isFalse();
+                .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)))).isFalse();
     }
 
     @Test
@@ -450,7 +416,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
         LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 0L, 1L,
                 Arrays.asList(new LayoutStripe(Arrays.asList("B", "localhost"))));
         assertThat(RedundancyCalculator
-                .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)), "localhost")).isTrue();
+                .canMergeSegments(createTestLayout(Arrays.asList(segment1, segment2)))).isTrue();
 
     }
 

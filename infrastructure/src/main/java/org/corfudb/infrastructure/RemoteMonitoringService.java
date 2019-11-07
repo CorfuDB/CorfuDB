@@ -431,9 +431,9 @@ public class RemoteMonitoringService implements MonitoringService {
             return DetectorTask.SKIPPED;
         }
 
-        // Check that the current node requires the merge of segments,
-        // also verify that the node is healed (not present in the unresponsive list).
-        if (RedundancyCalculator.requiresMerge(layout, localEndpoint) &&
+        // Check that the current node can invoke a restoration action,
+        // also verify that the current node is healed (not present in the unresponsive list).
+        if (RedundancyCalculator.canRestoreRedundancyOrMergeSegments(layout, localEndpoint) &&
                 !layout.getUnresponsiveServers().contains(localEndpoint)) {
             log.info("Layout requires restoration: {}. Spawning task to merge segments on {}.",
                     layout, localEndpoint);

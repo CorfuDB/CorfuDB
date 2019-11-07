@@ -8,10 +8,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferException;
+import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
-import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.ReadBatchException;
+import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferBatchProcessorException;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -47,11 +49,13 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      * Configurations for the retry logic.
      */
     @Default
-    private final int maxRetries = 3;
+    private final int maxReadRetries = 3;
     @Default
     private final Duration maxRetryTimeout = Duration.ofSeconds(10);
     @Default
     private final float randomFactorBackoff = 0.5f;
+    @Default
+    private final AtomicInteger maxOverwriteExceptions = new AtomicInteger(3);
 
     /**
      * Default read options for the replication protocol read.
@@ -72,11 +76,11 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     @Override
     public CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest) {
         return readRecords(transferBatchRequest, 0)
-                .thenApply(records -> writeRecords(records, streamLog))
+                .thenApply(records -> writeRecords(records, streamLog, maxOverwriteExceptions))
                 .exceptionally(error -> TransferBatchResponse
                         .builder()
                         .status(FAILED)
-                        .transferBatchRequest(transferBatchRequest)
+                        .causeOfFailure(Optional.of(new StateTransferBatchProcessorException(error)))
                         .build()
                 );
     }
@@ -84,8 +88,8 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     /**
      * Reads data entries by utilizing the replication protocol. If there are errors, retries.
      *
-     * @param transferBatchRequest   The transferBatchRequest of addresses to be read.
-     * @param retries The number of retries.
+     * @param transferBatchRequest The transferBatchRequest of addresses to be read.
+     * @param retries              The number of retries.
      * @return A result of reading records.
      */
     CompletableFuture<ReadBatch> readRecords(TransferBatchRequest transferBatchRequest, int retries) {
@@ -121,8 +125,8 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     /**
      * Handle read errors. Exponential backoff policy is utilized.
      *
-     * @param transferBatchRequest        TransferBatchRequest of addresses to be read.
-     * @param retriesTried Configurable number of retries for the current transferBatchRequest.
+     * @param transferBatchRequest TransferBatchRequest of addresses to be read.
+     * @param retriesTried         Configurable number of retries for the current transferBatchRequest.
      * @return Future of the result of the retry.
      */
     CompletableFuture<ReadBatch> retryReadRecords
@@ -130,28 +134,34 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
         try {
             AtomicInteger readRetries = new AtomicInteger(retriesTried);
             return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
-                if (readRetries.incrementAndGet() >= maxRetries) {
+                if (readRetries.incrementAndGet() >= maxReadRetries) {
                     throw new RetryExhaustedException("Read retries are exhausted");
                 }
 
                 // If a pipeline completed exceptionally, than return the error.
-                CompletableFuture<ReadBatch> pipelineFuture = readRecords(transferBatchRequest, readRetries.get())
-                        .handle((result, exception) -> Optional.ofNullable(exception)
-                                .map(e -> ReadBatch.builder()
-                                        .failedAddresses(transferBatchRequest.getAddresses())
-                                        .destination(transferBatchRequest.getDestination())
-                                        .status(ReadBatch.ReadStatus.FAILED)
-                                        .build())
-                                .orElse(result)
-                        );
-                // Join the result.
-                ReadBatch joinResult = pipelineFuture.join();
+                CompletableFuture<ReadBatch> pipelineFuture =
+                        readRecords(transferBatchRequest, readRetries.get())
+                                .handle((result, err) -> Optional.ofNullable(err)
+                                        .map(e -> ReadBatch.builder()
+                                                .failedAddresses(transferBatchRequest.getAddresses())
+                                                .destination(transferBatchRequest.getDestination())
+                                                .causeOfFailure(Optional.of(new ReadBatchException(e)))
+                                                .status(ReadBatch.ReadStatus.FAILED)
+                                                .build())
+                                        .orElse(result)
+                                );
 
-                if (joinResult.getStatus() == ReadBatch.ReadStatus.FAILED) {
+                ReadBatch readBatch = pipelineFuture.join();
+
+                // If the result is an error, print an error message and retry.
+                if (readBatch.getStatus() == ReadBatch.ReadStatus.FAILED) {
+                    readBatch.getCauseOfFailure()
+                            .ifPresent(e -> log.error("A read failed with {}.", e.getMessage()));
+                    log.error("Retrying {} times.", readRetries.get());
                     throw new RetryNeededException();
                 } else {
                     // If the result is not an error, return.
-                    return CompletableFuture.completedFuture(joinResult);
+                    return CompletableFuture.completedFuture(readBatch);
                 }
 
             }).setOptions(retry -> {
@@ -159,13 +169,11 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 retry.setRandomPortion(randomFactorBackoff);
             }).run();
 
-        } catch (InterruptedException | RetryExhaustedException ie) {
+        } catch (InterruptedException | RetryExhaustedException exception) {
             log.error("Retries were exhausted.");
-            return CompletableFuture.completedFuture(ReadBatch
-                    .builder()
-                    .status(ReadBatch.ReadStatus.FAILED)
-                    .build()
-            );
+            CompletableFuture<ReadBatch> future = new CompletableFuture<>();
+            future.completeExceptionally(exception);
+            return future;
         }
     }
 
