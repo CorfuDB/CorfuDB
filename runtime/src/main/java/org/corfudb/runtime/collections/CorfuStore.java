@@ -4,6 +4,7 @@ import com.google.protobuf.Message;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
+import java.util.List;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -150,5 +151,28 @@ public class CorfuStore {
                 this.runtime.getTableRegistry(),
                 this.runtime.getObjectsView(),
                 namespace);
+    }
+
+    /**
+     * Subscribe to a specific a table in a namespace or the entire namespace.
+     * Objects returned will honor transactional boundaries
+     * @param streamListener - callback context.
+     * @param namespace - the CorfuStore namespace to subscribe to.
+     * @param tablesOfInterest - If specified, only updates from these tables will be returned.
+     * @param timestamp - If specified, all stream updates from this timestamp will be returned
+     *                  - if null, only future updates will be returned.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                   @Nonnull List<TableSchema> tablesOfInterest,
+                   @Nullable Timestamp timestamp) {
+    }
+
+    /**
+     * Gracefully shutdown a streamer.
+     * Once this call returns no further stream updates will be returned.
+     * @param streamListener - callback context.
+     */
+    public void unsubscribe(@Nonnull StreamListener streamListener) {
     }
 }

@@ -19,11 +19,9 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 @Slf4j
-public abstract class AbstractCorfuCluster<U extends UniverseParams> extends AbstractCluster<
-        CorfuServer,
-        CorfuServerParams,
-        CorfuClusterParams,
-        U> implements CorfuCluster<CorfuServer, CorfuClusterParams> {
+public abstract class AbstractCorfuCluster<U extends UniverseParams>
+        extends AbstractCluster<CorfuServer, CorfuServerParams, CorfuClusterParams, U>
+        implements CorfuCluster<CorfuServer, CorfuClusterParams> {
 
     private final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
 

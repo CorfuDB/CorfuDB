@@ -16,7 +16,7 @@ before_install: |
     -q
 
 
-install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C
+install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
 jobs:
   include:
