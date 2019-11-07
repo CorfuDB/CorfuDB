@@ -193,6 +193,27 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     }
 
     /**
+     * Run gc on this object. Since the stream that backs this object is not thread-safe:
+     * synchronization between gc and external object access is needed.
+     */
+    public void gc(long trimMark) {
+        long ts = 0;
+
+        try (Timer.Context vloGcDuration = VloMetricsHelper.getVloGcContext()) {
+            ts = lock.writeLock();
+
+            // pengdingUpcalls and upcallResults before compaction mark will no longer
+            // used by the client
+            pendingUpcalls.removeIf(e -> e < trimMark);
+            upcallResults.entrySet().removeIf(e -> e.getKey() < trimMark);
+
+            smrStream.gc(trimMark);
+        } finally {
+            lock.unlock(ts);
+        }
+    }
+
+    /**
      * Access the internal state of the object, trying first to optimistically access
      * the object, then obtaining a write lock the optimistic access fails.
      *
@@ -617,14 +638,17 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             throw new RuntimeException("Unknown upcall " + record.getSMRMethod());
         }
 
-        ICorfuExecutionContext.Context context = getContext(timestamp);
 
-        // Calculate an undo record if no undo record is present -OR- there
+        ICorfuExecutionContext.Context context = getContext(timestamp);
+        // calculate an undo record if no undo record is present and its
+        // global address is smaller than compaction mark -OR- there
         // is an optimistic record, (which has no valid global address).
         // In the case of optimistic entries, the snapshot may have changed
         // since the last time they were applied, so we need to recalculate
         // undo -- this is the case without snapshot isolation.
-        if (!record.isUndoable() || !Address.isAddress(record.getGlobalAddress())) {
+        if (!Address.isAddress(record.getGlobalAddress()) ||
+                !record.isUndoable() &&
+                        record.getGlobalAddress() >= rt.getAddressSpaceView().getCompactionMark().get()) {
             // Can we generate an undo record?
             IUndoRecordFunction<T> undoRecordTarget =
                     undoRecordFunctionMap.get(record.getSMRMethod());

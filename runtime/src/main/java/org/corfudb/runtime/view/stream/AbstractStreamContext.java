@@ -29,21 +29,6 @@ public abstract class AbstractStreamContext implements
     final long maxGlobalAddress;
 
     /**
-     * The trim mark for Garbage Collection.
-     *
-     * This is based on the log trim mark,
-     * and is used to discard data in the stream views before the trim mark.
-     *
-     * Note: Data cannot be discarded deliberately as there might be active transactions
-     * still operating in this space, we need to ensure the object is synced beyond this threshold
-     * before discarding data, or data might be temporarily loss or resets will slow performance.
-     *
-     */
-    @Getter
-    @Setter
-    protected long gcTrimMark = 0;
-
-    /**
      * A pointer to the current global address, which is the
      * global address of the most recently added entry.
      */
