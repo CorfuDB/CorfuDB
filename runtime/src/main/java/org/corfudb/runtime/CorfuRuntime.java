@@ -1071,8 +1071,6 @@ public class CorfuRuntime {
 
         checkVersion();
 
-        garbageInformer.start();
-
         return this;
     }
 
