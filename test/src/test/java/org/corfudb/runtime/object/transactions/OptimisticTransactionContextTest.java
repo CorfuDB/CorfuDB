@@ -918,11 +918,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         }
 
         // run compaction
-        t(1, () -> getRuntime().getGarbageInformer().gcUnsafe());
-        t(1, () -> getLogUnit(SERVERS.PORT_0).runCompaction()); // compactionMark = RECORD_PER_SEGMENT
-        getRuntime().getAddressSpaceView().resetCaches();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-
+        t(1, () -> startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0)));
         t(2, () -> get("k"))
                 .assertThrows().hasCauseInstanceOf(TrimmedException.class);
         t(2, this::TXEnd);
@@ -939,13 +935,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t(1, this::SnapshotTXBegin);
 
         // run compaction
-
-        t(1, () -> getRuntime().getGarbageInformer().gcUnsafe());
-        t(1, () -> getLogUnit(SERVERS.PORT_0).runCompaction());
-        getRuntime().getAddressSpaceView().resetCaches();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-
-
+        t(1, () -> startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0)));
         t(1, () -> get("k"))
                 .assertResult().isEqualTo("v" + entryNum); // SnapshotTimeStamp = RECORDS_PER_SEGMENT
         t(1, this::TXEnd);
