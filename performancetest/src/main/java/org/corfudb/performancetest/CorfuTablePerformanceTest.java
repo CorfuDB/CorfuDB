@@ -16,29 +16,24 @@ import java.util.*;
 
 @Slf4j
 public class CorfuTablePerformanceTest extends PerformanceTest{
-    private long seed;
-    private int randomBoundary;
-    private long time;
-    private int milliToSecond;
-    private int keyNum;
-    private int valueSize;
+    private final long seed;
+    private final int randomBoundary;
+    private final long time;
+    public static final int MILLI_TO_SECOND = 1000;
+    private final int keyNum;
+    private final int valueSize;
     private CorfuRuntime runtime;
-    private Random random;
-    private KeyValueManager keyValueManager;
+    private final Random random;
+    private final KeyValueManager keyValueManager;
 
     public CorfuTablePerformanceTest() {
-        loadProperties();
-        random = new Random(seed);
-        keyValueManager = new org.corfudb.performancetest.KeyValueManager(keyNum, valueSize);
-    }
-
-    private void loadProperties()  {
         seed = Long.parseLong(PROPERTIES.getProperty("tableSeed", "1024"));
         randomBoundary = Integer.parseInt(PROPERTIES.getProperty("tableRandomBoundary","10"));
         time = Long.parseLong(PROPERTIES.getProperty("tableTime", "100"));
-        milliToSecond = Integer.parseInt(PROPERTIES.getProperty("milliToSecond", "1000"));
         keyNum = Integer.parseInt(PROPERTIES.getProperty("keyNum", "10"));
         valueSize = Integer.parseInt(PROPERTIES.getProperty("valueSize", "1024"));
+        random = new Random(seed);
+        keyValueManager = new org.corfudb.performancetest.KeyValueManager(keyNum, valueSize);
     }
 
     private CorfuTable<String, String> buildTable(String name) {
@@ -67,7 +62,7 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
         return new Thread(() -> {
             long duration = 0;
             while ( duration <=  time) {
-                duration = (System.currentTimeMillis() - start) / milliToSecond;
+                duration = (System.currentTimeMillis() - start) / MILLI_TO_SECOND;
                 try {
                     putTable(table, random.nextInt(randomBoundary));
                     getTable(table, random.nextInt(randomBoundary));
@@ -87,7 +82,7 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
                 corfuTable = buildTable("table1");
         long start = System.currentTimeMillis();
         while (true) {
-            if ((System.currentTimeMillis() - start) / milliToSecond > time) {
+            if ((System.currentTimeMillis() - start) / MILLI_TO_SECOND > time) {
                 break;
             }
             putTable(corfuTable, random.nextInt(randomBoundary));
