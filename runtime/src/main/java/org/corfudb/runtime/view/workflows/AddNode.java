@@ -71,7 +71,9 @@ public class AddNode extends WorkflowRequest {
 
     @Override
     protected Optional<ManagementClient> getOrchestrator() {
-        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout().getBaseClient(nodeForWorkflow);
+        runtime.invalidateLayout();
+        Layout layout = new Layout(runtime.getLayoutView().getLayout());
+        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout(layout).getBaseClient(nodeForWorkflow);
         // Add node requires a few pings for orchestrator selection because the current
         // server router might not be immediately ready after the recent shutdown.
         for (int i = 0; i < pingRetries; i++) {

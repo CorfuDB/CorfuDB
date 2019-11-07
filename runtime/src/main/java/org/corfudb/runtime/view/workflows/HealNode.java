@@ -51,15 +51,15 @@ public class HealNode extends WorkflowRequest {
     }
 
     @Override
-    protected Optional<ManagementClient> getOrchestrator(){
-
-        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout().getBaseClient(nodeForWorkflow);
-        if(baseClient.pingSync()){
+    protected Optional<ManagementClient> getOrchestrator() {
+        runtime.invalidateLayout();
+        Layout layout = new Layout(runtime.getLayoutView().getLayout());
+        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout(layout).getBaseClient(nodeForWorkflow);
+        if (baseClient.pingSync()) {
             log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
             return Optional.of(runtime.getLayoutView()
                     .getRuntimeLayout().getManagementClient(nodeForWorkflow));
-        }
-        else{
+        } else {
             log.warn("getOrchestrator: a server {} is not responding to pings", nodeForWorkflow);
             return Optional.empty();
         }
