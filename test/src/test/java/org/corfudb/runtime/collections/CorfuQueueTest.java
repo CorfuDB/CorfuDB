@@ -6,6 +6,7 @@ import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.Comparator;
@@ -65,6 +66,21 @@ public class CorfuQueueTest extends AbstractViewTest {
 
         assertThat(records.get(0).compareTo(records2.get(1))).isLessThan(0);
         assertThat(records.get(0).getRecordId().compareTo(records2.get(1).getRecordId())).isLessThan(0);
+    }
+
+    @Test
+    public void queueWithSecondaryIndexCheck() {
+        CorfuQueue<String>
+                corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
+                CorfuTable.IndexRegistry.empty());
+
+        CorfuRecordId idC = corfuQueue.enqueue("c");
+        CorfuRecordId idB = corfuQueue.enqueue("b");
+        CorfuRecordId idA = corfuQueue.enqueue("a");
+
+        final int expected = 3;
+        List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
+        assertThat(records.size()).isEqualTo(expected);
     }
 
     @Test
