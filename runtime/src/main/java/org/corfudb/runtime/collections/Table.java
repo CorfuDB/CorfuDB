@@ -220,6 +220,21 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
+     * Clears the table.
+     */
+    public void clear() {
+        boolean beganNewTxn = false;
+        try {
+            beganNewTxn = TxBegin();
+            corfuTable.clear();
+        } finally {
+            if (beganNewTxn) {
+                TxEnd();
+            }
+        }
+    }
+
+    /**
      * Count of records in the table.
      *
      * @return Count of records.
