@@ -365,8 +365,13 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                     timestamp, compactionMark));
         }
 
-        rollbackStreamUnsafe(smrStream, timestamp);
-        log.trace("Rollback[{}] completed", this);
+        try {
+            rollbackStreamUnsafe(smrStream, timestamp);
+            log.trace("Rollback[{}] completed", this);
+        } catch (NoRollbackException ex) {
+            log.warn("Rollback[{}] failed", this);
+            resetUnsafe();
+        }
     }
 
     /**

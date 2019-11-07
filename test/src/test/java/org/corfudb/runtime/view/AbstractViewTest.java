@@ -479,6 +479,24 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return "test:" + port;
     }
 
+    /**
+     * Start to trigger compaction. This function is only used for testing purpose.
+     * @param rt Corfu runtime.
+     * @param logUnitServer LogUnit server.
+     */
+    protected void startCompaction(CorfuRuntime rt, LogUnitServer logUnitServer) {
+        // stop periodical tasks to prevent race condition
+        rt.getGarbageInformer().stop();
+
+        // send garbage decisions to logUnit servers
+        rt.getGarbageInformer().gcUnsafe();
+
+        // run compaction on LogUnit servers
+        logUnitServer.runCompaction();
+        rt.getAddressSpaceView().resetCaches();
+        rt.getAddressSpaceView().invalidateServerCaches();
+    }
+
     // Private
 
     /**
