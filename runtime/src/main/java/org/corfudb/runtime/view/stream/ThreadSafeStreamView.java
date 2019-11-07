@@ -51,6 +51,11 @@ public class ThreadSafeStreamView implements IStreamView {
     }
 
     @Override
+    public synchronized void gc(long trimMark) {
+        stream.gc(trimMark);
+    }
+
+    @Override
     public synchronized void seek(long globalAddress) {
         stream.seek(globalAddress);
     }
