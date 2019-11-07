@@ -50,7 +50,7 @@ public class LogUnitPerformanceTest extends PerformanceTest{
                 client.read(pos).get();
             }
         }
-        killServer();
+        killServer(server);
     }
 
     /**
@@ -94,6 +94,6 @@ public class LogUnitPerformanceTest extends PerformanceTest{
                 client.readAll(addresses).get();
             }
         }
-        killServer();
+        killServer(server);
     }
 }

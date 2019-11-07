@@ -1,5 +1,6 @@
 package org.corfudb.performancetest;
 
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -22,7 +23,6 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
     public static final int MILLI_TO_SECOND = 1000;
     private final int keyNum;
     private final int valueSize;
-    private CorfuRuntime runtime;
     private final Random random;
     private final KeyValueManager keyValueManager;
 
@@ -74,10 +74,13 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
     }
 
     @Test
-    public void CorfuTable1Thread1Table() throws IOException, InterruptedException {
+    public void CorfuTable1Thread1TableTest () throws IOException, InterruptedException {
         setMetricsReportFlags("corfutable-1-1");
         Process server = runServer();
         runtime = initRuntime();
+        System.out.println(System.getProperty(PROPERTY_LOCAL_METRICS_COLLECTION ));
+        System.out.println(System.getProperty(PROPERTY_CSV_INTERVAL));
+        System.out.println(System.getProperty(PROPERTY_CSV_FOLDER));
         CorfuTable<String, String>
                 corfuTable = buildTable("table1");
         long start = System.currentTimeMillis();
@@ -88,7 +91,7 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
             putTable(corfuTable, random.nextInt(randomBoundary));
             getTable(corfuTable, random.nextInt(randomBoundary));
         }
-        killServer();
+        killServer(server);
     }
 
     private void runTableOps(int numThreads, int numTables) throws InterruptedException {
@@ -108,20 +111,20 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
     }
 
     @Test
-    public void CorfuTable10Thread1Table() throws InterruptedException, IOException {
+    public void CorfuTable10Thread1TableTest () throws IOException, InterruptedException {
         setMetricsReportFlags("corfutable-10-1");
         Process server = runServer();
         runtime = initRuntime();
         runTableOps(1, 10);
-        killServer();
+        killServer(server);
     }
 
     @Test
-    public void CorfuTable10Thread10Table() throws InterruptedException, IOException {
+    public void CorfuTable10Thread10Table() throws IOException, InterruptedException {
         setMetricsReportFlags("corfutable-10-10");
         Process server = runServer();
         runtime = initRuntime();
         runTableOps(10, 10);
-        killServer();
+        killServer(server);
     }
 }

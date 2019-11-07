@@ -42,7 +42,7 @@ public class StreamPerformanceTest extends PerformanceTest {
                 counter++;
             }
         }
-        killServer();
+        killServer(server);
     }
 
     /**
@@ -74,7 +74,7 @@ public class StreamPerformanceTest extends PerformanceTest {
                 counter++;
             }
         }
-        killServer();
+        killServer(server);
     }
 
     private void populateStream(CorfuRuntime runtime, int objectNum, byte[] payload) {

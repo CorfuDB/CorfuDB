@@ -62,7 +62,7 @@ public class SequencerPerformanceTest extends PerformanceTest{
     public void sequencerPerformanceTest() throws IOException, InterruptedException {
         setMetricsReportFlags("sequencer");
         Process server = runServer();
-        CorfuRuntime runtime = initRuntime();
+        runtime = initRuntime();
         long start = System.currentTimeMillis();
         while (true) {
             if ((System.currentTimeMillis() - start) / MILLI_TO_SECOND > time) {
@@ -71,6 +71,6 @@ public class SequencerPerformanceTest extends PerformanceTest{
             tokenQuery(runtime, random.nextInt(randomBoundary));
             tokenTx(runtime, random.nextInt(randomBoundary));
         }
-        killServer();
+        killServer(server);
     }
 }
