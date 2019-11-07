@@ -129,7 +129,7 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         }
 
         // run compaction
-        t(1, () -> getRuntime().getGarbageInformer().gcUnsafe());
+        t(1, () -> getRuntime().getGarbageInformer().submitGCTask());
         t(1, () -> getLogUnit(SERVERS.PORT_0).runCompaction()); // compactionMark = RECORD_PER_SEGMENT
         getRuntime().getAddressSpaceView().resetCaches();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
@@ -150,7 +150,7 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         t(1, this::SnapshotTXBegin); // SnapshotTimeStamp = RECORDS_PER_SEGMENT
 
         // run compaction
-        t(1, () -> getRuntime().getGarbageInformer().gcUnsafe());
+        t(1, () -> getRuntime().getGarbageInformer().submitGCTask());
         t(1, () -> getLogUnit(SERVERS.PORT_0).runCompaction());
         getRuntime().getAddressSpaceView().resetCaches();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
