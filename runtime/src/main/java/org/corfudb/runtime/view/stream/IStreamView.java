@@ -40,6 +40,12 @@ public interface IStreamView extends
      */
     void reset();
 
+    /**
+     * Garbage collect all the trimmed entries on this stream
+     * @param trimMark start of the active log
+     */
+    void gc(long trimMark);
+
     /** Seek to the requested maxGlobal address. The next read will
      * begin at the given global address, inclusive.
      * @param globalAddress Address to seek to
