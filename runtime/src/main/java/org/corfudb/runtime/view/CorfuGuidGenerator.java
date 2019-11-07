@@ -7,6 +7,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.util.serializer.Serializers;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -119,6 +120,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
         distributedCounter = rt.getObjectsView().build()
                 .setType(SMRMap.class)
                 .setStreamName(GUID_STREAM_NAME)
+                .setSerializer(Serializers.getDefaultSerializer())
                 .open();
     }
 

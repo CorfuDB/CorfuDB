@@ -584,7 +584,7 @@ public class CorfuMapTest extends AbstractViewTest {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("A")
-                    .setSerializer(Serializers.JSON)
+                    .setSerializer(Serializers.getDefaultSerializer())
                     .addOption(ObjectOpenOptions.NO_CACHE)
                     .setTypeToken(CorfuTable.<String,String>getMapType())
                     .open();
