@@ -7,6 +7,7 @@ import org.corfudb.benchmarks.runtime.collections.helper.ValueGenerator.StaticVa
 import org.corfudb.benchmarks.util.SizeUnit;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
@@ -26,7 +27,8 @@ public abstract class HashMapState {
         StaticValueGenerator valueGenerator = new StaticValueGenerator(dataSize);
         HashMap<Integer, String> underlyingMap = new HashMap<>();
         CorfuTable<Integer, String> table = new CorfuTable<>(
-                () -> new StreamingMapDecorator<>(underlyingMap));
+                () -> new StreamingMapDecorator<>(underlyingMap),
+                ICorfuVersionPolicy.DEFAULT);
 
         helper = CorfuTableBenchmarkHelper.builder()
                 .underlyingMap(underlyingMap)

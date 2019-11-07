@@ -11,7 +11,8 @@ import java.util.UUID;
  * @param <T> The type of the underlying object.
  * Created by mwei on 11/10/16.
  */
-public interface ICorfuSMR<T> extends ICorfuExecutionContext<T>, AutoCloseable {
+public interface ICorfuSMR<T>
+        extends ICorfuExecutionContext<T>, ICorfuVersionPolicy, AutoCloseable {
 
     /** The suffix for all precompiled SMR wrapper classes. */
     String CORFUSMR_SUFFIX = "$CORFUSMR";

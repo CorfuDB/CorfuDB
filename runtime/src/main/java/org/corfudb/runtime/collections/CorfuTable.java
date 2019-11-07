@@ -41,6 +41,7 @@ import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.ImmuableListSetWrapper;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -208,6 +209,7 @@ public class CorfuTable<K ,V>
     private final Set<Index<K, V, ? extends Comparable>> indexSpec;
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
     private final CorfuTable<K, V> optimisticTable;
+    private final VersionPolicy versionPolicy;
 
     public CorfuTable(StreamingMap<K,V> mainMap,
                       Set<Index<K, V, ? extends Comparable>> indexSpec,
@@ -217,15 +219,20 @@ public class CorfuTable<K ,V>
         this.indexSpec = indexSpec;
         this.secondaryIndexes = secondaryIndexe;
         this.optimisticTable = optimisticTable;
+        this.versionPolicy = ICorfuVersionPolicy.DEFAULT;
     }
     /**
-     * Generate a table with a given implementation for the {@link StreamingMap}.
+     * The main constructor that generates a table with a given implementation of the
+     * {@link StreamingMap} along with {@link IndexRegistry} and {@link VersionPolicy}
+     * specification.
      */
     public CorfuTable(IndexRegistry<K, V> indices,
-                      Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                      Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                      VersionPolicy versionPolicy) {
         this.indexSpec = new HashSet<>();
         this.secondaryIndexes = new HashMap<>();
         this.mainMap = streamingMapSupplier.get();
+        this.versionPolicy = versionPolicy;
 
         this.optimisticTable = new CorfuTable<>(this.mainMap.getOptimisticMap(), this.indexSpec,
                 this.secondaryIndexes, null);
@@ -240,17 +247,29 @@ public class CorfuTable<K ,V>
     }
 
     /**
-     * Generate a table with a given implementation for the {@link StreamingMap}.
+     * Generate a table with a given implementation for the {@link StreamingMap} and
+     * {@link IndexRegistry}.
      */
-    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier) {
-        this(IndexRegistry.empty(), streamingMapSupplier);
+    public CorfuTable(IndexRegistry<K, V> indices,
+                      Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+        this(indices, streamingMapSupplier, ICorfuVersionPolicy.DEFAULT);
+    }
+
+    /**
+     * Generate a table with a given implementation for the {@link StreamingMap},
+     * and {@link VersionPolicy}.
+     */
+    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                      VersionPolicy versionPolicy) {
+        this(IndexRegistry.empty(), streamingMapSupplier, versionPolicy);
     }
 
     /**
      * Generate a table with the given {@link IndexRegistry}.
      */
     public CorfuTable(IndexRegistry<K, V> indexRegistry) {
-        this(indexRegistry, () -> new StreamingMapDecorator<>(new HashMap<>()));
+        this(indexRegistry, () -> new StreamingMapDecorator<>(new HashMap<>()),
+                ICorfuVersionPolicy.DEFAULT);
     }
 
     /**
@@ -812,6 +831,15 @@ public class CorfuTable<K ,V>
         } else {
             return this;
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @DontInstrument
+    @Override
+    public VersionPolicy getVersionPolicy() {
+        return versionPolicy;
     }
 
     /**

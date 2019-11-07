@@ -18,8 +18,10 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import lombok.NonNull;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -69,7 +71,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @Nullable final M metadataSchema,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
-                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                 @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy) {
 
         this.corfuRuntime = corfuRuntime;
         this.namespace = namespace;
@@ -85,7 +88,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier)
+                .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier, versionPolicy)
                 .open();
     }
 

@@ -26,6 +26,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -309,8 +310,10 @@ public class TableRegistry {
         }
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
         Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
         if (tableOptions.getPersistentDataPath().isPresent()) {
+            versionPolicy = ICorfuVersionPolicy.MONOTONIC;
             mapSupplier = () -> new PersistedStreamingMap<>(
                     tableOptions.getPersistentDataPath().get(),
                     getPersistentMapOptions(),
@@ -325,7 +328,7 @@ public class TableRegistry {
                 defaultMetadataMessage,
                 this.runtime,
                 this.protobufSerializer,
-                mapSupplier);
+                mapSupplier, versionPolicy);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass);
