@@ -55,10 +55,14 @@ public class PrefixTrimRedundancyCalculator extends RedundancyCalculator {
         long trimMark = setTrimOnNewLogUnit(layout, runtime, getServer());
         return layout.getSegments()
                 .stream()
-                // filter the segments that end before the trim mark and are not open.
+                // Keep all the segments after the trim mark, except the open one.
                 .filter(segment -> segment.getEnd() != NON_ADDRESS && segment.getEnd() >= trimMark)
                 .map(segment -> {
+                    // The transfer segment's start is the layout segment's start or a trim mark,
+                    // whichever is greater.
                     long segmentStart = Math.max(segment.getStart(), trimMark);
+                    // The transfer segment's end should be inclusive.
+                    // It is the last address to transfer.
                     long segmentEnd = segment.getEnd() - 1L;
 
                     if (segmentContainsServer(segment, getServer())) {
