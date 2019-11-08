@@ -1,13 +1,13 @@
-package org.corfudb.infrastructure.log.Compression;
+package org.corfudb.infrastructure.log.compression;
 
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  *
@@ -31,9 +31,13 @@ public class LZ4Compression implements Codec {
         return INSTANCE;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     */
     @Override
     public ByteBuffer compress(ByteBuffer uncompressed) {
-        checkNotNull(uncompressed);
+        Objects.requireNonNull(uncompressed);
         checkArgument(uncompressed.hasRemaining());
 
         final int decompressedLength = uncompressed.remaining();
@@ -41,29 +45,28 @@ public class LZ4Compression implements Codec {
         int maxCompressedLength = compressor.maxCompressedLength(decompressedLength);
 
         ByteBuffer compressed = ByteBuffer.allocate(maxCompressedLength + Integer.BYTES);
-
+        compressed.putInt(decompressedLength);
         int compressedLen = compressor.compress(uncompressed, 0, decompressedLength, compressed,
-                Integer.BYTES, maxCompressedLength);
-        compressed.putInt(0, decompressedLength);
+                compressed.position(), maxCompressedLength);
         compressed.position(compressedLen + Integer.BYTES);
         compressed.flip();
         return compressed;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     */
     @Override
     public ByteBuffer decompress(ByteBuffer compressed) {
-        checkNotNull(compressed);
+        Objects.requireNonNull(compressed);
         checkArgument(compressed.remaining() > Integer.BYTES);
 
         int decompressedSize = compressed.getInt();
 
         ByteBuffer restored = ByteBuffer.allocate(decompressedSize);
 
-        int restoredBytes = decompressor.decompress(compressed, Integer.BYTES, restored, 0, decompressedSize);
-
-        if (restoredBytes != decompressedSize) {
-            // Why is this always off-by one?
-        }
+        decompressor.decompress(compressed, Integer.BYTES, restored, 0, decompressedSize);
 
         return restored;
     }

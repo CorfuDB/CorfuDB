@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.Compression;
+package org.corfudb.infrastructure.log.compression;
 
 import java.nio.ByteBuffer;
 

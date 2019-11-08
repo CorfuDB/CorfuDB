@@ -3,7 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
-import org.corfudb.infrastructure.log.Compression.Codec;
+import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**

@@ -34,7 +34,7 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.Compression.Codec;
+import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;

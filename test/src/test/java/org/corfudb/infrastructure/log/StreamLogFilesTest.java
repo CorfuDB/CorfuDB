@@ -18,7 +18,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.bcel.classfile.Code;
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
@@ -26,7 +25,7 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.Compression.Codec;
+import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -94,7 +93,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Create two configurations, where one enables compression
         // and the other doesn't
         contexts[0] = new ServerContextBuilder()
-                .setCompressionCodec(Codec.Type.LZ4.toString())
+                .setCompressionCodec(Codec.Type.ZSTD.toString())
                 .setLogPath(path)
                 .setMemory(false)
                 .build();

@@ -122,13 +122,6 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
-     * Return whether the entry contains data.
-     */
-    default boolean isData() {
-        return getType() == DataType.DATA;
-    }
-
-    /**
      * Return whether the entry represents an empty entry or not.
      */
     default boolean isEmpty() {
