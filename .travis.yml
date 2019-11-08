@@ -3,6 +3,14 @@ sudo: required
 dist: xenial
 jdk: openjdk8
 
+stages:
+  - name: deploy
+    # Deploy corfu artifacts for master branch
+    if: branch = master AND type = pull_request
+  - name: update_version
+    # update project version
+    if: branch != master AND type = pull_request
+
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
 
@@ -10,11 +18,7 @@ cache:
   directories:
   - "$HOME/.m2"
 
-before_install: |
-  ./mvnw build-helper:parse-version versions:set \
-    -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
-    -q
-
+before_install: .travis_scripts/update_version.sh ${TRAVIS_BUILD_NUMBER}
 
 install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
@@ -33,6 +37,14 @@ jobs:
     # Run integration tests
     - ./mvnw -pl :universe clean verify -Pit
     name: Universe Tests
+  - script:
+    # deploy corfu artifacts
+    - ./mvnw clean
+    name: deploy
+  - script:
+      # update corfu version and push to git repo
+      - .travis_scripts/git_push.sh
+      name: update_version
 
 notifications:
   email:

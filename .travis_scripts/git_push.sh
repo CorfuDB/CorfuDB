@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
     if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
         echo -e "Publishing javadocs..."
