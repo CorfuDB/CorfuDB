@@ -1,5 +1,7 @@
 package org.corfudb.performancetest;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -16,12 +18,22 @@ import java.util.*;
  */
 
 public class LogUnitPerformanceTest extends PerformanceTest{
+    static MetricRegistry metricRegistry;
+    Timer readTimer;
+    Timer writeTimer;
     private static final int randomBoundary = 100;
+    private static final String METRIC_PREFIX = "corfu-perf";
     private static final String READ_PERCENT = "logunitReadPercent";
     private static final String SINGLE_REQUEST = "logunitSingleRequests";
     private static final String BATCH_REQUEST = "logunitBatchRequests";
     private static final String BATCH_SIZE = "logunitBatchSize";
     private static final String ENTRY_SIZE = "logEntrySize";
+
+    public LogUnitPerformanceTest() {
+        metricRegistry = CorfuRuntime.getDefaultMetrics();
+        readTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-read");
+        writeTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-write");
+    }
 
     /**
      * tests write() and read() performance of logunit client,
@@ -44,10 +56,14 @@ public class LogUnitPerformanceTest extends PerformanceTest{
 
         for (int i = 0; i < numRequests; i++) {
             if (address == 0 || random.nextInt(randomBoundary) > readPercent) {
+                Timer.Context context = writeTimer.time();
                 client.write(address++, null, payload, Collections.emptyMap()).get();
+                context.stop();
             } else {
                 int pos = random.nextInt(address);
+                Timer.Context context = readTimer.time();
                 client.read(pos).get();
+                context.stop();
             }
         }
         killServer(server);
@@ -84,14 +100,19 @@ public class LogUnitPerformanceTest extends PerformanceTest{
                     entries.add(ld);
                 }
                 writeCount++;
+                Timer.Context context = writeTimer.time();
                 client.writeRange(entries).get();
+                context.stop();
+
             } else {
                 long start = random.nextInt(writeCount) * batchSize;
                 List<Long> addresses = new ArrayList<>();
                 for (long x = start; x < batchSize; x++) {
                     addresses.add(x);
                 }
+                Timer.Context context = readTimer.time();
                 client.readAll(addresses).get();
+                context.stop();
             }
         }
         killServer(server);
