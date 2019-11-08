@@ -29,7 +29,7 @@ jobs:
     name: Integration Tests
   - script:
     # Prepare docker image
-    - ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
+    - ./mvnw -pl infrastructure -pl runtime -DskipTests -Pdocker clean package
     # Run integration tests
     - ./mvnw -pl :universe clean verify -Pit
     name: Universe Tests
