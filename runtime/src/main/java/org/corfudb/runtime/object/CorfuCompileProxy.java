@@ -6,6 +6,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -22,15 +23,15 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -98,7 +99,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /**
      * The arguments this proxy was created with.
      */
-    final Object[] args;
+    private final Object[] args;
 
     private final MetricRegistry metrics;
     /**
@@ -451,30 +452,16 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @SuppressWarnings("unchecked")
     private T getNewInstance() {
         try {
-            T ret = null;
-            if (args == null || args.length == 0) {
-                ret = type.newInstance();
-            } else {
-                // This loop is not ideal, but the easiest way to get around Java boxing,
-                // which results in primitive constructors not matching.
-                for (Constructor<?> constructor : type.getDeclaredConstructors()) {
-                    try {
-                        ret = (T) constructor.newInstance(args);
-                        break;
-                    } catch (Exception e) {
-                        // just keep trying until one works.
-                    }
-                }
-            }
+            T ret = (T) ReflectionUtils
+                    .findMatchingConstructor(type.getDeclaredConstructors(), args);
             if (ret instanceof ICorfuSMRProxyWrapper) {
                 ((ICorfuSMRProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
             }
             return ret;
-        } catch (InstantiationException | IllegalAccessException e) {
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
     }
-
     @Override
     public String toString() {
         return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";

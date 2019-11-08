@@ -108,7 +108,7 @@ public class DockerSupportServer<N extends SupportServerParams> implements Suppo
 
         ContainerConfig.Builder builder = ContainerConfig.builder();
         builder.hostConfig(hostConfig)
-                .exposedPorts(ports.stream().toArray(String[]::new))
+                .exposedPorts(ports.toArray(new String[0]))
                 .image(IMAGE_NAME.get(getParams().getNodeType()));
 
         return builder.build();

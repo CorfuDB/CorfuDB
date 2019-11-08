@@ -32,6 +32,17 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
     private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
 
     @Default
+    @Getter
+    private final int numNodes = 3;
+
+    /**
+     * Corfu server version, for instance: 0.3.0-SNAPSHOT
+     */
+    @NonNull
+    @Getter
+    private final String serverVersion;
+
+    @Default
     @NonNull
     private final SortedSet<CorfuServerParams> nodes = new TreeSet<>();
 

@@ -1,14 +1,18 @@
 syntax = "proto3";
 
-package org.corfudb.test;
-option java_package = "org.corfudb.test";
+package samples.protobuf;
+option java_package = "samples.protobuf";
 
 import "corfu_options.proto";
 import "work_experience.proto";
 
-message Person {
+message Name {
     string first_name = 1 [(org.corfudb.runtime.schema).secondary_key = true];
     string last_name = 2 [(org.corfudb.runtime.schema).secondary_key = true];
-    int32 age = 3;
-    org.corfudb.test.Experience exp = 4;
+}
+
+message Person {
+    Name name = 1 [(org.corfudb.runtime.schema).secondary_key = true];
+    int32 age = 2;
+    samples.protobuf.Experience exp = 3;
 }

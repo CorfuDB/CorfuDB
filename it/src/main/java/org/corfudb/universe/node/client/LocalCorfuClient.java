@@ -53,7 +53,7 @@ public class LocalCorfuClient implements CorfuClient {
                 .layoutServers(layoutServers)
                 .systemDownHandler(this::systemDownHandler);
 
-        prometheusMetricsPort.map(port -> parametersBuilder.prometheusMetricsPort(port));
+        prometheusMetricsPort.map(parametersBuilder::prometheusMetricsPort);
         this.runtime = fromParameters(parametersBuilder.build());
     }
 
