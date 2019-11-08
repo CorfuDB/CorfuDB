@@ -113,6 +113,10 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
 
     @Test
     public void snapshotReadBeforeCompactionMark() {
+        // enable garbage collection
+        getRuntime().getParameters().setGarbageCollectionEnabled(true);
+        getRuntime().getGarbageInformer().start();
+
         final int entryNum = RECORDS_PER_SEGMENT;
 
         t(1, () -> put("k" , "v0"));    // TS = 0
@@ -133,10 +137,18 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         t(2, () -> get("k"))
                 .assertThrows().hasCauseInstanceOf(TrimmedException.class);
         t(2, this::TXEnd);
+
+        // disable it after the test
+        getRuntime().getGarbageInformer().stop();
+        getRuntime().getParameters().setGarbageCollectionEnabled(false);
     }
 
     @Test
     public void snapshotReadAfterCompactionMark() {
+        // enable garbage collection
+        getRuntime().getParameters().setGarbageCollectionEnabled(true);
+        getRuntime().getGarbageInformer().start();
+
         final int entryNum = RECORDS_PER_SEGMENT;
         for (int i = 0; i <= entryNum; ++i) {
             AtomicInteger version = new AtomicInteger(i);
@@ -150,5 +162,9 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         t(1, () -> get("k"))
                 .assertResult().isEqualTo("v" + entryNum);
         t(1, this::TXEnd);
+
+        // disable it after the test
+        getRuntime().getGarbageInformer().stop();
+        getRuntime().getParameters().setGarbageCollectionEnabled(false);
     }
 }

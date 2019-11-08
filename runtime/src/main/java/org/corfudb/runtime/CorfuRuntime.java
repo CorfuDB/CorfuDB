@@ -86,6 +86,16 @@ public class CorfuRuntime {
         @Default
         private final long nettyShutdownTimeout = 300;
 
+        // region Garbage Collection Parameters
+
+        /**
+         * Enable the client to mark garbage and periodically inform
+         * LogUnits about garbage decisions.
+         */
+        @Default
+        volatile boolean garbageCollectionEnabled = true;
+        // end region
+
         // region Object Layer Parameters
 
         /**
@@ -742,8 +752,11 @@ public class CorfuRuntime {
         // Stopping async task from fetching layout.
         isShutdown = true;
         runtimeExecutor.shutdownNow();
-        garbageInformer.stop();
         garbageCollector.stop();
+
+        if (parameters.isGarbageCollectionEnabled()) {
+            garbageInformer.stop();
+        }
 
         if (layout != null) {
             try {
@@ -1080,6 +1093,8 @@ public class CorfuRuntime {
                     .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());
             fastLoader.loadMaps();
         }
+
+        garbageInformer.start();
 
         return this;
     }

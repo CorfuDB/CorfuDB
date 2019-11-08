@@ -27,7 +27,6 @@ import lombok.ToString;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.GarbageInformer;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -35,7 +34,6 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -799,6 +797,10 @@ public class CorfuMapTest extends AbstractViewTest {
     @Test
     public void garbageIdentify()
             throws Exception{
+        // enable garbage collection
+        getRuntime().getParameters().setGarbageCollectionEnabled(true);
+        getRuntime().getGarbageInformer().start();
+
         UUID stream = UUID.randomUUID();
 
         Map<String, String> testMap = getRuntime()
@@ -858,11 +860,19 @@ public class CorfuMapTest extends AbstractViewTest {
 
         assertThat(getRuntime().getGarbageInformer().getGarbageReceivingQueue().size())
                 .isEqualTo(garbageCount * 2);
+
+        // disable it after the test
+        getRuntime().getGarbageInformer().stop();
+        getRuntime().getParameters().setGarbageCollectionEnabled(false);
     }
 
     @Test
     public void garbageInform()
             throws Exception {
+        // enable garbage collection
+        getRuntime().getParameters().setGarbageCollectionEnabled(true);
+        getRuntime().getGarbageInformer().start();
+
         UUID stream = UUID.randomUUID();
 
         Map<String, String> testMap = getRuntime()
@@ -880,6 +890,10 @@ public class CorfuMapTest extends AbstractViewTest {
 
         int garbageSize = 1;
         assertThat(garbageInformer.getGarbageReceivingQueue().size()).isEqualTo(garbageSize);
+
+        // disable it after the test
+        getRuntime().getGarbageInformer().stop();
+        getRuntime().getParameters().setGarbageCollectionEnabled(false);
     }
 
 

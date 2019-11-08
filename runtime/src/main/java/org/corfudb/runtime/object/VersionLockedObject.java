@@ -771,6 +771,11 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                                 pendingUpcalls.remove(record.getGlobalAddress());
                             }
 
+                            // If the function of marking garbage is disable, no garbage decisions are made.
+                            if (!rt.getParameters().isGarbageCollectionEnabled()) {
+                                return;
+                            }
+
                             // Record with global address larger than lastSyncAddress indicates that all SMRRecords
                             // from last global address has been applied. Therefore, syncTail could be updated.
                             if (lastSyncAddress.get() != Address.NON_ADDRESS &&
@@ -817,7 +822,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
 
 
         // update syncTail after applying all SMRRecords. 
-        if (!isOptimistic) {
+        if (!isOptimistic && rt.getParameters().isGarbageCollectionEnabled()) {
             syncTail = Math.max(syncTail, lastSyncAddress.get());
 
             // flush garbage if there is garbage

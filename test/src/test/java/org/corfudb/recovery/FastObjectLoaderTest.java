@@ -168,11 +168,19 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void canReloadMapsAfterSparseTrim() throws Exception {
+        // enable garbage collection
+        getRuntime().getParameters().setGarbageCollectionEnabled(true);
+        getRuntime().getGarbageInformer().start();
+
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, RECORDS_PER_SEGMENT + 1);
 
         startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0));
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
+
+        // disable it after the test
+        getRuntime().getGarbageInformer().stop();
+        getRuntime().getParameters().setGarbageCollectionEnabled(false);
     }
 
     @Test

@@ -21,12 +21,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class GarbageInformer {
-
-
     private final static Duration GC_PERIOD = Duration.ofSeconds(15);
     private final static int RECEIVING_QUEUE_CAPACITY = 5_000;
     private final static int SENDING_QUEUE_CAPACITY = 20;
@@ -38,6 +45,8 @@ public class GarbageInformer {
     private final static long KEEP_ALIVE_TIME = 0L;
 
     private final CorfuRuntime rt;
+
+    private boolean isRunning = false;
 
     // executor to drain garbageReceivingQueue when it is full
     private final ExecutorService drainExecutor =
@@ -71,13 +80,24 @@ public class GarbageInformer {
      */
     public GarbageInformer(CorfuRuntime rt) {
         this.rt = rt;
-        start();
     }
 
     /**
      * Start to send garbage decisions to LogUnit servers.
      */
-    public void start() {
+    public synchronized void start() {
+        // If garbage collection is disabled, DO NOT start the periodic task which sends
+        // garbage decisions to LogUnit servers.
+        if (rt.getParameters().isGarbageCollectionEnabled()) {
+            log.info("Garbage collection is disabled.");
+            return;
+        }
+
+        if (isRunning) {
+            log.info("Garbage informer had been started.");
+            return;
+        }
+
         Random rand = new Random();
 
         // periodically to drain garbageReceivingQueue and send garbage decisions to LogUnit servers.
@@ -86,14 +106,24 @@ public class GarbageInformer {
                 GC_PERIOD.getSeconds() + rand.nextInt((int) GC_PERIOD.getSeconds()),
                 GC_PERIOD.getSeconds(),
                 TimeUnit.SECONDS);
+
+        isRunning = true;
+        log.info("Garbage informer is started.");
     }
 
     /**
      * Stop to send garbage decisions to LogUnit servers.
      * This function shuts down the single-threaded executor.
      */
-    public void stop() {
+    public synchronized void stop() {
+        if (!isRunning) {
+            log.info("Garbage informer had been stopped.");
+            return;
+        }
+
         gcScheduler.shutdownNow();
+        log.info("Garbage informer is stopped.");
+        isRunning = false;
     }
 
     /**

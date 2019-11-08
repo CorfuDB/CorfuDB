@@ -295,6 +295,7 @@ public class AbstractIT extends AbstractCorfuTest {
         CorfuRuntime rt = new CorfuRuntime(endpoint)
                 .setCacheDisabled(true)
                 .connect();
+        rt.getParameters().setGarbageCollectionEnabled(false);
         return rt;
     }
 
@@ -302,6 +303,7 @@ public class AbstractIT extends AbstractCorfuTest {
         CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT)
                 .setCacheDisabled(false)
                 .connect();
+        rt.getParameters().setGarbageCollectionEnabled(false);
         return rt;
     }
 

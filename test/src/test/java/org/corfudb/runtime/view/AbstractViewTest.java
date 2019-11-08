@@ -38,7 +38,6 @@ import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 
 import org.corfudb.util.NodeLocator;
-import org.eclipse.jetty.server.Server;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -106,6 +105,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .followBackpointersEnabled(followBackpointers)
+                .garbageCollectionEnabled(false)
                 .nettyEventLoop(NETTY_EVENT_LOOP)
                 .build());
         // Default number of times to read before hole filling to 0

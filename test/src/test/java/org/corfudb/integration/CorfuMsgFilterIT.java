@@ -78,6 +78,9 @@ public class CorfuMsgFilterIT extends AbstractIT {
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
 
+        // disables garbage collection
+        runtime.getParameters().setGarbageCollectionEnabled(false);
+
         // Verify
         assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
         assertThatThrownBy(() -> runtime.getLayoutView()
@@ -127,6 +130,9 @@ public class CorfuMsgFilterIT extends AbstractIT {
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
 
+        // disables garbage collection
+        runtime.getParameters().setGarbageCollectionEnabled(false);
+
         // Verify
         assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
         assertThat(runtime.getLayoutView()
@@ -166,6 +172,9 @@ public class CorfuMsgFilterIT extends AbstractIT {
                 .fromParameters(corfuRuntimeParameters)
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
+
+        // disables garbage collection
+        runtime.getParameters().setGarbageCollectionEnabled(false);
 
         // Verify
         assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
@@ -207,6 +216,9 @@ public class CorfuMsgFilterIT extends AbstractIT {
                 .fromParameters(corfuRuntimeParameters)
                 .parseConfigurationString(singleNodeEndpoint)
                 .connect();
+
+        // disables garbage collection
+        runtime.getParameters().setGarbageCollectionEnabled(false);
 
         // Verify
         assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(0L);
