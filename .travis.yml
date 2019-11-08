@@ -6,7 +6,7 @@ jdk: openjdk8
 stages:
   - name: deploy
     # Deploy corfu artifacts for master branch
-    if: branch = master AND type = pull_request
+    if: branch = master AND type != pull_request
   - name: update_version
     # update project version
     if: branch != master AND type = pull_request
