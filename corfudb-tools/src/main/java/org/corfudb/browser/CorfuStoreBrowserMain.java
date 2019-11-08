@@ -1,6 +1,7 @@
 package org.corfudb.browser;
 
 import java.util.Map;
+import java.util.Objects;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,20 +21,22 @@ import org.docopt.Docopt;
 @Slf4j
 public class CorfuStoreBrowserMain {
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
-        "--port=<port> --namespace=<namespace> --tablename=<tablename> " +
+        "--port=<port> --tlsEnabled=<tls_enabled> " +
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
-        "[--tlsEnabled=<tls_enabled>]\n"
+        "--operation=(listTables [--namespace=<namespace>]" +
+        "|showTable --namespace=<namespace> --tablename=<tablename>)\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
+        + "--tlsEnabled=<tls_enabled>\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
         + "--ks_password=<keystore_password> KeyStore Password\n"
         + "--truststore=<truststore_file> TrustStore File\n"
         + "--truststore_password=<truststore_password> Truststore Password\n"
-        + "--tlsEnabled=<tls_enabled>";
+        + "--operation=<operation - listTables|showTable>\n";
 
     public static void main(String[] args) {
         try {
@@ -42,12 +45,12 @@ public class CorfuStoreBrowserMain {
             Map<String, Object> opts =
                 new Docopt(USAGE)
                     .withVersion(GitRepositoryState.getRepositoryState().describe)
-
                     .parse(args);
             String host = opts.get("--host").toString();
             Integer port = Integer.parseInt(opts.get("--port").toString());
             boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled")
                 .toString());
+            String operation = opts.get("--operation").toString();
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
                 .useFastLoader(false)
@@ -70,13 +73,20 @@ public class CorfuStoreBrowserMain {
             runtime.parseConfigurationString(singleNodeEndpoint);
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
+
             CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                browser.getTable(
-                    opts.get("--namespace").toString(),
-                    opts.get("--tablename").toString()
-                );
-            browser.printTable(table);
+            switch (operation) {
+                case "listTables":
+                    String namespace = opts.containsKey("--namespace") ?
+                        opts.get("--namespace").toString() : null;
+                    browser.listTables(namespace);
+
+                case "showTable":
+                    CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                        browser.getTable(opts.get("--namespace").toString(),
+                        opts.get("--tablename").toString());
+                    browser.printTable(table);
+            }
         } catch (Throwable t) {
             log.error("Error in Browser Execution.", t);
             throw t;
