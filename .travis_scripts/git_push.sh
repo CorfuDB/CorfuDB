@@ -2,24 +2,12 @@
 
 set -e
 
-if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
-    if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
-        echo -e "Publishing javadocs..."
+echo -e "updating project version..."
 
-        ./mvnw javadoc:javadoc -DskipTests=true
-        cp -R target/site/apidocs $HOME/javadoc
-        cd $HOME
-        git config --global user.email "travis@travis-ci.org"
-        git config --global user.name "travis-ci"
-        git clone --quiet --branch=gh-pages https://${GH_TOKEN}@github.com/CorfuDB/CorfuDB gh-pages > /dev/null
+git config --global user.email "travis@travis-ci.org"
+git config --global user.name "travis-ci"
+git add -f .
+git commit -m "update project version to: $TRAVIS_BRANCH"
+git push -fq origin $TRAVIS_BRANCH > /dev/null
 
-        cd gh-pages
-        git rm -rf ./javadoc
-        cp -Rf $HOME/javadoc ./javadoc
-        git add -f .
-        git commit -m "Updated javadoc from travis build $TRAVIS_BUILD_NUMBER pushed to github pages"
-        git push -fq origin gh-pages > /dev/null
-
-        echo -e "Javadoc Built and published to github pages."
-    fi
-fi
+echo -e "Done."
