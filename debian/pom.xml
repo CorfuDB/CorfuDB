@@ -26,6 +26,11 @@
             <artifactId>cmdlets</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>corfudb-tools</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- make debian the last module in maven lifecycle -->
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -75,6 +80,17 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/lib</prefix>
+                                    </mapper>
+                                </data>
+                                <!-- dependency of corfudb-tools is included -->
+                                <data>
+                                    <src>${session.executionRootDirectory}/corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/share/corfu/lib</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
                                     </mapper>
                                 </data>
                                 <!-- general shell scripts -->
