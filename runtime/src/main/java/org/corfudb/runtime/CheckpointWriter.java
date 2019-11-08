@@ -105,7 +105,7 @@ public class CheckpointWriter<T extends Map> {
 
     @Getter
     @Setter
-    ISerializer serializer = Serializers.JSON;
+    ISerializer serializer = Serializers.getDefaultSerializer();
 
     /** Constructor for Checkpoint Writer for Corfu Maps.
      * @param rt object's runtime

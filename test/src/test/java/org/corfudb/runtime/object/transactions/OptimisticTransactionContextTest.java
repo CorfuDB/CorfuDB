@@ -296,7 +296,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     @Test
     public void customSameHashAlwaysConflicts() {
         // Register a custom hasher which always hashes to an empty byte array
-        Serializers.JSON.registerCustomHasher(CustomSameHashConflictObject.class,
+        Serializers.getDefaultSerializer().registerCustomHasher(CustomSameHashConflictObject.class,
                 o -> new byte[0]);
 
         CustomSameHashConflictObject c1 = new CustomSameHashConflictObject("a", "a");
@@ -336,7 +336,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     public void customHasDoesNotConflict() {
         // Register a custom hasher which always hashes to the two strings together as a
         // byte array
-        Serializers.JSON.registerCustomHasher(CustomSameHashConflictObject.class,
+        Serializers.getDefaultSerializer().registerCustomHasher(CustomSameHashConflictObject.class,
                 o -> {
                     ByteBuffer b = ByteBuffer.wrap(new byte[o.k1.length() + o.k2.length()]);
                     b.put(o.k1.getBytes());
