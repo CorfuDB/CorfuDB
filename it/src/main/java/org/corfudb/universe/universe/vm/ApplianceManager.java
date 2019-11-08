@@ -30,13 +30,12 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.corfudb.common.result.Result;
 import org.corfudb.universe.universe.UniverseException;
-import org.corfudb.universe.universe.vm.VmConfigPropertiesLoader.PropsLoaderException;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,6 +84,7 @@ public class ApplianceManager {
         Map<String, VirtualMachine> deployment = new HashMap<>();
 
         Stream<String> ipAddressStream = universeParams.getVmIpAddresses().keySet().stream();
+
         List<CompletableFuture<VirtualMachine>> asyncDeployment = Streams
                 .mapWithIndex(ipAddressStream, ImmutablePair::new)
                 .map(pair -> deployVmAsync(pair.left, pair.right))
@@ -157,38 +157,37 @@ public class ApplianceManager {
                 log.info("Deploying the VM {} via vSphere {}...",
                         vmName, universeParams.getVSphereUrl());
 
-                Result<Properties, PropsLoaderException> vmPropsResult = VmConfigPropertiesLoader
-                        .loadVmProperties();
-                if (vmPropsResult.isError()) {
-                    throw vmPropsResult.getError();
-                }
+                Properties vmPropsResult = VmConfigPropertiesLoader
+                        .loadVmProperties()
+                        .get();
 
-                ImmutableMap<String, String> props = Maps.fromProperties(vmPropsResult.get());
+                ImmutableMap<String, String> vmProps = Maps.fromProperties(vmPropsResult);
 
                 // Create customization for cloning process
-                VirtualMachineCloneSpec cloneSpec = createLinuxCustomization(vmName, props, index);
+                VirtualMachineCloneSpec cloneSpec = createLinuxCustomization(vmName, vmProps, index);
 
-                ManagedObjectReference folderR = new ManagedObjectReference();
-                folderR.setType(ResourceType.FOLDER.resource);
+                String folderProp = String.format("vm%d.%s", index, ResourceType.FOLDER.resource);
 
-                String propName = String.format("vm%d.%s", index, ResourceType.FOLDER.resource);
-                String prop = props.get(propName);
-                folderR.setVal(prop);
+                Folder folder;
+                if (vmProps.containsKey(folderProp)) {
+                    ManagedObjectReference folderR = new ManagedObjectReference();
+                    folderR.setType(ResourceType.FOLDER.resource);
 
-                Folder folder = new Folder(vmTemplate.getServerConnection(), folderR);
-                Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName, cloneSpec);
+                    String prop = vmProps.get(folderProp);
+                    folderR.setVal(prop);
+
+                    folder = new Folder(vmTemplate.getServerConnection(), folderR);
+                } else {
+                    folder = (Folder) vmTemplate.getParent();
+                }
 
                 try {
                     // Do the cloning - providing the clone specification
+                    Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName, cloneSpec);
                     cloneTask.waitForTask();
-                } catch (RemoteException | InterruptedException e) {
+                } catch (Exception e) {
                     String err = String.format("Deploy VM %s failed due to ", vmName);
                     throw new UniverseException(err, e);
-                }
-
-                if (cloneTask.getTaskInfo().getError() != null) {
-                    throw new UniverseException(
-                            cloneTask.getTaskInfo().getError().getLocalizedMessage());
                 }
                 // After the clone task completes, get the VM from the inventory
                 vm = (VirtualMachine) inventoryNavigator
@@ -222,29 +221,70 @@ public class ApplianceManager {
 
         VirtualMachineCloneSpec vmCloneSpec = new VirtualMachineCloneSpec();
 
+        String hostKey = String.format("vm%d.%s", index, HOST_SYSTEM.resource);
+        String dsKey = String.format("vm%d.%s", index, DATA_STORE.resource);
+        String resourceTypeKey = String.format("vm%d.%s", index, RESOURCE_TYPE.resource);
+
         //Set location of clone to be the same as template (Datastore)
         VirtualMachineRelocateSpec vmRelocateSpec = new VirtualMachineRelocateSpec();
 
-        ManagedObjectReference host = new ManagedObjectReference();
-        host.setType(HOST_SYSTEM.resource);
-        host.setVal(props.get(String.format("vm%d.%s", index, HOST_SYSTEM.resource)));
-        vmRelocateSpec.setHost(host);
+        if (props.keySet().containsAll(Arrays.asList(hostKey, dsKey, resourceTypeKey))) {
+            ManagedObjectReference host = new ManagedObjectReference();
+            host.setType(HOST_SYSTEM.resource);
+            host.setVal(props.get(hostKey));
+            vmRelocateSpec.setHost(host);
 
-        ManagedObjectReference dataStore = new ManagedObjectReference();
-        dataStore.setType(DATA_STORE.resource);
-        dataStore.setVal(props.get(String.format("vm%d.%s", index, DATA_STORE.resource)));
-        vmRelocateSpec.setDatastore(dataStore);
+            ManagedObjectReference dataStore = new ManagedObjectReference();
+            dataStore.setType(DATA_STORE.resource);
+            dataStore.setVal(props.get(dsKey));
+            vmRelocateSpec.setDatastore(dataStore);
 
-        ManagedObjectReference pool = new ManagedObjectReference();
-        pool.setType(RESOURCE_TYPE.resource);
-        pool.setVal(props.get(String.format("vm%d.%s", index, RESOURCE_TYPE.resource)));
-        vmRelocateSpec.setPool(pool);
+            ManagedObjectReference pool = new ManagedObjectReference();
+            pool.setType(RESOURCE_TYPE.resource);
+            pool.setVal(props.get(resourceTypeKey));
+            vmRelocateSpec.setPool(pool);
+        }
 
         vmCloneSpec.setLocation(vmRelocateSpec);
 
         //Clone is powered on, not a template.
         vmCloneSpec.setPowerOn(true);
         vmCloneSpec.setTemplate(false);
+
+        //Create customization specs/linux specific options
+        CustomizationSpec customSpec = new CustomizationSpec();
+        CustomizationLinuxOptions linuxOptions = new CustomizationLinuxOptions();
+        customSpec.setOptions(linuxOptions);
+
+        CustomizationLinuxPrep linuxPrep = new CustomizationLinuxPrep();
+        linuxPrep.setDomain(universeParams.getDomainName());
+        linuxPrep.setHwClockUTC(true);
+        linuxPrep.setTimeZone(universeParams.getTimeZone());
+
+        CustomizationFixedName fixedName = new CustomizationFixedName();
+        fixedName.setName(cloneName);
+        linuxPrep.setHostName(fixedName);
+        customSpec.setIdentity(linuxPrep);
+
+        //Network related settings
+        CustomizationGlobalIPSettings globalIPSettings = new CustomizationGlobalIPSettings();
+        globalIPSettings.setDnsServerList(universeParams.getDnsServers());
+        globalIPSettings.setDnsSuffixList(universeParams.getDomainSuffixes());
+        customSpec.setGlobalIPSettings(globalIPSettings);
+
+        CustomizationIPSettings customizationIPSettings = new CustomizationIPSettings();
+        customizationIPSettings.setIp(new CustomizationDhcpIpGenerator());
+        customizationIPSettings.setGateway(universeParams.getGateways());
+        customizationIPSettings.setSubnetMask(universeParams.getSubnet());
+
+        CustomizationAdapterMapping adapterMapping = new CustomizationAdapterMapping();
+        adapterMapping.setAdapter(customizationIPSettings);
+
+        CustomizationAdapterMapping[] adapterMappings = new CustomizationAdapterMapping[]{adapterMapping};
+        customSpec.setNicSettingMap(adapterMappings);
+
+        //Set all customization to clone specs
+        vmCloneSpec.setCustomization(customSpec);
         return vmCloneSpec;
     }
 
