@@ -98,6 +98,7 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+            runtime.invalidateLayout();
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
             runtime.getLayoutManagementView().addNode(currentLayout, request.getEndpoint(),
                     true, true,

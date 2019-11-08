@@ -1,8 +1,10 @@
 package org.corfudb.universe.scenario;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutServersChange;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
@@ -18,6 +20,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+@Slf4j
 public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
 
     /**
@@ -102,7 +105,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
             ));
 
             // Wait for layout servers to change
-            waitForLayoutServersChange(size -> size == numNodes, corfuClient);
+            waitForLayoutChange(layout -> layout.getSegments().size() == 1, corfuClient);
             executor2.shutdownNow();
 
             // Verify data path working fine

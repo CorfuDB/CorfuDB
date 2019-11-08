@@ -58,7 +58,7 @@ public class HealNode extends WorkflowRequest {
         if (baseClient.pingSync()) {
             log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
             return Optional.of(runtime.getLayoutView()
-                    .getRuntimeLayout().getManagementClient(nodeForWorkflow));
+                    .getRuntimeLayout(layout).getManagementClient(nodeForWorkflow));
         } else {
             log.warn("getOrchestrator: a server {} is not responding to pings", nodeForWorkflow);
             return Optional.empty();

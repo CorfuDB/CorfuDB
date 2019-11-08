@@ -61,7 +61,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      * Default read options for the replication protocol read.
      */
     @Getter
-    private static ReadOptions readOptions = ReadOptions.builder()
+    private final ReadOptions readOptions = ReadOptions.builder()
             .waitForHole(true)
             .clientCacheable(false)
             .serverCacheable(false)

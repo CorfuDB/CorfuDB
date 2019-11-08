@@ -80,7 +80,7 @@ public class AddNode extends WorkflowRequest {
             if (baseClient.pingSync()) {
                 log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
                 return Optional.of(runtime.getLayoutView()
-                        .getRuntimeLayout().getManagementClient(nodeForWorkflow));
+                        .getRuntimeLayout(layout).getManagementClient(nodeForWorkflow));
             }
             Sleep.sleepUninterruptibly(pingInterval);
             log.info("Retrying to ping a current base server {} times.", i);

@@ -34,7 +34,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
         Map<Long, ILogData> stubMap = createStubMap(stubList);
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
@@ -56,7 +60,11 @@ class ProtocolBatchProcessorTest extends DataTest {
     void transferFail() {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         Map<Long, ILogData> stubMap = createStubMapFromLongs(addresses);
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         List<LogData> recordsFromStubMap = getRecordsFromStubMap(stubMap);
         StreamLog streamLog = mock(StreamLog.class);
         doThrow(new IllegalStateException()).when(streamLog).append(recordsFromStubMap);
@@ -79,7 +87,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
         Map<Long, ILogData> stubMap = createStubMap(stubList);
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
@@ -112,7 +124,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<LogData> secondReadList = createStubList(unreadAddresses);
         Map<Long, ILogData> secondReadMap = createStubMap(secondReadList);
 
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(firstReadList);
         doNothing().when(streamLog).append(secondReadList);
@@ -147,9 +163,12 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
 
         List<LogData> secondReadList = createStubList(addresses);
-        Map<Long, ILogData> secondReadMap = createStubMap(secondReadList);
 
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         StreamLog streamLog = mock(StreamLog.class);
 
         doNothing().when(streamLog).append(secondReadList);
@@ -180,7 +199,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
         Map<Long, ILogData> stubMap = createStubMap(stubList);
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
@@ -203,7 +226,11 @@ class ProtocolBatchProcessorTest extends DataTest {
         List<Long> unreadAddresses = LongStream.range(0L, 10L).boxed().filter(x -> x % 2 != 0).collect(Collectors.toList());
         List<LogData> stubList = createStubList(readAddresses);
         Map<Long, ILogData> stubMap = createStubMap(stubList);
-        ReadOptions readOptions = ProtocolBatchProcessor.getReadOptions();
+        ReadOptions readOptions = ReadOptions.builder()
+                .waitForHole(true)
+                .clientCacheable(false)
+                .serverCacheable(false)
+                .build();
         StreamLog streamLog = mock(StreamLog.class);
         doNothing().when(streamLog).append(stubList);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
