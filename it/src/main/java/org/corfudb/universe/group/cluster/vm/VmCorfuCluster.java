@@ -37,6 +37,8 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmUniverseParams> {
                              ImmutableMap<String, VirtualMachine> vms) {
         super(corfuClusterParams, universeParams);
         this.vms = vms;
+
+        init();
     }
 
 

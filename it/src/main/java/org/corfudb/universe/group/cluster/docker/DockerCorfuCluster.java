@@ -44,6 +44,8 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
         this.docker = docker;
         this.loggingParams = loggingParams;
         this.dockerManager = DockerManager.builder().docker(docker).build();
+
+        init();
     }
 
     @Override
