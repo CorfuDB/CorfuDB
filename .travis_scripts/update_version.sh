@@ -11,6 +11,5 @@ if [[ -z "${TRAVIS_BUILD_NUMBER}" ]]; then
 else
     ./mvnw build-helper:parse-version versions:set \
     -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.${TRAVIS_BUILD_NUMBER} \
-    -DgenerateBackupPoms=false \
-    -q
+    -DgenerateBackupPoms=false
 fi
