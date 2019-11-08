@@ -78,9 +78,6 @@ public class CorfuTablePerformanceTest extends PerformanceTest{
         setMetricsReportFlags("corfutable-1-1");
         Process server = runServer();
         runtime = initRuntime();
-        System.out.println(System.getProperty(PROPERTY_LOCAL_METRICS_COLLECTION ));
-        System.out.println(System.getProperty(PROPERTY_CSV_INTERVAL));
-        System.out.println(System.getProperty(PROPERTY_CSV_FOLDER));
         CorfuTable<String, String>
                 corfuTable = buildTable("table1");
         long start = System.currentTimeMillis();
