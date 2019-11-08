@@ -3,13 +3,7 @@ sudo: required
 dist: xenial
 jdk: openjdk8
 
-stages:
-  - name: deploy
-    # Deploy corfu artifacts for master branch
-    if: branch = master AND type != pull_request
-  - name: update_version
-    # update project version
-    if: branch != master AND type = pull_request
+
 
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
