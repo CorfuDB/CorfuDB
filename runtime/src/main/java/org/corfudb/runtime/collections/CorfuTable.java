@@ -36,6 +36,7 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.util.ImmuableListSetWrapper;
 
@@ -787,7 +788,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V>, AutoCloseable {
     /**
      * {@inheritDoc}
      */
-    @DontInstrument
+    @PassThrough
     @Override
     public void close() {
         this.mainMap.close();

@@ -489,6 +489,6 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     @After
     @Override
     public void close() {
-        PersistedStreamingMap.closeAll();
+        //PersistedStreamingMap.closeAll();
     }
 }

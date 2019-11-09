@@ -41,11 +41,7 @@ public class CorfuCompileWrapperBuilder {
 
         // Instantiate a new instance of this class.
         ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
-                            findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
-
-        if (wrapperObject instanceof AutoCloseable) {
-            ((AutoCloseable) wrapperObject).close();
-        }
+                            findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
