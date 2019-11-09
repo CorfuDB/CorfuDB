@@ -160,7 +160,7 @@ def write_version_string_to_tanuki_wrapper(new_version):
     str -> None
     Replace old_version with new_version in all tanuki wrapper files.
     """
-    tanuki_files = check_output("find . -name \"corfu-server*.conf\"", shell=True).splitlines()
+    tanuki_files = check_output("find . -name \"corfu-*server*.conf\"", shell=True).splitlines()
     for tanuki_file in tanuki_files:
         content = []
         with open(tanuki_file, "r") as tf:

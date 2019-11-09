@@ -9,3 +9,9 @@ if [[ -n $(which systemctl) ]]; then
 else
     update-rc.d corfu-server remove
 fi
+
+if [[ -n $(which systemctl) ]]; then
+    systemctl disable corfu-nonconfig-server
+else
+    update-rc.d corfu-nonconfig-server remove
+fi
