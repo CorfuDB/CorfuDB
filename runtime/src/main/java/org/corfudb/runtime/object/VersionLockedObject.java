@@ -172,6 +172,13 @@ public class VersionLockedObject<T> {
     }
 
     /**
+     * Execute a method on the version locked object without synchronization
+     */
+    public <R> R passThrough(Function<T, R> method) {
+        return method.apply(object);
+    }
+
+    /**
      * Access the internal state of the object, trying first to optimistically access
      * the object, then obtaining a write lock the optimistic access fails.
      *
