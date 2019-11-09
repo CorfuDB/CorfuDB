@@ -310,6 +310,27 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             Descriptors.FieldDescriptor.Type.SFIXED64
     ));
 
+    private M getNewMetadata(@Nonnull M previousMetadata,
+                             @Nullable M userMetadata) {
+        M.Builder builder = previousMetadata.toBuilder();
+        for (Descriptors.FieldDescriptor fieldDescriptor : previousMetadata.getDescriptorForType().getFields()) {
+            if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getVersion()) {
+                builder.setField(
+                        fieldDescriptor,
+                        Optional.ofNullable(previousMetadata.getField(fieldDescriptor))
+                                .map(previousVersion -> ((Long) previousVersion) + 1)
+                                .orElse(0L));
+            } else if (userMetadata != null) { // Non-revision fields must retain previous values..
+                if (!userMetadata.hasField(fieldDescriptor)) { // ..iff not explicitly set..
+                    builder.setField(fieldDescriptor, previousMetadata.getField(fieldDescriptor));
+                } else { // .. otherwise the values of newer fields that are explicitly set are taken.
+                    builder.setField(fieldDescriptor, userMetadata.getField(fieldDescriptor));
+                }
+            }
+        }
+        return (M) builder.build();
+    }
+
     private void validateVersion(@Nullable M previousMetadata,
                                  @Nullable M userMetadata) {
         // TODO: do a lookup instead of a search if possible
@@ -318,8 +339,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 continue;
             }
             if (!versionTypes.contains(fieldDescriptor.getType())) {
-                throw new IllegalArgumentException("Version field needs to be an Integer or Long type." +
-                        " Current type=" + fieldDescriptor.getType());
+                throw new IllegalArgumentException("Version field needs to be an Integer or Long type."
+                        + " Current type=" + fieldDescriptor.getType());
             }
             long validatingVersion = (long) userMetadata.getField(fieldDescriptor);
             if (validatingVersion <= 0) {
@@ -334,22 +355,4 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             }
         }
     }
-
-    private M getNewMetadata(@Nonnull M previousMetadata,
-                             @Nullable M userMetadata) {
-        M.Builder builder = previousMetadata.toBuilder();
-        for (Descriptors.FieldDescriptor fieldDescriptor : previousMetadata.getDescriptorForType().getFields()) {
-            if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getVersion()) {
-                builder.setField(
-                        fieldDescriptor,
-                        Optional.ofNullable(previousMetadata.getField(fieldDescriptor))
-                                .map(previousVersion -> ((Long) previousVersion) + 1)
-                                .orElse(0L));
-            } else if (userMetadata != null) {
-                builder.setField(fieldDescriptor, userMetadata.getField(fieldDescriptor));
-            }
-        }
-        return (M) builder.build();
-    }
-
 }

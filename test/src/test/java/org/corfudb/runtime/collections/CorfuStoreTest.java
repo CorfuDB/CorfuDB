@@ -79,7 +79,6 @@ public class CorfuStoreTest extends AbstractViewTest {
                 EventInfo.newBuilder().setName("simpleCRUD").build(),
                 metadata);
 
-
         // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
         Timestamp timestamp = corfuStore.getTimestamp();
 
@@ -202,7 +201,10 @@ public class CorfuStoreTest extends AbstractViewTest {
                         user_1)
                 .commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
-                .isEqualTo(ManagedResources.newBuilder().setCreateUser("user_1").setVersion(expectedVersion++).build());
+                .isEqualTo(ManagedResources.newBuilder()
+                        .setCreateUser("user_1")
+                        .setCreateTimestamp(0L)
+                        .setVersion(expectedVersion++).build());
 
         // Set the version field to the correct value 1 and expect that no exception is thrown
         corfuStore.tx(nsxManager)
@@ -212,7 +214,10 @@ public class CorfuStoreTest extends AbstractViewTest {
                         ManagedResources.newBuilder().setCreateUser("user_2").setVersion(1L).build())
                 .commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
-                .isEqualTo(ManagedResources.newBuilder().setCreateUser("user_2").setVersion(expectedVersion++).build());
+                .isEqualTo(ManagedResources.newBuilder()
+                        .setCreateUser("user_2")
+                        .setCreateTimestamp(0L)
+                        .setVersion(expectedVersion++).build());
 
         // Now do an updated without setting the version field, and it should not get validated!
         corfuStore.tx(nsxManager)
@@ -222,7 +227,10 @@ public class CorfuStoreTest extends AbstractViewTest {
                         user_2)
                 .commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
-                .isEqualTo(ManagedResources.newBuilder().setCreateUser("user_2").setVersion(expectedVersion).build());
+                .isEqualTo(ManagedResources.newBuilder()
+                        .setCreateUser("user_2")
+                        .setCreateTimestamp(0L)
+                        .setVersion(expectedVersion).build());
 
         corfuStore.tx(nsxManager).delete(tableName, key1).commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1)).isNull();
@@ -235,7 +243,9 @@ public class CorfuStoreTest extends AbstractViewTest {
                         user_2)
                 .commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
-                .isEqualTo(ManagedResources.newBuilder(user_2).setVersion(expectedVersion).build());
+                .isEqualTo(ManagedResources.newBuilder(user_2)
+                        .setCreateTimestamp(0L)
+                        .setVersion(expectedVersion).build());
 
         // Validate that if Metadata schema is specified, a null metadata is not acceptable
         assertThatThrownBy(() ->
@@ -243,7 +253,8 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .isExactlyInstanceOf(RuntimeException.class);
 
         // Validate that we throw a StaleObject exception if there is an explicit version mismatch
-        ManagedResources wrongRevisionMetadata = ManagedResources.newBuilder(user_2).setVersion(2).build();
+        ManagedResources wrongRevisionMetadata = ManagedResources.newBuilder(user_2)
+                .setVersion(2).build();
 
         assertThatThrownBy(() ->
                 table.update(key1, EventInfo.getDefaultInstance(), wrongRevisionMetadata))
@@ -308,6 +319,55 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
+    }
+
+    /**
+     * Validate that fields of metadata that are not set explicitly retain their prior values.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkMetadataMergesOldFieldsTest() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String nsxManager = "nsx-manager";
+        // Define table name.
+        final String tableName = "EventInfo";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, EventInfo, ManagedResources> table = corfuStore.openTable(
+                nsxManager,
+                tableName,
+                Uuid.class,
+                EventInfo.class,
+                ManagedResources.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        EventInfo value = EventInfo.newBuilder().setName("simpleValue").build();
+
+        long timestamp = System.currentTimeMillis();
+        corfuStore.tx(nsxManager)
+                .create(tableName, key, value,
+                        ManagedResources.newBuilder()
+                                .setCreateTimestamp(timestamp).build())
+                .commit();
+
+        corfuStore.tx(nsxManager)
+                .update(tableName, key, value,
+                        ManagedResources.newBuilder().setCreateUser("CreateUser").build())
+                .commit();
+
+        CorfuRecord<EventInfo, ManagedResources> record1 = table.get(key);
+        assertThat(record1.getMetadata().getCreateTimestamp()).isEqualTo(timestamp);
+        assertThat(record1.getMetadata().getCreateUser()).isEqualTo("CreateUser");
     }
 
     /**
