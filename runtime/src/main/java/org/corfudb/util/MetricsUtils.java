@@ -265,11 +265,7 @@ public class MetricsUtils {
     }
 
     public static Timer.Context getConditionalContext(@NonNull Timer t) {
-        return getConditionalContext(metricsCollectionEnabled, t);
-    }
-
-    public static Timer.Context getConditionalContext(boolean enabled, @NonNull Timer t) {
-        return enabled ? t.time() : null;
+        return metricsCollectionEnabled ? t.time() : null;
     }
 
     public static void stopConditionalContext(Timer.Context context) {
@@ -279,11 +275,7 @@ public class MetricsUtils {
     }
 
     public static void incConditionalCounter(@NonNull Counter counter, long amount) {
-        incConditionalCounter(metricsCollectionEnabled, counter, amount);
-    }
-
-    public static void incConditionalCounter(boolean enabled, @NonNull Counter counter, long amount) {
-        if (enabled) {
+        if (metricsCollectionEnabled) {
             counter.inc(amount);
         }
     }
