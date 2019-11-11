@@ -16,7 +16,7 @@ given table and namespace, or list tables in a given namespace.
 1. showTable to read and output all entries in a given table and namespace.
 It can be invoked like the below example-
 java -cp "corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
-org.corfudb.browser.CorfuBrowserMain
+org.corfudb.browser.CorfuStoreBrowserMain
 --host=10.160.29.112
 --port=9000
 --operation=showTable
@@ -45,7 +45,7 @@ org.corfudb.browser.CorfuBrowserMain
 Keystore and truststore parameters are not required if tls is disabled.
 
 For usage help,
-java -cp "corfuBrowser/corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuTableBrowserMain <--help|-h>
+java -cp "corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuStoreBrowserMain <--help|-h>
 
 TODO(pmajmudar): Add a user script to invoke the browser.
 
