@@ -21,11 +21,13 @@
             <groupId>org.corfudb</groupId>
             <artifactId>runtime</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.spotify</groupId>
@@ -47,6 +49,7 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.8.0</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>

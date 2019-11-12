@@ -63,6 +63,12 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
     void reconnect();
 
     /**
+     * Execute a shell command on a vm
+     * @param command shell command
+     */
+    void execute(String command);
+
+    /**
      * Reconnect a {@link CorfuServer} to the list of servers
      *
      * @param servers List of servers to reconnect.

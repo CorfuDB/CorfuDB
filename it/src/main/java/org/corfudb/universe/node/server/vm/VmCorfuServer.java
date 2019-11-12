@@ -150,6 +150,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanOutput()));
     }
 
+    @Override
+    public void execute(String command) {
+        executeCommand(command);
+    }
+
     /**
      * Reconnect a server to a list of servers.
      */

@@ -120,6 +120,11 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         throw new UnsupportedOperationException("Not supported");
     }
 
+    @Override
+    public void execute(String command) {
+        executeCommand(Optional.empty(), command);
+    }
+
     /**
      * Reconnect a server to a list of servers.
      */
