@@ -25,7 +25,7 @@ import static lombok.EqualsAndHashCode.Exclude;
  */
 @Getter
 @ToString
-@Builder
+@Builder(toBuilder = true)
 public class ReadBatch {
     public enum ReadStatus {
         SUCCEEDED,
@@ -73,7 +73,7 @@ public class ReadBatch {
     }
 
     /**
-     * Get addresses of the successfully transferred records.
+     * Get addresses of the successfully read records.
      * @return Addresses.
      */
     public List<Long> getAddresses() {

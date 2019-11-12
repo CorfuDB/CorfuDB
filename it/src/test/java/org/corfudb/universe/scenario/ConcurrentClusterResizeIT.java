@@ -81,6 +81,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
             });
 
             // Wait for layout servers to change
+            waitForLayoutServersChange(size -> size == numNodes, corfuClient);
             waitForLayoutServersChange(size -> size == 1, corfuClient);
             executor.shutdownNow();
 

@@ -20,7 +20,7 @@ import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRe
  * a {@link #transferBatchRequest} that contains an empty list,
  * and an optional destination server.
  */
-@Builder
+@Builder(toBuilder = true)
 @Getter
 @EqualsAndHashCode
 public class TransferBatchResponse {

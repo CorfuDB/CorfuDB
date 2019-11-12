@@ -55,8 +55,9 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     @Default
     private final float randomFactorBackoff = 0.5f;
     @Default
-    private final AtomicInteger maxOverwriteExceptions = new AtomicInteger(3);
-
+    private final AtomicInteger maxWriteRetries = new AtomicInteger(3);
+    @Default
+    private final Duration writeSleepDuration = Duration.ofMillis(500);
     /**
      * Default read options for the replication protocol read.
      */
@@ -68,7 +69,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
             .build();
 
     @Getter
-    public final StreamLog streamLog;
+    private final StreamLog streamLog;
 
     @Getter
     private final AddressSpaceView addressSpaceView;
@@ -76,7 +77,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     @Override
     public CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest) {
         return readRecords(transferBatchRequest, 0)
-                .thenApply(records -> writeRecords(records, streamLog, maxOverwriteExceptions))
+                .thenApply(records -> writeRecords(records, streamLog, maxWriteRetries, writeSleepDuration))
                 .exceptionally(error -> TransferBatchResponse
                         .builder()
                         .status(FAILED)
