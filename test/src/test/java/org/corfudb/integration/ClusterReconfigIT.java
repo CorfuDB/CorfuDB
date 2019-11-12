@@ -1050,7 +1050,7 @@ public class ClusterReconfigIT extends AbstractIT {
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         final int systemDownHandlerLimit = 10;
-        CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+        runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
                 .systemDownHandler(() -> {
                     throw new RuntimeException();

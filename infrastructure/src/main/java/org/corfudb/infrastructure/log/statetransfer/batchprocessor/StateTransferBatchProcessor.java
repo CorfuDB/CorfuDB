@@ -69,7 +69,7 @@ public interface StateTransferBatchProcessor {
                         .filter(data -> nonWrittenAddresses.contains(data.getGlobalAddress()))
                         .collect(ImmutableList.toImmutableList());
                 ReadBatch newReadBatch = readBatch.toBuilder().data(nonWrittenData).build();
-                // Try writing the records and also preserve all the original addresses.
+                // Try writing the records and also preserve the the original request.
                 return writeRecords(newReadBatch, streamlog, writeRetriesAllowed, writeSleepDuration)
                         .toBuilder()
                         .transferBatchRequest(new TransferBatchRequest(addresses, destination))
