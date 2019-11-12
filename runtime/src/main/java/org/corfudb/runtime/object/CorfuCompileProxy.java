@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -165,6 +166,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         counterAccessLocked = metrics.counter(mpObj + "access-locked");
         counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
         counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public  <R> R passThrough(Function<T, R> method) {
+        return underlyingObject.passThrough(method);
     }
 
     /**
