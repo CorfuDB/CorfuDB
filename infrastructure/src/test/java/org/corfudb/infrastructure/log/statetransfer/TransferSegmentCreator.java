@@ -6,10 +6,12 @@ import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.Transfe
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 
 import java.util.Optional;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.*;
+
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.builder;
 
 /**
  * An utility interface to create the instances of transfer segments.

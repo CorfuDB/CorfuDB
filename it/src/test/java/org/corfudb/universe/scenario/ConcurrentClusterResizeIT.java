@@ -1,9 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutServersChange;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.universe.GenericIntegrationTest;
@@ -19,6 +15,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterUp;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutServersChange;
 
 @Slf4j
 public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
@@ -80,8 +81,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
                 executor.submit(removeNodeAction);
             });
 
-            // Wait for layout servers to change
-            waitForLayoutServersChange(size -> size == numNodes, corfuClient);
+            // Wait for layout servers to change and wait for cluster to be up
             waitForLayoutServersChange(size -> size == 1, corfuClient);
             executor.shutdownNow();
 
@@ -89,6 +89,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
             corfuClient.invalidateLayout();
             assertThat(corfuClient.getLayout().getAllServers()).containsExactly(server0.getEndpoint());
 
+            waitForClusterUp(table, "0");
             // Verify data path working fine
             for (int x = 0; x < TestFixtureConst.DEFAULT_TABLE_ITER; x++) {
                 assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
@@ -105,8 +106,12 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
                     clientFixture.getPollPeriod())
             ));
 
-            // Wait for layout servers to change
-            waitForLayoutChange(layout -> layout.getSegments().size() == 1, corfuClient);
+
+            // Check that the segments are merged and all the servers are equal to numNodes
+            waitForLayoutChange(layout -> layout.getSegments().size() == 1 &&
+                    layout.getAllServers().size() == numNodes, corfuClient);
+            // wait for the cluster to be up
+            waitForClusterUp(table, "0");
             executor2.shutdownNow();
 
             // Verify data path working fine

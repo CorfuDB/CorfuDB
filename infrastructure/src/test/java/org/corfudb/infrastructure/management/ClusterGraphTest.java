@@ -1,18 +1,5 @@
 package org.corfudb.infrastructure.management;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
-import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
-import static org.corfudb.infrastructure.management.NodeStateTestUtil.C;
-import static org.corfudb.infrastructure.management.failuredetector.ClusterGraph.ClusterGraphHelper.cluster;
-import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
-import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
-import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.connectivity;
-import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.unavailable;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
@@ -25,8 +12,20 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.C;
+import static org.corfudb.infrastructure.management.failuredetector.ClusterGraph.ClusterGraphHelper.cluster;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.connectivity;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.unavailable;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class ClusterGraphTest {
 

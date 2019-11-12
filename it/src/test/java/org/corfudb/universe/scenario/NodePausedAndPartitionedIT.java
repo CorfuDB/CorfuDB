@@ -1,13 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -19,6 +11,14 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 
 public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
 

@@ -8,7 +8,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Test;
 import org.mockito.Mockito;
-import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -16,8 +15,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import static org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask.*;
-import static org.corfudb.runtime.view.Layout.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask.COMPLETED;
+import static org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask.SKIPPED;
+import static org.corfudb.runtime.view.Layout.LayoutSegment;
+import static org.corfudb.runtime.view.Layout.LayoutStripe;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
