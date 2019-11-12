@@ -2,6 +2,7 @@ package org.corfudb.universe.scenario;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
@@ -70,13 +71,12 @@ public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
             waitForClusterDown(table);
 
             // Recover cluster by resuming the paused node, removing
-            // partition and wait for layout's unresponsive servers to change
+            // partition and wait for layout's unresponsive servers to change.
+            // Also wait for the segment merge.
             server1.resume();
             server2.reconnect(Arrays.asList(server0, server1));
             waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
-
-            waitUninterruptibly(Duration.ofSeconds(30));
-
+            waitForLayoutChange(layout -> layout.getSegments().size() == 1, corfuClient);
             // Verify cluster status is STABLE
             corfuClient.invalidateLayout();
             clusterStatusReport = corfuClient.getManagementView().getClusterStatus();

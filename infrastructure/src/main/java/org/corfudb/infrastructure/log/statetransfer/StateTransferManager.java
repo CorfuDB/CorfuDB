@@ -204,6 +204,7 @@ public class StateTransferManager {
 
                     // If no addresses to transfer - mark a segment as transferred.
                     if (unknownAddressesInRange.isEmpty()) {
+                        log.debug("All addresses are present in a range, skipping transfer.");
                         long totalTransferred = segment.computeTotalTransferred();
 
                         newStatus = TransferSegmentStatus
@@ -224,7 +225,7 @@ public class StateTransferManager {
                         // Execute state transfer synchronously.
                         newStatus = synchronousStateTransfer(batchStream, numAddressesToTransfer);
                     }
-                    // If a segment contains some other status -> return.
+
                     return TransferSegment
                             .builder()
                             .startAddress(segment.getStartAddress())
