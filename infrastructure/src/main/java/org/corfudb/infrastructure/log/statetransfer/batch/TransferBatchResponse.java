@@ -3,12 +3,12 @@ package org.corfudb.infrastructure.log.statetransfer.batch;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
+import lombok.EqualsAndHashCode.Exclude;
 import lombok.Getter;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferBatchProcessorException;
 
 import java.util.Optional;
 
-import static lombok.EqualsAndHashCode.*;
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
 
 /**

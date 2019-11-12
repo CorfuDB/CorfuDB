@@ -37,7 +37,11 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 .getKnownAddressesInRange(0L, 100L);
 
         StateTransferManager stateTransferManager =
-                new StateTransferManager(streamLog, 10);
+                StateTransferManager.builder()
+                        .streamLog(streamLog)
+                        .batchSize(10)
+                        .batchProcessor(new SuccessfulBatchProcessor())
+                        .build();
 
         ImmutableList<Long> unknownAddressesInRange = stateTransferManager
                 .getUnknownAddressesInRange(0L, 100L);
@@ -55,7 +59,11 @@ class StateTransferManagerTest implements TransferSegmentCreator {
     void handleTransfer() {
         // Any status besides NOT_TRANSFERRED should not be updated
         StreamLog streamLog = mock(StreamLog.class);
-        StateTransferManager manager = new StateTransferManager(streamLog, 10);
+        StateTransferManager manager = StateTransferManager.builder()
+                .streamLog(streamLog)
+                .batchSize(10)
+                .batchProcessor(new SuccessfulBatchProcessor())
+                .build();
         ImmutableList<TransferSegment> segments =
                 ImmutableList.of(
                         createTransferSegment(0L, 50L, TRANSFERRED),
@@ -75,7 +83,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                         segment.getEndAddress())).collect(Collectors.toList());
 
         ImmutableList<TransferSegment> transferSegments =
-                manager.handleTransfer(segments, new SuccessfulBatchProcessor());
+                manager.handleTransfer(segments);
 
         List<TransferSegmentStatus> statuses =
                 transferSegments.stream()
@@ -102,7 +110,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
 
         doReturn(ImmutableList.of()).when(spy).getUnknownAddressesInRange(0L, 50L);
         transferSegments =
-                spy.handleTransfer(ImmutableList.of(transferSegment), new SuccessfulBatchProcessor());
+                spy.handleTransfer(ImmutableList.of(transferSegment));
 
         assertThat(transferSegments.get(0).getStatus().getSegmentState())
                 .isEqualTo(TRANSFERRED);
@@ -112,17 +120,19 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         ImmutableList<Long> unknownData =
                 ImmutableList.copyOf(LongStream.range(25L, 51L).boxed().collect(Collectors.toList()));
 
+        manager = StateTransferManager.builder()
+                .streamLog(streamLog)
+                .batchSize(10)
+                .batchProcessor(new FaultyBatchProcessor(10))
+                .build();
+
+        spy = spy(manager);
+
         doReturn(unknownData).when(spy).getUnknownAddressesInRange(0L, 50L);
 
         transferSegments =
-                spy.handleTransfer(ImmutableList.of(transferSegment), new SuccessfulBatchProcessor());
+                spy.handleTransfer(ImmutableList.of(transferSegment));
 
-        assertThat(transferSegments.get(0).getStatus().getSegmentState())
-                .isEqualTo(TRANSFERRED);
-
-        // Some data is not present and transfer fails
-        transferSegments =
-                spy.handleTransfer(ImmutableList.of(transferSegment), new FaultyBatchProcessor(10));
         assertThat(transferSegments.get(0).getStatus().getSegmentState())
                 .isEqualTo(FAILED);
     }
@@ -132,13 +142,13 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         StateTransferBatchProcessor batchProcessor = new SuccessfulBatchProcessor();
         StreamLog streamLog = mock(StreamLog.class);
         int batchSize = 10;
-        StateTransferManager manager = new StateTransferManager(streamLog, batchSize);
+        StateTransferManager manager = new StateTransferManager(streamLog, batchSize, batchProcessor);
         Stream<TransferBatchRequest> stream = Lists
                 .partition(LongStream.range(0, 100).boxed().collect(Collectors.toList()), batchSize)
                 .stream()
                 .map(partition -> TransferBatchRequest.builder().addresses(partition).build());
 
-        TransferSegmentStatus status = manager.synchronousStateTransfer(batchProcessor, stream, 100);
+        TransferSegmentStatus status = manager.synchronousStateTransfer(stream, 100);
         assertThat(status.getSegmentState()).isEqualTo(TRANSFERRED);
         assertThat(status.getTotalTransferred()).isEqualTo(100L);
 
@@ -146,7 +156,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 .partition(LongStream.range(0, 80).boxed().collect(Collectors.toList()), batchSize)
                 .stream()
                 .map(partition -> TransferBatchRequest.builder().addresses(partition).build());
-        status = manager.synchronousStateTransfer(batchProcessor, stream, 100);
+        status = manager.synchronousStateTransfer(stream, 100);
         assertThat(status.getSegmentState()).isEqualTo(FAILED);
         assertThat(status.getTotalTransferred()).isEqualTo(0L);
         stream = Lists
@@ -154,7 +164,8 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 .stream()
                 .map(partition -> TransferBatchRequest.builder().addresses(partition).build());
         batchProcessor = new FaultyBatchProcessor(10);
-        status = manager.synchronousStateTransfer(batchProcessor, stream, 80);
+        manager = new StateTransferManager(streamLog, batchSize, batchProcessor);
+        status = manager.synchronousStateTransfer(stream, 80);
         assertThat(status.getSegmentState()).isEqualTo(FAILED);
         assertThat(status.getTotalTransferred()).isEqualTo(0L);
     }

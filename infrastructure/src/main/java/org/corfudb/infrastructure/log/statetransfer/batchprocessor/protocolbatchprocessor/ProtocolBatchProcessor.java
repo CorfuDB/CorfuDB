@@ -194,11 +194,11 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                         .filter(readResult::containsKey)
                         .collect(Collectors.toList());
         if (transferredAddresses.equals(addresses)) {
-            List<LogData> lodData = readResult.entrySet().stream()
+            List<LogData> logData = readResult.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .map(entry -> (LogData) entry.getValue()).collect(Collectors.toList());
             return ReadBatch.builder()
-                    .data(lodData)
+                    .data(logData)
                     .destination(destination)
                     .status(ReadBatch.ReadStatus.SUCCEEDED)
                     .build();

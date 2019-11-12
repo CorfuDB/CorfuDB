@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
@@ -54,6 +55,7 @@ public class AddNodeWorkflow implements IWorkflow {
                 RestoreRedundancyMergeSegments.builder()
                         .streamLog(streamLog)
                         .currentNode(request.getEndpoint())
+                        .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
                         .build());
     }
 

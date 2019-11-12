@@ -12,11 +12,13 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -653,6 +655,7 @@ public class StateTransferTest extends AbstractViewTest {
                 .builder()
                 .currentNode(SERVERS.ENDPOINT_1)
                 .streamLog(spy)
+                .redundancyCalculator(new RedundancyCalculator(SERVERS.ENDPOINT_1))
                 .build();
 
         // Throw time out on all the addresses after 50.
@@ -668,7 +671,8 @@ public class StateTransferTest extends AbstractViewTest {
 
         // Assert that the TimeOutException is thrown
         assertThatThrownBy(() -> action1.impl(rt))
-                .isInstanceOf(TransferSegmentException.class);
+                .isInstanceOf(RetryExhaustedException.class)
+                .hasRootCauseInstanceOf(TimeoutException.class);
 
         // Known addresses should contain only [0:49] and the addresses in the open segment.
         ArrayList<Long> knownAddresses = new ArrayList<>(rt.getLayoutView()
@@ -783,10 +787,12 @@ public class StateTransferTest extends AbstractViewTest {
                 .builder()
                 .currentNode(SERVERS.ENDPOINT_1)
                 .streamLog(streamLog1)
+                .redundancyCalculator(new RedundancyCalculator(SERVERS.ENDPOINT_1))
                 .build();
         final RestoreRedundancyMergeSegments action2 = RestoreRedundancyMergeSegments
                 .builder()
                 .currentNode(SERVERS.ENDPOINT_2)
+                .redundancyCalculator(new RedundancyCalculator(SERVERS.ENDPOINT_1))
                 .streamLog(streamLog2)
                 .build();
 

@@ -1,7 +1,18 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getLogTail;
+import com.google.common.collect.Sets;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.CFUtils;
 
+import javax.annotation.Nonnull;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -12,20 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 
-import javax.annotation.Nonnull;
-
-import com.google.common.collect.Sets;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.exceptions.OutrankedException;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.util.CFUtils;
+import static org.corfudb.util.Utils.getLogTail;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -212,29 +210,28 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Attempts to merge all the segments of the layout starting from the last two.
+     * Attempts to merge all the segments of the layout starting from the first two.
      * Once the remaining segments can no longer be merged, attempts consensus on a new layout.
+     *
      * @param currentLayout Current layout
      * @throws OutrankedException if consensus is outranked.
      */
-    public void mergeSegments(Layout currentLayout) throws OutrankedException {
-
+    public void mergeSegments(Layout currentLayout) {
         Layout newLayout;
-        if (currentLayout.getSegments().size() > 1) {
+        Predicate<Layout> shouldMergeSegments = layout -> {
+            if (layout.getSegments().size() > 1) {
+                return Sets.difference(
+                        layout.getSegments().get(1).getAllLogServers(),
+                        layout.getSegments().get(0).getAllLogServers()).isEmpty();
+            }
+            return false;
+        };
+
+        if (shouldMergeSegments.test(currentLayout)) {
 
             log.info("mergeSegments: layout is {}", currentLayout);
 
             sealEpoch(currentLayout);
-
-            Predicate<Layout> shouldMergeSegments = layout -> {
-                if(layout.getSegments().size() > 1){
-                    return Sets.difference(
-                            layout.getSegments().get(1).getAllLogServers(),
-                            layout.getSegments().get(0).getAllLogServers()).isEmpty();
-                }
-                return false;
-            };
-
 
             while(shouldMergeSegments.test(currentLayout)){
                 LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
@@ -266,7 +263,7 @@ public class LayoutManagementView extends AbstractView {
      */
     public void addLogUnitReplica(@Nonnull Layout currentLayout,
                                   @Nonnull String endpoint,
-                                  int stripeIndex) throws OutrankedException {
+                                  int stripeIndex) {
         boolean isTaskDone = currentLayout.getSegments().stream()
                 .map(layoutSegment -> layoutSegment.getStripes().get(stripeIndex))
                 .allMatch(layoutStripe -> layoutStripe.getLogServers().contains(endpoint));

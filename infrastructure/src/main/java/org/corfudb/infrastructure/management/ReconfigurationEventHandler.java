@@ -131,6 +131,7 @@ public class ReconfigurationEventHandler {
      * deterministically provide the same identifiable endpoint to the orchestrator. In this case, we choose the
      * last added endpoint in the first stripe.
      *
+     * @param currentEndpoint   A current endpoint.
      * @param runtime           Connected corfu runtime instance.
      * @param layout            Latest known layout.
      * @param retryQueryTimeout Timeout to poll for workflow status.

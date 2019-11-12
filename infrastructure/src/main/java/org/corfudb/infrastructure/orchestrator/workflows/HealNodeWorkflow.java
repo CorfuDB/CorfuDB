@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
@@ -34,6 +35,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
                 RestoreRedundancyMergeSegments.builder()
                         .streamLog(streamLog)
                         .currentNode(request.getEndpoint())
+                        .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
                         .build());
     }
 

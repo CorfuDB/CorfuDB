@@ -3,12 +3,9 @@ package org.corfudb.infrastructure.redundancy;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
@@ -20,12 +17,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
-import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.CURRENT_EPOCH;
-import static org.corfudb.infrastructure.redundancy.RedundancyCalculator.SegmentAge.PREVIOUS_EPOCH;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
@@ -39,32 +32,7 @@ public class RedundancyCalculator {
     @Getter
     private final String server;
 
-    /**
-     * A status that tells whether a transfer segment belongs to the current or a previous epoch.
-     */
-    public enum SegmentAge {
-        PREVIOUS_EPOCH,
-        CURRENT_EPOCH
-    }
-
-    /**
-     * A transfer segment that also contains an information about its age.
-     */
-    @AllArgsConstructor
-    @Getter
-    @ToString
-    @EqualsAndHashCode
-    public static class AgedSegment implements Comparable<AgedSegment> {
-        private final TransferSegment segment;
-        private final SegmentAge age;
-
-        @Override
-        public int compareTo(AgedSegment other) {
-            return segment.compareTo(other.segment);
-        }
-    }
-
-    static boolean segmentContainsServer(LayoutSegment segment, String server) {
+    boolean segmentContainsServer(LayoutSegment segment, String server) {
         return segment.getFirstStripe().getLogServers().contains(server);
     }
 
@@ -195,150 +163,6 @@ public class RedundancyCalculator {
                 RedundancyCalculator.canMergeSegments(layout);
     }
 
-
-    /**
-     * Given a sorted accumulated list of segments belonging to two epochs,
-     * merges the next segment into the last added segment and returns a new list.
-     *
-     * @param nextSegment     A next segment to merge into the list.
-     * @param accumulatedList An accumulated list of sorted and merged segments.
-     * @return A new list.
-     */
-    ImmutableList<AgedSegment> mergeSegmentToAccumulatedList
-    (AgedSegment nextSegment, ImmutableList<AgedSegment> accumulatedList) {
-        if (accumulatedList.isEmpty()) {
-            // If it's a first segment, add it to the list.
-            return ImmutableList.of(nextSegment);
-        } else {
-            // Get the last added segment.
-            int size = accumulatedList.size();
-            AgedSegment lastAddedSegment = accumulatedList.get(size - 1);
-            ImmutableList<AgedSegment> accumulatedListNoLastSegment = accumulatedList
-                    .stream()
-                    .filter(segment -> !segment.equals(lastAddedSegment))
-                    .collect(ImmutableList.toImmutableList());
-            // If the segments overlap:
-            if (lastAddedSegment.segment.overlapsWith(nextSegment.segment)) {
-                AgedSegment oldSegment;
-                AgedSegment newSegment;
-                AgedSegment mergedSegment;
-                // Find the old and the new segment.
-                if (lastAddedSegment.age.equals(PREVIOUS_EPOCH)) {
-                    oldSegment = lastAddedSegment;
-                    newSegment = nextSegment;
-                } else {
-                    oldSegment = nextSegment;
-                    newSegment = lastAddedSegment;
-                }
-
-                TransferSegmentStatus oldSegmentStatus = oldSegment.segment.getStatus();
-
-                mergedSegment = newSegment;
-                // If the old segment is not done transferring, or restored -> update the segment
-                // with a new range and the old status.
-                TransferSegmentStatus.SegmentState segmentState = oldSegmentStatus.getSegmentState();
-                if (segmentState == FAILED || segmentState == RESTORED) {
-                    TransferSegment segment = TransferSegment
-                            .builder()
-                            .startAddress(newSegment.segment.getStartAddress())
-                            .endAddress(newSegment.segment.getEndAddress())
-                            .status(oldSegmentStatus)
-                            .build();
-                    mergedSegment = new AgedSegment(segment, CURRENT_EPOCH);
-                }
-
-
-                return new ImmutableList.Builder<AgedSegment>()
-                        .addAll(accumulatedListNoLastSegment)
-                        .add(mergedSegment)
-                        .build();
-
-            }
-            // No overlap -> add both segments.
-            else {
-                return new ImmutableList.Builder<AgedSegment>()
-                        .addAll(accumulatedListNoLastSegment)
-                        .add(lastAddedSegment)
-                        .add(nextSegment)
-                        .build();
-            }
-        }
-    }
-
-    /**
-     * Merges two segment lists from the old and the new epochs.
-     * If a new list is empty, restores all the transferred segments and creates a new list.
-     * Otherwise, adds all the segments to the list,
-     * sorts it and then merges the segments if they overlap.
-     * Non overlapping segments are both added. If the segments overlap a range
-     * of a new segment is taken and the status of an old segment is taken only
-     * if its still transferring, failed or restored.
-     *
-     * @param oldList A list of segments before the epoch change.
-     * @param newList A list of segments after the epoch change.
-     * @return A new list, that reflects correctly the status of the transfer segments.
-     */
-    public ImmutableList<TransferSegment> mergeLists(
-            List<TransferSegment> oldList, List<TransferSegment> newList) {
-
-        // If a new list is empty ->
-        // Nothing to transfer. Update all the TRANSFERRED to RESTORED and return.
-        if (newList.isEmpty()) {
-            return oldList.stream().map(segment -> {
-                TransferSegmentStatus oldStatus = segment.getStatus();
-
-                TransferSegmentStatus newStatus = oldStatus;
-
-                if (oldStatus.getSegmentState() == TRANSFERRED) {
-                    newStatus = TransferSegmentStatus
-                            .builder()
-                            .segmentState(RESTORED)
-                            .totalTransferred(segment.computeTotalTransferred())
-                            .build();
-                }
-
-                return TransferSegment
-                        .builder()
-                        .startAddress(segment.getStartAddress())
-                        .endAddress(segment.getEndAddress())
-                        .status(newStatus)
-                        .build();
-
-            }).collect(ImmutableList.toImmutableList());
-        }
-
-        // Group segments by age and sort them.
-        ImmutableList<AgedSegment> oldSegments = oldList
-                .stream()
-                .map(segment -> new AgedSegment(segment, PREVIOUS_EPOCH))
-                .collect(ImmutableList.toImmutableList());
-
-        ImmutableList<AgedSegment> newSegments = newList
-                .stream()
-                .map(segment -> new AgedSegment(segment, CURRENT_EPOCH))
-                .collect(ImmutableList.toImmutableList());
-
-        ImmutableList<AgedSegment> allSegments = new ImmutableList.Builder<AgedSegment>()
-                .addAll(oldSegments)
-                .addAll(newSegments)
-                .build()
-                .stream()
-                .sorted()
-                .collect(ImmutableList.toImmutableList());
-
-        ImmutableList<AgedSegment> initList = ImmutableList.of();
-
-        // Merge the old and the new segments and return the new list.
-        return allSegments.stream()
-                .reduce(initList,
-                        (accumulatedList, nextSegment) ->
-                                mergeSegmentToAccumulatedList(nextSegment, accumulatedList),
-                        (list1, list2) -> list2)
-                .stream()
-                .map(agedSegment -> agedSegment.segment)
-                .collect(ImmutableList.toImmutableList());
-    }
-
     /**
      * Given a layout, and global trim mark creates an initial list
      * of non-empty and bounded transfer segments.
@@ -351,7 +175,7 @@ public class RedundancyCalculator {
         return layout.getSegments()
                 .stream()
                 // Keep all the segments after the trim mark, except the open one.
-                .filter(segment -> segment.getEnd() != NON_ADDRESS && segment.getEnd() >= trimMark)
+                .filter(segment -> segment.getEnd() != NON_ADDRESS && segment.getEnd() > trimMark)
                 .map(segment -> {
                     // The transfer segment's start is the layout segment's start or a trim mark,
                     // whichever is greater.

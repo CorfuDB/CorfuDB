@@ -26,14 +26,16 @@ import java.util.Set;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.*;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
 
 /**
  * A class responsible for managing a state transfer on the current node.
  * It executes the state transfer for each non-transferred segment synchronously.
  */
 @Slf4j
-@AllArgsConstructor
+@Builder
 public class StateTransferManager {
 
     /**
@@ -62,20 +64,6 @@ public class StateTransferManager {
         public int compareTo(TransferSegment other) {
             return Long.compare(this.getStartAddress(), other.getStartAddress());
         }
-
-
-        /**
-         * Whether a current transfer segment overlaps with another transfer segment.
-         *
-         * @param other Other segment.
-         * @return True, if overlap.
-         */
-        public boolean overlapsWith(TransferSegment other) {
-            return Optional.ofNullable(other)
-                    .map(otherSegment -> otherSegment.getStartAddress() <= this.getEndAddress())
-                    .orElse(false);
-        }
-
 
         /**
          * Compute the total number of transferred addresses.
@@ -154,13 +142,26 @@ public class StateTransferManager {
         private final Optional<TransferSegmentException> causeOfFailure = Optional.empty();
     }
 
+    /**
+     * A stream log of the current node.
+     */
     @Getter
     @NonNull
     private final StreamLog streamLog;
 
+    /**
+     * A size of one batch of transfer.
+     */
     @Getter
     @NonNull
     private final int batchSize;
+
+    /**
+     * A batch processor that transfers addresses one batch at a time.
+     */
+    @Getter
+    @NonNull
+    private final StateTransferBatchProcessor batchProcessor;
 
     /**
      * Given a range, return the addresses that are currently not present in the stream log.
@@ -184,11 +185,9 @@ public class StateTransferManager {
      * updates their state as a result.
      *
      * @param transferSegments A list of the segment currently present in the system.
-     * @param batchProcessor   An instance of a batch processor.
      * @return A list with the updated transfer segments.
      */
-    public ImmutableList<TransferSegment> handleTransfer(
-            List<TransferSegment> transferSegments, StateTransferBatchProcessor batchProcessor) {
+    public ImmutableList<TransferSegment> handleTransfer(List<TransferSegment> transferSegments) {
 
         return transferSegments.stream().map(segment -> {   // For each of the segments:
                     TransferSegmentStatus newStatus = segment.getStatus();
@@ -219,10 +218,11 @@ public class StateTransferManager {
                         Stream<TransferBatchRequest> batchStream = Lists
                                 .partition(unknownAddressesInRange, batchSize)
                                 .stream()
-                                .map(groupedAddresses -> new TransferBatchRequest(groupedAddresses, Optional.empty())
+                                .map(groupedAddresses ->
+                                        new TransferBatchRequest(groupedAddresses, Optional.empty())
                                 );
                         // Execute state transfer synchronously.
-                        newStatus = synchronousStateTransfer(batchProcessor, batchStream, numAddressesToTransfer);
+                        newStatus = synchronousStateTransfer(batchStream, numAddressesToTransfer);
                     }
                     // If a segment contains some other status -> return.
                     return TransferSegment
@@ -237,18 +237,15 @@ public class StateTransferManager {
     }
 
     /**
-     * Given a batch processor, a stream of batch requests, and a total number
+     * Given a stream of batch requests, and a total number
      * of transferred addresses needed, execute a state transfer synchronously.
      *
-     * @param batchProcessor An instance of a batch processor.
-     * @param batchStream    A stream of batch requests.
-     * @param totalNeeded    A total number of addresses needed for transfer.
+     * @param batchStream A stream of batch requests.
+     * @param totalNeeded A total number of addresses needed for transfer.
      * @return A status representing a final status of a transferred segment.
      */
     TransferSegmentStatus synchronousStateTransfer(
-            StateTransferBatchProcessor batchProcessor,
-            Stream<TransferBatchRequest> batchStream,
-            long totalNeeded) {
+            Stream<TransferBatchRequest> batchStream, long totalNeeded) {
         long accTransferred = 0L;
 
         Iterator<TransferBatchRequest> iterator = batchStream.iterator();
@@ -260,7 +257,10 @@ public class StateTransferManager {
 
             if (response.getStatus() == TransferStatus.FAILED) {
                 Optional<TransferSegmentException> causeOfFailure =
-                        Optional.of(new TransferSegmentException("Failed to transfer a batch."));
+                        Optional.of(response.getCauseOfFailure()
+                                .map(TransferSegmentException::new)
+                                .orElse(new TransferSegmentException("Failed to transfer.")));
+
                 return TransferSegmentStatus
                         .builder()
                         .totalTransferred(0L)
@@ -279,7 +279,8 @@ public class StateTransferManager {
                     .build();
         }
 
-        String errorMsg = "Needed: " + totalNeeded + ", but transferred: " + accTransferred;
+        String errorMsg = String.format("Needed: %s, but transferred: %s",
+                totalNeeded, accTransferred);
 
         return TransferSegmentStatus
                 .builder()
