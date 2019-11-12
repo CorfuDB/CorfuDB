@@ -56,13 +56,12 @@ public interface StateTransferBatchProcessor {
             } else {
                 Sleep.sleepUninterruptibly(writeSleepDuration);
                 // Get all the addresses that were supposed to be written to a stream log.
-                List<Long> allReadAddresses = readBatch.getAddresses();
-                long start = allReadAddresses.get(0);
-                long end = allReadAddresses.get(allReadAddresses.size() - 1);
+                long start = addresses.get(0);
+                long end = addresses.get(addresses.size() - 1);
                 Set<Long> knownAddresses = streamlog.getKnownAddressesInRange(start, end);
                 // Get all the addresses that were not written.
                 Set<Long> nonWrittenAddresses =
-                        Sets.difference(new HashSet<>(allReadAddresses), knownAddresses);
+                        Sets.difference(new HashSet<>(addresses), knownAddresses);
                 // Create a new read batch with the missing data and retry.
                 ImmutableList<LogData> nonWrittenData = readBatch.getData()
                         .stream()
