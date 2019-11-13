@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 
 import org.junit.jupiter.api.Test;
@@ -53,7 +54,7 @@ public class CorfuStorePerfIT extends  AbstractIT {
         Map<UUID, Event> map = rt.getObjectsView()
             .build()
             .setStreamName("s1")
-            .setType(CorfuTable.class)
+            .setTypeToken(new TypeToken<CorfuTable<UUID, Event>>() {})
             .open();
 
         Event event;

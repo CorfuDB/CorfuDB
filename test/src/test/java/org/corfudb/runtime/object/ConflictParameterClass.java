@@ -10,7 +10,7 @@ import org.corfudb.annotations.MutatorAccessor;
  * Created by mwei on 12/15/16.
  */
 @CorfuObject
-public class ConflictParameterClass {
+public class ConflictParameterClass implements ICorfuSMR<ConflictParameterClass> {
 
     @Mutator(name = "mutatorTest")
     public void mutatorTest(int test1, @ConflictParameter int test2) {
@@ -25,5 +25,13 @@ public class ConflictParameterClass {
     @MutatorAccessor(name = "mutatorAccessorTest")
     public Object mutatorAccessorTest(@ConflictParameter String test1, String test2) {
         return 0;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ConflictParameterClass getContext(ICorfuExecutionContext.Context context) {
+        return this;
     }
 }

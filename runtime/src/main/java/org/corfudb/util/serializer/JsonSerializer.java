@@ -16,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuSMR;
 
-
 /**
  * Created by mwei on 2/10/16.
  */
@@ -58,7 +57,7 @@ public class JsonSerializer implements ISerializer {
             try {
                 return rt.getObjectsView().build()
                         .setStreamID(new UUID(b.readLong(), b.readLong()))
-                        .setType(Class.forName(smrClassName))
+                        .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
                         .open();
             } catch (ClassNotFoundException cnfe) {
                 log.error("Exception during deserialization!", cnfe);

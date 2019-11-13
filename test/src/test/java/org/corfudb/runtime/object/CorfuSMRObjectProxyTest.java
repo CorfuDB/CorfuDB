@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
@@ -251,7 +252,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
@@ -275,13 +276,13 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
 
         Map<String, String> test2 = r.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(Serializers.getDefaultSerializer())
                 .open();

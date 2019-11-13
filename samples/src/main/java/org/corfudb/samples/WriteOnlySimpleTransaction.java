@@ -2,6 +2,7 @@ package org.corfudb.samples;
 
 import java.util.Map;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 
 /**
@@ -36,7 +37,8 @@ public class WriteOnlySimpleTransaction extends BaseCorfuAppUtils {
         /**
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object.
          */
-        Map<String, Integer> map = instantiateCorfuObject(SMRMap.class, "A");
+        Map<String, Integer> map = instantiateCorfuObject(
+                new TypeToken<SMRMap<String, Integer>>() {}, "A");
 
 
         // thread 1: update "a" and "b" atomically
