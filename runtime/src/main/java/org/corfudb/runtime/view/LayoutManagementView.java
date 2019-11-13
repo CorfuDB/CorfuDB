@@ -406,6 +406,10 @@ public class LayoutManagementView extends AbstractView {
             }
             log.warn("attemptConsensus: Checking if {} has been accepted, retry {}", layout, x);
         }
+
+        // If our proposed layout was not selected, throw an exception.
+        throw new IllegalStateException(String.format("Layout %s was not accepted. " +
+                "Accepted layout is %s", layout, runtime.getLayoutView().getLayout()));
     }
 
     /**
