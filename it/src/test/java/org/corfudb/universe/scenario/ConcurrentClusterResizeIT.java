@@ -108,8 +108,8 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
 
 
             // Check that the segments are merged and all the servers are equal to numNodes
-            waitForLayoutChange(layout -> layout.getAllServers().size() == numNodes &&
-                            layout.getSegments().size() == 1, corfuClient);
+            waitForLayoutChange(layout -> layout.getAllServers().size() == numNodes, corfuClient);
+            waitForLayoutChange(layout -> layout.getSegments().size() == 1, corfuClient);
             // wait for the cluster to be up
             waitForClusterUp(table, "0");
             executor2.shutdownNow();
