@@ -23,6 +23,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -201,9 +202,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = createDefaultRuntime();
 
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
 
@@ -415,9 +416,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Create map and set up daemon writer thread.
         runtime = createDefaultRuntime();
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         final String data = createStringOfSize(1_000);
@@ -658,9 +659,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Create map and set up daemon writer thread.
         runtime = createDefaultRuntime();
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         final String data = createStringOfSize(1_000);
@@ -748,9 +749,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
 
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         final String data = createStringOfSize(1_000);

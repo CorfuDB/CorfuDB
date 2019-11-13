@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
@@ -73,7 +74,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         Map<String, String> map = rt.getObjectsView()
                 .build()
                 .setStreamName("s1")
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         // Create a map
@@ -120,7 +121,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         Map<String, String> map2 = privilegedRt.getObjectsView()
                 .build()
                 .setStreamName("s1")
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         // Verify that a high priority client can write to a map
@@ -143,7 +144,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         Map<String, String> map3 = rt3.getObjectsView()
                 .build()
                 .setStreamName("s1")
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         assertThat(map3.get("k1")).isEqualTo("v1");

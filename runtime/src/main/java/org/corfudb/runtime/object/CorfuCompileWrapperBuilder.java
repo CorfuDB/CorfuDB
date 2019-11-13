@@ -31,27 +31,22 @@ public class CorfuCompileWrapperBuilder {
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                   UUID streamID, Object[] args,
-                                   ISerializer serializer)
-            throws ClassNotFoundException, IllegalAccessException,
-            InstantiationException, InvocationTargetException {
+    public static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
+                                                         UUID streamID, Object[] args,
+                                                         ISerializer serializer)
+            throws Exception {
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
 
         // Instantiate a new instance of this class.
         ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
-                            findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
+                findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                type, args, serializer,
-                wrapperObject.getCorfuSMRUpcallMap(),
-                wrapperObject.getCorfuUndoMap(),
-                wrapperObject.getCorfuUndoRecordMap(),
-                wrapperObject.getCorfuResetSet()));
+        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<T>(rt, streamID,
+                type, args, serializer, wrapperObject));
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)

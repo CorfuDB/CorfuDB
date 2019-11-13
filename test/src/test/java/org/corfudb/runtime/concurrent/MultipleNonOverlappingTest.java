@@ -5,6 +5,7 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Assert;
 import org.junit.Test;
@@ -237,7 +238,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         return getRuntime().getObjectsView().TXEnd();
     }
 
-    protected <T> T instantiateCorfuObject(Class<T> tClass, String name) {
+    protected <T extends ICorfuSMR> T instantiateCorfuObject(Class<T> tClass, String name) {
 
         // TODO: Does not work at the moment.
         // corfudb.runtime.exceptions.NoRollbackException: Can't roll back due to non-undoable exception

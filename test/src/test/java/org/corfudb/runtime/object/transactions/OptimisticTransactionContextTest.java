@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -47,7 +48,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ConflictParameterClass testObject = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setType(ConflictParameterClass.class)
+                .setTypeToken(new TypeToken<ConflictParameterClass>() {})
                 .open();
 
         final String TEST_0 = "0";
@@ -147,7 +148,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> map = rtWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
@@ -187,7 +188,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> map = rtSlowWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
         int[] retry = new int[1];
