@@ -79,6 +79,7 @@ public abstract class WorkflowRequest {
                 log.info("getOrchestrator: orchestrator selected {}, layout {}", endpoint, layout);
                 managementClient = Optional.of(runtime.getLayoutView().getRuntimeLayout(layout)
                         .getManagementClient(endpoint));
+                break;
             }
 
         }
