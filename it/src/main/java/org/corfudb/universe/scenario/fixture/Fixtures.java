@@ -148,13 +148,9 @@ public interface Fixtures {
                     //empty
                     .orElse(new Properties());
 
-            Result<Properties, PropsLoaderException> vmPropertiesResult = VmConfigPropertiesLoader
-                    .loadVmProperties();
-
-            if (vmPropertiesResult.isError()) {
-                throw vmPropertiesResult.getError();
-            }
-            Properties vmProperties = vmPropertiesResult.get();
+            Properties vmProperties = VmConfigPropertiesLoader
+                    .loadVmProperties()
+                    .get();
 
             servers
                     .logLevel(Level.INFO)
