@@ -34,6 +34,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private ByteBuf serializedCache = null;
 
+    // last know serialized payload size.
+    @Getter
     private int lastKnownSize = NOT_KNOWN;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
@@ -252,6 +254,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         payload.set(newPayload);
         serializedCache = null;
         lastKnownSize = NOT_KNOWN;
+        unsetPayloadSize();
     }
 
     /**

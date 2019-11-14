@@ -246,6 +246,13 @@ public interface IMetadata {
     }
 
     /**
+     * Remove the payload size field.
+     */
+    default void unsetPayloadSize() {
+        getMetadataMap().remove(LogUnitMetadataType.PAYLOAD_SIZE);
+    }
+
+    /**
      * Get the un-compressed, serialized payload size.
      *
      * @return payload size

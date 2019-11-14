@@ -1,9 +1,9 @@
 package org.corfudb.protocols.logprotocol;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -33,14 +33,13 @@ import static com.google.common.base.Preconditions.checkState;
 public class SMRLogEntry extends LogEntry {
 
     // Map from stream-ID to a list of SMR updates to this stream.
-    @Getter
     public Map<UUID, List<SMRRecord>> streamUpdates = new ConcurrentHashMap<>();
 
     /**
      * A container to store streams and their payloads (i.e. serialized SMR updates).
      * This is required to support lazy stream deserialization.
      */
-    private final Map<UUID, byte[]> streamBuffers = new ConcurrentHashMap<>();
+    private final Map<UUID, List<byte[]>> streamBuffers = new ConcurrentHashMap<>();
 
     public SMRLogEntry() {
         this.type = LogEntryType.SMRLOG;
@@ -55,7 +54,7 @@ public class SMRLogEntry extends LogEntry {
      * @return all the stream identifiers.
      */
     public Set<UUID> getStreams() {
-        return getEntryMap().keySet();
+        return Sets.union(streamUpdates.keySet(), streamBuffers.keySet());
     }
 
     /**
@@ -79,6 +78,17 @@ public class SMRLogEntry extends LogEntry {
      */
     public void addTo(UUID streamId, List<SMRRecord> smrRecords) {
         List<SMRRecord> records = streamUpdates.computeIfAbsent(streamId, k -> new ArrayList<>());
+        records.addAll(smrRecords);
+    }
+
+    /**
+     * Add multiple serialized SMR-updates to one object's update-list.
+     *
+     * @param streamId   stream identifier
+     * @param smrRecords a list of serialized SMRRecord to add
+     */
+    public void addSerialized(UUID streamId, List<byte[]> smrRecords) {
+        List<byte[]> records = streamBuffers.computeIfAbsent(streamId, k -> new ArrayList<>());
         records.addAll(smrRecords);
     }
 
@@ -115,13 +125,14 @@ public class SMRLogEntry extends LogEntry {
         super.deserializeBuffer(b, rt);
         int numStreams = b.readInt();
 
-        for (int i = 0; i < numStreams; i++) {
+        for (int s = 0; s < numStreams; s++) {
             UUID streamId = new UUID(b.readLong(), b.readLong());
-
-            int updateLength = b.readInt();
-            byte[] streamUpdates = new byte[updateLength];
-            b.readBytes(streamUpdates);
-            streamBuffers.put(streamId, streamUpdates);
+            int updateCount = b.readInt();
+            List<byte[]> updateBuffers = new ArrayList<>(updateCount);
+            for (int i = 0; i < updateCount; i++) {
+                updateBuffers.add(SMRRecord.slice(b));
+            }
+            streamBuffers.put(streamId, updateBuffers);
         }
     }
 
@@ -131,21 +142,20 @@ public class SMRLogEntry extends LogEntry {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
-        b.writeInt(streamUpdates.size());
+        b.writeInt(getStreams().size());
+        // Stream payload structure
+        // | stream id | update count | SMR Update 1 | ... | SMR Update N|
         streamUpdates.forEach((sid, records) -> {
-            // Stream payload structure
-            // | stream id | payload size | SMR Update 1 | ... | SMR Update N|
             b.writeLong(sid.getMostSignificantBits());
             b.writeLong(sid.getLeastSignificantBits());
-            int payloadSizeIndex = b.writerIndex();
-            b.writeInt(0);
-            int payloadIndex = b.writerIndex();
             b.writeInt(records.size());
             records.forEach(smrRecord -> smrRecord.serialize(b));
-            int length = b.writerIndex() - payloadIndex;
-            b.writerIndex(payloadSizeIndex);
-            b.writeInt(length);
-            b.writerIndex(payloadIndex + length);
+        });
+        streamBuffers.forEach((sid, bytes) -> {
+            b.writeLong(sid.getMostSignificantBits());
+            b.writeLong(sid.getLeastSignificantBits());
+            b.writeInt(bytes.size());
+            bytes.forEach(b::writeBytes);
         });
     }
 
@@ -165,21 +175,32 @@ public class SMRLogEntry extends LogEntry {
             }
 
             // The stream exists and it needs to be deserialized.
-            byte[] streamUpdatesBuf = streamBuffers.get(streamId);
-            ByteBuf buf = Unpooled.wrappedBuffer(streamUpdatesBuf);
-            int numUpdates = buf.readInt();
-            List<SMRRecord> records = new ArrayList<>(numUpdates);
-            for (int update = 0; update < numUpdates; update++) {
+            List<byte[]> updatesBuf = streamBuffers.get(streamId);
+            List<SMRRecord> records = new ArrayList<>(updatesBuf.size());
+            updatesBuf.forEach(bytes -> {
+                ByteBuf buf = Unpooled.wrappedBuffer(bytes);
                 SMRRecord smrRecord = SMRRecord.deserializeFromBuffer(buf);
                 smrRecord.setGlobalAddress(getGlobalAddress());
                 records.add(smrRecord);
-            }
+            });
 
             streamBuffers.remove(streamId);
             return records;
         });
 
         return resSMRUpdates == null ? Collections.emptyList() : resSMRUpdates;
+    }
+
+    /**
+     * Get the list of serialized SMR updates for a particular object.
+     * This is useful when the caller does not have all the serializers
+     * and only needs the serialized format of SMR updates.
+     *
+     * @param streamId StreamID
+     * @return an empty list if object has no updates; a list of updates if exists
+     */
+    public List<byte[]> getSerializedSMRUpdates(UUID streamId) {
+        return streamBuffers.getOrDefault(streamId, Collections.emptyList());
     }
 
     /**
@@ -208,7 +229,7 @@ public class SMRLogEntry extends LogEntry {
     }
 
     @VisibleForTesting
-    Map<UUID, byte[]> getStreamBuffers() {
+    Map<UUID, List<byte[]>> getStreamBuffers() {
         return streamBuffers;
     }
 
