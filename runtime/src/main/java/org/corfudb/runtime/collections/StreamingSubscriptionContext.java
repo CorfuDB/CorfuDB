@@ -93,6 +93,13 @@ public class StreamingSubscriptionContext {
     private final static int QUEUE_CAPACITY = 512;
 
     /**
+     * Second defined in nano
+     */
+    /**
+     * Threshold for long running callbacks in seconds
+     */
+    private final static long thresholdForLongRunningCallsInNano = 60L * 1_000_000_000;
+    /**
      * Bounded queue of CorfuStreamEntries to be delivered to the client.
      */
     private final LinkedBlockingQueue<CorfuStreamEntries> streamQueue =
@@ -236,7 +243,15 @@ public class StreamingSubscriptionContext {
                     if (nextUpdate == null) {
                         return;
                     }
+                    long before = System.nanoTime();
+
                     listener.onNext(nextUpdate);
+
+                    long after = System.nanoTime();
+                    if (after - before > thresholdForLongRunningCallsInNano) {
+                        log.error("{} onNext() took too long {} seconds", listener.toString(),
+                                (after - before)/1_000_000_000);
+                    }
                     updatesDelivered++;
                 } while (numUpdatesToDeliver > updatesDelivered);
             } catch (Throwable t) {
