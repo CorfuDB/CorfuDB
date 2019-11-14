@@ -9,7 +9,7 @@ import org.corfudb.util.serializer.Serializers;
  * This serializer class is to be used only in tests.
  */
 public class CustomSerializer implements ISerializer {
-    ISerializer serializer = Serializers.JSON;
+    ISerializer serializer = Serializers.getDefaultSerializer();
     private final byte type;
 
     public CustomSerializer(byte type) {

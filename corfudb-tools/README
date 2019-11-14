@@ -13,7 +13,7 @@ The browser supports read operation which reads and outputs all entries in a
 given table and namespace.  It can be invoked like the below example-
 
 java -cp "corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
-org.corfudb.browser.CorfuBrowserMain
+org.corfudb.browser.CorfuStoreBrowserMain
 --host=10.160.29.112
 --port=9000
 --namespace=sample_namespace
@@ -27,7 +27,7 @@ org.corfudb.browser.CorfuBrowserMain
 Keystore and truststore parameters are not required if tls is disabled.
 
 For usage help,
-java -cp "corfuBrowser/corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuTableBrowserMain <--help|-h>
+java -cp "corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuStoreBrowserMain <--help|-h>
 
 TODO(pmajmudar): Add a user script to invoke the browser.
 

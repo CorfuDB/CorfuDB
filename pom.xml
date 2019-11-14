@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.3.0.20191030234407.6487</version>
+    <version>0.3.0.20191114052646.8593</version>
 
     <modules>
         <module>infrastructure</module>
@@ -170,7 +170,7 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.36.Final</version>
+            <version>4.1.42.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

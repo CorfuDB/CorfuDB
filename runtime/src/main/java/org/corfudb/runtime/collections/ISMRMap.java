@@ -13,7 +13,7 @@ import org.corfudb.annotations.MutatorAccessor;
  * Created by mwei on 1/9/16.
  */
 @SuppressWarnings("checkstyle:abbreviation")
-public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
+public interface ISMRMap<K, V> extends Map<K, V> {
 
     /**
      * {@inheritDoc}

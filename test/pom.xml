@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.3.0.20191030234407.6487</version>
+        <version>0.3.0.20191114052646.8593</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -57,6 +57,12 @@
             <groupId>org.fusesource.jansi</groupId>
             <artifactId>jansi</artifactId>
             <version>1.14</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.2.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -147,7 +153,7 @@
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>7.3</version>
+                        <version>8.18</version>
                     </dependency>
                 </dependencies>
             </plugin>
