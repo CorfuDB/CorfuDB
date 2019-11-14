@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -20,9 +21,16 @@ import javax.annotation.Nullable;
 
 @EqualsAndHashCode
 public class TableSchema<K extends Message, V extends Message, M extends Message> {
+    @Getter
     private final String tableName;
+
+    @Getter
     private final Class<K> keyClass;
+
+    @Getter
     private final Class<V> payloadClass;
+
+    @Getter
     private final Class<M> metadataClass;
 
     public TableSchema(@Nonnull String tableName, @Nonnull Class<K> keyClass,
