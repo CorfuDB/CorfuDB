@@ -28,6 +28,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private ByteBuf serializedCache = null;
 
+    // last know serialized payload size.
+    @Getter
     private int lastKnownSize = NOT_KNOWN;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
@@ -106,7 +108,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (payload.get() == null) {
             return;
         }
+        int startIndex = buf.writerIndex();
         Serializers.CORFU.serialize(payload.get(), buf);
+        lastKnownSize = buf.writerIndex() - startIndex;
     }
 
     @Override
@@ -124,7 +128,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (serializedCache == null) {
             serializedCache = Unpooled.buffer();
             doSerializeInternal(serializedCache);
-            lastKnownSize = serializedCache.array().length;
         } else {
             serializedCache.retain();
         }
@@ -267,6 +270,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 buf.writerIndex(lengthIndex + size + 4);
             } else {
                 ICorfuPayload.serialize(buf, data);
+                lastKnownSize = data.length;
             }
         }
         if (type.isMetadataAware()) {
