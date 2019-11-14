@@ -81,8 +81,11 @@ class CompactionMetadata {
                 continue;
             }
 
-            // If this is a new LogData created on server (e.g. during compaction),
-            // we should serialize it first to get the size.
+            if (logData.getLastKnownSize() != LogData.NOT_KNOWN) {
+                totalPayloadSize += logData.getLastKnownSize();
+                continue;
+            }
+
             try (ILogData.SerializationHandle sh = logData.getSerializedForm()) {
                 totalPayloadSize += logData.getSizeEstimate();
             }

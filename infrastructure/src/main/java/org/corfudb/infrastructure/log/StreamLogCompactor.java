@@ -250,19 +250,19 @@ public class StreamLogCompactor {
 
         // Check each stream and every update in the stream.
         for (UUID streamId : smrLogEntry.getStreams()) {
+            List<byte[]> smrRecords = smrLogEntry.getSerializedSMRUpdates(streamId);
             // No garbage information on this stream.
             if (garbageEntry.getGarbageRecords(streamId) == null) {
-                compactedEntry.addTo(streamId, smrLogEntry.getSMRUpdates(streamId));
+                compactedEntry.addSerialized(streamId, smrRecords);
                 continue;
             }
 
             // Check each SMR update in this stream.
-            List<SMRRecord> smrRecords = smrLogEntry.getSMRUpdates(streamId);
-            List<SMRRecord> compactedRecords = new ArrayList<>();
+            List<byte[]> compactedRecords = new ArrayList<>();
             for (int i = 0; i < smrRecords.size(); i++) {
-                SMRRecord smrRecord = smrRecords.get(i);
+                byte[] smrRecord = smrRecords.get(i);
                 // If the record is already compacted, do not compact again.
-                if (smrRecord.isCompacted()) {
+                if (SMRRecord.isCompacted(smrRecord)) {
                     compactedRecords.add(smrRecord);
                     compactionFeedback.addGarbageRecordToPrune(address, streamId, i);
                     continue;
@@ -279,7 +279,7 @@ public class StreamLogCompactor {
                 // If the record should be compacted, we put an empty (compacted) record.
                 // It cannot simply be discarded as the we need to preserve the order
                 // of the SMR updates so clients can correctly mark garbage afterwards.
-                compactedRecords.add(SMRRecord.COMPACTED_RECORD);
+                compactedRecords.add(SMRRecord.COMPACTED_RECORD_SERIALIZED);
                 // Record this garbage record to later prune the GarbageLogSegment.
                 compactionFeedback.addGarbageRecordToPrune(address, streamId, i);
                 // Calculate the largest marker address in this segment.
@@ -295,7 +295,7 @@ public class StreamLogCompactor {
                 compactionFeedback.addAddressToPrune(streamId, address);
                 compactionFeedback.addGarbageRecordToPrune(address, streamId);
             } else {
-                compactedEntry.addTo(streamId, compactedRecords);
+                compactedEntry.addSerialized(streamId, compactedRecords);
             }
         }
 
