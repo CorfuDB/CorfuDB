@@ -1,6 +1,7 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -28,6 +29,13 @@ import java.util.Arrays;
 public class SMRRecord {
 
     public final static SMRRecord COMPACTED_RECORD = SMRRecord.builder().build();
+    public final static byte[] COMPACTED_RECORD_SERIALIZED;
+
+    static {
+        ByteBuf buf = Unpooled.buffer(1);
+        COMPACTED_RECORD.serialize(buf);
+        COMPACTED_RECORD_SERIALIZED = buf.array();
+    }
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -95,10 +103,28 @@ public class SMRRecord {
     private int serializedSize = 0;
 
     /**
+     * SMRRecord constructor.
+     */
+    public SMRRecord(String smrMethod, @NonNull Object[] smrArguments, ISerializer serializer) {
+        this.SMRMethod = smrMethod;
+        this.SMRArguments = smrArguments;
+        this.serializerType = serializer;
+    }
+
+    /**
      * If this record is trimmed because of compaction.
      */
     public boolean isCompacted() {
         return this == COMPACTED_RECORD;
+    }
+
+    /**
+     * If this byte array representing the record is
+     * trimmed because of compaction.
+     */
+    public static boolean isCompacted(byte[] record) {
+        ByteBuf buf = Unpooled.wrappedBuffer(record);
+        return buf.readBoolean();
     }
 
     /**
@@ -125,16 +151,6 @@ public class SMRRecord {
         undoable = false;
     }
 
-
-    /**
-     * SMRRecord constructor.
-     */
-    public SMRRecord(String smrMethod, @NonNull Object[] smrArguments, ISerializer serializer) {
-        this.SMRMethod = smrMethod;
-        this.SMRArguments = smrArguments;
-        this.serializerType = serializer;
-    }
-
     /**
      * Deserialize from buffer and return a new {@code SMRRecord}.
      *
@@ -147,6 +163,7 @@ public class SMRRecord {
             return COMPACTED_RECORD;
         }
         SMRRecord record = new SMRRecord();
+        record.serializedSize = b.readInt();
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
         b.readBytes(methodBytes, 0, methodLength);
@@ -161,7 +178,6 @@ public class SMRRecord {
             b.skipBytes(len);
         }
         record.SMRArguments = arguments;
-        record.serializedSize = b.readInt();
         return record;
     }
 
@@ -175,10 +191,13 @@ public class SMRRecord {
         int startPos = b.writerIndex();
         b.writeBoolean(isCompacted());
         if (isCompacted()) {
-            // A compacted record does not need serializedSize;
+            // Do not write serializedSize to the buffer if compacted.
             return;
         }
 
+        // Write total size of the record.
+        int sizeIndex = b.writerIndex();
+        b.writeInt(0);
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
         b.writeByte(serializerType.getType());
@@ -193,8 +212,33 @@ public class SMRRecord {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
-        // including the size of serializedSize itself.
-        serializedSize = b.writerIndex() - startPos + 4;
+        // Calculate the serialized size for garbage marking purpose.
+        serializedSize = b.writerIndex() - startPos;
+        b.writerIndex(sizeIndex);
         b.writeInt(serializedSize);
+        b.writerIndex(startPos + serializedSize);
+    }
+
+    /**
+     * Get the bytes of one {@link SMRRecord} from a larger byte buffer
+     * slice and transfer it to a new byte array.
+     *
+     * @param b byte buffer to slice from
+     * @return a new byte array containing the transferred bytes
+     */
+    static byte[] slice(ByteBuf b) {
+        int startIndex = b.readerIndex();
+
+        boolean compacted = b.readBoolean();
+        if (compacted) {
+            return new byte[]{1};
+        }
+
+        int totalSize = b.readInt();
+        b.readerIndex(startIndex);
+        byte[] array = new byte[totalSize];
+        b.readBytes(array);
+
+        return array;
     }
 }
