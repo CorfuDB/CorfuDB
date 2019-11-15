@@ -2,10 +2,12 @@ package org.corfudb.browser;
 
 import com.google.common.reflect.TypeToken;
 
+import java.util.Collection;
 import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -71,5 +73,19 @@ public class CorfuStoreBrowser {
                 .append("\n====================\n");
             log.info(builder.toString());
         }
+    }
+
+    /**
+     * List all tables in CorfuStore
+     */
+    public void listTables(String namespace)
+    {
+        log.info("\n=====Tables=======\n");
+        for (CorfuStoreMetadata.TableName tableName : runtime.getTableRegistry()
+            .listTables(namespace)) {
+            log.info("Table: " + tableName.getTableName());
+            log.info("Namespace: " + tableName.getNamespace());
+        }
+        log.info("\n======================\n");
     }
 }
