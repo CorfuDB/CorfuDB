@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -30,7 +31,7 @@ import org.corfudb.runtime.view.TableRegistry;
 /**
  * Query class provides methods to query the CorfuStore tables.
  * It has several methods to query by secondary index, to perform predicate joins and apply merge filters.
- *
+ * <p>
  * Created by zlokhandwala on 2019-08-09.
  */
 public class Query {
@@ -109,8 +110,8 @@ public class Query {
     @Nullable
     public <K extends Message, V extends Message, M extends Message>
     CorfuRecord<V, M> getRecord(@Nonnull final String tableName,
-                          @Nullable final Timestamp timestamp,
-                          @Nonnull final K key) {
+                                @Nullable final Timestamp timestamp,
+                                @Nonnull final K key) {
         if (tableName == null) {
             throw new IllegalArgumentException("Query::getRecord needs a valid tableName");
         }
@@ -150,14 +151,34 @@ public class Query {
         }
     }
 
+    /**
+     * Returns the keySet of the Table.
+     *
+     * @param tableName TableName to query.
+     * @param timestamp Timestamp to query at. If null, latest timestamp is used.
+     * @param <K>       Type of Key.
+     * @return Set of keys.
+     */
     @Nonnull
-    private <K extends Message, V extends Message, M extends Message>
-    Collection<CorfuRecord<V, M>> scanAndFilter(@Nonnull final String tableName,
-                                                @Nullable Timestamp timestamp,
-                                                @Nonnull final Predicate<CorfuRecord<V, M>> p) {
+    public <K extends Message> Set<K> keySet(@Nonnull String tableName,
+                                             @Nullable Timestamp timestamp) {
         try {
             txBegin(timestamp);
-            return ((Table<K, V, M>) getTable(tableName)).scanAndFilter(p);
+            return (Set<K>) getTable(tableName).keySet();
+        } finally {
+            txEnd();
+        }
+    }
+
+    @Nonnull
+    private <K extends Message, V extends Message, M extends Message>
+    List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
+            @Nonnull final String tableName,
+            @Nullable Timestamp timestamp,
+            @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> predicate) {
+        try {
+            txBegin(timestamp);
+            return ((Table<K, V, M>) getTable(tableName)).scanAndFilterByEntry(predicate);
         } finally {
             txEnd();
         }
@@ -182,8 +203,8 @@ public class Query {
         return new QueryResult<>(((Table<K, V, M>) getTable(tableName)).getByIndex(indexName, indexKey));
     }
 
-    private <V extends Message, M extends Message, R>
-    Collection<R> initializeResultCollection(QueryOptions<V, M, R> queryOptions) {
+    private <K extends Message, V extends Message, M extends Message, R>
+    Collection<R> initializeResultCollection(QueryOptions<K, V, M, R> queryOptions) {
         if (!queryOptions.isDistinct()) {
             return new ArrayList<>();
         }
@@ -193,10 +214,10 @@ public class Query {
         return new HashSet<>();
     }
 
-    private <V extends Message, M extends Message, R>
-    Collection<R> transform(Collection<CorfuRecord<V, M>> queryResult,
+    private <K extends Message, V extends Message, M extends Message, R>
+    Collection<R> transform(Collection<CorfuStoreEntry<K, V, M>> queryResult,
                             Collection<R> resultCollection,
-                            Function<CorfuRecord<V, M>, R> projection) {
+                            Function<CorfuStoreEntry<K, V, M>, R> projection) {
         return queryResult.stream()
                 .map(v -> Optional.ofNullable(projection)
                         .map(function -> function.apply(v))
@@ -209,14 +230,15 @@ public class Query {
      *
      * @param tableName Table name.
      * @param query     Predicate to filter the values.
+     * @param <K>       Type of Key.
      * @param <V>       Type of Value.
      * @param <R>       Type of returned projected values.
      * @return Result of the query.
      */
     @Nonnull
-    public <V extends Message, M extends Message, R>
+    public <K extends Message, V extends Message, M extends Message, R>
     QueryResult<R> executeQuery(@Nonnull final String tableName,
-                                 @Nonnull final Predicate<CorfuRecord<V, M>> query) {
+                                @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> query) {
         return executeQuery(tableName, query, DEFAULT_OPTIONS);
     }
 
@@ -235,12 +257,13 @@ public class Query {
      * @return Result of the query.
      */
     @Nonnull
-    public <V extends Message, M extends Message, R>
+    public <K extends Message, V extends Message, M extends Message, R>
     QueryResult<R> executeQuery(@Nonnull final String tableName,
-                                 @Nonnull final Predicate<CorfuRecord<V, M>> query,
-                                 @Nonnull final QueryOptions<V, M, R> queryOptions) {
+                                @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> query,
+                                @Nonnull final QueryOptions<K, V, M, R> queryOptions) {
 
-        Collection<CorfuRecord<V, M>> filterResult = scanAndFilter(tableName, queryOptions.getTimestamp(), query);
+        List<CorfuStoreEntry<K, V, M>> filterResult
+                = scanAndFilterByEntry(tableName, queryOptions.getTimestamp(), query);
         Collection<R> result = initializeResultCollection(queryOptions);
         return new QueryResult<>(transform(filterResult, result, queryOptions.getProjection()));
     }
@@ -255,21 +278,23 @@ public class Query {
      * @param joinPredicate  Predicate to filter entries during the join.
      * @param joinFunction   Function to merge entries.
      * @param joinProjection Project the merged entries.
-     * @param <Val1>         Type of Value in table 1.
-     * @param <Val2>         Type of Value in table 2.
+     * @param <V1>           Type of Value in table 1.
+     * @param <V2>           Type of Value in table 2.
      * @param <T>            Type of resultant value after merging type V and type W.
      * @param <U>            Type of value projected from T.
      * @return Result of query.
      */
     @Nonnull
-    public <Val1 extends Message, Val2 extends Message, Meta1 extends Message, Meta2 extends Message, T, U>
+    public <K1 extends Message, K2 extends Message,
+            V1 extends Message, V2 extends Message,
+            M1 extends Message, M2 extends Message, T, U>
     QueryResult<U> executeJoinQuery(
             @Nonnull final String tableName1,
             @Nonnull final String tableName2,
-            @Nonnull final Predicate<CorfuRecord<Val1, Meta1>> query1,
-            @Nonnull final Predicate<CorfuRecord<Val2, Meta2>> query2,
-            @Nonnull final BiPredicate<Val1, Val2> joinPredicate,
-            @Nonnull final BiFunction<Val1, Val2, T> joinFunction,
+            @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
+            @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
+            @Nonnull final BiPredicate<V1, V2> joinPredicate,
+            @Nonnull final BiFunction<V1, V2, T> joinFunction,
             final Function<T, U> joinProjection) {
         return executeJoinQuery(
                 tableName1,
@@ -295,8 +320,8 @@ public class Query {
      * @param joinPredicate  Predicate to filter entries during the join.
      * @param joinFunction   Function to merge entries.
      * @param joinProjection Project the merged entries.
-     * @param <Val1>         Type of Value in table 1.
-     * @param <Val2>         Type of Value in table 2.
+     * @param <V1>           Type of Value in table 1.
+     * @param <V2>           Type of Value in table 2.
      * @param <R>            Type of projected values from table 1 from type V.
      * @param <S>            Type of projected values from table 2 from type W.
      * @param <T>            Type of resultant value after merging type R and type S.
@@ -304,25 +329,30 @@ public class Query {
      * @return Result of query.
      */
     @Nonnull
-    public <Val1 extends Message, Val2 extends Message, Meta1 extends Message, Meta2 extends Message, R, S, T, U>
+    public <K1 extends Message, K2 extends Message,
+            V1 extends Message, V2 extends Message,
+            M1 extends Message, M2 extends Message,
+            R, S, T, U>
     QueryResult<U> executeJoinQuery(
             @Nonnull final String tableName1,
             @Nonnull final String tableName2,
-            @Nonnull final Predicate<CorfuRecord<Val1, Meta1>> query1,
-            @Nonnull final Predicate<CorfuRecord<Val2, Meta2>> query2,
-            @Nonnull final QueryOptions<Val1, Meta1, R> queryOptions1,
-            @Nonnull final QueryOptions<Val2, Meta2, S> queryOptions2,
+            @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
+            @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
+            @Nonnull final QueryOptions<K1, V1, M1, R> queryOptions1,
+            @Nonnull final QueryOptions<K2, V2, M2, S> queryOptions2,
             @Nonnull final BiPredicate<R, S> joinPredicate,
             @Nonnull final BiFunction<R, S, T> joinFunction,
             final Function<T, U> joinProjection) {
 
-        Collection<CorfuRecord<Val1, Meta1>> filterResult1 = scanAndFilter(tableName1, queryOptions1.getTimestamp(), query1);
+        List<CorfuStoreEntry<K1, V1, M1>> filterResult1
+                = scanAndFilterByEntry(tableName1, queryOptions1.getTimestamp(), query1);
         Collection<R> queryResult1 = transform(
                 filterResult1,
                 initializeResultCollection(queryOptions1),
                 queryOptions1.getProjection());
 
-        Collection<CorfuRecord<Val2, Meta2>> filterResult2 = scanAndFilter(tableName2, queryOptions2.getTimestamp(), query2);
+        List<CorfuStoreEntry<K2, V2, M2>> filterResult2
+                = scanAndFilterByEntry(tableName2, queryOptions2.getTimestamp(), query2);
         Collection<S> queryResult2 = transform(
                 filterResult2,
                 initializeResultCollection(queryOptions2),
@@ -368,12 +398,13 @@ public class Query {
     /**
      * Combines the result of a multi table join, two tables at a time
      * This function can be optimized without recursions if required.
-     * @param list
-     * @param mergePayload
-     * @param func
-     * @param depth
-     * @param <R>
-     * @return
+     *
+     * @param list         List of collection of values across tables.
+     * @param mergePayload Payload for the next merge level. Starts with an empty list.
+     * @param func         Merge function specified by the user.
+     * @param depth        Current depth. Starts at 0.
+     * @param <R>          Return type.
+     * @return List of values after merge.
      */
     private <R> List<R> merge(@Nonnull List<Collection<?>> list,
                               @Nonnull List<Object> mergePayload,
@@ -414,15 +445,14 @@ public class Query {
     public <R> QueryResult<R> executeMultiJoinQuery(@Nonnull final Collection<String> tableNames,
                                                     @Nonnull final MergeFunction<R> joinFunction) {
 
-        List<Collection<? extends Object>> values = new ArrayList<>();
+        List<Collection<?>> values = new ArrayList<>();
         for (String tableName : tableNames) {
-            Collection<Message> messages = scanAndFilter(tableName, null, corfuRecord -> true)
+            Collection<Message> messages = scanAndFilterByEntry(tableName, null, corfuStoreEntry -> true)
                     .stream()
-                    .map(corfuRecord -> corfuRecord.getPayload())
+                    .map(CorfuStoreEntry::getPayload)
                     .collect(Collectors.toList());
             values.add(messages);
         }
-
 
         int mergeJoinDepth = 0; // shallow merges for now
         Collection<R> mergedResults = merge(values, new ArrayList<>(), joinFunction, mergeJoinDepth);

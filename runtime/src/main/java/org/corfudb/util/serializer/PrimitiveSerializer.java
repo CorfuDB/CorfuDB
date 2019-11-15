@@ -16,6 +16,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 
 /**
@@ -186,7 +187,7 @@ public class PrimitiveSerializer implements ISerializer {
                     try {
                         return r.getObjectsView().build()
                                 .setStreamID(new UUID(b.readLong(), b.readLong()))
-                                .setType(Class.forName(smrClassName))
+                                .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
                                 .open();
                     } catch (ClassNotFoundException cnfe) {
                         log.error("Exception during deserialization!", cnfe);

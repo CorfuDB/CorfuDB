@@ -33,7 +33,7 @@ public class Helpers{
         return createMap(streamName, cr, SMRMap.class);
     }
 
-    static <T> Map<String, String> createMap(String streamName, CorfuRuntime cr, Class<T> type) {
+    static <T extends ICorfuSMR> Map<String, String> createMap(String streamName, CorfuRuntime cr, Class<T> type) {
         return (Map<String, String>) cr.getObjectsView().build()
                 .setStreamName(streamName)
                 .setType(type)

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 
 /**
@@ -70,7 +71,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         Map<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
-                .setType(SMRMap.class)  // object class backed by this stream
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
                 .open();                // instantiate the object!
 
         // populate map: sequentially
@@ -104,7 +105,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
                     getCorfuRuntime().getObjectsView()
                             .build()
                             .setStreamName("C" + m)
-                            .setType(SMRMap.class)
+                            .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
                             .open()
             );
         }

@@ -41,6 +41,11 @@ message LogEntry {
     optional int64 clientId_most_significant = 17;
     // ThreadId is the thread id that created this LogEntry
     optional int64 threadId = 18;
+    // The type of codec that payload was encoded with
+    // Protobuf doesnt have a byte, so this should use
+    // less than 4-bytes to encode, since the codecType
+    // range is positive and fits in a byte
+    optional int32 codecType = 19;
 }
 
 message LogHeader {

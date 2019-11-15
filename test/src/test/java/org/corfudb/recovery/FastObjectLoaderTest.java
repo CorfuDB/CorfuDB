@@ -1,5 +1,6 @@
 package org.corfudb.recovery;
 
+import com.google.common.reflect.TypeToken;
 import org.assertj.core.data.MapEntry;
 import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -15,6 +16,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -52,13 +54,13 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     private int key_count = 0;
     private Map<String, Map> maps = new HashMap<>();
 
-    private <T extends Map<String, String>> void populateMapWithNextKey(T map) {
+    private <T extends Map<String, String>, ICorfuExecutionContext> void populateMapWithNextKey(T map) {
         map.put("key" + key_count, "value" + key_count);
         key_count++;
     }
 
-    <T extends Map> void populateMaps(int numMaps, CorfuRuntime rt, Class<T> type, boolean reset,
-                                      int keyPerMap) {
+    <T extends ICorfuSMR> void populateMaps(int numMaps, CorfuRuntime rt, Class<T> type,
+                                            boolean reset, int keyPerMap) {
         if (reset) {
             maps.clear();
             key_count = 0;
@@ -66,7 +68,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         for (int i = 0; i < numMaps; i++) {
             String mapName = "Map" + i;
             Map currentMap = maps.computeIfAbsent(mapName, (k) ->
-                (T) Helpers.createMap(k, rt, type)
+                    Helpers.createMap(k, rt, type)
             );
 
             for(int j = 0; j < keyPerMap; j++) {
@@ -694,7 +696,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime originalRuntime = getDefaultRuntime();
 
         Map<String, String> originalMap = originalRuntime.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
@@ -711,7 +713,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         // because it was already created in the ObjectsView cache
         // with the correct serializer.
         Map<String, String> recreatedMap = recreatedRuntime.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("test")
                 .open();
 
@@ -725,7 +727,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime originalRuntime = getDefaultRuntime();
 
         CorfuTable originalTable = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
 
@@ -742,7 +744,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         fsmr.loadMaps();
 
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         // Get raw maps (VersionLockedObject)
@@ -770,7 +772,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
 
         CorfuTable originalTable = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -797,7 +799,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         // Recreating the table without explicitly providing the indexer
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -817,12 +819,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime originalRuntime = getDefaultRuntime();
 
         SMRMap smrMap = originalRuntime.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("smrMap")
                 .open();
 
         CorfuTable corfuTable = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("corfuTable")
                 .open();
 
@@ -861,7 +863,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         Serializers.registerSerializer(customSerializer);
 
         CorfuTable originalTable = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
@@ -879,7 +881,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         fsmr.loadMaps();
 
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         // Get raw maps (VersionLockedObject)

@@ -22,6 +22,7 @@ message LogicalSwitch {
 message ManagedResources {
     optional string create_user = 1;
     optional int64 version = 2 [(org.corfudb.runtime.schema).version = true];
+    optional int64 create_timestamp = 3;
 }
 
 message EventInfo {

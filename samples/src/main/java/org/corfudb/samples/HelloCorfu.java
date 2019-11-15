@@ -2,6 +2,7 @@ package org.corfudb.samples;
 
 import java.util.Map;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.util.GitRepositoryState;
@@ -62,7 +63,7 @@ public class HelloCorfu {
         Map<String, Integer> map = runtime.getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
-                .setType(SMRMap.class)  // object class backed by this stream
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
                 .open();                // instantiate the object!
 
         /**

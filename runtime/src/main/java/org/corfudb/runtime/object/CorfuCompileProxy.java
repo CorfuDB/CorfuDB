@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -60,7 +61,7 @@ import java.util.function.Supplier;
  * <p>Created by mwei on 11/11/16.
  */
 @Slf4j
-public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
+public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
 
     /**
      * The underlying object. This object stores the actual
@@ -128,19 +129,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @param type                Type of underlying object to instantiate a new instance.
      * @param args                Arguments to create this proxy.
      * @param serializer          Serializer used by the SMR entries to serialize the arguments.
-     * @param upcallTargetMap     upCallTargetMap
-     * @param undoTargetMap       undoTargetMap
-     * @param undoRecordTargetMap undoRecordTargetMap
-     * @param resetSet            resetSet
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                             ISerializer serializer,
-                             Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
-                             Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
-                             Set<String> resetSet
+                             ISerializer serializer, ICorfuSMR<T> wrapperObject
     ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -152,8 +145,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                upcallTargetMap, undoRecordTargetMap,
-                undoTargetMap, resetSet);
+                wrapperObject);
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();
@@ -165,6 +157,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         counterAccessLocked = metrics.counter(mpObj + "access-locked");
         counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
         counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public  <R> R passThrough(Function<T, R> method) {
+        return underlyingObject.passThrough(method);
     }
 
     /**
@@ -462,6 +462,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             throw new RuntimeException(e);
         }
     }
+
     @Override
     public String toString() {
         return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
