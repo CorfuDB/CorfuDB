@@ -5,7 +5,9 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -23,7 +25,7 @@ import java.util.UUID;
  * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
  */
 @Slf4j
-public class MultiCheckpointWriter<T extends Map> {
+public class MultiCheckpointWriter<T extends StreamingMap> {
     @Getter
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
 

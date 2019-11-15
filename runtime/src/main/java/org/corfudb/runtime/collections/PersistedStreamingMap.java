@@ -38,13 +38,13 @@ import java.util.stream.Stream;
  * @param <V> value type
  */
 @Slf4j
-public class PersistedStreamingMap<K, V> implements StreamingMap<K, V> {
+public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     static {
         RocksDB.loadLibrary();
     }
 
-    private final StreamingMap<K, V> optimisticMap = new StreamingMapDecorator<>();
+    private final ContextAwareMap<K, V> optimisticMap = new StreamingMapDecorator<>();
     private final AtomicInteger dataSetSize = new AtomicInteger();
     private final CorfuRuntime corfuRuntime;
     private final ISerializer serializer;
@@ -308,7 +308,7 @@ public class PersistedStreamingMap<K, V> implements StreamingMap<K, V> {
      * {@inheritDoc}
      */
     @Override
-    public StreamingMap<K, V> getOptimisticMap() {
+    public ContextAwareMap<K, V> getOptimisticMap() {
         return optimisticMap;
     }
 
