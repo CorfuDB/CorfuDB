@@ -7,9 +7,12 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferDataStore;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
+import org.corfudb.infrastructure.log.statetransfer.metrics.StateTransferStats;
+import org.corfudb.infrastructure.log.statetransfer.metrics.StateTransferStats.StateTransferAttemptStats.StateTransferAttemptStatsBuilder;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -30,12 +33,14 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.metrics.StateTransferStats.TransferMethod.PROTOCOL;
 
 /**
  * This action attempts to restore the redundancy for the segments, for which the current node is
@@ -57,6 +62,10 @@ public class RestoreRedundancyMergeSegments extends Action {
     @Getter
     @NonNull
     private final RedundancyCalculator redundancyCalculator;
+
+    @Getter
+    @Default
+    private final Optional<StateTransferDataStore> dataStore = Optional.empty();
 
     @Default
     private final int retryBase = 3;
@@ -98,12 +107,20 @@ public class RestoreRedundancyMergeSegments extends Action {
 
         // Configure a number of retries.
         AtomicInteger retries = new AtomicInteger(restoreRetries);
+        AtomicReference<StateTransferStats> stats = new AtomicReference<>();
 
         return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
+
+            StateTransferAttemptStatsBuilder stateTransferAttemptStats =
+                    StateTransferStats.StateTransferAttemptStats
+                            .builder()
+                            .localEndpoint(currentNode);
             try {
                 // Retrieve a current layout.
                 runtime.invalidateLayout();
                 Layout currentLayout = runtime.getLayoutView().getLayout();
+
+                stateTransferAttemptStats.layoutBeforeTransfer(currentLayout);
 
                 log.info("State transfer on {}: Layout before transfer: {}",
                         currentNode, currentLayout);
@@ -115,9 +132,16 @@ public class RestoreRedundancyMergeSegments extends Action {
                 ImmutableList<TransferSegment> preTransferList =
                         redundancyCalculator.createStateList(currentLayout, trimMark);
 
+                stateTransferAttemptStats.initTransferSegments(preTransferList);
+
                 // Perform a state transfer for each segment synchronously and update the state list.
+                long transferStart = System.currentTimeMillis();
                 ImmutableList<TransferSegment> transferList = transferManager
                         .handleTransfer(preTransferList);
+
+                long transferDuration = System.currentTimeMillis() - transferStart;
+
+                stateTransferAttemptStats.durationOfTransfer(Duration.ofMillis(transferDuration));
 
                 // Get all the transfers that failed.
                 List<TransferSegment> failedList = transferList.stream()
@@ -139,11 +163,12 @@ public class RestoreRedundancyMergeSegments extends Action {
                         .collect(Collectors.toList());
 
                 LayoutManagementView layoutManagementView = runtime.getLayoutManagementView();
-
+                long restoreStart = System.currentTimeMillis();
                 // State transfer did not happen. Try merging segments if possible.
+                Layout newLayout = null;
                 if (transferredSegments.isEmpty()) {
                     log.info("State transfer on: {}: No transfer occurred, " +
-                                    "try merging the segments.", currentNode);
+                            "try merging the segments.", currentNode);
                     layoutManagementView.mergeSegments(currentLayout);
                 }
                 // State transfer happened.
@@ -153,7 +178,7 @@ public class RestoreRedundancyMergeSegments extends Action {
                     // Create a new layout after the segments were transferred.
                     // After this action is performed a current node will be present
                     // in all the segments that previously had a status 'TRANSFERRED'.
-                    Layout newLayout = redundancyCalculator.updateLayoutAfterRedundancyRestoration(
+                    newLayout = redundancyCalculator.updateLayoutAfterRedundancyRestoration(
                             transferredSegments, currentLayout);
 
                     log.info("State transfer on {}: New layout: {}.", currentNode, newLayout);
@@ -173,11 +198,27 @@ public class RestoreRedundancyMergeSegments extends Action {
                                         false);
                     }
                 }
+                long restoreDuration = System.currentTimeMillis() - restoreStart;
+                stateTransferAttemptStats.durationOfRestoration(Optional.of(Duration.ofMillis(restoreDuration)));
                 // Return the latest layout.
                 runtime.invalidateLayout();
+                stateTransferAttemptStats.layoutAfterTransfer(Optional.of(runtime.getLayoutView().getLayout()));
+                stateTransferAttemptStats.succeeded(true);
+
+                stats.getAndUpdate(st -> {
+                    st.pushAttemptStats(stateTransferAttemptStats.build());
+                    return st;
+                });
+
                 return runtime.getLayoutView().getLayout();
 
             } catch (WrongEpochException | QuorumUnreachableException | OutrankedException e) {
+                stateTransferAttemptStats.succeeded(false);
+                stats.getAndUpdate(st -> {
+                    st.pushAttemptStats(stateTransferAttemptStats.build());
+                    return st;
+                });
+
                 log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
                 if (retries.decrementAndGet() < 0) {
                     throw new RetryExhaustedException("Retries exhausted.", e);
@@ -186,11 +227,15 @@ public class RestoreRedundancyMergeSegments extends Action {
                 }
             } catch (TransferSegmentException e) {
                 throw new RetryExhaustedException("Transfer segment exception occurred.", e);
+            } finally {
+                log.info("State transfer stats: {}", stats.get());
+                dataStore.ifPresent(ds -> ds.saveStateTransferStats(stats.get()));
             }
 
         }).setOptions(retrySettings).run();
 
     }
+
     /**
      * Sets the trim mark on this endpoint's log unit and also perform a prefix trim.
      *

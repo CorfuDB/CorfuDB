@@ -63,8 +63,24 @@
             <artifactId>ant-jsch</artifactId>
             <version>1.10.5</version>
         </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>universe</artifactId>
+            <version>0.3.2</version>
+        </dependency>
 
     </dependencies>
+
+    <repositories>
+        <repository>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>bintray-corfudb-maven</id>
+            <name>bintray</name>
+            <url>https://dl.bintray.com/corfudb/maven</url>
+        </repository>
+    </repositories>
 
     <build>
         <plugins>

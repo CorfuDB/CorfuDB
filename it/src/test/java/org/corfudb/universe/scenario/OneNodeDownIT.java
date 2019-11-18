@@ -14,6 +14,7 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
@@ -35,6 +36,11 @@ public class OneNodeDownIT extends GenericIntegrationTest {
     public void oneNodeDownTest() {
 
         workflow(wf -> {
+            wf.setupProcess(fixtura -> {
+                fixtura.getCluster().name("ST");
+                fixtura.getFixtureUtilBuilder().initialPort(Optional.of(9000));
+                fixtura.getUniverse().cleanUpEnabled(false);
+            });
             wf.deploy();
 
             CorfuCluster corfuCluster = wf.getUniverse()
