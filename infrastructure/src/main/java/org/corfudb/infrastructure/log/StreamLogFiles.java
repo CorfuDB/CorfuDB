@@ -376,27 +376,20 @@ public class StreamLogFiles implements StreamLog {
     }
 
     /**
-     * Verifies that a range of entries doesn't span more than two
-     * segments and that the log addresses are ordered sequentially.
+     * Verifies that a list of entries to write are ordered
+     * by address and have no duplicates.
      *
-     * @param range entries to verify
-     * @return return true if the range is valid
+     * @param entries entries to verify
+     * @return return true if the entries are valid
      */
-    private boolean verifyRangeWrite(List<LogData> range) {
-        // Make sure that entries are ordered sequentially.
-        long firstAddress = range.get(0).getGlobalAddress();
-        for (int x = 1; x < range.size(); x++) {
-            if (range.get(x).getGlobalAddress() != firstAddress + x) {
+    private boolean verifyMultiWrite(List<LogData> entries) {
+        for (int x = 1; x < entries.size(); x++) {
+            if (entries.get(x).getGlobalAddress() <= entries.get(x - 1).getGlobalAddress()) {
                 return false;
             }
         }
 
-        // Check if the range spans more than two segments.
-        long lastAddress = range.get(range.size() - 1).getGlobalAddress();
-        long firstSegment = segmentManager.getSegmentOrdinal(firstAddress);
-        long endSegment = segmentManager.getSegmentOrdinal(lastAddress);
-
-        return endSegment - firstSegment <= 1;
+        return true;
     }
 
     /**
@@ -421,47 +414,45 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void append(List<LogData> range) {
-        if (range.isEmpty()) {
+    public void append(List<LogData> entries) {
+        if (entries.isEmpty()) {
             log.info("No entries to write.");
             return;
         }
 
         // Assuming garbage log entries are not mixed up with stream log entries.
-        DataType dataType = range.get(0).getType();
-        if (dataType != DataType.GARBAGE && !verifyRangeWrite(range)) {
-            throw new IllegalArgumentException("Write range not consecutive or " +
-                    "too large. Range size: " + range.size());
+        DataType dataType = entries.get(0).getType();
+        if (dataType != DataType.GARBAGE && !verifyMultiWrite(entries)) {
+            throw new IllegalArgumentException("Entries to append are not ordered" +
+                    "by address or contain duplicates: " + entries);
         }
 
-        Collection<List<LogData>> segmentedRange = getSegmentedEntries(range);
-        segmentedRange.forEach(entries -> appendToSegment(entries, dataType));
+        Map<Long, List<LogData>> ordinalToEntriesMap = getSegmentedEntries(entries);
+        ordinalToEntriesMap.forEach((ord, ent) -> appendToSegment(ord, ent, dataType));
     }
 
     /**
      * Group a list of entries by their corresponding segment's ordinal.
      */
-    private Collection<List<LogData>> getSegmentedEntries(List<LogData> entries) {
-        Map<Long, List<LogData>> ordinalToRangeMap = new HashMap<>();
+    private Map<Long, List<LogData>> getSegmentedEntries(List<LogData> entries) {
+        Map<Long, List<LogData>> ordinalToEntriesMap = new HashMap<>();
 
         entries.forEach(entry -> {
             long ordinal = segmentManager.getSegmentOrdinal(entry.getGlobalAddress());
-            List<LogData> list = ordinalToRangeMap.computeIfAbsent(ordinal, ord -> new ArrayList<>());
+            List<LogData> list = ordinalToEntriesMap.computeIfAbsent(ordinal, ord -> new ArrayList<>());
             list.add(entry);
         });
 
-        return ordinalToRangeMap.values();
+        return ordinalToEntriesMap;
     }
 
     /**
      * Append to one segment. The caller should ensure entries do not span segments.
      */
-    private void appendToSegment(List<LogData> entries, DataType dataType) {
-        LogData first = entries.get(0);
-
+    private void appendToSegment(long ordinal, List<LogData> entries, DataType dataType) {
         AbstractLogSegment segment = (dataType == DataType.GARBAGE)
-                ? segmentManager.getGarbageLogSegment(first.getGlobalAddress())
-                : segmentManager.getStreamLogSegment(first.getGlobalAddress());
+                ? segmentManager.getGarbageLogSegmentByOrdinal(ordinal)
+                : segmentManager.getStreamLogSegmentByOrdinal(ordinal);
         segment.append(entries);
         updateGlobalMetaData(entries.get(entries.size() - 1).getGlobalAddress(), entries, segment);
     }

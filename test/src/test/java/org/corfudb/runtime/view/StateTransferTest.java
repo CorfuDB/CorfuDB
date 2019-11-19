@@ -32,7 +32,6 @@ import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSeg
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -481,7 +480,7 @@ public class StateTransferTest extends AbstractViewTest {
         // STEP 1.
         // Rule added to fail the state transfer on the last range write.
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
-                corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)
+                corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.MULTIPLE_WRITE)
                         && allowedWrites.decrementAndGet() < 0)
                 .drop());
 
@@ -525,7 +524,7 @@ public class StateTransferTest extends AbstractViewTest {
         AtomicInteger rangeWrites = new AtomicInteger();
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
                 corfuMsg -> {
-                    if (corfuMsg.getMsgType().equals(CorfuMsgType.RANGE_WRITE)) {
+                    if (corfuMsg.getMsgType().equals(CorfuMsgType.MULTIPLE_WRITE)) {
                         rangeWrites.incrementAndGet();
                     }
                     return true;
