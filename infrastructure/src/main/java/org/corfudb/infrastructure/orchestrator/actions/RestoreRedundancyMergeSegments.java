@@ -9,6 +9,7 @@ import javax.annotation.Nonnull;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 /**
  * This action attempts to restore redundancy for all servers across all segments
@@ -54,7 +55,6 @@ public class RestoreRedundancyMergeSegments extends Action {
 
         // Catchup all servers across all segments.
         while (layout.getSegments().size() > 1) {
-
             Set<String> lowRedundancyServers = getNodesWithReducedRedundancy(layout, layoutSegmentToMergeTo);
 
             // Currently the state is transferred for the complete segment.
