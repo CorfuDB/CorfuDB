@@ -8,17 +8,17 @@ import java.util.List;
 
 /**
  *
- * A sequence of log entries to write
+ * A list of log entries to write
  *
  * @author Maithem
  */
 @Data
 @AllArgsConstructor
-public class RangeWriteMsg implements ICorfuPayload<RangeWriteMsg> {
+public class MultipleWriteMsg implements ICorfuPayload<MultipleWriteMsg> {
 
     private List<LogData> entries;
 
-    public RangeWriteMsg(ByteBuf buf) {
+    public MultipleWriteMsg(ByteBuf buf) {
         entries = ICorfuPayload.listFromBuffer(buf, LogData.class);
     }
 

@@ -6,7 +6,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -63,7 +63,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
         }
 
         // Range write is not cached on server.
-        sendRequest(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(payloads))).join();
+        sendRequest(CorfuMsgType.MULTIPLE_WRITE.payloadMsg(new MultipleWriteMsg(payloads))).join();
 
         // Non-cacheable reads should not affect the data cache on server.
         CompletableFuture<ReadResponse> future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST

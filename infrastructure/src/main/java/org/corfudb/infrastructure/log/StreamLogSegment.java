@@ -202,7 +202,7 @@ class StreamLogSegment extends AbstractLogSegment {
      * Check if any entry in a list exists (not a hole) in this segment, including compacted.
      */
     private boolean containsAny(List<LogData> entries) {
-        // Assume the entries are ordered by address, which is checked in upper layer.
+        // Assumes the entries are ordered by address, which is checked by upper layer.
         if (entries.get(entries.size() - 1).getGlobalAddress() <= dataStore.getCommittedTail()) {
             return true;
         }
