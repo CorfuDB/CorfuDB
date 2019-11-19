@@ -20,7 +20,7 @@ import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -44,6 +44,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.MULTI_GARBAGE_WRITE;
@@ -253,14 +255,13 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Services incoming range write calls.
+     * Services incoming multi write calls.
      */
-    @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
-    public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
+    @ServerHandler(type = CorfuMsgType.MULTIPLE_WRITE)
+    public void multiWrite(CorfuPayloadMsg<MultipleWriteMsg> msg,
                            ChannelHandlerContext ctx, IServerRouter r) {
-        List<LogData> range = msg.getPayload().getEntries();
-        log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
-                range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
+        List<LogData> entries = msg.getPayload().getEntries();
+        log.debug("multiWrite: Writing {} data entries: {}", entries.size());
 
         batchWriter.addTask(RANGE_WRITE, msg)
                 .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
@@ -271,7 +272,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type = CorfuMsgType.MULTIPLE_GARBAGE_WRITE)
-    private void multiGarbageWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
+    private void multiGarbageWrite(CorfuPayloadMsg<MultipleWriteMsg> msg,
                                    ChannelHandlerContext ctx, IServerRouter r) {
         List<LogData> garbageEntries = msg.getPayload().getEntries();
         log.debug("multiGarbageWrite: Writing {} garbage entries", garbageEntries.size());

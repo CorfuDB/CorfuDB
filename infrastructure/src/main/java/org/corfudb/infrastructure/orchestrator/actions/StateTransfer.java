@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -204,12 +203,12 @@ public class StateTransfer {
         }
 
         try {
-            // Write segment chunk to the new log unit
+            // Write segment chunk to the new log unit.
             ts1 = System.currentTimeMillis();
             boolean transferSuccess = CFUtils.getUninterruptibly(runtime.getLayoutView()
                     .getRuntimeLayout(layout)
                     .getLogUnitClient(endpoint)
-                    .writeRange(entries), OverwriteException.class);
+                    .writeAll(entries), OverwriteException.class);
 
             ts2 = System.currentTimeMillis();
 
