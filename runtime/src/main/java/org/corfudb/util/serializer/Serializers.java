@@ -6,11 +6,6 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.SerializerException;
 
-
-/**
- * Created by mwei on 1/8/16.
- */
-
 @Slf4j
 public class Serializers {
 
@@ -20,24 +15,27 @@ public class Serializers {
     public static final ISerializer JSON = new JsonSerializer((byte) 2);
     public static final ISerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
 
+    private Serializers() {
+        //prevent creating instances
+    }
+
     /**
      * @return the recommended default serializer used for converting objects into write format.
      */
-    public static final ISerializer getDefaultSerializer() {
+    public static ISerializer getDefaultSerializer() {
         return Serializers.JSON;
     }
 
-    private static final Map<Byte, ISerializer> serializersMap;
+    private static final Map<Byte, ISerializer> CUSTOM_SERIALIZERS = new HashMap<>();
+
+    private static final Map<Byte, ISerializer> SERIALIZERS_MAP = new HashMap<>();
 
     static {
-        serializersMap = new HashMap();
-        serializersMap.put(CORFU.getType(), CORFU);
-        serializersMap.put(JAVA.getType(), JAVA);
-        serializersMap.put(JSON.getType(), JSON);
-        serializersMap.put(PRIMITIVE.getType(), PRIMITIVE);
+        SERIALIZERS_MAP.put(CORFU.getType(), CORFU);
+        SERIALIZERS_MAP.put(JAVA.getType(), JAVA);
+        SERIALIZERS_MAP.put(JSON.getType(), JSON);
+        SERIALIZERS_MAP.put(PRIMITIVE.getType(), PRIMITIVE);
     }
-
-    private static final Map<Byte, ISerializer> customSerializers = new HashMap<>();
 
     /**
      * Return the serializer byte.
@@ -46,11 +44,11 @@ public class Serializers {
      */
     public static ISerializer getSerializer(Byte type) {
         if (type <= SYSTEM_SERIALIZERS_COUNT) {
-            if (serializersMap.containsKey(type)) {
-                return serializersMap.get(type);
+            if (SERIALIZERS_MAP.containsKey(type)) {
+                return SERIALIZERS_MAP.get(type);
             }
-        } else if (customSerializers.containsKey(type)) {
-            return customSerializers.get(type);
+        } else if (CUSTOM_SERIALIZERS.containsKey(type)) {
+            return CUSTOM_SERIALIZERS.get(type);
         }
 
         log.error("Serializer with type code {} not found. Please check custom serializers " +
@@ -64,11 +62,11 @@ public class Serializers {
      */
     public static synchronized void registerSerializer(ISerializer serializer) {
         if (serializer.getType() > SYSTEM_SERIALIZERS_COUNT) {
-            customSerializers.put(serializer.getType(), serializer);
+            CUSTOM_SERIALIZERS.put(serializer.getType(), serializer);
         } else {
-            String msg = String.format("Serializer id must be greater than {}",
-                    SYSTEM_SERIALIZERS_COUNT);
-            throw new RuntimeException(msg);
+            String msg = String.format(
+                    "Serializer id must be greater than %s", SYSTEM_SERIALIZERS_COUNT);
+            throw new IllegalStateException(msg);
         }
     }
 }
