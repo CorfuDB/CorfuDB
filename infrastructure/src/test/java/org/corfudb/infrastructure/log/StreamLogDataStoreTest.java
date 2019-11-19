@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.runtime.view.Address;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -13,7 +14,6 @@ import java.util.Map;
 
 @Slf4j
 public class StreamLogDataStoreTest {
-    private static final long INITIAL_ADDRESS = 0L;
 
     @Rule
     public TemporaryFolder tempDir = new TemporaryFolder();
@@ -22,23 +22,45 @@ public class StreamLogDataStoreTest {
     public void testGetAndSave() {
         StreamLogDataStore streamLogDs = getStreamLogDataStore();
 
-        final int tailSegment = 333;
+        final long headSegment = 555L;
+        streamLogDs.updateHeadSegment(headSegment);
+        assertEquals(headSegment, streamLogDs.getHeadSegment());
+
+        final long tailSegment = 333L;
         streamLogDs.updateTailSegment(tailSegment);
         assertEquals(tailSegment, streamLogDs.getTailSegment());
 
-        final int startingAddress = 555;
-        streamLogDs.updateStartingAddress(startingAddress);
-        assertEquals(startingAddress, streamLogDs.getStartingAddress());
+        final long compactionMark = 666L;
+        streamLogDs.updateGlobalCompactionMark(compactionMark);
+        assertEquals(compactionMark, streamLogDs.getGlobalCompactionMark());
+
+        final long committedTail = 777L;
+        streamLogDs.updateCommittedTail(committedTail);
+        assertEquals(committedTail, streamLogDs.getCommittedTail());
     }
 
     @Test
     public void testReset() {
         StreamLogDataStore streamLogDs = getStreamLogDataStore();
-        streamLogDs.resetStartingAddress();
-        assertEquals(INITIAL_ADDRESS, streamLogDs.getStartingAddress());
+
+        final long initialValue = 100L;
+
+        streamLogDs.updateHeadSegment(initialValue);
+        streamLogDs.updateTailSegment(initialValue);
+        streamLogDs.updateGlobalCompactionMark(initialValue);
+        streamLogDs.updateCommittedTail(initialValue);
+
+        streamLogDs.resetHeadSegment();
+        assertEquals(streamLogDs.getHeadSegment(), Address.MAX);
 
         streamLogDs.resetTailSegment();
-        assertEquals(INITIAL_ADDRESS, streamLogDs.getTailSegment());
+        assertEquals(streamLogDs.getTailSegment(), Address.getMinAddress());
+
+        streamLogDs.resetGlobalCompactionMark();
+        assertEquals(streamLogDs.getGlobalCompactionMark(), Address.NON_ADDRESS);
+
+        streamLogDs.resetCommittedTail();
+        assertEquals(streamLogDs.getCommittedTail(), Address.NON_ADDRESS);
     }
 
     private StreamLogDataStore getStreamLogDataStore() {

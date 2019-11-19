@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.GarbageInformer;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -354,6 +355,9 @@ public class StreamViewTest extends AbstractViewTest {
             smrLogEntry.addTo(streamId, Collections.singletonList(smrRecord));
             sv.append(smrLogEntry);
         }
+
+        // Update committed tail so that compactor can run.
+        Utils.updateCommittedTail(r.getLayoutView().getLayout(), r, entryNum - 1);
 
         // write one synthesized garbage decision
         final long markerAddress = 3L;
