@@ -22,8 +22,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
-
 /**
  * A segment manger which manages stream and garbage segment mappings.
  * <p>
@@ -318,18 +316,30 @@ public class SegmentManager {
      * @return a list of segments that can be selected for compaction
      */
     List<CompactionMetadata> getCompactibleSegments() {
+        // Do not compact any segment if state transfer is required and not finished.
+        if (dataStore.getRequireStateTransfer()) {
+            return Collections.emptyList();
+        }
+
         // Take a snapshot of the current segmentCompactionMetadata.
         Map<Long, CompactionMetadata> metaDataMapCopy = new HashMap<>(segmentCompactionMetadata);
 
+        // Check if any segment can be selected other than the protected ones.
         if (metaDataMapCopy.size() <= logParams.protectedSegments) {
+            return Collections.emptyList();
+        }
+
+        // Ordinal of the last compactible segment, rounded by committed tail.
+        long lastOrdinal = getSegmentOrdinal(dataStore.getCommittedTail()) - 1;
+        if (lastOrdinal < 0) {
             return Collections.emptyList();
         }
 
         return metaDataMapCopy
                 .values()
                 .stream()
-                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal))
-                .limit(metaDataMapCopy.size() - logParams.protectedSegments)
+                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal).reversed())
+                .skip(logParams.protectedSegments)
                 .collect(Collectors.toList());
     }
 
@@ -353,11 +363,12 @@ public class SegmentManager {
         }
 
         segmentCache.asMap().compute(ordinal, (ord, segment) -> {
-            // Close the segment to fail on-going operations with ClosedSegmentException.
             if (segment != null) {
-                // Force close the segment without checking reference count, let
-                // any on-going channel operation fail with ClosedChannelException.
-                segment.close(true);
+                // Close the segment when it is not referenced. We don not need to force
+                // close it because writers cannot write anything new to the segment as it
+                // is consolidated before it could be compacted and readers are allowed to
+                // read from un-compacted segment.
+                segment.close(false);
             }
 
             Path oldPath = Paths.get(oldSegment.getFilePath());

@@ -27,8 +27,6 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.roaringbitmap.longlong.LongIterator;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -67,8 +65,6 @@ import static org.corfudb.infrastructure.log.StreamLogParams.VERSION;
 
 @Slf4j
 public class StreamLogFiles implements StreamLog {
-
-    private static int CLOSE_SEGMENT_EXCEPTION_RETRY = 1;
 
     @Getter
     private final StreamLogParams logParams;
@@ -204,7 +200,7 @@ public class StreamLogFiles implements StreamLog {
      * consecutive segments from [startSegment, endSegment]
      */
     private void initializeLogMetadata() {
-        long startSegment = segmentManager.getSegmentOrdinal(dataStore.getStartingAddress());
+        long startSegment = dataStore.getHeadSegment();
         long tailSegment = dataStore.getTailSegment();
 
         long start = System.currentTimeMillis();
@@ -214,16 +210,6 @@ public class StreamLogFiles implements StreamLog {
             for (Long address : streamSegment.getKnownAddresses().keySet()) {
                 LogData logData = read(address);
                 logMetadata.update(Collections.singletonList(logData));
-            }
-
-            // Update global tail with compactedAddresses to prevent holes regressing global tail.
-            // It is safe for stream tails and stream address map since holes do not belong to any
-            // stream and if a stream update in a LogData is compacted, it must had been marked
-            // garbage by someone with greater address and still not compacted yet.
-            Roaring64NavigableMap compactedAddresses = streamSegment.getCompactedAddresses();
-            LongIterator iterator = compactedAddresses.getReverseLongIterator();
-            if (iterator.hasNext()) {
-                logMetadata.updateGlobalTail(iterator.next());
             }
 
             // Load garbage log segment to update CompactionMetadata.
@@ -315,6 +301,21 @@ public class StreamLogFiles implements StreamLog {
     public TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public long getCommittedTail() {
+        return dataStore.getCommittedTail();
+    }
+
+    @Override
+    public void updateCommittedTail(long committedTail) {
+        dataStore.updateCommittedTail(committedTail);
+    }
+
+    @Override
+    public void setRequireStateTransfer(boolean isRequired) {
+        dataStore.setRequireStateTransfer(isRequired);
     }
 
     private void verifyLogs() {
@@ -463,48 +464,25 @@ public class StreamLogFiles implements StreamLog {
     private void appendToSegment(List<LogData> entries, DataType dataType) {
         LogData first = entries.get(0);
 
-        int retryCount = 0;
-        while (true) {
-            try {
-                AbstractLogSegment segment = (dataType == DataType.GARBAGE)
-                        ? segmentManager.getGarbageLogSegment(first.getGlobalAddress())
-                        : segmentManager.getStreamLogSegment(first.getGlobalAddress());
-                segment.append(entries);
-                updateGlobalMetaData(entries.get(entries.size() - 1).getGlobalAddress(), entries, segment);
-                return;
-            } catch (ClosedSegmentException e) {
-                // Segment could be closed because of compaction, retry once.
-                if (retryCount == CLOSE_SEGMENT_EXCEPTION_RETRY) {
-                    throw e;
-                }
-            }
-        }
+        AbstractLogSegment segment = (dataType == DataType.GARBAGE)
+                ? segmentManager.getGarbageLogSegment(first.getGlobalAddress())
+                : segmentManager.getStreamLogSegment(first.getGlobalAddress());
+        segment.append(entries);
+        updateGlobalMetaData(entries.get(entries.size() - 1).getGlobalAddress(), entries, segment);
     }
 
     @Override
     public void append(long address, LogData entry) {
-        int retryCount = 0;
-        while (true) {
-            try {
-                AbstractLogSegment segment = (entry.getType() == DataType.GARBAGE)
-                        ? segmentManager.getGarbageLogSegment(address)
-                        : segmentManager.getStreamLogSegment(address);
-                segment.append(address, entry);
-                updateGlobalMetaData(address, Collections.singletonList(entry), segment);
-                return;
-            } catch (ClosedSegmentException e) {
-                log.warn("Segment channel closed by compactor, retry for another time.");
-                // Segment could be closed because of compaction, retry once.
-                if (retryCount == CLOSE_SEGMENT_EXCEPTION_RETRY) {
-                    throw e;
-                }
-            }
-        }
+        AbstractLogSegment segment = (entry.getType() == DataType.GARBAGE)
+                ? segmentManager.getGarbageLogSegment(address)
+                : segmentManager.getStreamLogSegment(address);
+        segment.append(address, entry);
+        updateGlobalMetaData(address, Collections.singletonList(entry), segment);
     }
 
     private void updateGlobalMetaData(long lastAddress, List<LogData> entries,
                                       AbstractLogSegment segmentToSync) {
-        // TODO(Maithem) since writing a record and setting the tail segment is not
+        // TODO(Maithem) since writing a record and  the tail segment is not
         // an atomic operation, it is possible to set an incorrect tail segment. In
         // that case we will need to scan more than one segment.
         segmentsToSync.add(segmentToSync);
@@ -512,6 +490,7 @@ public class StreamLogFiles implements StreamLog {
             logMetadata.updateGlobalTail(lastAddress);
             logMetadata.update(entries);
             dataStore.updateTailSegment(segmentToSync.getOrdinal());
+            dataStore.updateHeadSegment(segmentToSync.getOrdinal());
         }
     }
 
@@ -526,21 +505,16 @@ public class StreamLogFiles implements StreamLog {
     }
 
     private LogData read(long address, boolean fromStreamLog) {
-        int retryCount = 0;
-        while (true) {
-            try {
-                AbstractLogSegment segment = fromStreamLog
-                        ? segmentManager.getStreamLogSegment(address)
-                        : segmentManager.getGarbageLogSegment(address);
-                return segment.read(address);
-            } catch (ClosedSegmentException e) {
-                log.warn("Segment channel closed by compactor, retry for another time.");
-                // Segment could be closed because of compaction, retry once.
-                if (retryCount++ == CLOSE_SEGMENT_EXCEPTION_RETRY) {
-                    throw e;
-                }
-            }
-        }
+        AbstractLogSegment segment = fromStreamLog
+                ? segmentManager.getStreamLogSegment(address)
+                : segmentManager.getGarbageLogSegment(address);
+        return segment.read(address);
+    }
+
+    @Override
+    public boolean contains(long address) {
+        StreamLogSegment segment = segmentManager.getStreamLogSegment(address);
+        return segment.contains(address);
     }
 
     @Override
@@ -571,10 +545,7 @@ public class StreamLogFiles implements StreamLog {
 
         segmentManager.cleanAndClose();
 
-        dataStore.resetStartingAddress();
-        dataStore.resetTailSegment();
-        dataStore.resetGlobalCompactionMark();
-        dataStore.resetAllCompactedAddresses();
+        dataStore.reset();
         logMetadata = new LogMetadata();
         segmentsToSync.clear();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);

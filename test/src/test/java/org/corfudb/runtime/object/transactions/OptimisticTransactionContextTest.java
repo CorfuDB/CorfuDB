@@ -14,6 +14,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
@@ -901,7 +902,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
     @Test
     public void snapshotReadBeforeCompactionMark() {
-        final int entryNum = RECORDS_PER_SEGMENT;
+        final int entryNum = RECORDS_PER_SEGMENT + 1;
 
         t(1, () -> put("k" , "v0"));    // TS = 0
         t(1, () -> put("k" , "v1"));    // TS = 1
@@ -911,10 +912,13 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t(2, () -> get("k"));           // thread2 syncs to TS = 2
 
         final int timestamp = 3;
-        for (int i = timestamp; i <= entryNum; ++i) {
+        for (int i = timestamp; i < entryNum; ++i) {
             AtomicInteger version = new AtomicInteger(i);
             t(1, () -> put("k" , "v" + version.get()));
         }
+
+        // Update committed tail so that compactor can run.
+        Utils.updateCommittedTail(getRuntime().getLayoutView().getLayout(), getRuntime(), entryNum - 1);
 
         // run compaction
         t(1, () -> startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0)));
