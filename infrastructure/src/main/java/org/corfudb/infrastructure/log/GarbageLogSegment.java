@@ -4,10 +4,10 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
+import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.Token;
 
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
@@ -17,7 +17,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
@@ -32,7 +31,8 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 @Slf4j
 public class GarbageLogSegment extends AbstractLogSegment {
 
-    // A file lock for all GarbageLogSegment instances.
+    // A lock for all GarbageLogSegment instances, which is required by compactor
+    // in case this segment is being written while compaction is on going.
     @Getter
     static final MultiReadWriteLock segmentLock = new MultiReadWriteLock();
 
@@ -66,7 +66,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
      */
     @Override
     public void append(long address, LogData entry) {
-        try {
+        try (AutoCloseableLock ignored = segmentLock.acquireWriteLock(ordinal)) {
             SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
             SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
 
@@ -81,7 +81,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
                 entry.resetPayload(uniqueGarbageEntry);
             }
 
-            writeRecord(address, entry, segmentLock);
+            writeRecord(address, entry);
             mergeGarbageEntry(address, uniqueGarbageEntry);
             compactionMetaData.updateGarbageSize(Collections.singletonList(uniqueGarbageEntry));
             log.trace("append[{}]: Written one garbage entry to disk.", address);
@@ -133,7 +133,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
                 uniqueGarbageLogData.add(entry);
             }
 
-            writeRecords(uniqueGarbageLogData, segmentLock);
+            writeRecords(uniqueGarbageLogData);
             uniqueGarbageEntries.forEach(this::mergeGarbageEntry);
             compactionMetaData.updateGarbageSize(uniqueGarbageEntries.values());
 
@@ -146,6 +146,20 @@ public class GarbageLogSegment extends AbstractLogSegment {
         } finally {
             release();
         }
+    }
+
+    /**
+     * Append list of possibly compacted entries to the log segment
+     * file, which ignores the global committed tail.
+     * <p>
+     * For garbage log, the implementation is same as {@link this#append(List)}
+     * since OverwriteException is never thrown.
+     *
+     * @param entries entries to append to the file
+     */
+    @Override
+    public void appendCompacted(List<LogData> entries) {
+        append(entries);
     }
 
     /**
@@ -191,7 +205,6 @@ public class GarbageLogSegment extends AbstractLogSegment {
             if (garbageEntry == null || garbageEntry.getGarbageRecordCount() == 0) {
                 return null;
             }
-
             LogData ld = new LogData(DataType.GARBAGE, garbageEntry);
             ld.setGlobalAddress(address);
             return ld;

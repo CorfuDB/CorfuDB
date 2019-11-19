@@ -2,6 +2,7 @@ package org.corfudb.runtime.view.replication;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -14,9 +15,11 @@ import org.corfudb.util.CFUtils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -84,7 +87,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
     /**
      * Reads a list of global addresses from the chain of log unit servers.
-     *
+     * <p>
      * - This method optimizes for the time to wait to hole fill in case empty addresses
      * are encountered.
      * - If the waitForWrite flag is set to true, when an empty address is encountered,
@@ -102,27 +105,22 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     @Override
     @Nonnull
     public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
-                                       List<Long> addresses,
+                                       Collection<Long> addresses,
                                        boolean waitForWrite,
                                        boolean cacheOnServer) {
+        // Group addresses by log unit tail server endpoint.
+        Map<String, List<Long>> serverAddressMap =
+                groupAddressByLogUnitTail(runtimeLayout.getLayout(), addresses);
 
-        // A map of log unit server endpoint to addresses it's responsible for
-        Map<String, List<Long>> serverAddressMap = new HashMap<>();
-
-        for (Long address : addresses) {
-            List<String> logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();
-            String logServer = logServers.get(logServers.size() - 1);
-            List<Long> addressList = serverAddressMap.computeIfAbsent(logServer, s -> new ArrayList<>());
-            addressList.add(address);
-        }
-
-        // Send read requests to log unit servers in parallel
-        List<CompletableFuture<ReadResponse>> futures = serverAddressMap.entrySet().stream()
+        // Send read requests to log unit servers in parallel.
+        List<CompletableFuture<ReadResponse>> futures = serverAddressMap
+                .entrySet()
+                .stream()
                 .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey())
                         .readAll(entry.getValue(), cacheOnServer))
                 .collect(Collectors.toList());
 
-        // Merge the read responses from different log unit servers
+        // Merge the read responses from different log unit servers.
         Map<Long, LogData> readResult = futures.stream()
                 .map(future -> {
                     ReadResponse readResponse = CFUtils.getUninterruptibly(future);
@@ -135,6 +133,42 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 });
 
         return waitOrHoleFill(runtimeLayout, readResult, waitForWrite);
+    }
+
+    public void commitAll(RuntimeLayout runtimeLayout, Collection<Long> addresses) {
+        // Group addresses by log unit tail server endpoint.
+        Map<String, List<Long>> serverAddressMap =
+                groupAddressByLogUnitTail(runtimeLayout.getLayout(), addresses);
+
+        // Send inspect addresses requests to log unit servers in parallel.
+        List<CompletableFuture<InspectAddressesResponse>> futures = serverAddressMap
+                .entrySet()
+                .stream()
+                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey())
+                        .inspectAddresses(entry.getValue()))
+                .collect(Collectors.toList());
+
+        // Merge the inspect responses from different log unit servers.
+        List<Long> holes = futures.stream()
+                .flatMap(future -> CFUtils.getUninterruptibly(future).getHoleAddresses().stream())
+                .collect(Collectors.toList());
+
+        // Fill all the holes.
+        holes.forEach(address -> holeFill(runtimeLayout, address));
+    }
+
+    private Map<String, List<Long>> groupAddressByLogUnitTail(Layout layout, Collection<Long> addresses) {
+        // A map of log unit server endpoint to addresses it's responsible for.
+        Map<String, List<Long>> serverAddressMap = new HashMap<>();
+
+        for (Long address : addresses) {
+            List<String> logServers = layout.getStripe(address).getLogServers();
+            String logServer = logServers.get(logServers.size() - 1);
+            List<Long> addressList = serverAddressMap.computeIfAbsent(logServer, s -> new ArrayList<>());
+            addressList.add(address);
+        }
+
+        return serverAddressMap;
     }
 
     private Map<Long, ILogData> waitOrHoleFill(RuntimeLayout runtimeLayout,
@@ -167,9 +201,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                     // fulfilled the read through the hole fill policy (back-off / wait for write)
                     wait = false;
                 } else {
-                    // try to read the value
+                    // Try to read the value again because after the initial waiting,
+                    // the rest of unfilled addresses might be written.
                     value = peek(runtimeLayout, address);
-                    // if value is empty, fill the hole and get the value.
+                    // If value is still empty, fill the hole and get the value.
                     if (value == null) {
                         holeFill(runtimeLayout, address);
                         value = peek(runtimeLayout, address);

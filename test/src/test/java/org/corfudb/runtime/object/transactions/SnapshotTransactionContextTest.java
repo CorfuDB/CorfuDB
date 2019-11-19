@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
+import org.corfudb.util.Utils;
 import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -113,7 +114,7 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
 
     @Test
     public void snapshotReadBeforeCompactionMark() {
-        final int entryNum = RECORDS_PER_SEGMENT;
+        final int entryNum = RECORDS_PER_SEGMENT + 1;
 
         t(1, () -> put("k" , "v0"));    // TS = 0
         t(1, () -> put("k" , "v1"));    // TS = 1
@@ -123,10 +124,13 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         t(2, this::TXBegin);            // snapshotTimestamp = 2
 
         final int timestamp = 3;
-        for (int i = timestamp; i <= entryNum; ++i) {
+        for (int i = timestamp; i < entryNum; ++i) {
             AtomicInteger version = new AtomicInteger(i);
             t(1, () -> put("k" , "v" + version.get()));
         }
+
+        // Update committed tail so that compactor can run.
+        Utils.updateCommittedTail(getRuntime().getLayoutView().getLayout(), getRuntime(), entryNum - 1);
 
         // run compaction
         t(1, () -> startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0)));
