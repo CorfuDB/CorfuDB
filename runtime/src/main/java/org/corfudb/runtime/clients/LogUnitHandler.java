@@ -10,6 +10,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -183,9 +184,21 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
         return msg.getPayload();
     }
 
+    @ClientHandler(type = CorfuMsgType.COMMITTED_TAIL_RESPONSE)
+    private static Object handleCommittedTailResponse(CorfuPayloadMsg<Long> msg,
+                                                      ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
     @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
     private static Object handleStreamsAddressResponse(CorfuPayloadMsg<TailsResponse> msg,
-                                             ChannelHandlerContext ctx, IClientRouter r) {
+                                                       ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.INSPECT_ADDRESSES_RESPONSE)
+    private static Object handleInspectAddressResponse(CorfuPayloadMsg<InspectAddressesResponse> msg,
+                                                       ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
 
