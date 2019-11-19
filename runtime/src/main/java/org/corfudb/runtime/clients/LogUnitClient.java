@@ -2,25 +2,19 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import lombok.Getter;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
@@ -28,11 +22,15 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -188,6 +186,18 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Check if addresses are committed on log unit server, which returns a future
+     * with uncommitted addresses (holes) on the server.
+     *
+     * @param addresses list of global addresses to inspect
+     * @return a completableFuture which returns an InspectAddressesResponse
+     */
+    public CompletableFuture<InspectAddressesResponse> inspectAddresses(List<Long> addresses) {
+        return sendMessageWithFuture(CorfuMsgType.INSPECT_ADDRESSES_REQUEST
+                .payloadMsg(new InspectAddressesRequest(addresses)));
+    }
+
+    /**
      * Asynchronously read garbage information for a list of addresses from the log unit server.
      * @param addresses a list of addresses that garbage is from.
      * @return a completableFuture which return a ReadResponse containing garbage information on completion.
@@ -230,6 +240,34 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<TailsResponse> getAllTails() {
         return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(TailsRequest.ALL_STREAMS_TAIL));
+    }
+
+    /**
+     * Get the committed tail of the log unit.
+     *
+     * @return a CompletableFuture which will complete with the committed tail address once received.
+     */
+    public CompletableFuture<Long> getCommittedTail() {
+        return sendMessageWithFuture(CorfuMsgType.COMMITTED_TAIL_REQUEST.msg());
+    }
+
+    /**
+     * Update the committed tail of the log unit.
+     *
+     * @param committedTail new committed tail to update
+     * @return an empty completableFuture
+     */
+    public CompletableFuture<Void> updateCommittedTail(long committedTail) {
+        return sendMessageWithFuture(CorfuMsgType.UPDATE_COMMITTED_TAIL.payloadMsg(committedTail));
+    }
+
+    /**
+     * Inform the log unit server that the state transfer is finished.
+     *
+     * @return an empty completableFuture
+     */
+    public CompletableFuture<Void> informStateTransferFinished() {
+        return sendMessageWithFuture(CorfuMsgType.INFORM_STATE_TRANSFER_FINISHED.msg());
     }
 
     /**

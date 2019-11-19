@@ -56,7 +56,8 @@ import java.util.stream.Collectors;
  * Created by zlokhandwala on 11/2/18.
  */
 @Slf4j
-public class RemoteMonitoringService implements MonitoringService {
+public class RemoteMonitoringService implements ManagementService {
+
     private static final CompletableFuture<DetectorTask> DETECTOR_TASK_NOT_COMPLETED
             = CompletableFuture.completedFuture(DetectorTask.NOT_COMPLETED);
 
@@ -162,7 +163,7 @@ public class RemoteMonitoringService implements MonitoringService {
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat(serverContext.getThreadPrefix() + "ManagementService")
+                        .setNameFormat(serverContext.getThreadPrefix() + "RemoteMonitoringService")
                         .build());
 
         // Creating the detection worker thread pool.
@@ -810,7 +811,7 @@ public class RemoteMonitoringService implements MonitoringService {
         // Shutting the fault detector.
         detectionTasksScheduler.shutdownNow();
         failureDetectorWorker.shutdownNow();
-        log.info("Fault Detection MonitoringService shutting down.");
+        log.info("Fault detection service shutting down.");
     }
 
     public enum DetectorTask {

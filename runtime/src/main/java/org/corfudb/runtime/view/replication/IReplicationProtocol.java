@@ -5,7 +5,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.RuntimeLayout;
 
 import javax.annotation.Nonnull;
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 
 
@@ -71,9 +71,17 @@ public interface IReplicationProtocol {
      */
     @Nonnull
     Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
-                                List<Long> addresses,
+                                Collection<Long> addresses,
                                 boolean waitForWrite,
                                 boolean cacheOnServer);
+
+    /**
+     * Commit the addresses by first reading and then hole filling if data not existed.
+     *
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for commit
+     * @param addresses a list of addresses to commit
+     */
+    void commitAll(RuntimeLayout runtimeLayout, Collection<Long> addresses);
 
     /**
      * Peek data from a given address.

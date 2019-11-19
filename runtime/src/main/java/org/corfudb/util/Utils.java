@@ -14,9 +14,12 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Created by crossbach on 5/22/15.
@@ -169,6 +172,41 @@ public class Utils {
         }
 
         return aggregateLogUnitTails(luResponses);
+    }
+
+    /**
+     * Attempt to get the maximum committed log tail from all log units.
+     *
+     * @return the maximum committed tail from all log units
+     */
+    public static long getCommittedTail(Layout layout, CorfuRuntime runtime) {
+        // Send the requests to all log units in parallel to get the committed tails.
+        Set<String> allLogUnits = layout.getAllLogServers();
+        List<CompletableFuture<Long>> futures = allLogUnits.stream()
+                .map(lu -> runtime.getLayoutView().getRuntimeLayout(layout)
+                        .getLogUnitClient(lu)
+                        .getCommittedTail())
+                .collect(Collectors.toList());
+
+        // Aggregate and get the maximum of committed tail.
+        return futures.stream()
+                .map(CFUtils::getUninterruptibly)
+                .reduce(Address.NON_ADDRESS, Long::max);
+    }
+
+    public static void updateCommittedTail(Layout layout, CorfuRuntime runtime,
+                                           long newCommittedTail) {
+        // Send the new committed tail to the log units that are present in
+        // all the address segments since they have the complete state.
+        Set<String> logServers = layout.getAllLogServers();
+        List<CompletableFuture<Void>> futures = logServers.stream()
+                .map(ls -> runtime.getLayoutView().getRuntimeLayout(layout)
+                        .getLogUnitClient(ls)
+                        .updateCommittedTail(newCommittedTail))
+                .collect(Collectors.toList());
+
+        // Wait until all futures completed, exceptions will be wrapped in RuntimeException.
+        futures.forEach(CFUtils::getUninterruptibly);
     }
 
     /**
