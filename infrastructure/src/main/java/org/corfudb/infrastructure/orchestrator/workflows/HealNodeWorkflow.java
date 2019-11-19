@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferDataStore;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
@@ -12,6 +13,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
+
+import java.util.Optional;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
@@ -28,12 +31,13 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
 
     private final HealNodeRequest request;
 
-    public HealNodeWorkflow(HealNodeRequest healNodeRequest, StreamLog streamLog) {
-        super(new AddNodeRequest(healNodeRequest.getEndpoint()), streamLog);
+    public HealNodeWorkflow(HealNodeRequest healNodeRequest, StreamLog streamLog, Optional<StateTransferDataStore> dataStore) {
+        super(new AddNodeRequest(healNodeRequest.getEndpoint()), streamLog, dataStore);
         this.request = healNodeRequest;
         this.actions = ImmutableList.of(new HealNodeToLayout(),
                 RestoreRedundancyMergeSegments.builder()
                         .streamLog(streamLog)
+                        .dataStore(dataStore)
                         .currentNode(request.getEndpoint())
                         .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
                         .build());

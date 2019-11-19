@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferDataStore;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
@@ -11,6 +12,7 @@ import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.RESTORE_REDUNDANCY_MERGE_SEGMENTS;
@@ -40,12 +42,13 @@ public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
      * @param request request to restore redundancy and merge a segment.
      */
     public RestoreRedundancyMergeSegmentsWorkflow(
-            RestoreRedundancyMergeSegmentsRequest request, StreamLog streamLog) {
+            RestoreRedundancyMergeSegmentsRequest request, StreamLog streamLog, Optional<StateTransferDataStore> dataStore) {
         this.id = UUID.randomUUID();
         this.request = request;
         this.actions = ImmutableList.of(
                 RestoreRedundancyMergeSegments.builder()
                         .streamLog(streamLog)
+                        .dataStore(dataStore)
                         .currentNode(request.getEndpoint())
                         .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
                         .build());

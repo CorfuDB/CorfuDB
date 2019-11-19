@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferDataStore;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
@@ -37,6 +38,7 @@ import org.corfudb.util.concurrent.SingletonResource;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -73,6 +75,7 @@ public class Orchestrator {
 
     final StreamLog streamLog;
 
+    final Optional<StateTransferDataStore> dataStore;
 
     public Orchestrator(@Nonnull SingletonResource<CorfuRuntime> runtime,
                         @Nonnull ServerContext serverContext,
@@ -80,6 +83,8 @@ public class Orchestrator {
         this.serverContext = serverContext;
         this.getRuntime = runtime;
         this.streamLog = streamLog;
+        this.dataStore = createTransferStore(serverContext.isTransferMetricsEnabled());
+
         executor = Executors.newFixedThreadPool(Runtime.getRuntime()
                 .availableProcessors(), new ThreadFactory() {
 
@@ -117,7 +122,7 @@ public class Orchestrator {
                 query(msg, ctx, r);
                 break;
             case ADD_NODE:
-                workflow = new AddNodeWorkflow((AddNodeRequest) orchReq.getRequest(), streamLog);
+                workflow = new AddNodeWorkflow((AddNodeRequest) orchReq.getRequest(), streamLog, dataStore);
                 dispatch(workflow, msg, ctx, r);
                 break;
             case REMOVE_NODE:
@@ -125,7 +130,7 @@ public class Orchestrator {
                 dispatch(workflow, msg, ctx, r);
                 break;
             case HEAL_NODE:
-                workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest(), streamLog);
+                workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest(), streamLog, dataStore);
                 dispatch(workflow, msg, ctx, r);
                 break;
             case FORCE_REMOVE_NODE:
@@ -134,11 +139,25 @@ public class Orchestrator {
                 break;
             case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
                 workflow = new RestoreRedundancyMergeSegmentsWorkflow(
-                        (RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest(), streamLog);
+                        (RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest(), streamLog, dataStore);
                 dispatch(workflow, msg, ctx, r);
                 break;
             default:
                 log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
+        }
+    }
+
+    /**
+     * Depending on a flag, create a transfer data store.
+     * @param enabled True or false flag.
+     * @return An optional instance of transfer data store.
+     */
+    Optional<StateTransferDataStore> createTransferStore(boolean enabled){
+        if(enabled){
+            return Optional.of(new StateTransferDataStore(serverContext.getDataStore()));
+        }
+        else{
+            return Optional.empty();
         }
     }
 

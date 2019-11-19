@@ -40,7 +40,6 @@ import java.util.stream.Collectors;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.metrics.StateTransferStats.TransferMethod.PROTOCOL;
 
 /**
  * This action attempts to restore the redundancy for the segments, for which the current node is
@@ -81,6 +80,23 @@ public class RestoreRedundancyMergeSegments extends Action {
 
     @Default
     private final int restoreRetries = 3;
+
+    public static void updateStateTransferStats(AtomicReference<StateTransferStats> oldStats,
+                                             StateTransferAttemptStatsBuilder statsBuilder) {
+        if (statsBuilder == null) {
+            throw new IllegalStateException("Builder should be present.");
+        }
+        StateTransferStats.StateTransferAttemptStats attemptStats = statsBuilder.build();
+        StateTransferStats newStats = new StateTransferStats(ImmutableList.of(attemptStats));
+        oldStats.updateAndGet(os -> {
+            if (os == newStats) {
+                throw new IllegalStateException("Non-atomic update to the stats state.");
+            }
+
+            return newStats;
+        });
+
+    }
 
     /**
      * Perform a state transfer on a current node, if needed, and then
@@ -165,7 +181,7 @@ public class RestoreRedundancyMergeSegments extends Action {
                 LayoutManagementView layoutManagementView = runtime.getLayoutManagementView();
                 long restoreStart = System.currentTimeMillis();
                 // State transfer did not happen. Try merging segments if possible.
-                Layout newLayout = null;
+                Layout newLayout;
                 if (transferredSegments.isEmpty()) {
                     log.info("State transfer on: {}: No transfer occurred, " +
                             "try merging the segments.", currentNode);
@@ -202,22 +218,17 @@ public class RestoreRedundancyMergeSegments extends Action {
                 stateTransferAttemptStats.durationOfRestoration(Optional.of(Duration.ofMillis(restoreDuration)));
                 // Return the latest layout.
                 runtime.invalidateLayout();
+
                 stateTransferAttemptStats.layoutAfterTransfer(Optional.of(runtime.getLayoutView().getLayout()));
                 stateTransferAttemptStats.succeeded(true);
 
-                stats.getAndUpdate(st -> {
-                    st.pushAttemptStats(stateTransferAttemptStats.build());
-                    return st;
-                });
+                updateStateTransferStats(stats, stateTransferAttemptStats);
 
                 return runtime.getLayoutView().getLayout();
 
             } catch (WrongEpochException | QuorumUnreachableException | OutrankedException e) {
-                stateTransferAttemptStats.succeeded(false);
-                stats.getAndUpdate(st -> {
-                    st.pushAttemptStats(stateTransferAttemptStats.build());
-                    return st;
-                });
+
+                updateStateTransferStats(stats, stateTransferAttemptStats);
 
                 log.warn("Got: {}. Retrying: {} times.", e.getMessage(), retries.get());
                 if (retries.decrementAndGet() < 0) {
@@ -228,7 +239,7 @@ public class RestoreRedundancyMergeSegments extends Action {
             } catch (TransferSegmentException e) {
                 throw new RetryExhaustedException("Transfer segment exception occurred.", e);
             } finally {
-                log.info("State transfer stats: {}", stats.get());
+                log.info("State Transfer Stats: {}", stats.get().toJson());
                 dataStore.ifPresent(ds -> ds.saveStateTransferStats(stats.get()));
             }
 

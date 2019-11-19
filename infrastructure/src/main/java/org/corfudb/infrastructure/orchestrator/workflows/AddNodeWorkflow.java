@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferDataStore;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
@@ -15,6 +16,7 @@ import org.corfudb.runtime.view.Layout;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
@@ -47,13 +49,15 @@ public class AddNodeWorkflow implements IWorkflow {
      *
      * @param request request to add a node
      */
-    public AddNodeWorkflow(AddNodeRequest request, StreamLog streamLog) {
+    public AddNodeWorkflow(AddNodeRequest request, StreamLog streamLog, Optional<StateTransferDataStore> dataStore) {
         this.id = UUID.randomUUID();
         this.request = request;
         actions = ImmutableList.of(new BootstrapNode(),
                 new AddNodeToLayout(),
-                RestoreRedundancyMergeSegments.builder()
+                RestoreRedundancyMergeSegments
+                        .builder()
                         .streamLog(streamLog)
+                        .dataStore(dataStore)
                         .currentNode(request.getEndpoint())
                         .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
                         .build());

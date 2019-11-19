@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
-import lombok.Builder;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +14,7 @@ import java.util.Optional;
  */
 @Slf4j
 @Getter
-@Builder
+@AllArgsConstructor
 public class StateTransferDataStore {
     private static final String STATE_TRANSFER_PREFIX = "STATE_TRANSFER";
     private static final String STATE_TRANSFER_KEY = "CURRENT";
