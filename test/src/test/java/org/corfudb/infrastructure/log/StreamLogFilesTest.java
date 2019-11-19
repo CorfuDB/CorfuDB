@@ -169,41 +169,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void badRangeWrite() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
-
-        List<LogData> largeRange = new ArrayList<>();
-        List<LogData> nonSequentialRange = new ArrayList<>();
-        final int numSegments = 3;
-        final int skipGap = 10;
-        final int numEntries = numSegments * RECORDS_PER_SEGMENT;
-        // Generate two invalid ranges, a large range and a non-sequential range
-        for (long address = 0; address < numEntries; address++) {
-            largeRange.add(getEntry(address));
-            if (address % skipGap == 0) {
-                nonSequentialRange.add(getEntry(address));
-            }
-        }
-
-        File file = log.getLogDir().toFile();
-        long logSize = FileUtils.sizeOfDirectory(file);
-
-        // Verify that range writes that span more than 2 segments are rejected
-        assertThatThrownBy(() -> log.append(largeRange))
-                .isInstanceOf(IllegalArgumentException.class);
-        log.sync(true);
-
-        // Verify that a non-sequential range write is rejected
-        assertThatThrownBy(() -> log.append(nonSequentialRange))
-                .isInstanceOf(IllegalArgumentException.class);
-        log.sync(true);
-
-        // Verify that no entries have been written to the log
-        long logSize2 = FileUtils.sizeOfDirectory(file);
-        assertThat(logSize2).isEqualTo(logSize);
-    }
-
-    @Test
     public void testRangeOverwrite() throws Exception {
         StreamLogFiles log = new StreamLogFiles(sc.getStreamLogParams(), sc.getStreamLogDataStore());
         final int numIter = 500;

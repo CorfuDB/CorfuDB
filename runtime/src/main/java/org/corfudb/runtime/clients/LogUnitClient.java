@@ -16,7 +16,7 @@ import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -104,27 +104,24 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Sends a request to write a list of addresses.
+     * Sends a request to write a list of entries.
      *
-     * @param range entries to write to the log unit. Must have at least one entry.
+     * @param entries entries to write to the log unit. Must have at least one entry.
      * @return a completable future which returns true on success.
      */
-    public CompletableFuture<Boolean> writeRange(List<LogData> range) {
-        if (range.isEmpty()) {
+    public CompletableFuture<Boolean> writeAll(List<LogData> entries) {
+        if (entries.isEmpty()) {
             throw new IllegalArgumentException("Can't write an empty range");
         }
 
-        long base = range.get(0).getGlobalAddress();
-        for (int x = 0; x < range.size(); x++) {
-            LogData curr = range.get(x);
-            if (!curr.getGlobalAddress().equals(base + x)) {
-                throw new IllegalArgumentException("Entries not in sequential order!");
-            } else if (curr.isEmpty()) {
+        for (int x = 0; x < entries.size(); x++) {
+            LogData curr = entries.get(x);
+            if (curr.isEmpty()) {
                 throw new IllegalArgumentException("Can't write empty entries!");
             }
         }
 
-        return sendMessageWithFuture(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(range)));
+        return sendMessageWithFuture(CorfuMsgType.MULTIPLE_WRITE.payloadMsg(new MultipleWriteMsg(entries)));
     }
 
     /**
@@ -219,7 +216,7 @@ public class LogUnitClient extends AbstractClient {
             throw new IllegalArgumentException("Can't write an empty range");
         }
 
-        return sendMessageWithFuture(CorfuMsgType.MULTIPLE_GARBAGE_WRITE.payloadMsg(new RangeWriteMsg(range)));
+        return sendMessageWithFuture(CorfuMsgType.MULTIPLE_GARBAGE_WRITE.payloadMsg(new MultipleWriteMsg(range)));
     }
 
     /**
