@@ -127,27 +127,6 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
-    public void writeNonSequentialRange() throws Exception {
-        final long address0 = 0;
-        final long address4 = 4;
-
-        List<LogData> entries = new ArrayList<>();
-        ByteBuf b = Unpooled.buffer();
-        byte[] streamEntry = "Payload".getBytes();
-        Serializers.CORFU.serialize(streamEntry, b);
-        LogData ld0 = new LogData(DataType.DATA, b);
-        ld0.setGlobalAddress(address0);
-        entries.add(ld0);
-
-        LogData ld4 = new LogData(DataType.DATA, b);
-        ld4.setGlobalAddress(address4);
-        entries.add(ld4);
-
-        assertThatThrownBy(() -> client.writeRange(entries).get())
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
     public void writeRange() throws Exception {
         final int numIter = 100;
 
@@ -161,11 +140,11 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             entries.add(ld);
         }
 
-        client.writeRange(entries).get();
+        client.writeAll(entries).get();
 
         // Ensure that the overwrite detection mechanism is working as expected.
         Assertions.assertThatExceptionOfType(ExecutionException.class).isThrownBy(
-                () -> client.writeRange(entries).get())
+                () -> client.writeAll(entries).get())
                 .withCauseInstanceOf(OverwriteException.class);
 
         // "Restart the logging unit

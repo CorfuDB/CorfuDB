@@ -21,12 +21,10 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -158,11 +156,11 @@ public class BatchProcessor implements AutoCloseable {
                                 streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
                                 break;
                             case RANGE_WRITE:
-                                RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
+                                MultipleWriteMsg writeRange = (MultipleWriteMsg) currOp.getMsg().getPayload();
                                 streamLog.append(writeRange.getEntries());
                                 break;
                             case MULTI_GARBAGE_WRITE:
-                                RangeWriteMsg garbageEntries = (RangeWriteMsg) currOp.getMsg().getPayload();
+                                MultipleWriteMsg garbageEntries = (MultipleWriteMsg) currOp.getMsg().getPayload();
                                 streamLog.append(garbageEntries.getEntries());
                                 break;
                             case RESET:
