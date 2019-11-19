@@ -121,6 +121,9 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
             log.append(i, streamEntries.get((int) i));
             log.append(i, garbageEntries.get((int) i));
         }
+
+        // This step is required as compactor can only compact addresses up to committed tail.
+        log.updateCommittedTail(numIter - 1);
         log.sync(true);
 
         long initialQuotaAvailable = log.getLogSizeQuota().getAvailable();
@@ -177,23 +180,20 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
             generateEntry(i, Address.NON_ADDRESS, streamEntries, garbageEntries);
         }
 
-        List<LogData> evenStreamEntries = streamEntries.stream()
-                .filter(e -> e.getGlobalAddress() % 2 == 0)
-                .collect(Collectors.toList());
         List<LogData> evenGarbageEntries = garbageEntries.stream()
                 .filter(e -> e.getGlobalAddress() % 2 == 0)
                 .collect(Collectors.toList());
-        List<LogData> oddStreamEntries = streamEntries.stream()
-                .filter(e -> e.getGlobalAddress() % 2 != 0)
-                .collect(Collectors.toList());
 
-        // Write half of the entries to the log.
-        for (LogData ld : evenStreamEntries) {
+        for (LogData ld : streamEntries) {
             log.append(ld.getGlobalAddress(), ld);
         }
+        // Write half of the garbage entries to the log.
         for (LogData ld : evenGarbageEntries) {
             log.append(ld.getGlobalAddress(), ld);
         }
+
+        // This step is required as compactor can only compact addresses up to committed tail.
+        log.updateCommittedTail(numIter - 1);
         log.sync(true);
 
         final int numThreads = 4;
@@ -208,14 +208,8 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
             compactionFinished.set(true);
         });
 
-        // Write another half of the entries without garbage decisions and
-        // verify compaction would not lost append history.
+        // Verify concurrent writes will not break compaction.
         executor.submit(() -> {
-            for (LogData ld : oddStreamEntries) {
-                log.append(ld.getGlobalAddress(), ld);
-            }
-            log.sync(true);
-
             while (!compactionFinished.get()) {
                 for (long i = 0; i < StreamLogParams.RECORDS_PER_SEGMENT; i++) {
                     final long address = i;
@@ -289,6 +283,9 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
         for (LogData ld : evenGarbageEntries) {
             log.append(ld.getGlobalAddress(), ld);
         }
+
+        // This step is required as compactor can only compact addresses up to committed tail.
+        log.updateCommittedTail(numIter - 1);
         log.sync(true);
 
         // Fist compact() will only set compaction upper bound if using SnapshotLengthFirstPolicy.
@@ -358,6 +355,9 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
                 .collect(Collectors.toList());
 
         log.append(firstHalfStreamEntries);
+
+        // This step is required as compactor can only compact addresses up to committed tail.
+        log.updateCommittedTail(secondHalfStreamEntries.get(0).getGlobalAddress() - 1);
         log.sync(true);
 
         // Fist compact() will set compaction upper bound if using SnapshotLengthFirstPolicy.
@@ -368,6 +368,9 @@ public class StreamLogCompactorTest extends AbstractCorfuTest {
 
         log.append(secondHalfStreamEntries);
         log.append(garbageEntries);
+
+        // This step is required as compactor can only compact addresses up to committed tail.
+        log.updateCommittedTail(numIter - 1);
         log.sync(true);
 
         // Compact entries whose marker address is up to StreamLogParams.RECORDS_PER_SEGMENT / 2 - 1
