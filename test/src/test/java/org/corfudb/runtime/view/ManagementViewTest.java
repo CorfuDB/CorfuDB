@@ -24,6 +24,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -539,7 +540,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(tokenResponse.getSequence()).isEqualTo(afterFailure - 1);
     }
 
-    protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
+    protected <T extends ICorfuSMR> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
         return getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name

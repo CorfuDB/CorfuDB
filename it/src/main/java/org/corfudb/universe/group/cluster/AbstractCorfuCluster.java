@@ -19,11 +19,9 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 @Slf4j
-public abstract class AbstractCorfuCluster<U extends UniverseParams> extends AbstractCluster<
-        CorfuServer,
-        CorfuServerParams,
-        CorfuClusterParams,
-        U> implements CorfuCluster<CorfuServer, CorfuClusterParams> {
+public abstract class AbstractCorfuCluster<U extends UniverseParams>
+        extends AbstractCluster<CorfuServer, CorfuServerParams, CorfuClusterParams, U>
+        implements CorfuCluster<CorfuServer, CorfuClusterParams> {
 
     private final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
 
@@ -71,7 +69,7 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams> extends Abs
     public LocalCorfuClient getLocalCorfuClient() {
         return LocalCorfuClient.builder()
                 .serverEndpoints(getClusterLayoutServers())
-                .metricsPort(Optional.empty())
+                .prometheusMetricsPort(Optional.empty())
                 .build()
                 .deploy();
     }
@@ -79,7 +77,7 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams> extends Abs
     @Override
     public LocalCorfuClient getLocalCorfuClient(int metricsPort) {
         return LocalCorfuClient.builder()
-                .metricsPort(Optional.of(metricsPort))
+                .prometheusMetricsPort(Optional.of(metricsPort))
                 .serverEndpoints(getClusterLayoutServers())
                 .build()
                 .deploy();

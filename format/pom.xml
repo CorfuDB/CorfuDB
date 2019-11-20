@@ -12,7 +12,7 @@
     <artifactId>format</artifactId>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <maven.deploy.skip>false</maven.deploy.skip>
     </properties>
 
     <dependencies>
@@ -29,7 +29,7 @@
             <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
-                <version>3.1.0.2</version>
+                <version>3.7.0.1</version>
                 <executions>
                     <execution>
                         <phase>generate-sources</phase>
@@ -38,6 +38,11 @@
                         </goals>
                         <configuration>
                             <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeDirectories>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
                             <inputDirectories>
                                 <include>proto</include>
                             </inputDirectories>

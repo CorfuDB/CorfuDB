@@ -11,8 +11,6 @@ import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.Node.NodeType;
-import org.corfudb.universe.node.server.CorfuServer.Mode;
-import org.corfudb.universe.node.server.CorfuServer.Persistence;
 import org.slf4j.event.Level;
 
 import java.time.Duration;
@@ -22,7 +20,7 @@ import java.util.Set;
 
 @Builder
 @AllArgsConstructor
-@EqualsAndHashCode(exclude = {"logLevel", "stopTimeout"})
+@EqualsAndHashCode
 @ToString
 public class SupportServerParams implements NodeParams {
     private static final Map<NodeType, Integer> PORTS = ImmutableMap.<NodeType, Integer>builder()
@@ -37,7 +35,8 @@ public class SupportServerParams implements NodeParams {
     @Default
     @NonNull
     @Getter
-    private final Level logLevel = Level.DEBUG;
+    @EqualsAndHashCode.Exclude
+    private final Level logLevel = Level.INFO;
 
     @NonNull
     @Getter
@@ -50,6 +49,7 @@ public class SupportServerParams implements NodeParams {
     @Getter
     @Default
     @NonNull
+    @EqualsAndHashCode.Exclude
     private final Duration stopTimeout = Duration.ofSeconds(1);
 
     @Override
@@ -61,4 +61,7 @@ public class SupportServerParams implements NodeParams {
         return ImmutableSet.of(PORTS.get(getNodeType()));
     }
 
+    public boolean isEnabled() {
+        return !metricPorts.isEmpty();
+    }
 }

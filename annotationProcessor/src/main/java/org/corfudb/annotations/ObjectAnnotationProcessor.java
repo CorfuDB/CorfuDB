@@ -527,13 +527,19 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 ? "return null; });" : "});"
                         );
                     } else if (smrMethod.getAnnotation(PassThrough.class) != null) {
-                        ms.addStatement("$L super.$L($L)",
+
+                        ms.addStatement((smrMethod.getReturnType().getKind()
+                                        .equals(TypeKind.VOID) ? "" : "return ") + "proxy"
+                                        + CORFUSMR_FIELD + ".passThrough(" + "o" + CORFUSMR_FIELD
+                                        + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L})",
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
                                         ? "" : "return ",
                                 smrMethod.getSimpleName(),
                                 smrMethod.getParameters().stream()
                                         .map(VariableElement::getSimpleName)
-                                        .collect(Collectors.joining(", "))
+                                        .collect(Collectors.joining(", ")),
+                                smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
+                                        ? "return null;" : ""
                         );
                     } else if (smrMethod.getAnnotation(InterfaceOverride.class) != null) {
                         ms.addStatement("$L$T.super.$L($L)",

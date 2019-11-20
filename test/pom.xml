@@ -16,6 +16,13 @@
     </properties>
 
     <dependencies>
+        <!-- external dependencies -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>format</artifactId>
@@ -35,6 +42,12 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>corfudb-tools</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.classic.version}</version>
@@ -46,10 +59,45 @@
             <version>1.14</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.2.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.7.0.1</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeDirectories>
+                                <includeDirectory>../runtime/proto</includeDirectory>
+                                <includeDirectory>src/test/resources/proto</includeDirectory>
+                            </includeDirectories>
+                            <inputDirectories>
+                                <include>../runtime/proto</include>
+                                <include>src/test/resources/proto</include>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -91,7 +139,10 @@
                             <consoleOutput>true</consoleOutput>
                             <failsOnError>true</failsOnError>
                             <configLocation>${session.executionRootDirectory}/test_checks.xml</configLocation>
-                            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                            <sourceDirectories>
+                                <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+                                <sourceDirectory>${project.build.testSourceDirectory}</sourceDirectory>
+                            </sourceDirectories>
                         </configuration>
                         <goals>
                             <goal>check</goal>
@@ -102,7 +153,7 @@
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>7.3</version>
+                        <version>8.18</version>
                     </dependency>
                 </dependencies>
             </plugin>

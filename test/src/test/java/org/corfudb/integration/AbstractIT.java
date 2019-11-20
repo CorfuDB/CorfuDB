@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -308,7 +309,7 @@ public class AbstractIT extends AbstractCorfuTest {
         Map<String, Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
                 .open();
         return map;
     }
@@ -364,6 +365,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
+        private String compressionCodec = null;
 
 
         /**
@@ -385,6 +387,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (logSizeLimitPercentage != null) {
                 command.append(" --log-size-quota-percentage ").append(logSizeLimitPercentage);
+            }
+
+            if (compressionCodec != null) {
+                command.append(" --compression-codec ").append(compressionCodec);
             }
 
             if (tlsEnabled) {

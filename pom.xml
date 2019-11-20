@@ -12,6 +12,7 @@
         <module>common</module>
         <module>format</module>
         <module>cmdlets</module>
+        <module>corfudb-tools</module>
         <module>test</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
@@ -19,6 +20,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
+        <module>benchmarks</module>
     </modules>
 
 
@@ -33,7 +35,7 @@
     </organization>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <maven.deploy.skip>false</maven.deploy.skip>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -152,7 +154,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.16.16</version>
+            <version>1.18.10</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -163,12 +165,12 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>23.0</version>
+            <version>28.0-jre</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.36.Final</version>
+            <version>4.1.42.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -202,7 +204,7 @@
         <repository>
             <id>bintray-corfudb-maven</id>
             <name>CorfuDB repository</name>
-            <url>https://api.bintray.com/maven/corfudb/maven/org.corfudb/;publish=1</url>
+            <url>https://api.bintray.com/maven/corfudb/maven/org.corfudb/;publish=1;override=1</url>
         </repository>
     </distributionManagement>
 
@@ -307,6 +309,32 @@
                     <failsOnError>false</failsOnError>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -316,7 +344,7 @@
                     <source>1.8</source>
                     <target>1.8</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
-                    <showDeprecation>true</showDeprecation>
+                    <showDeprecation>false</showDeprecation>
                     <compilerArgs>
                         <arg>-XDignore.symbol.file</arg>
                     </compilerArgs>

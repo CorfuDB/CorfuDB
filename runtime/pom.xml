@@ -18,6 +18,33 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.7.0.1</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeDirectories>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
+                            <inputDirectories>
+                                <include>proto</include>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
                 <version>2.1.15</version>
@@ -53,6 +80,11 @@
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
+            <artifactId>corfudb-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
             <artifactId>format</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -62,9 +94,9 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-        <groupId>org.corfudb</groupId>
-        <artifactId>annotationProcessor</artifactId>
-        <version>${project.version}</version>
+            <groupId>org.corfudb</groupId>
+            <artifactId>annotationProcessor</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <dependency>
@@ -103,9 +135,19 @@
             <version>3.1.0</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.9</version>
+        </dependency>
+        <dependency>
             <groupId>org.ehcache</groupId>
             <artifactId>sizeof</artifactId>
             <version>0.3.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.rocksdb</groupId>
+            <artifactId>rocksdbjni</artifactId>
+            <version>6.2.4</version>
         </dependency>
         <dependency>
             <groupId>org.roaringbitmap</groupId>

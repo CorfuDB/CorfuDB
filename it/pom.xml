@@ -111,6 +111,40 @@
                 </plugins>
             </build>
         </profile>
+
+        <!-- ./mvnw -pl it/ -Pinfrastructure dependency:copy -->
+        <profile>
+            <id>infrastructure</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>copy</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-dependencies</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.corfudb</groupId>
+                                    <artifactId>infrastructure</artifactId>
+                                    <type>jar</type>
+                                    <classifier>shaded</classifier>
+                                    <overWrite>false</overWrite>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
 </project>

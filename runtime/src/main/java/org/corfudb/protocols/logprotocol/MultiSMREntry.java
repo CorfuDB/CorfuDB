@@ -7,14 +7,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import static com.google.common.base.Preconditions.checkState;
 
 
 /**
@@ -25,6 +27,7 @@ import org.corfudb.util.serializer.Serializers;
 @SuppressWarnings("checkstyle:abbreviation")
 @ToString
 @Slf4j
+@EqualsAndHashCode
 public class MultiSMREntry extends LogEntry implements ISMRConsumable {
 
     @Getter
@@ -61,6 +64,23 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         for (int i = 0; i < numUpdates; i++) {
             updates.add(
                     (SMREntry) Serializers.CORFU.deserialize(b, rt));
+        }
+    }
+
+    /**
+     * Given a buffer with the reader index pointing to a serialized MultiSMREntry, this method will
+     * seek the buffer's reader index to the end of the entry.
+     */
+    public static void seekToEnd(ByteBuf b) {
+        // Magic
+        byte magicByte = b.readByte();
+        checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");
+        // container type
+        byte type = b.readByte();
+        checkState(type == LogEntryType.MULTISMR.asByte(), "Not a MULTISMR!");
+        int numUpdates = b.readInt();
+        for (int i = 0; i < numUpdates; i++) {
+            SMREntry.seekToEnd(b);
         }
     }
 

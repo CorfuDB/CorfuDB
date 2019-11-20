@@ -4,9 +4,12 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Persisted Queue supported by CorfuDB using distributed State Machine Replication.
@@ -39,14 +43,23 @@ public class CorfuQueue<E> {
     private final CorfuRuntime runtime;
     private final CorfuGuidGenerator guidGenerator;
 
-    public CorfuQueue(CorfuRuntime runtime, String streamName) {
+    public CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer,
+                      IndexRegistry<Long, E> indices) {
+        final Supplier<StreamingMap<Long, E>> mapSupplier =
+                () -> new StreamingMapDecorator<>(new LinkedHashMap<Long, E>());
         this.runtime = runtime;
         corfuTable = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<Long, E>>() {})
                 .setStreamName(streamName)
-                .setArguments(CorfuTable.IndexRegistry.empty(), new LinkedHashMap<Long, E>())
+                .setArguments(indices, mapSupplier)
+                .setSerializer(serializer)
                 .open();
-        guidGenerator = new CorfuGuidGenerator(runtime);
+        guidGenerator = CorfuGuidGenerator.getInstance(runtime);
+    }
+
+    public CorfuQueue(CorfuRuntime runtime, String streamName) {
+        this(runtime, streamName, Serializers.getDefaultSerializer(), IndexRegistry.empty());
+
     }
 
     /**

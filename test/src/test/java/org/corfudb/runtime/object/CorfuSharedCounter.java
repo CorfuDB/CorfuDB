@@ -9,7 +9,7 @@ import org.corfudb.annotations.MutatorAccessor;
  * Created by dmalkhi on 12/2/16.
  */
 @CorfuObject
-public class CorfuSharedCounter {
+public class CorfuSharedCounter implements ICorfuSMR<CorfuSharedCounter> {
     int value = 0;
 
     // currently, this is invisible to Corfu applications, cannot be used
@@ -31,5 +31,10 @@ public class CorfuSharedCounter {
         if (curValue == testValue)
             value = newValue;
         return curValue;
+    }
+
+    @Override
+    public CorfuSharedCounter getContext(ICorfuExecutionContext.Context context) {
+        return this;
     }
 }

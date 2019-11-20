@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -8,7 +9,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -40,7 +40,7 @@ public class TransactionStreamIT extends AbstractIT {
     private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas) {
         for (ILogData ld : deltas) {
             MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(null);
-            for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.entryMap.entrySet()) {
+            for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.getEntryMap().entrySet()) {
                 for (SMREntry update : multiSMREntry.getValue().getUpdates()) {
                     int key = (int) update.getSMRArguments()[0];
                     int val = (int) update.getSMRArguments()[1];
@@ -125,10 +125,10 @@ public class TransactionStreamIT extends AbstractIT {
         for (int x = 1; x <= numWriters; x++) {
             final int idx = x;
             producers.submit(() -> {
-                CorfuTable map = producersRt.getObjectsView()
+                CorfuTable<Integer, Integer> map = producersRt.getObjectsView()
                         .build()
                         .setStreamName(String.valueOf(idx))
-                        .setType(CorfuTable.class)
+                        .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                         .open();
                 for (int i = 1; i <= numWritesPerThread; i++) {
                     producersRt.getObjectsView().TXBegin();
@@ -150,10 +150,10 @@ public class TransactionStreamIT extends AbstractIT {
         for (int x = 1; x <= numWriters; x++) {
             assertThat(counters.get(CorfuRuntime.getStreamID(String.valueOf(x)))).isEqualTo(sumOfWritesPerTable);
 
-            CorfuTable map = producersRt.getObjectsView()
+            CorfuTable<Integer, Integer> map = producersRt.getObjectsView()
                     .build()
                     .setStreamName(String.valueOf(x))
-                    .setType(CorfuTable.class)
+                    .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                     .open();
             assertThat(map.size()).isEqualTo(numWritesPerThread);
         }

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -27,7 +28,7 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
         CorfuTable<String, String> table = rt.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("table1")
                 .open();
 
