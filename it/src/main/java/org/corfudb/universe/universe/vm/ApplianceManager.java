@@ -176,14 +176,19 @@ public class ApplianceManager {
                 folderR.setVal(prop);
 
                 Folder folder = new Folder(vmTemplate.getServerConnection(), folderR);
+                Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName, cloneSpec);
 
                 try {
                     // Do the cloning - providing the clone specification
-                    Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName, cloneSpec);
                     cloneTask.waitForTask();
                 } catch (RemoteException | InterruptedException e) {
                     String err = String.format("Deploy VM %s failed due to ", vmName);
                     throw new UniverseException(err, e);
+                }
+
+                if (cloneTask.getTaskInfo().getError() != null) {
+                    throw new UniverseException(
+                            cloneTask.getTaskInfo().getError().getLocalizedMessage());
                 }
                 // After the clone task completes, get the VM from the inventory
                 vm = (VirtualMachine) inventoryNavigator
@@ -240,41 +245,6 @@ public class ApplianceManager {
         //Clone is powered on, not a template.
         vmCloneSpec.setPowerOn(true);
         vmCloneSpec.setTemplate(false);
-
-        //Create customization specs/linux specific options
-        CustomizationSpec customSpec = new CustomizationSpec();
-        CustomizationLinuxOptions linuxOptions = new CustomizationLinuxOptions();
-        customSpec.setOptions(linuxOptions);
-
-        CustomizationLinuxPrep linuxPrep = new CustomizationLinuxPrep();
-        linuxPrep.setDomain(universeParams.getDomainName());
-        linuxPrep.setHwClockUTC(true);
-        linuxPrep.setTimeZone(universeParams.getTimeZone());
-
-        CustomizationFixedName fixedName = new CustomizationFixedName();
-        fixedName.setName(cloneName);
-        linuxPrep.setHostName(fixedName);
-        customSpec.setIdentity(linuxPrep);
-
-        //Network related settings
-        CustomizationGlobalIPSettings globalIPSettings = new CustomizationGlobalIPSettings();
-        globalIPSettings.setDnsServerList(universeParams.getDnsServers());
-        globalIPSettings.setDnsSuffixList(universeParams.getDomainSuffixes());
-        customSpec.setGlobalIPSettings(globalIPSettings);
-
-        CustomizationIPSettings customizationIPSettings = new CustomizationIPSettings();
-        customizationIPSettings.setIp(new CustomizationDhcpIpGenerator());
-        customizationIPSettings.setGateway(universeParams.getGateways());
-        customizationIPSettings.setSubnetMask(universeParams.getSubnet());
-
-        CustomizationAdapterMapping adapterMapping = new CustomizationAdapterMapping();
-        adapterMapping.setAdapter(customizationIPSettings);
-
-        CustomizationAdapterMapping[] adapterMappings = new CustomizationAdapterMapping[]{adapterMapping};
-        customSpec.setNicSettingMap(adapterMappings);
-
-        //Set all customization to clone specs
-        vmCloneSpec.setCustomization(customSpec);
         return vmCloneSpec;
     }
 

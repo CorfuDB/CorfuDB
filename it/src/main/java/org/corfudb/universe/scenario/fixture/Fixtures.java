@@ -183,7 +183,7 @@ public interface Fixtures {
             universe = VmUniverseParams.builder()
                     .vSphereUrl(vmProperties.getProperty("vsphere.url"))
                     .networkName(vmProperties.getProperty("vm.network"))
-                    .templateVMName("corfu-server")
+                    .templateVMName("debian-buster-thin-provisioned")
                     .credentials(credentialParams)
                     .cleanUpEnabled(true);
         }
