@@ -130,11 +130,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      * @param args                Arguments to create this proxy.
      * @param serializer          Serializer used by the SMR entries to serialize the arguments.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                             ISerializer serializer, ICorfuSMR<T> wrapperObject
-    ) {
+                             ISerializer serializer, ICorfuSMR<T> wrapperObject) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -143,9 +140,11 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
-        underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
+        underlyingObject = new VersionLockedObject<>(
+                this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject);
+                wrapperObject
+        );
 
         metrics = CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();
@@ -202,7 +201,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                 return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp
                                 && !o.isOptimisticallyModifiedUnsafe(),
                         o -> o.syncObjectUnsafe(timestamp),
-                        o -> accessMethod.access(o));
+                        accessMethod::access);
             } catch (TrimmedException te) {
                 log.warn("accessInner: Encountered a trim exception while accessing version {} on attempt {}",
                         timestamp, x);

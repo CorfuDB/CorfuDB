@@ -88,16 +88,20 @@ public class RecoveryUtils {
      * Getting the underlying logEntry should trigger deserialization only once.
      * Next access should just returned the logEntry directly.
      */
-    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) throws Exception {
+    public static LogEntry deserializeLogData(CorfuRuntime runtime, ILogData logData) {
         return logData.getLogEntry(runtime);
     }
 
     /**
      * Look in the objectCache for the corresponding CorfuCompileProxy
      */
-    static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId, Class type) {
-        ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, type);
-        return ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().getObjectCache().get(thisObjectId)).
-                getCorfuSMRProxy());
+    static <T> CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId, Class type) {
+        ObjectsView.ObjectID<T> thisObjectId = new ObjectsView.ObjectID<>(streamId, type);
+        ICorfuSMR corfuSMR = (ICorfuSMR) runtime
+                .getObjectsView()
+                .getObjectCache()
+                .get(thisObjectId);
+
+        return (CorfuCompileProxy) corfuSMR.getCorfuSMRProxy();
     }
 }

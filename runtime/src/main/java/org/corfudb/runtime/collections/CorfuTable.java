@@ -213,11 +213,11 @@ public class CorfuTable<K ,V>
 
     public CorfuTable(StreamingMap<K,V> mainMap,
                       Set<Index<K, V, ? extends Comparable>> indexSpec,
-                      Map<String, Map<Comparable, Map<K, V>>> secondaryIndexe,
+                      Map<String, Map<Comparable, Map<K, V>>> secondaryIndex,
                       CorfuTable<K, V> optimisticTable) {
         this.mainMap = mainMap;
         this.indexSpec = indexSpec;
-        this.secondaryIndexes = secondaryIndexe;
+        this.secondaryIndexes = secondaryIndex;
         this.optimisticTable = optimisticTable;
         this.versionPolicy = ICorfuVersionPolicy.DEFAULT;
     }

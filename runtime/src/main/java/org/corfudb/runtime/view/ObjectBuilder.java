@@ -1,26 +1,26 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-
-import java.util.EnumSet;
-import java.util.Set;
-import java.util.UUID;
-
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.IObjectBuilder;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+
+import java.util.EnumSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 4/6/16.
@@ -94,43 +94,43 @@ public class ObjectBuilder<T extends ICorfuSMR<T>> implements IObjectBuilder<T> 
 
         log.info("ObjectBuilder: open Corfu stream {} id {}", streamName, streamID);
 
-        try {
-            if (options.contains(ObjectOpenOptions.NO_CACHE)) {
-                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                        arguments, serializer);
-            } else {
-                ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-                            try {
-                                T result = CorfuCompileWrapperBuilder.getWrapper(type, runtime,
-                                        streamID, arguments, serializer);
+        if (options.contains(ObjectOpenOptions.NO_CACHE)) {
+            return getWrapper();
+        }
 
-                                // Get object serializer to check if we didn't attempt to set another serializer
-                                // to an already existing map
-                                ISerializer objectSerializer = ((CorfuCompileProxy) ((ICorfuSMR) result).
-                                        getCorfuSMRProxy())
-                                        .getSerializer();
+        ObjectID<T> oid = new ObjectID<>(streamID, type);
 
-                                if (serializer != objectSerializer) {
-                                    log.warn("open: Attempt to open an existing object with a different serializer {}. " +
-                                                    "Object {} opened with original serializer {}.",
-                                            serializer.getClass().getSimpleName(),
-                                            oid,
-                                            objectSerializer.getClass().getSimpleName());
-                                }
-                                return result;
-                            } catch (Exception ex) {
-                                throw new UnrecoverableCorfuError(ex);
-                            }
-                        }
-                );
+        Function<ObjectID, ICorfuSMR> factoryAction = objId -> {
+            ICorfuSMR result = getWrapper();
+
+            // Get object serializer to check if we didn't attempt to set another serializer
+            // to an already existing map
+            ISerializer objectSerializer = ((CorfuCompileProxy) result.getCorfuSMRProxy())
+                    .getSerializer();
+
+            if (serializer != objectSerializer) {
+                String errMsg = "open: Attempt to open an existing object with a different " +
+                        "serializer {}. Object {} opened with original serializer {}.";
+                log.warn(errMsg, serializer.getClass().getSimpleName(),
+                        oid, objectSerializer.getClass().getSimpleName());
             }
+            return result;
+        };
+
+        return (T) runtime
+                .getObjectsView()
+                .objectCache
+                .computeIfAbsent(oid, factoryAction);
+    }
+
+    private T getWrapper() {
+        try {
+            return CorfuCompileWrapperBuilder
+                    .getWrapper(type, runtime, streamID, arguments, serializer);
         } catch (Exception ex) {
             log.error("Runtime instrumentation no longer supported and no compiled class found"
                     + " for {}", type);
             throw new UnrecoverableCorfuError(ex);
         }
     }
-
-
 }

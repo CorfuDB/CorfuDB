@@ -210,8 +210,7 @@ public class CheckpointWriter<T extends Map> {
         this.mdkv.put(CheckpointDictKey.START_TIME, startTime.toString());
         // VLO version at time of snapshot
         this.mdkv.put(CheckpointDictKey.START_LOG_ADDRESS, Long.toString(vloVersion));
-        this.mdkv.put(CheckpointDictKey.SNAPSHOT_ADDRESS,
-                Long.toString(txnSnapshot.getSequence()));
+        this.mdkv.put(CheckpointDictKey.SNAPSHOT_ADDRESS, Long.toString(txnSnapshot.getSequence()));
 
         ImmutableMap<CheckpointDictKey, String> mdkv = ImmutableMap.copyOf(this.mdkv);
         CheckpointEntry cp = new CheckpointEntry(

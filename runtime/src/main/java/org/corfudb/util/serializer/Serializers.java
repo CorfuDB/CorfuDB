@@ -10,6 +10,7 @@ import org.corfudb.runtime.exceptions.SerializerException;
 public class Serializers {
 
     public static final int SYSTEM_SERIALIZERS_COUNT = 10;
+
     public static final ISerializer CORFU = new CorfuSerializer((byte) 0);
     public static final ISerializer JAVA = new JavaSerializer((byte) 1);
     public static final ISerializer JSON = new JsonSerializer((byte) 2);

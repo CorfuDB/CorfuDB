@@ -76,8 +76,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                             ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
                             final Object actualValue;
                             try {
-                                actualValue =
-                                        Serializers.CORFU.deserialize(copyBuf, runtime);
+                                actualValue = Serializers.CORFU.deserialize(copyBuf, runtime);
                             } catch (Throwable throwable) {
                                 log.error("Exception caught at address {}, {}, {}",
                                         getGlobalAddress(), getStreams(), getType());

@@ -24,7 +24,6 @@ import static com.google.common.base.Preconditions.checkState;
  * Its primary use case is to allow a single log entry to
  * hold a sequence of updates made by a transaction, which are applied atomically.
  */
-@SuppressWarnings("checkstyle:abbreviation")
 @ToString
 @Slf4j
 @EqualsAndHashCode

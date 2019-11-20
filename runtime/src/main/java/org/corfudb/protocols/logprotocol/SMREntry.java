@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 /**
  * Created by mwei on 1/8/16.
  */
-@SuppressWarnings("checkstyle:abbreviation")
 @ToString(callSuper = true)
 @NoArgsConstructor
 @EqualsAndHashCode
@@ -31,14 +30,12 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
      */
-    @SuppressWarnings("checkstyle:MemberName")
     @Getter
     private String SMRMethod;
 
     /**
      * The arguments to the SMR method, which could be 0.
      */
-    @SuppressWarnings("checkstyle:MemberName")
     @Getter
     private Object[] SMRArguments;
 

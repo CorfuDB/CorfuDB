@@ -75,15 +75,21 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream, StreamOptions options) {
-        IStreamView streamView = runtime.getLayoutView().getLayout().getLatestSegment()
-                .getReplicationMode().getStreamView(runtime, stream, options);
+        IStreamView streamView = runtime.getLayoutView()
+                .getLayout()
+                .getLatestSegment()
+                .getReplicationMode()
+                .getStreamView(runtime, stream, options);
         streamCache.put(stream, streamView);
         return streamView;
     }
 
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
-        return runtime.getLayoutView().getLayout().getLatestSegment()
-                .getReplicationMode().getUnsafeStreamView(runtime, stream, options);
+        return runtime.getLayoutView()
+                .getLayout()
+                .getLatestSegment()
+                .getReplicationMode()
+                .getUnsafeStreamView(runtime, stream, options);
     }
 
     /**

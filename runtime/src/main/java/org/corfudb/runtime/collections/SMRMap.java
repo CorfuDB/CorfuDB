@@ -28,10 +28,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
  * Created by mwei on 1/7/16.
  */
 @CorfuObject
-@SuppressWarnings("checkstyle:abbreviation")
-public class SMRMap<K, V>
-        extends HashMap<K, V>
-        implements ISMRMap<K,V>, ICorfuSMR<SMRMap<K, V>> {
+public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V>, ICorfuSMR<SMRMap<K, V>> {
 
     /**
      * Returns a {@link Set} view of the keys contained in this map.
