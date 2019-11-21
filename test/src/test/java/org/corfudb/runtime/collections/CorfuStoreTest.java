@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
@@ -204,6 +205,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_1")
                         .setCreateTimestamp(0L)
+                        .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion++).build());
 
         // Set the version field to the correct value 1 and expect that no exception is thrown
@@ -217,6 +219,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
+                        .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion++).build());
 
         // Now do an updated without setting the version field, and it should not get validated!
@@ -230,6 +233,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
+                        .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion).build());
 
         corfuStore.tx(nsxManager).delete(tableName, key1).commit();
@@ -245,6 +249,7 @@ public class CorfuStoreTest extends AbstractViewTest {
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder(user_2)
                         .setCreateTimestamp(0L)
+                        .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion).build());
 
         // Validate that if Metadata schema is specified, a null metadata is not acceptable
