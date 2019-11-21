@@ -576,6 +576,23 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Get the first address in the address space.
+     */
+    public Token getTrimMark() {
+        // No-op, only for temporary backward compatibility.
+        return new Token(-1, -1);
+    }
+
+    /**
+     * Force compaction on an address space, which will force
+     * all log units to free space, and process any outstanding
+     * trim requests.
+     */
+    public void gc() {
+        // No-op, only for temporary backward compatibility.
+    }
+
+    /**
      * Get all tails, includes: log tail and stream tails.
      */
     public TailsResponse getAllTails() {
