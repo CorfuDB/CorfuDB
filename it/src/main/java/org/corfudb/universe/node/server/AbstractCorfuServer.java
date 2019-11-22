@@ -46,6 +46,8 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
             cmd.append(" -s");
         }
 
+        cmd.append(" --no-compaction");
+
         cmd.append(" -d ").append(params.getLogLevel().toString()).append(" ");
 
         cmd.append(params.getPort());
