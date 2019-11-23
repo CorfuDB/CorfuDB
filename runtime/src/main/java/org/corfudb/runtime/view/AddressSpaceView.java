@@ -217,7 +217,7 @@ public class AddressSpaceView extends AbstractView {
                     garbageDataList));
         }
 
-        CompletableFuture.allOf(futures);
+        CFUtils.getUninterruptibly(CompletableFuture.allOf(futures));
 
         log.trace("writeGarbage complete[{}]", servers);
     }
