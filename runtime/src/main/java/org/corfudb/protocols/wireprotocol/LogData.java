@@ -80,7 +80,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                                         Serializers.CORFU.deserialize(copyBuf, runtime);
                             } catch (Throwable throwable) {
                                 log.error("Exception caught at address {}, {}, {}",
-                                        getGlobalAddress(), getStreams(), getType());
+                                        getGlobalAddress(), getStreams(), getType(), throwable);
                                 copyBuf.release();
                                 data = null;
                                 throw throwable;
