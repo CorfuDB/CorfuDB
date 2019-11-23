@@ -925,23 +925,36 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t(1, () -> startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0)));
         t(2, () -> get("k"))
                 .assertThrows().hasCauseInstanceOf(TrimmedException.class);
+        t(2, () -> assertThat(getRuntime().getAddressSpaceView().getCompactionMark().get())
+                        .isEqualTo(RECORDS_PER_SEGMENT));
         t(2, this::TXEnd);
     }
 
     @Test
     public void snapshotReadAfterCompactionMark() {
-        final int entryNum = RECORDS_PER_SEGMENT;
+        t(2, this::SnapshotTXBegin);
+        t(2, () -> get("k"));
+        final int entryNum = RECORDS_PER_SEGMENT * 2 + 10;
         for (int i = 0; i <= entryNum; ++i) {
             AtomicInteger version = new AtomicInteger(i);
             t(1, () -> put("k" , "v" + version.get()));
         }
 
-        t(1, this::SnapshotTXBegin);
+        CorfuRuntime rt = getRuntime();
+
+        // Update committed tail so that compactor can run.
+        Utils.updateCommittedTail(rt.getLayoutView().getLayout(), getRuntime(), entryNum);
 
         // run compaction
-        t(1, () -> startCompaction(getRuntime(), getLogUnit(SERVERS.PORT_0)));
+        startCompaction(rt, getLogUnit(SERVERS.PORT_0));
+        t(2, () -> get("k"));
+        t(2, this::TXEnd);
+
+        t(1, this::TXBegin);
         t(1, () -> get("k"))
                 .assertResult().isEqualTo("v" + entryNum); // SnapshotTimeStamp = RECORDS_PER_SEGMENT
+        t(1, () -> assertThat(getRuntime().getAddressSpaceView().getCompactionMark().get())
+                .isEqualTo(RECORDS_PER_SEGMENT * 2));
         t(1, this::TXEnd);
     }
 }
