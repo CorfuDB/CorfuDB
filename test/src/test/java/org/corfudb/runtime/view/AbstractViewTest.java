@@ -488,8 +488,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         // stop periodical tasks to prevent race condition
         rt.getGarbageInformer().stop();
 
-        // send garbage decisions to logUnit servers
-        rt.getGarbageInformer().gcUnsafe();
+        // wait until all garbage decisions are sent to logUnit servers.
+        rt.getGarbageInformer().waitUntilAllTasksFinish();
 
         // run compaction on LogUnit servers
         logUnitServer.runCompaction();

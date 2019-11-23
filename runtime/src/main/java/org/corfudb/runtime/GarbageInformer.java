@@ -21,27 +21,36 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class GarbageInformer {
 
 
     private final static Duration GC_PERIOD = Duration.ofSeconds(15);
-    private final static int RECEIVING_QUEUE_CAPACITY = 5_000;
-    private final static int SENDING_QUEUE_CAPACITY = 20;
-    private final static int BATCH_SIZE = 100;
+    private final static int RECEIVING_QUEUE_CAPACITY = 5_0000;
+    private final static int SENDING_QUEUE_CAPACITY = 40;
+    private final static int BATCH_SIZE = 500;
 
     // parameters about drainExecutor which is a single-thread pool
     private final static int CORE_POOL_SIZE = 1;
     private final static int MAX_POOL_SIZE = 1;
     private final static long KEEP_ALIVE_TIME = 0L;
+    private final static Duration TERMINATION_WAIT_TIME = Duration.ofMinutes(10);
 
     private final CorfuRuntime rt;
 
     // executor to drain garbageReceivingQueue when it is full
-    private final ExecutorService drainExecutor =
-            new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME, TimeUnit.MILLISECONDS,
+    private ExecutorService drainExecutor = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME,
+            TimeUnit.MILLISECONDS,
                     new ArrayBlockingQueue<>(3, true),
                     new ThreadFactoryBuilder().setDaemon(true).setNameFormat("GarbageInformerDrain").build());
 
@@ -109,7 +118,6 @@ public class GarbageInformer {
         }
 
         List<SMRGarbageEntry> garbageEntries = generateGarbageEntries(markerAddress, locators);
-
         try {
             for (SMRGarbageEntry garbageEntry : garbageEntries) {
                 garbageReceivingQueue.put(garbageEntry);
@@ -148,6 +156,9 @@ public class GarbageInformer {
         return new ArrayList<>(garbage.values());
     }
 
+    /**
+     * Submit a task to send garbage decisions to LogUnit servers.
+     */
     public void submitGCTask() {
         try {
             drainExecutor.execute(this::gcUnsafe);
@@ -156,10 +167,28 @@ public class GarbageInformer {
         }
     }
 
+    @VisibleForTesting
+    public void waitUntilAllTasksFinish() {
+        // waits until all task in the executor finish
+        drainExecutor.shutdown();
+        try {
+            drainExecutor.awaitTermination(TERMINATION_WAIT_TIME.getSeconds(), TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            log.error("Encounter interruption exception when {} is await termination", drainExecutor, ex);
+            throw new UnrecoverableCorfuInterruptedError(ex);
+        } finally {
+            drainExecutor.shutdownNow();
+        }
+
+        // send garbage decisions to logUnit servers
+        while (getGarbageReceivingQueue().size() > 0) {
+            gcUnsafe();
+        }
+    }
+
     /**
      * Drains garbage decisions from receiving queue and sends them to LogUnit servers.
      */
-    @VisibleForTesting
     public void gcUnsafe() {
         while (garbageSendingDeque.size() < SENDING_QUEUE_CAPACITY) {
             List<SMRGarbageEntry> garbageEntries = new ArrayList<>();
