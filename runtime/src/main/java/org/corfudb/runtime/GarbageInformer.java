@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.*;
+import java.util.function.Supplier;
 
 @Slf4j
 public class GarbageInformer {
@@ -36,12 +37,13 @@ public class GarbageInformer {
     private final static int CORE_POOL_SIZE = 1;
     private final static int MAX_POOL_SIZE = 1;
     private final static long KEEP_ALIVE_TIME = 0L;
+    private final static Duration TERMINATION_WAIT_TIME = Duration.ofHours(1);
 
     private final CorfuRuntime rt;
 
     // executor to drain garbageReceivingQueue when it is full
-    private final ExecutorService drainExecutor =
-            new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME, TimeUnit.MILLISECONDS,
+    private ExecutorService drainExecutor = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME,
+            TimeUnit.MILLISECONDS,
                     new ArrayBlockingQueue<>(3, true),
                     new ThreadFactoryBuilder().setDaemon(true).setNameFormat("GarbageInformerDrain").build());
 
@@ -109,7 +111,6 @@ public class GarbageInformer {
         }
 
         List<SMRGarbageEntry> garbageEntries = generateGarbageEntries(markerAddress, locators);
-
         try {
             for (SMRGarbageEntry garbageEntry : garbageEntries) {
                 garbageReceivingQueue.put(garbageEntry);
@@ -148,6 +149,9 @@ public class GarbageInformer {
         return new ArrayList<>(garbage.values());
     }
 
+    /**
+     * Submit a task to send garbage decisions to LogUnit servers.
+     */
     public void submitGCTask() {
         try {
             drainExecutor.execute(this::gcUnsafe);
@@ -156,10 +160,28 @@ public class GarbageInformer {
         }
     }
 
+    @VisibleForTesting
+    public void waitUntilAllTasksFinish() {
+        // send garbage decisions to logUnit servers
+        while (getGarbageReceivingQueue().size() > 0) {
+            gcUnsafe();
+        }
+        
+        // waits until all task in the executor finish
+        drainExecutor.shutdown();
+        try {
+            drainExecutor.awaitTermination(TERMINATION_WAIT_TIME.getSeconds(), TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            log.error("Encounter interruption exception when {} is await termination", drainExecutor, ex);
+            throw new UnrecoverableCorfuInterruptedError(ex);
+        } finally {
+            drainExecutor.shutdownNow();
+        }
+    }
+
     /**
      * Drains garbage decisions from receiving queue and sends them to LogUnit servers.
      */
-    @VisibleForTesting
     public void gcUnsafe() {
         while (garbageSendingDeque.size() < SENDING_QUEUE_CAPACITY) {
             List<SMRGarbageEntry> garbageEntries = new ArrayList<>();
