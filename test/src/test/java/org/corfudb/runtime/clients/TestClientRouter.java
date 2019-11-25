@@ -191,7 +191,6 @@ public class TestClientRouter implements IClientRouter {
     @Override
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
                                                                  @NonNull CorfuMsg message) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -203,7 +202,7 @@ public class TestClientRouter implements IClientRouter {
         // Set up the timer and context to measure request
         final Timer roundTripMsgTimer = getTimer(message);
         final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(isEnabled, roundTripMsgTimer);
+                .getConditionalContext(roundTripMsgTimer);
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
