@@ -7,6 +7,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
@@ -41,16 +42,16 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NavigableSet;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 
 /**
@@ -61,15 +62,14 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class AddressSpaceView extends AbstractView {
 
+    private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
+    private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
+    private final static boolean NO_THROW = false;
+
     /**
      * A cache for read results.
      */
-    final Cache<Long, ILogData> readCache;
-
-    final private long cacheKeySize = MetricsUtils.sizeOf.deepSizeOf(new Long(0));
-
-    final private long defaultMaxCacheEntries = 5000;
-
+    private final Cache<Long, ILogData> readCache;
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
             .ignoreTrim(false)
             .waitForHole(true)
@@ -83,28 +83,29 @@ public class AddressSpaceView extends AbstractView {
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
 
-        CacheBuilder cacheBuilder = CacheBuilder.newBuilder();
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
 
-        long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
-        long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
-
-        if (maxCacheEntries != 0) {
-            cacheBuilder.maximumSize(runtime.getParameters().getMaxCacheEntries());
-        }
+        final boolean cacheDisabled = runtime.getParameters().isCacheDisabled();
+        final long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
+        final long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
+        final int concurrencyLevel = runtime.getParameters().getCacheConcurrencyLevel();
 
         if (maxCacheWeight != 0) {
-            cacheBuilder.maximumWeight(runtime.getParameters().getMaxCacheWeight());
-            cacheBuilder.weigher((k, v) -> (int) (cacheKeySize + MetricsUtils.sizeOf.deepSizeOf(v)));
+            cacheBuilder.maximumWeight(maxCacheWeight);
+            cacheBuilder.weigher((k, v) -> (int) (CACHE_KEY_SIZE + MetricsUtils.sizeOf.deepSizeOf(v)));
         }
 
-        if (maxCacheEntries == 0 && maxCacheWeight == 0) {
-            // If cache weight/size are not set, then we default to using
-            // size based cache
-            cacheBuilder.maximumSize(defaultMaxCacheEntries);
+        if (cacheDisabled) {
+            cacheBuilder.maximumSize(0); // Do not allocate memory when cache is disabled.
+        } else if (maxCacheEntries != 0) {
+            cacheBuilder.maximumSize(maxCacheEntries);
+        } else if (maxCacheWeight == 0) {
+            // If cache weight/size are not set, then we default to using size based cache.
+            cacheBuilder.maximumSize(DEFAULT_MAX_CACHE_ENTRIES);
         }
 
-        if (runtime.getParameters().getCacheConcurrencyLevel() != 0) {
-            cacheBuilder.concurrencyLevel(runtime.getParameters().getCacheConcurrencyLevel());
+        if (concurrencyLevel != 0) {
+            cacheBuilder.concurrencyLevel(concurrencyLevel);
         }
 
         readCache = cacheBuilder.expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
@@ -123,7 +124,7 @@ public class AddressSpaceView extends AbstractView {
         metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
-    public void handleEviction(RemovalNotification<Long, ILogData> notification) {
+    private void handleEviction(RemovalNotification<Long, ILogData> notification) {
         if (log.isTraceEnabled()) {
             log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
         }
@@ -235,7 +236,7 @@ public class AddressSpaceView extends AbstractView {
         }, true);
 
         // Cache the successful write
-        if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
+        if (cacheOption == CacheOption.WRITE_THROUGH) {
             readCache.put(token.getSequence(), ld);
         }
     }
@@ -282,47 +283,34 @@ public class AddressSpaceView extends AbstractView {
      */
     public @Nonnull
     ILogData read(long address, @NonNull ReadOptions options) {
-
-        if (cacheReadRequest(options)) {
-            // The VersionLockedObject and the Transaction layer will generate
-            // undoRecord(s) during a transaction commit, or object sync. These
-            // undo records are stored in transient fields and are not persisted.
-            // A missing undo record can cause a NoRollbackException, thus forcing
-            // a complete object rebuild that generates a "scanning" behavior
-            // which affects the LRU window. In essence, affecting other cache users
-            // and making the VersionLockedObject very sensitive to caching behavior.
-            // A concrete example of this would be unsynchronized readers/writes:
-            // 1. Thread A starts replicating write1
-            // 2. Thread B discovers the write (via stream tail query) and
-            //    tries to read write1
-            // 3. Thread B's read results in a cache miss and the reader thread
-            //    starts loading the value into the cache
-            // 4. Thread A completes its write and caches it with undo records
-            // 5. Thread B finishes loading and caches the loaded value replacing
-            //    the cached value from step 4 (i.e. loss of undo records computed
-            //    by thread A)
-            ILogData data = readCache.getIfPresent(address);
-            if (data == null) {
-                // Loading a value without the cache loader can result in
-                // redundant loading calls (i.e. multiple threads try to
-                // load the same value), but currently a redundant RPC
-                // is much cheaper than the cost of a NoRollBackException, therefore
-                // this trade-off is reasonable
-                final ILogData loadedVal = fetch(address);
-                return cacheLoadAndGet(readCache, address, loadedVal);
-            }
-            return data;
+        // The VersionLockedObject and the Transaction layer will generate
+        // undoRecord(s) during a transaction commit, or object sync. These
+        // undo records are stored in transient fields and are not persisted.
+        // A missing undo record can cause a NoRollbackException, thus forcing
+        // a complete object rebuild that generates a "scanning" behavior
+        // which affects the LRU window. In essence, affecting other cache users
+        // and making the VersionLockedObject very sensitive to caching behavior.
+        // A concrete example of this would be unsynchronized readers/writes:
+        // 1. Thread A starts replicating write1
+        // 2. Thread B discovers the write (via stream tail query) and
+        //    tries to read write1
+        // 3. Thread B's read results in a cache miss and the reader thread
+        //    starts loading the value into the cache
+        // 4. Thread A completes its write and caches it with undo records
+        // 5. Thread B finishes loading and caches the loaded value replacing
+        //    the cached value from step 4 (i.e. loss of undo records computed
+        //    by thread A)
+        ILogData data = readCache.getIfPresent(address);
+        if (data == null) {
+            // Loading a value without the cache loader can result in
+            // redundant loading calls (i.e. multiple threads try to
+            // load the same value), but currently a redundant RPC
+            // is much cheaper than the cost of a NoRollBackException, therefore
+            // this trade-off is reasonable
+            final ILogData loadedVal = fetch(address);
+            return cacheLoadAndGet(readCache, address, loadedVal, options);
         }
-
-        return fetch(address);
-    }
-
-    /**
-     * Determine whether to cache or not based on the ReadOptions and CorfuRuntimeParameters
-     * configurations
-     */
-    private boolean cacheReadRequest(ReadOptions options) {
-        return !runtime.getParameters().isCacheDisabled() && options.isClientCacheable();
+        return data;
     }
 
     /**
@@ -332,20 +320,20 @@ public class AddressSpaceView extends AbstractView {
      * If 'nextRead' is present in the cache, it directly returns this data.
      *
      * @param nextRead current address of interest
-     * @param addresses batch of addresses to read (bring into the cache) in case there is a cache miss (includes
-     *                  nextRead)
+     * @param addresses batch of addresses to read (bring into the cache) in case
+     *                  there is a cache miss (includes nextRead)
      * @param options  options for this read request
      * @return data for current 'address' of interest.
      */
     public @Nonnull
     ILogData read(@NonNull Long nextRead, @NonNull NavigableSet<Long> addresses,
                   @NonNull ReadOptions options) {
-        if (cacheReadRequest(options)) {
+        if (options.isClientCacheable()) {
             ILogData data = readCache.getIfPresent(nextRead);
             if (data == null) {
                 List<Long> batch = getBatch(nextRead, addresses);
                 log.trace("read: request address {}, read batch {}", nextRead, batch);
-                Map<Long, ILogData> mapAddresses = this.read(batch, options);
+                Map<Long, ILogData> mapAddresses = read(batch, options);
                 data = mapAddresses.get(nextRead);
             }
 
@@ -363,15 +351,12 @@ public class AddressSpaceView extends AbstractView {
      * @return batch of entries.
      */
     private List<Long> getBatch(long currentRead, @NonNull NavigableSet<Long> queue) {
-        int counter = 0;
         List<Long> batchRead = new ArrayList<>();
         batchRead.add(currentRead);
-        counter++;
 
         Iterator<Long> it = queue.iterator();
-        while (it.hasNext() && counter < runtime.getParameters().getStreamBatchSize()) {
+        while (it.hasNext() && batchRead.size() < runtime.getParameters().getStreamBatchSize()) {
             batchRead.add(it.next());
-            counter++;
         }
 
         return batchRead;
@@ -397,7 +382,14 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Attempts to insert a loaded value into the cache and return the cached value for a particular key.
      */
-    private ILogData cacheLoadAndGet(Cache<Long, ILogData> cache, long address, ILogData loadedValue) {
+    private ILogData cacheLoadAndGet(@NonNull Cache<Long, ILogData> cache, long address,
+                                     @NonNull ILogData loadedValue,
+                                     @NonNull ReadOptions options) {
+
+        if (!options.isClientCacheable()) {
+            return loadedValue;
+        }
+
         try {
             return cache.get(address, () -> loadedValue);
         } catch (ExecutionException | UncheckedExecutionException e) {
@@ -420,34 +412,29 @@ public class AddressSpaceView extends AbstractView {
      * @return A map of addresses read, which will be cached if caching is enabled
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses, @NonNull ReadOptions options) {
-        // We need this map to preserve ordering as entries are expected in ascending order.
-        Map<Long, ILogData> result = new HashMap<>();
+        final Map<Long, ILogData> cachedData = readCache.getAllPresent(addresses);
+        final Set<Long> addressesToFetch = Sets.difference(
+                Sets.newHashSet(addresses), cachedData.keySet());
 
-        if (cacheReadRequest(options)) {
-            Set<Long> addressesToFetch = new HashSet<>();
+        final Map<Long, ILogData> uncachedData = fetchAll(addressesToFetch, options);
+        final List<Long> trimmedAddresses = filterTrimmedAddresses(uncachedData);
+        trimmedAddresses.forEach(uncachedData::remove);
 
-            for (Long address : addresses) {
-                ILogData val = readCache.getIfPresent(address);
-                if (val == null) {
-                    addressesToFetch.add(address);
-                } else {
-                    result.put(address, val);
-                }
+        final Map<Long, ILogData> result = uncachedData.entrySet().stream()
+                .collect(Collectors.toMap(Entry::getKey, entry ->
+                        cacheLoadAndGet(readCache, entry.getKey(), entry.getValue(), options)));
+        result.putAll(cachedData);
+
+        if (!trimmedAddresses.isEmpty()) {
+            if (!options.isIgnoreTrim()) {
+                throw new TrimmedException(trimmedAddresses);
             }
 
-            // At this point we computed a subset of the addresses that
-            // resulted in a cache miss and need to be fetched
-            if (!addressesToFetch.isEmpty()) {
-                Map<Long, ILogData> fetchedAddresses = fetchAll(addressesToFetch, options);
-                result.putAll(checkForTrimmedAddresses(fetchedAddresses, options));
-            }
-
-            return result;
+            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
         }
 
-        Map<Long, ILogData> readAddresses = fetchAll(addresses, options);
-        return checkForTrimmedAddresses(readAddresses, options);
 
+        return result;
     }
 
     /**
@@ -614,64 +601,43 @@ public class AddressSpaceView extends AbstractView {
      */
     @Nonnull
     private Map<Long, ILogData> fetchAll(Iterable<Long> addresses, ReadOptions options) {
-        Map<Long, ILogData> result = new TreeMap<>();
+        final Map<Long, ILogData> rawData = new HashMap<>();
+        if (Iterables.isEmpty(addresses)) {
+            return rawData;
+        }
 
-        Iterable<List<Long>> batches = Iterables.partition(addresses,
+        final Iterable<List<Long>> batches = Iterables.partition(addresses,
                 runtime.getParameters().getBulkReadSize());
 
         for (List<Long> batch : batches) {
             // Doesn't handle the case where some address have a different replication mode
-            Map<Long, ILogData> batchResult = layoutHelper(e -> e.getLayout()
+            Map<Long, ILogData> batchResult = layoutHelper(layout -> layout.getLayout()
                     .getReplicationMode(batch.iterator().next())
                     .getReplicationProtocol(runtime)
-                    .readAll(e, batch, options.isWaitForHole(), options.isServerCacheable()));
+                    .readAll(layout, batch, options.isWaitForHole(), options.isServerCacheable()));
             // Sanity check for returned addresses
             if (batchResult.size() != batch.size()) {
                 log.error("fetchAll: Requested number of addresses not equal to the read result" +
                         "from server, requested: {}, returned: {}", batch, batchResult.keySet());
                 throw new IllegalStateException("Requested number of addresses not equal to the read result");
             }
-            result.putAll(batchResult);
+            rawData.putAll(batchResult);
         }
 
-        return result;
+        return rawData;
     }
 
     /**
-     * Check list of returned data for trimmed data.
+     * Given the input data, deduce which addresses have been trimmed.
      *
-     * @param result list of read data
+     * @param allData data on which the operation will be performed
      *
-     * @return map with valid data (not trimmed) or TrimmedException is thrown is data is trimmed and
-     * flag is not set.
+     * @return the list of addresses that have been trimmed.
      */
-    private Map<Long, ILogData> checkForTrimmedAddresses(Map<Long, ILogData> result, ReadOptions options) {
-        List<Long> trimmedAddresses = new ArrayList<>();
-
-        for (Map.Entry<Long, ILogData> entry : result.entrySet()) {
-            // Add trimmed addresses to list
-            if (!checkLogData(entry.getKey(), entry.getValue(), false)) {
-                trimmedAddresses.add(entry.getKey());
-            } else {
-                if (options.isClientCacheable()) {
-                    // After fetching a value, we need to insert it in the cache.
-                    // Even if trimmed exceptions are thrown, we cache the valid data.
-                    result.put(entry.getKey(), cacheLoadAndGet(readCache, entry.getKey(), entry.getValue()));
-                } else {
-                    result.put(entry.getKey(), entry.getValue());
-                }
-            }
-        }
-
-        if (!trimmedAddresses.isEmpty()) {
-            if (!options.isIgnoreTrim()) {
-                throw new TrimmedException(trimmedAddresses);
-            }
-
-            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
-        }
-
-        return result;
+    private List<Long> filterTrimmedAddresses(Map<Long, ILogData> allData) {
+        return allData.entrySet().stream()
+                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue(), NO_THROW))
+                .map(Entry::getKey).collect(Collectors.toList());
     }
 
     /**
@@ -683,7 +649,7 @@ public class AddressSpaceView extends AbstractView {
      * @param logData the ILogData at the address being checked
      * @return true if valid data, false if address is trimmed.
      */
-    private boolean checkLogData(long address, ILogData logData, boolean throwException) {
+    private boolean isLogDataValid(long address, ILogData logData, boolean throwException) {
         if (logData == null || logData.getType() == DataType.EMPTY) {
             throw new RuntimeException("Unexpected return of empty data at address "
                     + address + " on read");
@@ -718,7 +684,7 @@ public class AddressSpaceView extends AbstractView {
     }
 
     private void checkLogDataThrowException(long address, ILogData result) {
-        checkLogData(address, result, true);
+        isLogDataValid(address, result, true);
     }
 
     @VisibleForTesting
