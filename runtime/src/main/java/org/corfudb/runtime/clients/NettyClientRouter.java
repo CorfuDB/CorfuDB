@@ -404,7 +404,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
         @NonNull CorfuMsg message) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
 
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
@@ -428,7 +427,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 .timer(timerNameCache.get(message.getMsgType()));
 
         final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(isEnabled, roundTripMsgTimer);
+                .getConditionalContext(roundTripMsgTimer);
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();

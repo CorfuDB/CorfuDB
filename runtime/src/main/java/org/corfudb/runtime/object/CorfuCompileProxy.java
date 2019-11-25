@@ -102,11 +102,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     private final Object[] args;
 
-    private final MetricRegistry metrics;
     /**
      * Metrics: meter (counter), histogram.
      */
-    private final String mpObj;
     private final Timer timerAccess;
     private final Timer timerLogWrite;
     private final Timer timerTxn;
@@ -147,16 +145,15 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject);
 
-        metrics = CorfuRuntime.getDefaultMetrics();
-        mpObj = CorfuComponent.OBJECT.toString();
-        timerAccess = metrics.timer(mpObj + "access");
-        timerLogWrite = metrics.timer(mpObj + "log-write");
-        timerTxn = metrics.timer(mpObj + "txn");
-        timerUpcall = metrics.timer(mpObj + "upcall");
-        counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
-        counterAccessLocked = metrics.counter(mpObj + "access-locked");
-        counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
-        counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+        final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+        timerAccess = metrics.timer(CorfuComponent.OBJECT + "access");
+        timerLogWrite = metrics.timer(CorfuComponent.OBJECT + "log-write");
+        timerTxn = metrics.timer(CorfuComponent.OBJECT + "txn");
+        timerUpcall = metrics.timer(CorfuComponent.OBJECT + "upcall");
+        counterAccessOptimistic = metrics.counter(CorfuComponent.OBJECT + "access-optimistic");
+        counterAccessLocked = metrics.counter(CorfuComponent.OBJECT + "access-locked");
+        counterTxnRetry1 = metrics.counter(CorfuComponent.OBJECT + "txn-first-retry");
+        counterTxnRetryN = metrics.counter(CorfuComponent.OBJECT + "txn-extra-retries");
     }
 
     /**
@@ -173,14 +170,13 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {
-            return accessInner(accessMethod, conflictObject, isEnabled);
+        try (Timer.Context context = MetricsUtils.getConditionalContext(timerAccess)) {
+            return accessInner(accessMethod, conflictObject);
         }
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
-                              Object[] conflictObject, boolean isMetricsEnabled) {
+                              Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             try {
                 return TransactionalContext.getCurrentContext()
@@ -356,14 +352,13 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
-            return TXExecuteInner(txFunction, isEnabled);
+        try (Timer.Context context = MetricsUtils.getConditionalContext(timerTxn)) {
+            return TXExecuteInner(txFunction);
         }
     }
 
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})
-    private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
+    private <R> R TXExecuteInner(Supplier<R> txFunction) {
         // Don't nest transactions if we are already running in a transaction
         if (TransactionalContext.isInTransaction()) {
             try {
@@ -398,9 +393,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
                 if (retries == 1) {
                     MetricsUtils
-                            .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
+                            .incConditionalCounter(counterTxnRetry1, 1);
                 }
-                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
+                MetricsUtils.incConditionalCounter(counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
                 Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));
