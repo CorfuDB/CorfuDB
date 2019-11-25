@@ -165,6 +165,11 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
+    public void updateGlobalCompactionMark(long newCompactionMark) {
+        // No-op
+    }
+
+    @Override
     public void sync(boolean force){
         // No-op
     }

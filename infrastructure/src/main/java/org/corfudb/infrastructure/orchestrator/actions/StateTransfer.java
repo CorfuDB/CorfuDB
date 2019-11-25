@@ -3,21 +3,19 @@ package org.corfudb.infrastructure.orchestrator.actions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.common.compression.Codec;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateWriteMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
@@ -42,13 +40,6 @@ public class StateTransfer {
 
     // Maximum number of retries after which the Overwrite Exception is rethrown.
     private static final int OVERWRITE_RETRIES = 3;
-
-    // Default read options for the state read calls
-    private static final ReadOptions readOptions = ReadOptions.builder()
-            .waitForHole(true)
-            .clientCacheable(false)
-            .serverCacheable(false)
-            .build();
 
     /**
      * Fetch and propagate the trimMark to the new/healing nodes. Else, a FastLoader reading from
@@ -185,22 +176,28 @@ public class StateTransfer {
         long ts1 = System.currentTimeMillis();
 
         // Don't cache the read results on server for state transfer.
-        Map<Long, ILogData> dataMap = runtime.getAddressSpaceView().read(chunk, readOptions);
+        // The returned state already filtered out compacted log data.
+        LogRecoveryStateResponse recoveryState = runtime.getAddressSpaceView().readRecoveryStates(chunk);
 
         long ts2 = System.currentTimeMillis();
 
         log.info("stateTransfer: read [{}-{}] in {} ms",
                 chunk.get(0), chunk.get(chunk.size() - 1), (ts2 - ts1));
 
-        List<LogData> entries = new ArrayList<>();
+        List<LogData> logEntries = new ArrayList<>();
         for (long address : chunk) {
-            if (!dataMap.containsKey(address)) {
-                log.error("Missing address {} in batch {}", address, chunk);
-                throw new IllegalStateException("Missing address");
+            LogData logEntry = recoveryState.getLogEntryMap().get(address);
+            // The recoveryState read from AddressSpaceView does not
+            // contain compacted entries, so null check is needed.
+            if (logEntry != null) {
+                logEntries.add(logEntry);
             }
-            LogData ld = (LogData) dataMap.get(address);
-            entries.add(ld);
         }
+
+        List<LogData> garbageEntries = new ArrayList<>(recoveryState.getGarbageEntryMap().values());
+
+        LogRecoveryStateWriteMsg stateWriteMsg = new LogRecoveryStateWriteMsg(
+                logEntries, garbageEntries, recoveryState.getCompactionMark());
 
         try {
             // Write segment chunk to the new log unit.
@@ -208,7 +205,7 @@ public class StateTransfer {
             boolean transferSuccess = CFUtils.getUninterruptibly(runtime.getLayoutView()
                     .getRuntimeLayout(layout)
                     .getLogUnitClient(endpoint)
-                    .writeAll(entries), OverwriteException.class);
+                    .writeRecoveryStates(stateWriteMsg), OverwriteException.class);
 
             ts2 = System.currentTimeMillis();
 

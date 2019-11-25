@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.RuntimeLayout;
 
@@ -74,6 +75,19 @@ public interface IReplicationProtocol {
                                 Collection<Long> addresses,
                                 boolean waitForWrite,
                                 boolean cacheOnServer);
+
+    /**
+     * Read recovery states from all the given addresses,
+     * including log entries and garbage entries.
+     *
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for the read
+     * @param addresses     a list of addresses to read recovery states from
+     * @return a map of log entries and garbage entries commit at these address,
+     *         hole filling if necessary
+     */
+    @Nonnull
+    LogRecoveryStateResponse readRecoveryStates(RuntimeLayout runtimeLayout,
+                                                Collection<Long> addresses);
 
     /**
      * Commit the addresses by first reading and then hole filling if data not existed.

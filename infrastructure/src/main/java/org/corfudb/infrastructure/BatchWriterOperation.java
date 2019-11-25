@@ -19,6 +19,7 @@ public class BatchWriterOperation<T> {
         WRITE,
         RANGE_WRITE,
         MULTI_GARBAGE_WRITE,
+        RECOVERY_STATE_WRITE,
         SEAL,
         RESET,
         TAILS_QUERY,

@@ -18,9 +18,11 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateWriteMsg;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -48,6 +50,7 @@ import java.util.concurrent.Executors;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.MULTI_GARBAGE_WRITE;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RECOVERY_STATE_WRITE;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
@@ -273,9 +276,26 @@ public class LogUnitServer extends AbstractServer {
     private void multiGarbageWrite(CorfuPayloadMsg<MultipleWriteMsg> msg,
                                    ChannelHandlerContext ctx, IServerRouter r) {
         List<LogData> garbageEntries = msg.getPayload().getEntries();
-        log.debug("multiGarbageWrite: Writing {} garbage entries", garbageEntries.size());
+        log.trace("multiGarbageWrite: Writing {} garbage entries", garbageEntries.size());
 
         batchWriter.addTask(MULTI_GARBAGE_WRITE, msg)
+                .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    @ServerHandler(type = CorfuMsgType.LOG_RECOVERY_STATES_WRITE)
+    private void writeRecoveryStates(CorfuPayloadMsg<LogRecoveryStateWriteMsg> msg,
+                                     ChannelHandlerContext ctx, IServerRouter r) {
+        LogRecoveryStateWriteMsg recoveryState = msg.getPayload();
+        log.debug("writeRecoveryStates: Writing {} log entries, {} garbage entries, " +
+                "compaction mark: {}", recoveryState.getLogEntries().size(),
+                recoveryState.getLogEntries().size(), recoveryState.getCompactionMark());
+
+        streamLog.updateGlobalCompactionMark(recoveryState.getCompactionMark());
+        batchWriter.addTask(RECOVERY_STATE_WRITE, msg)
                 .thenRunAsync(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -327,6 +347,40 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    @ServerHandler(type = CorfuMsgType.LOG_RECOVERY_STATES_REQUEST)
+    public void readRecoveryStates(CorfuPayloadMsg<MultipleReadRequest> msg,
+                                   ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("readRecoveryStates: {}", msg.getPayload().getAddresses());
+
+        // Read garbage entries first to avoid losing garbage information since
+        // during compaction, garbage entries are pruned after stream entries.
+        LogRecoveryStateResponse state = new LogRecoveryStateResponse();
+        try {
+            for (long address : msg.getPayload().getAddresses()) {
+                LogData garbageData = streamLog.readGarbageEntry(address);
+                if (garbageData != null) {
+                    state.putGarbageData(address, garbageData);
+                }
+
+                LogData logData = streamLog.read(address);
+                if (logData == null) {
+                    state.putLogData(address, LogData.getEmpty(address));
+                } else if (!logData.isCompacted()) {
+                    // Only return the un-compacted data.
+                    state.putLogData(address, logData);
+                } else {
+                    // Compaction happened after the stream log entries are
+                    // read, remove the corresponding garbage entries.
+                    state.removeGarbageData(address);
+                }
+            }
+            state.setCompactionMark(streamLog.getGlobalCompactionMark());
+            r.sendResponse(ctx, msg, CorfuMsgType.LOG_RECOVERY_STATES_RESPONSE.payloadMsg(state));
+        } catch (DataCorruptionException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+        }
+    }
+
     @ServerHandler(type = CorfuMsgType.INSPECT_ADDRESSES_REQUEST)
     public void inspectAddresses(CorfuPayloadMsg<InspectAddressesRequest> msg,
                                  ChannelHandlerContext ctx, IServerRouter r) {
@@ -339,25 +393,6 @@ public class LogUnitServer extends AbstractServer {
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
-        } catch (DataCorruptionException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
-        }
-    }
-
-    @ServerHandler(type = CorfuMsgType.MULTIPLE_GARBAGE_REQUEST)
-    public void multiGarbageRead(CorfuPayloadMsg<MultipleReadRequest> msg,
-                                 ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("multiGarbageRead: {}", msg.getPayload().getAddresses());
-        ReadResponse rr = new ReadResponse();
-
-        try {
-            for (long address : msg.getPayload().getAddresses()) {
-                LogData logData = streamLog.readGarbageEntry(address);
-                if (logData != null) {
-                    rr.put(address, logData);
-                }
-            }
-            r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }

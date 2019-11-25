@@ -15,6 +15,8 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateWriteMsg;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
@@ -125,6 +127,13 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Send a request to write the log recovery states.
+     */
+    public CompletableFuture<Boolean> writeRecoveryStates(LogRecoveryStateWriteMsg state) {
+        return sendMessageWithFuture(CorfuMsgType.LOG_RECOVERY_STATES_WRITE.payloadMsg(state));
+    }
+
+    /**
      * Asynchronously read from the logging unit.
      * Read result is cached at log unit server.
      *
@@ -183,6 +192,23 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Read recovery states from the log unit server for a list of addresses.
+     *
+     * @param addresses list of global addresses.
+     * @return a completableFuture which returns a LogRecoveryStateResponse on completion.
+     */
+    public CompletableFuture<LogRecoveryStateResponse> readRecoveryStates(List<Long> addresses) {
+        Timer.Context context = getTimerContext("readRecoveryStates");
+        CompletableFuture<LogRecoveryStateResponse> cf = sendMessageWithFuture(
+                CorfuMsgType.LOG_RECOVERY_STATES_REQUEST.payloadMsg(
+                        new MultipleReadRequest(addresses, false)));
+        return cf.thenApply(x -> {
+            context.stop();
+            return x;
+        });
+    }
+
+    /**
      * Check if addresses are committed on log unit server, which returns a future
      * with uncommitted addresses (holes) on the server.
      *
@@ -192,17 +218,6 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<InspectAddressesResponse> inspectAddresses(List<Long> addresses) {
         return sendMessageWithFuture(CorfuMsgType.INSPECT_ADDRESSES_REQUEST
                 .payloadMsg(new InspectAddressesRequest(addresses)));
-    }
-
-    /**
-     * Asynchronously read garbage information for a list of addresses from the log unit server.
-     * @param addresses a list of addresses that garbage is from.
-     * @return a completableFuture which return a ReadResponse containing garbage information on completion.
-     */
-    public CompletableFuture<ReadResponse> readGarbageEntries(List<Long> addresses) {
-        return sendMessageWithFuture(
-                CorfuMsgType.MULTIPLE_GARBAGE_REQUEST
-                        .payloadMsg(new MultipleReadRequest(addresses, false)));
     }
 
     /**

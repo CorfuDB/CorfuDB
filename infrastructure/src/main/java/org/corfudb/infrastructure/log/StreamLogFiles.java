@@ -510,6 +510,11 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
+    public void updateGlobalCompactionMark(long newCompactionMark) {
+        dataStore.updateGlobalCompactionMark(newCompactionMark);
+    }
+
+    @Override
     public void close() {
         compactor.shutdown();
         segmentManager.close();

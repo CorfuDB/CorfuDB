@@ -20,6 +20,7 @@ import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateWriteMsg;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.MultipleWriteMsg;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
@@ -163,6 +164,11 @@ public class BatchProcessor implements AutoCloseable {
                             case MULTI_GARBAGE_WRITE:
                                 MultipleWriteMsg garbageEntries = (MultipleWriteMsg) currOp.getMsg().getPayload();
                                 streamLog.append(garbageEntries.getEntries());
+                                break;
+                            case RECOVERY_STATE_WRITE:
+                                LogRecoveryStateWriteMsg msg = (LogRecoveryStateWriteMsg) currOp.getMsg().getPayload();
+                                streamLog.append(msg.getLogEntries());
+                                streamLog.append(msg.getGarbageEntries());
                                 break;
                             case RESET:
                                 streamLog.reset();

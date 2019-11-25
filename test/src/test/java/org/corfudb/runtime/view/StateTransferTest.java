@@ -482,7 +482,7 @@ public class StateTransferTest extends AbstractViewTest {
         // STEP 1.
         // Rule added to fail the state transfer on the last range write.
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
-                corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.MULTIPLE_WRITE)
+                corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.LOG_RECOVERY_STATES_WRITE)
                         && allowedWrites.decrementAndGet() < 0)
                 .drop());
 
@@ -526,7 +526,7 @@ public class StateTransferTest extends AbstractViewTest {
         AtomicInteger rangeWrites = new AtomicInteger();
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_1, new TestRule().matches(
                 corfuMsg -> {
-                    if (corfuMsg.getMsgType().equals(CorfuMsgType.MULTIPLE_WRITE)) {
+                    if (corfuMsg.getMsgType().equals(CorfuMsgType.LOG_RECOVERY_STATES_WRITE)) {
                         rangeWrites.incrementAndGet();
                     }
                     return true;

@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -154,6 +155,19 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @ClientHandler(type = CorfuMsgType.READ_RESPONSE)
     private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    /**
+     * Handle a LOG_RECOVERY_STATES_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.LOG_RECOVERY_STATES_RESPONSE)
+    private static Object handleLogRecoveryStatesResponse(CorfuPayloadMsg<LogRecoveryStateResponse> msg,
+                                                          ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
 

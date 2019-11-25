@@ -22,7 +22,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -543,6 +543,27 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Read the recovery states for state transfer, including log entries,
+     * garbage entries and compaction mark.
+     *
+     * @param addresses addresses to request recovery states
+     * @return LogRecoveryStateResponse representing the states to transfer
+     */
+    public LogRecoveryStateResponse readRecoveryStates(Collection<Long> addresses) {
+        // Batching is controlled by upper layer.
+        LogRecoveryStateResponse recoveryState = layoutHelper(e -> e.getLayout()
+                .getReplicationMode(addresses.iterator().next())
+                .getReplicationProtocol(runtime)
+                .readRecoveryStates(e, addresses));
+
+        for (Map.Entry<Long, LogData> entry : recoveryState.getLogEntryMap().entrySet()) {
+            isLogDataValid(entry.getKey(), entry.getValue());
+        }
+
+        return recoveryState;
+    }
+
+    /**
      * Get the log's tail, i.e., last address in the address space.
      */
     public Long getLogTail() {
@@ -714,53 +735,6 @@ public class AddressSpaceView extends AbstractView {
         isLogDataValid(address, result);
 
         return result;
-    }
-
-    /**
-     * Fetch garbage decisions from LogUnit servers.
-     *
-     * @param addresses an iterator of a collection of addresses to read.
-     * @return garbage decisions.
-     */
-    @Nonnull
-    public Map<Long, LogData> FetchGarbageEntries(Iterable<Long> addresses) {
-        Iterable<List<Long>> batches = Iterables.partition(addresses,
-                runtime.getParameters().getBulkReadSize());
-
-        // The garbage should come from the same log unit servers.
-        // Prevent batch results come from different log unit due to layout change. 
-        return layoutHelper(e -> {
-            Map<Long, LogData> garbageEntries = new TreeMap<>();
-            for (List<Long> batch : batches) {
-                Map<Long, LogData> batchResult = FetchGarbageEntryBatch(batch, e);
-                garbageEntries.putAll(batchResult);
-            }
-            return garbageEntries;
-        });
-    }
-
-    @Nonnull
-    private Map<Long, LogData> FetchGarbageEntryBatch(Iterable<Long> addresses, RuntimeLayout runtimeLayout) {
-        Map<String, List<Long>> serverToAddressMap = new HashMap<>();
-        for (Long address : addresses) {
-            List<String> logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();
-            String logServer = logServers.get(logServers.size() - 1);
-            List<Long> addressList = serverToAddressMap.computeIfAbsent(logServer, s -> new ArrayList<>());
-            addressList.add(address);
-        }
-
-        // Send read requests to log unit servers in parallel
-        List<CompletableFuture<ReadResponse>> futures = serverToAddressMap.entrySet().stream()
-                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey()).readGarbageEntries(entry.getValue()))
-                .collect(Collectors.toList());
-
-        // Merge the read responses from different log unit servers
-        return futures.stream()
-                .map(future -> CFUtils.getUninterruptibly(future).getAddresses())
-                .reduce(new HashMap<>(), (map1, map2) -> {
-                    map1.putAll(map2);
-                    return map1;
-                });
     }
 
     @VisibleForTesting

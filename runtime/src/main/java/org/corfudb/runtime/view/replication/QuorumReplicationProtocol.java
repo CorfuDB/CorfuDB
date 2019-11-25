@@ -13,6 +13,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
@@ -115,6 +116,12 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         return addresses.stream()
                 .map(addr -> new SimpleImmutableEntry<>(addr, read(runtimeLayout, addr)))
                 .collect(Collectors.toMap(SimpleImmutableEntry::getKey, SimpleImmutableEntry::getValue));
+    }
+
+    @Nonnull
+    public LogRecoveryStateResponse readRecoveryStates(RuntimeLayout runtimeLayout,
+                                                       Collection<Long> addresses) {
+        throw new UnsupportedOperationException();
     }
 
     /**

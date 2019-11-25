@@ -72,6 +72,13 @@ public interface StreamLog {
     long getGlobalCompactionMark();
 
     /**
+     * Update the global compaction mark.
+     *
+     * @param newCompactionMark new compaction mark to update
+     */
+    void updateGlobalCompactionMark(long newCompactionMark);
+
+    /**
      * Start running log compactor.
      */
     void startCompactor();

@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogRecoveryStateResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -19,7 +20,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -155,6 +155,36 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
         // Fill all the holes.
         holes.forEach(address -> holeFill(runtimeLayout, address));
+    }
+
+    @Override
+    @Nonnull
+    @SuppressWarnings("unchecked")
+    public LogRecoveryStateResponse readRecoveryStates(RuntimeLayout runtimeLayout, Collection<Long> addresses) {
+        // Group addresses by log unit tail server endpoint.
+        Map<String, List<Long>> serverAddressMap =
+                groupAddressByLogUnitTail(runtimeLayout.getLayout(), addresses);
+
+        // Send read requests to log unit servers in parallel.
+        List<CompletableFuture<LogRecoveryStateResponse>> futures = serverAddressMap
+                .entrySet()
+                .stream()
+                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey())
+                        .readRecoveryStates(entry.getValue()))
+                .collect(Collectors.toList());
+
+        LogRecoveryStateResponse resultState = new LogRecoveryStateResponse();
+        futures.forEach(future -> {
+            LogRecoveryStateResponse state = CFUtils.getUninterruptibly(future);
+            resultState.merge(state);
+        });
+
+        // TODO(Wenbin): clean up ILogData and LogData.
+        Map<Long, ? extends ILogData> filledLogData =
+                waitOrHoleFill(runtimeLayout, resultState.getLogEntryMap(), true);
+        resultState.setLogEntryMap((Map<Long, LogData>) filledLogData);
+
+        return resultState;
     }
 
     private Map<String, List<Long>> groupAddressByLogUnitTail(Layout layout, Collection<Long> addresses) {
