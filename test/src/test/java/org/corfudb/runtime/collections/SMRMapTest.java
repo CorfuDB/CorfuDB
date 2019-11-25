@@ -581,7 +581,7 @@ public class SMRMapTest extends AbstractViewTest {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("A")
-                    .setSerializer(Serializers.JSON)
+                    .setSerializer(Serializers.getDefaultSerializer())
                     .addOption(ObjectOpenOptions.NO_CACHE)
                     .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                     .open();
@@ -768,7 +768,7 @@ public class SMRMapTest extends AbstractViewTest {
 
         long startTime = System.nanoTime();
         Map<String, String> testMap2 = getRuntime().getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamID(stream)
                 .addOption(ObjectOpenOptions.NO_CACHE)
                 .open();

@@ -135,9 +135,19 @@
             <version>3.1.0</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.9</version>
+        </dependency>
+        <dependency>
             <groupId>org.ehcache</groupId>
             <artifactId>sizeof</artifactId>
             <version>0.3.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.rocksdb</groupId>
+            <artifactId>rocksdbjni</artifactId>
+            <version>6.2.4</version>
         </dependency>
         <dependency>
             <groupId>org.roaringbitmap</groupId>

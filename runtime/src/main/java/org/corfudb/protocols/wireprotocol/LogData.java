@@ -73,18 +73,27 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                     if (data == null) {
                         this.payload.set(null);
                     } else {
-                        ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
-                        final Object actualValue =
-                                Serializers.CORFU.deserialize(copyBuf, runtime);
-                        if (actualValue instanceof LogEntry) {
-                            ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
-                            ((LogEntry) actualValue).setRuntime(runtime);
-                        }
-                        value = actualValue == null ? this.payload : actualValue;
-                        this.payload.set(value);
-                        copyBuf.release();
-                        lastKnownSize = data.length;
-                        data = null;
+                            ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
+                            final Object actualValue;
+                            try {
+                                actualValue =
+                                        Serializers.CORFU.deserialize(copyBuf, runtime);
+                            } catch (Throwable throwable) {
+                                log.error("Exception caught at address {}, {}, {}",
+                                        getGlobalAddress(), getStreams(), getType());
+                                copyBuf.release();
+                                data = null;
+                                throw throwable;
+                            }
+                            if (actualValue instanceof LogEntry) {
+                                ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
+                                ((LogEntry) actualValue).setRuntime(runtime);
+                            }
+                            value = actualValue == null ? this.payload : actualValue;
+                            this.payload.set(value);
+                            copyBuf.release();
+                            lastKnownSize = data.length;
+                            data = null;
                     }
                 }
             }

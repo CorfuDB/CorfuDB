@@ -23,12 +23,13 @@ import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
- * The annotation @CorfuObject turns this into a Corfu object
+ * The annotation {@link CorfuObject} turns this into a Corfu object
  */
 @CorfuObject
-public class CorfuSharedCounter {
+public class CorfuSharedCounter implements ICorfuSMR<CorfuSharedCounter> {
     Integer value = 0;
 
     /**
@@ -58,4 +59,12 @@ public class CorfuSharedCounter {
      */
     @Mutator(name = "Set")
     public void Set(int newvalue) { value = newvalue; }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CorfuSharedCounter getContext(Context context) {
+        return this;
+    }
 }

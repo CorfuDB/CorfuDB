@@ -16,6 +16,8 @@ import org.corfudb.annotations.ObjectType;
 import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.runtime.object.AbstractCorfuWrapper;
+import org.corfudb.runtime.object.ICorfuExecutionContext;
+import org.corfudb.runtime.object.ICorfuSMR;
 import sun.misc.CRC16;
 
 /**
@@ -24,7 +26,8 @@ import sun.misc.CRC16;
 @SuppressWarnings("checkstyle:abbreviation")
 @CorfuObject(constructorType = ConstructorType.PERSISTED,
         objectType = ObjectType.STATELESS)
-public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map<K, V> {
+public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map<K, V>,
+        ICorfuSMR<FGMap<K, V>> {
 
     @Getter
     public final int numBuckets;
@@ -392,5 +395,13 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
                 .map(Map::entrySet)
                 .flatMap(Set::stream)
                 .collect(Collectors.toSet());
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public FGMap<K, V> getContext(ICorfuExecutionContext.Context context) {
+        return this;
     }
 }

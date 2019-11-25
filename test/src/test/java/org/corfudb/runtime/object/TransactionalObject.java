@@ -9,7 +9,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
  * Created by rmichoud on 8/1/17.
  */
 @CorfuObject
-public class TransactionalObject {
+public class TransactionalObject implements ICorfuSMR<TransactionalObject> {
     @TransactionalMethod
     @Accessor
     public boolean isInNestedTransaction() {
@@ -26,5 +26,13 @@ public class TransactionalObject {
     @Accessor
     public void throwRuntimeException() {
         throw new RuntimeException("Sneaky runtime exception");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public TransactionalObject getContext(ICorfuExecutionContext.Context context) {
+        return this;
     }
 }

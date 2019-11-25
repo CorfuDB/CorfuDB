@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -7,6 +8,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.util.serializer.Serializers;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -117,8 +119,9 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private CorfuGuidGenerator(CorfuRuntime rt) {
         runtime = rt;
         distributedCounter = rt.getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<Integer, Long>>() {})
                 .setStreamName(GUID_STREAM_NAME)
+                .setSerializer(Serializers.getDefaultSerializer())
                 .open();
     }
 
