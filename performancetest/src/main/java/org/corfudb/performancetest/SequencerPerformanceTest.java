@@ -5,22 +5,37 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
-
 import java.io.IOException;
 import java.util.*;
 
 /**
- * Created by Lin Dong on 10/18/19.
+ * SequencerPerformanceTest is the sub class of PerformanceTest.
+ * This class is mainly about PerformanceTest for sequencer. The operations
+ * tested in this class is query and token request with conflictInfo.
+ * @author Lin Dong
  */
-
 @Slf4j
 public class SequencerPerformanceTest extends PerformanceTest{
+    /**
+     * Seed for Random Object.
+     */
     private final long seed;
+    /**
+     * The boundary of the integer randomly generated.
+     */
     private final int randomBoundary;
+    /**
+     * How long the test runs.
+     */
     private final long time;
-    public static final int MILLI_TO_SECOND = 1000;
+    /**
+     * Random Object.
+     */
     private final Random random;
 
+    /**
+     * Constructor. Initiate some variables.
+     */
     public SequencerPerformanceTest() {
         seed = Long.parseLong(PROPERTIES.getProperty("sequencerSeed", "1024"));
         randomBoundary = Integer.parseInt(PROPERTIES.getProperty("sequencerRandomBoundary", "100"));
@@ -28,12 +43,22 @@ public class SequencerPerformanceTest extends PerformanceTest{
         random = new Random(seed);
     }
 
+    /**
+     * tokenQuery calls query API of SequencerView.
+     * @param corfuRuntime runtime.
+     * @param numRequest how many times the function calls query().
+     */
     private void tokenQuery(CorfuRuntime corfuRuntime, int numRequest) {
         for (int i = 0; i < numRequest; i++) {
             corfuRuntime.getSequencerView().query();
         }
     }
 
+    /**
+     * tokenTx calls next(conflictInfo, stream) API of SequencerView.
+     * @param corfuRuntime runtime.
+     * @param numRequest how many times the function calls next().
+     */
     private void tokenTx(CorfuRuntime corfuRuntime, int numRequest) {
         for (int i = 0; i < numRequest; i++) {
             UUID transactionID = UUID.nameUUIDFromBytes("transaction".getBytes());
@@ -58,6 +83,13 @@ public class SequencerPerformanceTest extends PerformanceTest{
         }
     }
 
+    /**
+     * The performance test for sequencer.
+     * This test starts a CorfuServer and a CorfuRuntime, continues sending query and
+     * token requests for a period, then shuts down the CorfuServer.
+     * @throws IOException
+     * @throws InterruptedException
+     */
     @Test
     public void sequencerPerformanceTest() throws IOException, InterruptedException {
         setMetricsReportFlags("sequencer");

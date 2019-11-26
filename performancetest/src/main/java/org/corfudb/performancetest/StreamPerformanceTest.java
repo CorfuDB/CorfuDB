@@ -16,7 +16,7 @@ public class StreamPerformanceTest extends PerformanceTest {
     static MetricRegistry metricRegistry;
     Timer producerTimer;
     Timer consumerTimer;
-    private static final String METRIC_PREFIX = "corfu-perf";
+    private static final String METRIC_PREFIX = "corfu-perf.";
     private static final String STREAM_NAME = "stream-perf-it";
     private static final String OBJECT_NUM = "appendObjectNum";
     private static final String OBJECT_SIZE = "appendObjectSize";
@@ -24,8 +24,8 @@ public class StreamPerformanceTest extends PerformanceTest {
 
     public StreamPerformanceTest() {
         metricRegistry = CorfuRuntime.getDefaultMetrics();
-        producerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-single-producer");
-        consumerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-single-consumer");
+        producerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-producer");
+        consumerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-consumer");
     }
 
     /**

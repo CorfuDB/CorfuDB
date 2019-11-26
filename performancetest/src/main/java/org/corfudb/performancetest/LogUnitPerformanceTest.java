@@ -10,7 +10,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
 import java.util.*;
 
 /**
@@ -22,7 +21,7 @@ public class LogUnitPerformanceTest extends PerformanceTest{
     Timer readTimer;
     Timer writeTimer;
     private static final int randomBoundary = 100;
-    private static final String METRIC_PREFIX = "corfu-perf";
+    private static final String METRIC_PREFIX = "corfu-perf.";
     private static final String READ_PERCENT = "logunitReadPercent";
     private static final String SINGLE_REQUEST = "logunitSingleRequests";
     private static final String BATCH_REQUEST = "logunitBatchRequests";
@@ -31,8 +30,8 @@ public class LogUnitPerformanceTest extends PerformanceTest{
 
     public LogUnitPerformanceTest() {
         metricRegistry = CorfuRuntime.getDefaultMetrics();
-        readTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-read");
-        writeTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-single-write");
+        readTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-read");
+        writeTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-write");
     }
 
     /**
