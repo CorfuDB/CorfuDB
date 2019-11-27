@@ -9,7 +9,7 @@ import org.junit.Test;
 import java.io.IOException;
 
 /**
- * Created by Nan Zhang and Lin Dong on 10/23/19.
+ * Created by Nan Zhang and Lin Dong.
  */
 
 public class StreamPerformanceTest extends PerformanceTest {

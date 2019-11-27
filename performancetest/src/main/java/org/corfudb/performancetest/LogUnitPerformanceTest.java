@@ -13,7 +13,7 @@ import org.junit.Test;
 import java.util.*;
 
 /**
- * Created by Nan Zhang and Lin Dong on 10/23/19.
+ * Created by Nan Zhang and Lin Dong.
  */
 
 public class LogUnitPerformanceTest extends PerformanceTest{
