@@ -22,7 +22,7 @@ import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -738,7 +738,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+                .runtime(recreatedRuntime)
+                .setType(CorfuTable.class)
                 .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("test"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
@@ -846,7 +848,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+                .runtime(recreatedRuntime)
+                .setType(CorfuTable.class)
                 .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("corfuTable"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("corfuTable"), ob);
@@ -875,7 +879,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+                .runtime(recreatedRuntime)
+                .setType(CorfuTable.class)
                 .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("test"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);

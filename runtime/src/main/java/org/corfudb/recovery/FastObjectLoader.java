@@ -25,7 +25,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -170,9 +170,9 @@ public class FastObjectLoader {
     /**
      * We can register streams with non-default type
      */
-    private final Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
+    private final Map<UUID, SMRObject.SMRObjectBuilder> customTypeStreams = new HashMap<>();
 
-    public void addCustomTypeStream(UUID streamId, ObjectBuilder ob) {
+    public void addCustomTypeStream(UUID streamId, SMRObject.SMRObjectBuilder ob) {
         customTypeStreams.put(streamId, ob);
     }
 
@@ -184,8 +184,11 @@ public class FastObjectLoader {
      */
     public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
         UUID streamId = CorfuRuntime.getStreamID(streamName);
-        ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)
-                .setArguments(indexRegistry).setStreamID(streamId);
+        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+                .runtime(runtime)
+                .setType(CorfuTable.class)
+                .setArguments(indexRegistry)
+                .setStreamID(streamId);
         addCustomTypeStream(streamId, ob);
     }
 
