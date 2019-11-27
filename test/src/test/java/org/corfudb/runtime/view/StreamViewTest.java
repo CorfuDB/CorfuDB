@@ -242,62 +242,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canFindInStream()
-            throws Exception
-    {
-        CorfuRuntime r = getDefaultRuntime().connect();
-        IStreamView svA = r.getStreamsView().get(
-                CorfuRuntime.getStreamID("stream  A"));
-        IStreamView svB = r.getStreamsView().get(
-                CorfuRuntime.getStreamID("stream  B"));
-
-        // Append some entries
-        final long A_GLOBAL = 0;
-        svA.append("a".getBytes());
-        final long B_GLOBAL = 1;
-        svB.append("b".getBytes());
-        final long C_GLOBAL = 2;
-        svA.append("c".getBytes());
-        final long D_GLOBAL = 3;
-        svB.append("d".getBytes());
-        final long E_GLOBAL = 4;
-        svA.append("e".getBytes());
-
-        // See if we can find entries:
-        // Should find entry "c"
-        assertThat(svA.find(B_GLOBAL,
-                IStreamView.SearchDirection.FORWARD))
-                .isEqualTo(C_GLOBAL);
-        // Should find entry "a"
-        assertThat(svA.find(B_GLOBAL,
-                IStreamView.SearchDirection.REVERSE))
-                .isEqualTo(A_GLOBAL);
-        // Should find entry "e"
-        assertThat(svA.find(E_GLOBAL,
-                IStreamView.SearchDirection.FORWARD_INCLUSIVE))
-                .isEqualTo(E_GLOBAL);
-        // Should find entry "c"
-        assertThat(svA.find(C_GLOBAL,
-                IStreamView.SearchDirection.REVERSE_INCLUSIVE))
-                .isEqualTo(C_GLOBAL);
-
-        // From existing to existing:
-        // Should find entry "b"
-        assertThat(svB.find(D_GLOBAL,
-                IStreamView.SearchDirection.REVERSE))
-                .isEqualTo(B_GLOBAL);
-        // Should find entry "d"
-        assertThat(svB.find(B_GLOBAL,
-                IStreamView.SearchDirection.FORWARD))
-                .isEqualTo(D_GLOBAL);
-
-        // Bounds:
-        assertThat(svB.find(D_GLOBAL,
-                IStreamView.SearchDirection.FORWARD))
-                .isEqualTo(Address.NOT_FOUND);
-    }
-
-    @Test
     public void canDoPreviousOnStream()
             throws Exception
     {

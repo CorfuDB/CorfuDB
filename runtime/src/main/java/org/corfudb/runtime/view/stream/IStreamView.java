@@ -49,40 +49,6 @@ public interface IStreamView extends
      */
     void seek(long globalAddress);
 
-    /** An enum representing search directions. */
-    @RequiredArgsConstructor
-    enum SearchDirection {
-        /** Search forward. */
-        FORWARD(false, true),
-        /** Search forward, including address given. */
-        FORWARD_INCLUSIVE(true, true),
-        /** Search backwards. */
-        REVERSE(false, false),
-        /** Search backwards, including address given. */
-        REVERSE_INCLUSIVE(true, false);
-
-        /** Whether the address given should be included
-         * in the search.
-         */
-        @Getter
-        final boolean inclusive;
-
-        /** True if the search is forward, false otherwise. */
-        @Getter
-        final boolean forward;
-    }
-
-    /** Find the global address of the next entry in this stream,
-     * in the direction given.
-     *
-     * @param globalAddress     The global address to start searching from.
-     * @param direction         The direction to search.
-     * @return                  The global address of the next entry in the
-     *                          stream, or Address.NOT_FOUND if no entry
-     *                          was found.
-     */
-    long find(long globalAddress, SearchDirection direction);
-
     /** Append an object to the stream, returning the global address
      * it was written at.
      * <p>
