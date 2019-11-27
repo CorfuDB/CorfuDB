@@ -5,7 +5,6 @@ import com.codahale.metrics.Timer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
-
 import java.io.IOException;
 
 /**
