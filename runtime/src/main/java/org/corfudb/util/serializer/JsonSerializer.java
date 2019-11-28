@@ -49,7 +49,7 @@ public class JsonSerializer implements ISerializer {
         String className = new String(classNameBytes);
         if (className.equals("null")) {
             return null;
-        } else if (className.equals("SMRObject")) {
+        } else if (className.equals("CorfuObject")) {
             int smrClassNameLength = b.readShort();
             byte[] smrClassNameBytes = new byte[smrClassNameLength];
             b.readBytes(smrClassNameBytes, 0, smrClassNameLength);
@@ -85,7 +85,7 @@ public class JsonSerializer implements ISerializer {
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
         if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
-            className = "SMRObject";
+            className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
             b.writeBytes(classNameBytes);
@@ -94,7 +94,7 @@ public class JsonSerializer implements ISerializer {
             b.writeShort(smrClassNameBytes.length);
             b.writeBytes(smrClassNameBytes);
             UUID id = ((ICorfuSMR) o).getCorfuStreamID();
-            log.trace("Serializing a SMRObject of type {} as a stream pointer to {}",
+            log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}",
                     smrClass, id);
             b.writeLong(id.getMostSignificantBits());
             b.writeLong(id.getLeastSignificantBits());

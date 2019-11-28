@@ -61,7 +61,7 @@ public class RecoveryUtils {
         }
     }
 
-    static void createObjectIfNotExist(SMRObject.SMRObjectBuilder ob, ISerializer serializer) {
+    static void createObjectIfNotExist(SMRObject.Builder ob, ISerializer serializer) {
         if (!ob.getRuntime().getObjectsView().getObjectCache()
                 .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){
                 ob.setSerializer(serializer).open();

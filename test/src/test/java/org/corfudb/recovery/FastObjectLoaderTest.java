@@ -738,7 +738,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+        SMRObject.Builder ob = SMRObject.builder()
                 .runtime(recreatedRuntime)
                 .setType(CorfuTable.class)
                 .setArguments(new StringIndexer())
@@ -848,7 +848,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+        SMRObject.Builder ob = SMRObject.builder()
                 .runtime(recreatedRuntime)
                 .setType(CorfuTable.class)
                 .setArguments(new StringIndexer())
@@ -879,7 +879,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+        SMRObject.Builder ob = SMRObject.builder()
                 .runtime(recreatedRuntime)
                 .setType(CorfuTable.class)
                 .setArguments(new StringIndexer())

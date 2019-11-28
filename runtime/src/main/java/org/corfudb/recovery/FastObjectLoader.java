@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.SMRObject.Builder;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -127,6 +128,11 @@ public class FastObjectLoader {
 
     private boolean whiteList = false;
     private final List<UUID> streamsToLoad = new ArrayList<>();
+    
+    /**
+     * We can register streams with non-default type
+     */
+    private final Map<UUID, Builder> customTypeStreams = new HashMap<>();
 
     @VisibleForTesting
     void setLogHead(long head) { this.logHead = head; }
@@ -136,6 +142,13 @@ public class FastObjectLoader {
 
     // A future to track the last submitted read request
     volatile private Future lastReadRequest;
+
+    /**
+     * We can add streams to be ignored during the
+     * reconstruction of the state (e.g. raw streams)
+     */
+    @Getter
+    private Set<UUID> streamsToIgnore = new HashSet<>();
 
     /**
      * Enable whiteList mode where we only reconstruct
@@ -160,19 +173,7 @@ public class FastObjectLoader {
         return this;
     }
 
-    /**
-     * We can add streams to be ignored during the
-     * reconstruction of the state (e.g. raw streams)
-     */
-    @Getter
-    private Set<UUID> streamsToIgnore = new HashSet<>();
-
-    /**
-     * We can register streams with non-default type
-     */
-    private final Map<UUID, SMRObject.SMRObjectBuilder> customTypeStreams = new HashMap<>();
-
-    public void addCustomTypeStream(UUID streamId, SMRObject.SMRObjectBuilder ob) {
+    public void addCustomTypeStream(UUID streamId, Builder ob) {
         customTypeStreams.put(streamId, ob);
     }
 
@@ -184,7 +185,7 @@ public class FastObjectLoader {
      */
     public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
         UUID streamId = CorfuRuntime.getStreamID(streamName);
-        SMRObject.SMRObjectBuilder ob = SMRObject.builder()
+        Builder ob = SMRObject.builder()
                 .runtime(runtime)
                 .setType(CorfuTable.class)
                 .setArguments(indexRegistry)
