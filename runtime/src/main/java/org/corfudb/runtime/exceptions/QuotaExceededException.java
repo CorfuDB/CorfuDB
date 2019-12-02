@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class QuotaExceededException extends RuntimeException {
     public QuotaExceededException(String msg) {
-        super(msg);
+        super("Disk usage has exceeded the quota set, system is now in read-only mode. "
+                + msg);
     }
 }
