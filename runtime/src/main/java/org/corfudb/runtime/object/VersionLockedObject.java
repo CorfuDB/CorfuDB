@@ -363,6 +363,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 rollbackUncommittedChangesUnsafe();
                 this.optimisticStream = null;
             }
+            
             // If we are too far ahead, roll back to the past
             rollbackObjectUnsafe(timestamp);
             syncStreamUnsafe(smrStream, timestamp);
