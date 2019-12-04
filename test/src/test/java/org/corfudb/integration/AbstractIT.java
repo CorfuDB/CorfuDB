@@ -408,6 +408,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 }
             }
             command.append(" -d ").append(logLevel).append(" ")
+                    .append("-p ")
                     .append(port);
             return command.toString();
         }

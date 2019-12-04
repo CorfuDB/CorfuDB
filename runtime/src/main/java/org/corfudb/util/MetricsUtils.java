@@ -27,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
-import org.corfudb.common.metrics.servers.PrometheusMetricsServer.Config;
 import org.ehcache.sizeof.SizeOf;
 import org.slf4j.LoggerFactory;
 
@@ -182,8 +181,7 @@ public class MetricsUtils {
      */
     public static void metricsReportingSetup(@NonNull MetricRegistry metricRegistry,
                                               int prometheusMetricsPort) {
-        Config config = new Config(prometheusMetricsPort, Config.ENABLED);
-        MetricsServer server = new PrometheusMetricsServer(config, metricRegistry);
+        MetricsServer server = new PrometheusMetricsServer(prometheusMetricsPort, metricRegistry);
         server.start();
 
         metricsCollectionEnabled = true;

@@ -7,6 +7,7 @@ import io.netty.channel.ChannelFuture;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServerNode;
 import org.corfudb.infrastructure.NettyServerRouter;
@@ -90,7 +91,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 NettyServerData d = new NettyServerData(
                     new ServerContextBuilder()
                         .setTlsEnabled(true)
-                        .setImplementation("auto")
+                        .setImplementation(ChannelImplementation.AUTO)
                         .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                         .setTlsProtocols("TLSv1.2")
                         .setKeystore("src/test/resources/security/s1.jks")
@@ -123,7 +124,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
             NettyServerData d = new NettyServerData(new ServerContextBuilder()
-                    .setImplementation("auto")
+                    .setImplementation(ChannelImplementation.AUTO)
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -158,7 +159,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
-                    .setImplementation("auto")
+                    .setImplementation(ChannelImplementation.AUTO)
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -193,7 +194,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
-                    .setImplementation("auto")
+                    .setImplementation(ChannelImplementation.AUTO)
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -228,7 +229,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
-                    .setImplementation("auto")
+                    .setImplementation(ChannelImplementation.AUTO)
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -264,7 +265,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 System.setProperty("java.security.auth.login.config",
                     "src/test/resources/security/corfudb_jaas.config");
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
-                    .setImplementation("auto")
+                    .setImplementation(ChannelImplementation.AUTO)
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -369,7 +370,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 System.setProperty("java.security.auth.login.config",
                     "src/test/resources/security/corfudb_jaas.config");
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
-                    .setImplementation("auto")
+                    .setImplementation(ChannelImplementation.AUTO)
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -439,7 +440,7 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         NettyServerData serverData = new NettyServerData(
             new ServerContextBuilder()
-                .setImplementation("auto")
+                .setImplementation(ChannelImplementation.AUTO)
                 .setTlsEnabled(true)
                 .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                 .setTlsProtocols("TLSv1.2")
@@ -554,8 +555,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     serverContext,
                     nsr,
                     address,
-                    Integer.parseInt((String)serverContext
-                        .getServerConfig().get("<port>")));
+                    serverContext.getConfiguration().getServerPort());
         }
 
         void shutdownServer() {

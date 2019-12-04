@@ -11,6 +11,7 @@ import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
@@ -65,19 +66,19 @@ public class DataStore implements KvDataStore {
     /**
      * Return a new DataStore object.
      *
-     * @param opts        map of option strings
+     * @param conf        server configuration
      * @param cleanupTask method to cleanup DataStore files
      */
-    public DataStore(@Nonnull Map<String, Object> opts,
+    public DataStore(@Nonnull ServerConfiguration conf,
                      @Nonnull Consumer<String> cleanupTask) {
 
-        if ((opts.containsKey("--memory") && (Boolean) opts.get("--memory")) || !opts.containsKey("--log-path")) {
+        if (conf.getInMemoryMode()) {
             this.logDirPath = null;
             this.cleanupTask = fileName -> { };
             cache = buildMemoryDs();
             inMem = true;
         } else {
-            this.logDirPath = (String) opts.get("--log-path");
+            this.logDirPath = conf.getServerDir();
             this.cleanupTask = cleanupTask;
             cache = buildPersistentDs();
             inMem = false;

@@ -480,11 +480,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         IServerRouter serverRouter;
         int port;
 
-        TestServer(Map<String, Object> optsMap) {
-            this(new ServerContext(optsMap));
-            serverContext.setServerRouter(new TestServerRouter());
-        }
-
         TestServer(ServerContext serverContext) {
             this.serverContext = serverContext;
             this.serverRouter = serverContext.getServerRouter();
@@ -505,7 +500,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         }
 
         TestServer(int port) {
-            this(ServerContextBuilder.defaultTestContext(port).getServerConfig());
+            this(ServerContextBuilder.defaultTestContext(port));
         }
 
         void addToTest(int port, AbstractViewTest test) {

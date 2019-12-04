@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.NodeLocator;
@@ -24,7 +25,9 @@ public class CorfuServerNodeTest extends AbstractCorfuTest {
 
         // Start the Corfu Server
         ServerContext context = new ServerContextBuilder()
-            .setAddress(hostname).setImplementation("auto").build();
+                .setAddress(hostname)
+                .setImplementation(ChannelImplementation.AUTO)
+                .build();
         CorfuServerNode serverNode = new CorfuServerNode(context);
         serverNode.start();
 
