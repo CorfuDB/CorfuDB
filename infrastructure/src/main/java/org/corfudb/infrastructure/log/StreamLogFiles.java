@@ -8,6 +8,7 @@ import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.Unpooled;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -279,6 +280,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public boolean quotaExceeded() {
         return !logSizeQuota.hasAvailable();
+    }
+
+    @Override
+    public long quotaLimitInBytes() {
+        return logSizeQuota.getLimit();
     }
 
     @Override

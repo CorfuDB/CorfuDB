@@ -151,6 +151,13 @@ public class DynamicProtobufSerializer implements ISerializer {
             return fileDescriptorMap.get(name);
         }
 
+        if (!fdProtoMap.containsKey(name)) {
+            log.error("DynamicProtobufSerializer failed to deserialize unknown file {}",
+                    name);
+            log.error(this.toString());
+            throw new SerializerException(
+                    "DynamicProtobufSerializer file " + name + " was never seen in registry");
+        }
         List<FileDescriptor> fileDescriptorList = new ArrayList<>();
         for (String s : fdProtoMap.get(name).getDependencyList()) {
             FileDescriptor descriptor = getDescriptor(s);
@@ -283,6 +290,27 @@ public class DynamicProtobufSerializer implements ISerializer {
             log.error("Exception during serialization!", ie);
             throw new SerializerException(ie);
         }
+    }
+
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("\n---------messageFdProtoNameMap Messages:---------\n");
+        for (Map.Entry<String, String> mname: messagesFdProtoNameMap.entrySet()) {
+            stringBuilder.append("Message: "+ mname.getKey()+ " in file "+ mname.getValue()+"\n");
+        }
+
+        stringBuilder.append("\n-------fdProtoMap FileDescriptors:--------------\n");
+        for (Map.Entry<String, FileDescriptorProto> fdProto: fdProtoMap.entrySet()) {
+            stringBuilder.append("File: " + fdProto.getKey());
+            stringBuilder.append(" ===> (FileDescriptorProto follows...)\n");
+            stringBuilder.append(fdProto.getValue());
+        }
+
+        stringBuilder.append("\n---------fileDescriptorCache FileDescriptors----------\n");
+        for (Map.Entry<String, FileDescriptor> fds: fileDescriptorMap.entrySet()) {
+            stringBuilder.append("File: "+ fds.getKey() + " ==> " + fds.getValue() + "\n");
+        }
+        return stringBuilder.toString();
     }
 }
 
