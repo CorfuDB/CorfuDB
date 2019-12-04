@@ -62,8 +62,8 @@ import org.corfudb.runtime.object.ICorfuVersionPolicy;
  */
 @Slf4j
 @CorfuObject
-public class CorfuTable<K ,V>
-        implements ICorfuMap<K, V>, ICorfuSMR<CorfuTable<K ,V>>, AutoCloseable {
+public class CorfuTable<K ,V> implements
+        ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
 
     /**
      * Denotes a function that supplies the unique name of an index registered to
@@ -205,13 +205,13 @@ public class CorfuTable<K ,V>
     }
 
     // The "main" map which contains the primary key-value mappings.
-    private final StreamingMap<K,V> mainMap;
+    private final ContextAwareMap<K,V> mainMap;
     private final Set<Index<K, V, ? extends Comparable>> indexSpec;
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
     private final CorfuTable<K, V> optimisticTable;
     private final VersionPolicy versionPolicy;
 
-    public CorfuTable(StreamingMap<K,V> mainMap,
+    public CorfuTable(ContextAwareMap<K,V> mainMap,
                       Set<Index<K, V, ? extends Comparable>> indexSpec,
                       Map<String, Map<Comparable, Map<K, V>>> secondaryIndexe,
                       CorfuTable<K, V> optimisticTable) {
@@ -227,7 +227,7 @@ public class CorfuTable<K ,V>
      * specification.
      */
     public CorfuTable(IndexRegistry<K, V> indices,
-                      Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                      Supplier<ContextAwareMap<K, V>> streamingMapSupplier,
                       VersionPolicy versionPolicy) {
         this.indexSpec = new HashSet<>();
         this.secondaryIndexes = new HashMap<>();
@@ -251,7 +251,7 @@ public class CorfuTable<K ,V>
      * {@link IndexRegistry}.
      */
     public CorfuTable(IndexRegistry<K, V> indices,
-                      Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                      Supplier<ContextAwareMap<K, V>> streamingMapSupplier) {
         this(indices, streamingMapSupplier, ICorfuVersionPolicy.DEFAULT);
     }
 
@@ -259,7 +259,7 @@ public class CorfuTable<K ,V>
      * Generate a table with a given implementation for the {@link StreamingMap},
      * and {@link VersionPolicy}.
      */
-    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier,
+    public CorfuTable(Supplier<ContextAwareMap<K, V>> streamingMapSupplier,
                       VersionPolicy versionPolicy) {
         this(IndexRegistry.empty(), streamingMapSupplier, versionPolicy);
     }

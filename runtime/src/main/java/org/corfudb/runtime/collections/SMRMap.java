@@ -17,6 +17,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
@@ -706,5 +707,13 @@ public class SMRMap<K, V>
     @Override
     public SMRMap<K, V> getContext(ICorfuExecutionContext.Context context) {
         return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Stream<Entry<K, V>> entryStream() {
+        return entrySet().stream();
     }
 }

@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -118,7 +119,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         privilegedRt.connect();
 
 
-        Map<String, String> map2 = privilegedRt.getObjectsView()
+        StreamingMap<String, String> map2 = privilegedRt.getObjectsView()
                 .build()
                 .setStreamName("s1")
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
