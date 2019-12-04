@@ -18,7 +18,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
+import org.corfudb.runtime.collections.Index;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -184,7 +184,7 @@ public class FastObjectLoader {
      * @param streamName    Stream name.
      * @param indexRegistry Index Registry.
      */
-    public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
+    public void addIndexerToCorfuTableStream(String streamName, Index.Registry indexRegistry) {
         UUID streamId = CorfuRuntime.getStreamID(streamName);
         Builder ob = SMRObject.builder()
                 .runtime(runtime)

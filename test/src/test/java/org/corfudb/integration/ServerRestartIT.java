@@ -31,9 +31,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.Index;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.collections.StringMultiIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -510,7 +509,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
     }
 
-    private CorfuTable createTable(CorfuRuntime corfuRuntime, CorfuTable.IndexRegistry indexer) {
+    private CorfuTable createTable(CorfuRuntime corfuRuntime, Index.Registry indexer) {
         return corfuRuntime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(indexer)

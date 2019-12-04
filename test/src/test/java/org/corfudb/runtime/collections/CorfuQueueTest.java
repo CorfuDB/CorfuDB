@@ -71,7 +71,7 @@ public class CorfuQueueTest extends AbstractViewTest {
     public void queueWithSecondaryIndexCheck() {
         CorfuQueue<String>
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
-                CorfuTable.IndexRegistry.empty());
+                Index.Registry.empty());
 
         CorfuRecordId idC = corfuQueue.enqueue("c");
         CorfuRecordId idB = corfuQueue.enqueue("b");
