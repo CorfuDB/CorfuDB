@@ -34,7 +34,7 @@ jobs:
   - stage: Deploy
     name: Deployment
     script:
-    - ./mvnw clean deploy -DskipTests -T 1C
+    - ./mvnw clean deploy -s .travis_scripts/settings.xml -DskipTests -T 1C
 
 notifications:
   email:
