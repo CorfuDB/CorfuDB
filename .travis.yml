@@ -11,6 +11,7 @@ cache:
   - "$HOME/.m2"
 
 stages:
+  - name: Tests
   - name: Deploy
     if: branch = master AND type != pull_request
 
