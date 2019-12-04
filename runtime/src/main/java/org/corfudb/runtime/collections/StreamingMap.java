@@ -13,7 +13,7 @@ import java.util.stream.Stream;
  * @param <K> key type
  * @param <V> value type
  */
-public interface StreamingMap<K, V> extends Map<K, V>, AutoCloseable {
+public interface StreamingMap<K, V> extends Map<K, V> {
 
     /**
      * Present the content of a {@link StreamingMap} via the {@link Stream} interface.
@@ -21,23 +21,4 @@ public interface StreamingMap<K, V> extends Map<K, V>, AutoCloseable {
      * @return stream of entries
      */
     Stream<Map.Entry<K, V>> entryStream();
-
-    /**
-     * Return an optional implementation of the {@link StreamingMap} that
-     * is used only during optimistic (non-committed) operations.
-     *
-     * It is the responsibility of the data-structure to query this map during
-     * any sort of access operations.
-     *
-     * @return {@link StreamingMap} representing non-committed changes
-     */
-    default StreamingMap<K, V> getOptimisticMap() {
-        return this;
-    }
-
-    /**
-     * Relinquish any resources associated with this object.
-     */
-    default void close() {
-    }
 }

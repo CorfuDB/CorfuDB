@@ -15,6 +15,8 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.collections.ISMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
@@ -27,10 +29,10 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 
 /** Checkpoint writer for SMRMaps: take a snapshot of the
@@ -40,7 +42,7 @@ import java.util.function.Function;
  *  TODO: Generalize to all SMR objects.
  */
 @Slf4j
-public class CheckpointWriter<T extends Map> {
+public class CheckpointWriter<T extends StreamingMap> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
     private final UUID streamId;
@@ -60,9 +62,8 @@ public class CheckpointWriter<T extends Map> {
     private final Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
 
     @SuppressWarnings("checkstyle:abbreviation")
-    final UUID checkpointStreamID;
-
-    final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
+    private final UUID checkpointStreamID;
+    private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
 
     /** Mutator lambda to change map key.  Typically used for
      *  testing but could also be used for type conversion, etc.
@@ -163,18 +164,18 @@ public class CheckpointWriter<T extends Map> {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
             log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
-            Set<Map.Entry> entries = this.map.entrySet();
+            Stream<Map.Entry> entries = this.map.entryStream();
             // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
             // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
             startCheckpoint(snapshotTimestamp, streamTail);
-            appendObjectState(entries);
+            int entryCount = appendObjectState(entries);
             finishCheckpoint();
             long cpDuration = System.currentTimeMillis() - start;
             log.info("appendCheckpoint: completed checkpoint for {}, entries({}), " +
                             "cpSize({}) bytes at snapshot {} in {} ms",
-                    streamId, entries.size(), numBytes, snapshotTimestamp, cpDuration);
+                    streamId, entryCount, numBytes, snapshotTimestamp, cpDuration);
         } finally {
             rt.getObjectsView().TXEnd();
         }
@@ -244,11 +245,13 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Stream of global log addresses of the CONTINUATION records written.
      */
-    public void appendObjectState(Set<Map.Entry> entries) {
+    public int appendObjectState(Stream<Map.Entry> entryStream) {
         ImmutableMap<CheckpointEntry.CheckpointDictKey, String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
 
-        Iterable<List<Map.Entry>> partitions = Iterables.partition(entries, batchSize);
+        final Iterable<List<Map.Entry>> partitions =
+                Iterables.partition(entryStream::iterator, batchSize);
+        int entryCount = 0;
 
         for (List<Map.Entry> partition : partitions) {
             MultiSMREntry smrEntries = new MultiSMREntry();
@@ -257,6 +260,7 @@ public class CheckpointWriter<T extends Map> {
                         new Object[]{keyMutator.apply(entry.getKey()),
                                 valueMutator.apply(entry.getValue())},
                         serializer));
+                entryCount++;
             }
 
             CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
@@ -269,6 +273,8 @@ public class CheckpointWriter<T extends Map> {
             // for an accurate count of serialized bytes of SRMEntries.
             numBytes += cp.getSmrEntriesBytes();
         }
+
+        return entryCount;
     }
 
     /** Append a checkpoint END record to this object's stream.

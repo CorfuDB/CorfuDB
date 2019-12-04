@@ -16,6 +16,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -633,7 +634,7 @@ public class CheckpointTest extends AbstractObjectTest {
         CorfuRuntime runtime = getARuntime();
 
         try {
-            Map<String, Long> testMap = rt.getObjectsView().build()
+            StreamingMap<String, Long> testMap = rt.getObjectsView().build()
                     .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
                     })
                     .setStreamName(streamName)
