@@ -137,7 +137,7 @@ public class ManagementServer extends AbstractServer {
     public ManagementServer(ServerContext serverContext) {
         this.serverContext = serverContext;
 
-        this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
+        this.executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumManagementServerThreads(),
                 new ServerThreadFactory("management-", new ServerThreadFactory.ExceptionHandler()));
 
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();

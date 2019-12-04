@@ -93,8 +93,7 @@ public class LayoutServer extends AbstractServer {
                 .dataStore(serverContext.getDataStore())
                 .build();
 
-        executor = Executors.newFixedThreadPool(
-                serverContext.getLayoutServerThreadCount(),
+        executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumLayoutServerThreads(),
                 new ServerThreadFactory("layoutServer-", new ExceptionHandler())
         );
 
