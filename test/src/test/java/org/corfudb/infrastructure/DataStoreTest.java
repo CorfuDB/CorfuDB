@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -25,23 +26,21 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     private static final KvRecord<String> TEST_RECORD = KvRecord.of("test", "key", String.class);
 
-    private DataStore createPersistDataStore(String serviceDir, String numRetention,
+    private DataStore createPersistDataStore(String serviceDir, int numRetention,
                                              Consumer<String> cleanupTask) {
-        return new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--metadata-retention", numRetention)
-                .build(), cleanupTask);
+        return new DataStore(new ServerConfiguration()
+                .setServerDirectory(serviceDir)
+                .setMetadataRetention(numRetention), cleanupTask);
     }
 
     private DataStore createInMemoryDataStore() {
-        return new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--memory", true)
-                .build(), fn -> { });
+        return new DataStore(new ServerConfiguration().setInMemoryMode(true),
+                fn -> { });
     }
 
     @Test
     public void testPutGet() {
-        final String numRetention = "10";
+        final int numRetention = 10;
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
@@ -54,7 +53,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testDataCorruption() throws IOException {
-        final String numRetention = "10";
+        final int numRetention = 10;
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
@@ -75,7 +74,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testPutGetWithRestart() {
-        final String numRetention = "10";
+        final int numRetention = 10;
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
@@ -91,7 +90,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testDataStoreEviction() {
-        final String numRetention = "10";
+        final int numRetention = 10;
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
 
@@ -116,7 +115,7 @@ public class DataStoreTest extends AbstractCorfuTest {
         ServerContext serverContext = new ServerContextBuilder()
                 .setMemory(false)
                 .setLogPath(serviceDirPath)
-                .setRetention(String.valueOf(numRetention))
+                .setRetention(numRetention)
                 .build();
         DataStore dataStore = serverContext.getDataStore();
         Set<String> prefixesToClean = serverContext.getDsFilePrefixesForCleanup();

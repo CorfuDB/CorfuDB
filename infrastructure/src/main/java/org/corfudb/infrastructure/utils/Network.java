@@ -1,4 +1,4 @@
-package org.corfudb.util;
+package org.corfudb.infrastructure.utils;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -15,19 +15,16 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Network utility methods.
- *
- * <p>Created by zlokhandwala on 3/6/18.
+ * Utils class for classes that need to write to the filesystem.
+ * <p>
+ * Created by maithem on 12/4/19.
  */
+
+
 @Slf4j
-public class NetworkUtils {
-
-    private NetworkUtils() {
-        // prevent instantiation of this class
-    }
-
+public class Network {
     /**
-     * Fetches the IP address given an interface name.
+     * Finds an ip given an interface name.
      * Throws an unrecoverable error and aborts if the server is unable to find a valid address.
      *
      * @param interfaceName Network interface name.
@@ -40,10 +37,10 @@ public class NetworkUtils {
                         && interfaceName.equals(networkInterface.getName())) {
                     String address;
                     if (networkInterface.isVirtual()) {
-                        // If the interface is a subinterface return any ipv4 address
+                        // If the interface is a sub interface return any ipv4 address
                         address = getIPV4Address(networkInterface.getInterfaceAddresses());
                     } else {
-                        // This is not a subinterface, need to exclude the subinterface addresses
+                        // This is not a sub interface, need to exclude the sub interface addresses
                         // from the address list before we select an ipv4 address.
                         Set<InterfaceAddress> parentAddresses = new HashSet<>(networkInterface.getInterfaceAddresses());
                         Set<InterfaceAddress> subInterfacesAddresses = getSubInterfacesAddresses(networkInterface);
@@ -68,7 +65,7 @@ public class NetworkUtils {
     }
 
     /**
-     * Collects all subinterface addreses for an interface
+     * Collects all sub interface addresses for an interface
      */
     private static Set<InterfaceAddress> getSubInterfacesAddresses(NetworkInterface networkInterface) {
         Set<InterfaceAddress> interfaceAddresses = new HashSet<>();

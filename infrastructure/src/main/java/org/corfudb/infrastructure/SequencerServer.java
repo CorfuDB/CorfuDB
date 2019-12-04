@@ -3,8 +3,6 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Builder;
-import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -146,18 +144,13 @@ public class SequencerServer extends AbstractServer {
      */
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        Config config = Config.parse(serverContext.getServerConfig());
 
         // Sequencer server is single threaded by current design
         this.executor = Executors.newSingleThreadExecutor(
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
-
-        globalLogTail = Address.getMinAddress();
-
-        this.cache = new SequencerServerCache(config.getCacheSize());
-
-
+        globalLogTail = 0;
+        this.cache = new SequencerServerCache(serverContext.getConfiguration().getSequencerConflictWindowSize());
         setUpTimerNameCache();
     }
 
@@ -696,26 +689,5 @@ public class SequencerServer extends AbstractServer {
     @Override
     public void shutdown() {
         super.shutdown();
-    }
-
-    /**
-     * Sequencer server configuration
-     */
-    @Builder
-    @Getter
-    public static class Config {
-        private static final long DEFAULT_CACHE_SIZE = 250_000L;
-
-        @Default
-        private final long cacheSize = DEFAULT_CACHE_SIZE;
-
-        public static Config parse(Map<String, Object> opts) {
-            long cacheSize = opts.containsKey("--sequencer-cache-size") ?
-                    Long.parseLong((String) opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE;
-
-            return Config.builder()
-                    .cacheSize(cacheSize)
-                    .build();
-        }
     }
 }
