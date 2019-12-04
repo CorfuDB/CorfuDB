@@ -87,12 +87,12 @@ public class LogUnitServerTest extends AbstractServerTest {
      */
     @Test
     public void cantOpenReadOnlyLogFiles() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
+        ServerContext sc = new ServerContextBuilder()
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
                 .setMemory(false)
-                .build());
+                .build();
+
+        LogUnitServer s1 = new LogUnitServer(sc);
 
         this.router.reset();
         this.router.addServer(s1);
@@ -109,23 +109,20 @@ public class LogUnitServerTest extends AbstractServerTest {
         s1.shutdown();
 
         try {
-            File serviceDirectory = new File(serviceDir);
+            File serviceDirectory = new File(sc.getConfiguration().getServerDir());
             serviceDirectory.setWritable(false);
         } catch(SecurityException e) {
             fail("Should not hit security exception"+e.toString());
         }
 
         try {
-            LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
-                    .setLogPath(serviceDir)
-                    .setMemory(false)
-                    .build());
+            LogUnitServer s2 = new LogUnitServer(sc);
             fail("Should have failed to startup in read-only mode");
         } catch (LogUnitException e) {
             // Correctly failed to open on read-only directory
         }
         // In case the directory is re-used for other tests, restore its write permissions.
-        File serviceDirectory = new File(serviceDir);
+        File serviceDirectory = new File(sc.getConfiguration().getServerDir());
         serviceDirectory.setWritable(true);
     }
 
@@ -426,32 +423,32 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Test (expected = RuntimeException.class)
     public void testInvalidLogVersion() throws Exception {
+        ServerContext context = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .build();
+
         // Create a log file with an invalid version
-        String tempDir = PARAMETERS.TEST_TEMP_DIR;
-        createLogFile(tempDir, StreamLogFiles.VERSION + 1, false);
+        createLogFile(context.getConfiguration().getServerDir(), StreamLogFiles.VERSION + 1, false);
 
         // Start a new logging version
-        ServerContextBuilder builder = new ServerContextBuilder();
-        builder.setMemory(false);
-        builder.setLogPath(tempDir);
-        ServerContext context = builder.build();
         LogUnitServer logunit = new LogUnitServer(context);
     }
 
     @Test (expected = RuntimeException.class)
     public void testVerifyWithNoVerifyLog() throws Exception {
-        boolean noVerify = true;
+        boolean verifyChecksum = false;
 
-        // Generate a log file without computing the checksum for log entries
-        String tempDir = PARAMETERS.TEST_TEMP_DIR;
-        createLogFile(tempDir, StreamLogFiles.VERSION + 1, noVerify);
-
-        // Start a new logging version
         ServerContextBuilder builder = new ServerContextBuilder();
         builder.setMemory(false);
-        builder.setLogPath(tempDir);
-        builder.setNoVerify(!noVerify);
+        builder.setLogPath(PARAMETERS.TEST_TEMP_DIR);
+        builder.setVerifyChecksum(verifyChecksum);
         ServerContext context = builder.build();
+
+        // Generate a log file without computing the checksum for log entries
+        createLogFile(context.getConfiguration().getServerDir(), StreamLogFiles.VERSION + 1, verifyChecksum);
+
+        // Start a new logging version
         LogUnitServer logunit = new LogUnitServer(context);
     }
 

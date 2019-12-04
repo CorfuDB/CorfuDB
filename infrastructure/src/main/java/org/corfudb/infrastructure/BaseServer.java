@@ -38,7 +38,7 @@ public class BaseServer extends AbstractServer {
 
     public BaseServer(@Nonnull ServerContext context) {
         this.serverContext = context;
-        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),
+        executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumBaseServerThreads(),
                 new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
     }
 
@@ -87,8 +87,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.VERSION_REQUEST)
     private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
-                                         serverContext.getNodeIdBase64());
+        VersionInfo vi = new VersionInfo(serverContext.getNodeIdBase64());
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
     }
 

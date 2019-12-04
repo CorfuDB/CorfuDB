@@ -84,7 +84,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public static final int VERSION = 2;
     public static final int RECORDS_PER_LOG_FILE = 10000;
     private final Path logDir;
-    private final boolean verify;
+    private final boolean verifyChecksum;
 
     private final StreamLogDataStore dataStore;
 
@@ -111,17 +111,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      *
      * @param serverContext Context object that provides server state such as epoch,
      *                      segment and start address
-     * @param noVerify      Disable checksum if true
      */
-    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
-        logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
+    public StreamLogFiles(ServerContext serverContext) {
+        logDir = Paths.get(serverContext.getConfiguration().getLogDir());
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
-        this.verify = !noVerify;
+        this.verifyChecksum = serverContext.getConfiguration().getVerifyChecksum();
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
 
-        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
-        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
+        final double logSizeLimitPercentage = serverContext.getConfiguration().getLogSizeQuota();
         if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
             String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
                     logSizeLimitPercentage);
@@ -366,7 +364,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new IllegalStateException(msg);
             }
 
-            if (verify && !header.getVerifyChecksum()) {
+            if (verifyChecksum && !header.getVerifyChecksum()) {
                 String msg = String.format("Log file %s not generated with check sums, can't verify!",
                         file.getAbsoluteFile());
                 throw new IllegalStateException(msg);
@@ -616,7 +614,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             return null;
         }
 
-        if (verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
+        if (verifyChecksum && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
             String errorMessage = getDataCorruptionErrorMessage(
                     "Checksum mismatch detected while trying to read file",
                     channel, fileName
@@ -649,7 +647,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogHeader header = parseHeader(fileChannel, segment.getFileName());
         if (header == null) {
             log.warn("Couldn't find log header for {}, creating new header.", segment.getFileName());
-            writeHeader(fileChannel, VERSION, verify);
+            writeHeader(fileChannel, VERSION, verifyChecksum);
             return;
         }
 

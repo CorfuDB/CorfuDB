@@ -12,9 +12,6 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 public class VersionInfo {
     @Getter
-    Map<String, Object> optionsMap;
-
-    @Getter
     long upTime = ManagementFactory.getRuntimeMXBean().getUptime();
 
     @Getter
@@ -31,17 +28,9 @@ public class VersionInfo {
 
     /** Create a new version info, using the current options map and node id.
      *
-     * @param optionsMap    The options map used to start the server.
      * @param nodeId        The current node id.
      */
-    public VersionInfo(Map<String,Object> optionsMap, @Nonnull String nodeId) {
-        this.optionsMap = new HashMap<>(optionsMap);
-        // Remove any non-serializable objects
-        this.optionsMap.entrySet()
-                .removeIf(e -> {
-                    Object v = e.getValue();
-                    return !(v instanceof Integer || v instanceof Long || v instanceof String);
-                });
+    public VersionInfo(@Nonnull String nodeId) {
         this.nodeId = nodeId;
         this.version = CorfuRuntime.getVersionString();
     }

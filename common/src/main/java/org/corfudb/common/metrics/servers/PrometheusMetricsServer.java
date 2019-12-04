@@ -4,27 +4,22 @@ import com.codahale.metrics.MetricRegistry;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
 import io.prometheus.client.exporter.MetricsServlet;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 
-import java.util.Map;
-import java.util.Optional;
-
 import org.corfudb.common.metrics.MetricsServer;
 
 @Slf4j
 public class PrometheusMetricsServer implements MetricsServer {
     private final Server server;
-    private final Config config;
+    private final int port;
 
-    public PrometheusMetricsServer(Config config, MetricRegistry metricRegistry) {
-        this.config = config;
-        this.server = new Server(config.getPort());
+    public PrometheusMetricsServer(int port, MetricRegistry metricRegistry) {
+        this.port = port;
+        this.server = new Server(this.port);
         CollectorRegistry.defaultRegistry.register(new DropwizardExports(metricRegistry));
     }
 
@@ -33,7 +28,8 @@ public class PrometheusMetricsServer implements MetricsServer {
      */
     @Override
     public synchronized void start() {
-        if (server.isStarted() || !config.isEnabled()) {
+        // If config isnt enabled then why even return here :s
+        if (server.isStarted()) {
             return;
         }
 
@@ -43,7 +39,7 @@ public class PrometheusMetricsServer implements MetricsServer {
         contextHandler.addServlet(new ServletHolder(new MetricsServlet()), "/metrics");
         try {
             server.start();
-            log.info("setupMetrics: reporting metrics on port {}", config.getPort());
+            log.info("setupMetrics: reporting metrics on port {}", this.port);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -62,26 +58,6 @@ public class PrometheusMetricsServer implements MetricsServer {
             server.stop();
         } catch (Exception e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    @AllArgsConstructor
-    @Getter
-    public static class Config {
-        private final int port;
-        private final boolean enabled;
-        public static final Boolean ENABLED = true;
-        public static final String METRICS_PARAM = "--metrics";
-        public static final String METRICS_PORT_PARAM = "--metrics-port";
-
-        public static Config parse(Map<String, Object> opts) {
-            boolean enabled = Optional.ofNullable(opts.get(METRICS_PARAM))
-                    .map(e -> (boolean)e)
-                    .orElse(false);
-            int port = Optional.ofNullable(opts.get(METRICS_PORT_PARAM))
-                    .map(p -> Integer.parseInt(p.toString()))
-                    .orElse(-1);
-            return new Config(port, enabled);
         }
     }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -42,10 +43,10 @@ public class StreamLogDataStoreTest {
     }
 
     private StreamLogDataStore getStreamLogDataStore() {
-        Map<String, Object> opts = new HashMap<>();
-        opts.put("--log-path", tempDir.getRoot().getAbsolutePath());
+        ServerConfiguration conf = new ServerConfiguration();
+        conf.setServerDirectory(tempDir.getRoot().getAbsolutePath());
 
-        DataStore ds = new DataStore(opts, val -> log.info("clean up"));
+        DataStore ds = new DataStore(conf, val -> log.info("clean up"));
 
         return StreamLogDataStore.builder()
                 .dataStore(ds)

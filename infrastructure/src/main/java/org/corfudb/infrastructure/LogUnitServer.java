@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
@@ -38,7 +37,6 @@ import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -74,11 +72,6 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 public class LogUnitServer extends AbstractServer {
 
     /**
-     * The options map.
-     */
-    private final LogUnitServerConfig config;
-
-    /**
      * The server context of the node.
      */
     private final ServerContext serverContext;
@@ -109,24 +102,24 @@ public class LogUnitServer extends AbstractServer {
      */
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
+        executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
                 new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
 
-        if (config.isMemoryMode()) {
+        if (serverContext.getConfiguration().isInMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
                     + "This should be run for testing purposes only. "
                     + "If you exceed the maximum size of the unit, old entries will be "
                     + "AUTOMATICALLY trimmed. "
                     + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
+                    .convertToByteStringRepresentation(serverContext.getConfiguration().getMaxLogUnitCacheSize()));
             streamLog = new InMemoryStreamLog();
         } else {
-            streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
+            streamLog = new StreamLogFiles(serverContext);
         }
 
-        dataCache = new LogUnitServerCache(config, streamLog);
-        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
+        dataCache = new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
+        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(),
+                serverContext.getConfiguration().getSyncData());
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
     }
@@ -423,12 +416,7 @@ public class LogUnitServer extends AbstractServer {
 
     @VisibleForTesting
     long getMaxCacheSize() {
-        return config.getMaxCacheSize();
-    }
-
-    @VisibleForTesting
-    BatchProcessor getBatchWriter() {
-        return batchWriter;
+        return serverContext.getConfiguration().getMaxLogUnitCacheSize();
     }
 
     @VisibleForTesting
@@ -439,36 +427,5 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     void prefixTrim(long trimAddress) {
         streamLog.prefixTrim(trimAddress);
-    }
-
-    /**
-     * Log unit server parameters.
-     */
-    @Builder
-    @Getter
-    public static class LogUnitServerConfig {
-        private final double cacheSizeHeapRatio;
-        private final long maxCacheSize;
-        private final boolean memoryMode;
-        private final boolean noVerify;
-        private final boolean noSync;
-
-        /**
-         * Parse legacy configuration options
-         *
-         * @param opts legacy config
-         * @return log unit configuration
-         */
-        public static LogUnitServerConfig parse(Map<String, Object> opts) {
-            double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
-
-            return LogUnitServerConfig.builder()
-                    .cacheSizeHeapRatio(cacheSizeHeapRatio)
-                    .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
-                    .memoryMode(Boolean.valueOf(opts.get("--memory").toString()))
-                    .noVerify((Boolean) opts.get("--no-verify"))
-                    .noSync((Boolean) opts.get("--no-sync"))
-                    .build();
-        }
     }
 }
