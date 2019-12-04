@@ -164,7 +164,7 @@ For example:
     public void AbortTest() {
         Map<String, String> testMap = getRuntime().getObjectsView().build()
                 .setStreamID(UUID.randomUUID())
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();

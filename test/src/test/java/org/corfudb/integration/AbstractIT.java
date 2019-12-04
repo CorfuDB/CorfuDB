@@ -10,7 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
@@ -308,7 +308,7 @@ public class AbstractIT extends AbstractCorfuTest {
         StreamingMap<String, Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                 .open();
         return map;
     }

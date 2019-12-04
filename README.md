@@ -307,7 +307,7 @@ Once you have Corfu added as a dependency, you can start writing Corfu code. Let
     Map<String,Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setType(SMRMap.class)
+                .setType(CorfuTable.class)
                 .open();
 
     Integer previous = map.get("a");

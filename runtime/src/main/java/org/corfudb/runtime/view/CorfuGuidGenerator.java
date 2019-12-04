@@ -4,7 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -100,7 +100,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private final String GUID_STREAM_NAME = "CORFU_GUID_COUNTER_STREAM";
     private final Integer GUID_STREAM_KEY = 0xdeadbeef;
 
-    private final SMRMap<Integer, Long> distributedCounter;
+    private final CorfuTable<Integer, Long> distributedCounter;
 
     private final CorfuRuntime runtime;
 
@@ -119,7 +119,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private CorfuGuidGenerator(CorfuRuntime rt) {
         runtime = rt;
         distributedCounter = rt.getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<Integer, Long>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Long>>() {})
                 .setStreamName(GUID_STREAM_NAME)
                 .setSerializer(Serializers.getDefaultSerializer())
                 .open();
