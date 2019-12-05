@@ -11,9 +11,9 @@ import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
@@ -305,8 +305,8 @@ public class AbstractIT extends AbstractCorfuTest {
         return rt;
     }
 
-    public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {
-        Map<String, Integer> map = rt.getObjectsView()
+    public static StreamingMap<String, Integer> createMap(CorfuRuntime rt, String streamName) {
+        StreamingMap<String, Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
@@ -365,6 +365,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStore = null;
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
+        private String compressionCodec = null;
 
 
         /**
@@ -386,6 +387,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (logSizeLimitPercentage != null) {
                 command.append(" --log-size-quota-percentage ").append(logSizeLimitPercentage);
+            }
+
+            if (compressionCodec != null) {
+                command.append(" --compression-codec ").append(compressionCodec);
             }
 
             if (tlsEnabled) {

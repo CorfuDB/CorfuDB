@@ -6,14 +6,16 @@ import java.util.Map;
 import java.util.Set;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
+import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
  * Created by mwei on 1/9/16.
  */
 @SuppressWarnings("checkstyle:abbreviation")
-public interface ISMRMap<K, V> extends Map<K, V> {
+public interface ISMRMap<K, V> extends StreamingMap<K, V> {
 
     /**
      * {@inheritDoc}
@@ -90,7 +92,9 @@ public interface ISMRMap<K, V> extends Map<K, V> {
      */
     @Mutator(name = "put", noUpcall = true)
     default void blindPut(@ConflictParameter K key, V value) {
-        put(key, value);
+        // This is just a stub, the annotation processor will generate an update with
+        // put(key, value), since this method doesn't require an upcall therefore no
+        // operations are needed to be executed on the internal data structure
     }
 
     /** Generate an undo record for a put, given the previous state of the map
@@ -271,5 +275,4 @@ public interface ISMRMap<K, V> extends Map<K, V> {
     @Accessor
     @Override
     Set<Entry<K, V>> entrySet();
-
 }

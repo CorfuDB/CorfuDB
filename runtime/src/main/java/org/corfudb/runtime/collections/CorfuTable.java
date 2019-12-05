@@ -62,8 +62,8 @@ import org.corfudb.runtime.object.ICorfuVersionPolicy;
  */
 @Slf4j
 @CorfuObject
-public class CorfuTable<K ,V>
-        implements ICorfuMap<K, V>, ICorfuSMR<CorfuTable<K ,V>>, AutoCloseable {
+public class CorfuTable<K ,V> implements
+        ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
 
     /**
      * Denotes a function that supplies the unique name of an index registered to
@@ -205,13 +205,13 @@ public class CorfuTable<K ,V>
     }
 
     // The "main" map which contains the primary key-value mappings.
-    private final StreamingMap<K,V> mainMap;
+    private final ContextAwareMap<K,V> mainMap;
     private final Set<Index<K, V, ? extends Comparable>> indexSpec;
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
     private final CorfuTable<K, V> optimisticTable;
     private final VersionPolicy versionPolicy;
 
-    public CorfuTable(StreamingMap<K,V> mainMap,
+    public CorfuTable(ContextAwareMap<K,V> mainMap,
                       Set<Index<K, V, ? extends Comparable>> indexSpec,
                       Map<String, Map<Comparable, Map<K, V>>> secondaryIndexe,
                       CorfuTable<K, V> optimisticTable) {
@@ -227,7 +227,7 @@ public class CorfuTable<K ,V>
      * specification.
      */
     public CorfuTable(IndexRegistry<K, V> indices,
-                      Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                      Supplier<ContextAwareMap<K, V>> streamingMapSupplier,
                       VersionPolicy versionPolicy) {
         this.indexSpec = new HashSet<>();
         this.secondaryIndexes = new HashMap<>();
@@ -251,7 +251,7 @@ public class CorfuTable<K ,V>
      * {@link IndexRegistry}.
      */
     public CorfuTable(IndexRegistry<K, V> indices,
-                      Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                      Supplier<ContextAwareMap<K, V>> streamingMapSupplier) {
         this(indices, streamingMapSupplier, ICorfuVersionPolicy.DEFAULT);
     }
 
@@ -259,7 +259,7 @@ public class CorfuTable<K ,V>
      * Generate a table with a given implementation for the {@link StreamingMap},
      * and {@link VersionPolicy}.
      */
-    public CorfuTable(Supplier<StreamingMap<K, V>> streamingMapSupplier,
+    public CorfuTable(Supplier<ContextAwareMap<K, V>> streamingMapSupplier,
                       VersionPolicy versionPolicy) {
         this(IndexRegistry.empty(), streamingMapSupplier, versionPolicy);
     }
@@ -465,12 +465,9 @@ public class CorfuTable<K ,V>
     @Override
     @Mutator(name = "put", noUpcall = true)
     public void insert(@ConflictParameter K key, V value) {
-        V previous = mainMap.put(key, value);
-        // If we have index functions, update the secondary indexes.
-        if (!secondaryIndexes.isEmpty()) {
-            unmapSecondaryIndexes(key, previous);
-            mapSecondaryIndexes(key, value);
-        }
+        // This is just a stub, the annotation processor will generate an update with
+        // put(key, value), since this method doesn't require an upcall therefore no
+        // operations are needed to be executed on the internal data structure
     }
 
     /**
@@ -532,8 +529,9 @@ public class CorfuTable<K ,V>
     @Override
     @Mutator(name = "remove", noUpcall = true)
     public void delete(@ConflictParameter K key) {
-        V previous =  mainMap.remove(key);
-        unmapSecondaryIndexes(key, previous);
+        // This is just a stub, the annotation processor will generate an update with
+        // remove(key), since this method doesn't require an upcall therefore no
+        // operations are needed to be executed on the internal data structure
     }
 
     /** {@inheritDoc} */
@@ -746,6 +744,7 @@ public class CorfuTable<K ,V>
      * @param key   The primary key (index) for the mapping.
      * @param value The value to unmap.
      */
+    @DontInstrument
     @SuppressWarnings("unchecked")
     protected void unmapSecondaryIndexes(K key, V value) {
         if (value == null) {
@@ -783,6 +782,7 @@ public class CorfuTable<K ,V>
      * @param key   the primary key associated with the indexing.
      * @param value the value to map.
      */
+    @DontInstrument
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
         if (value == null) {
@@ -815,6 +815,7 @@ public class CorfuTable<K ,V>
     /**
      *  Disable all secondary indices for this table. Only used during error-recovery.
      */
+    @DontInstrument
     protected void clearIndex() {
         indexSpec.clear();
         secondaryIndexes.clear();

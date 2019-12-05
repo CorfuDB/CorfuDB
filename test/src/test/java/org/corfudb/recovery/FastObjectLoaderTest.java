@@ -15,6 +15,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
@@ -52,7 +53,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
 
     private int key_count = 0;
-    private Map<String, Map> maps = new HashMap<>();
+    private Map<String, StreamingMap> maps = new HashMap<>();
 
     private <T extends Map<String, String>, ICorfuExecutionContext> void populateMapWithNextKey(T map) {
         map.put("key" + key_count, "value" + key_count);
@@ -67,7 +68,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         }
         for (int i = 0; i < numMaps; i++) {
             String mapName = "Map" + i;
-            Map currentMap = maps.computeIfAbsent(mapName, (k) ->
+            StreamingMap currentMap = maps.computeIfAbsent(mapName, (k) ->
                     Helpers.createMap(k, rt, type)
             );
 
@@ -369,7 +370,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canFindTailsWithFailedCheckpoint() throws Exception {
         CorfuRuntime rt1 = getDefaultRuntime();
         String streamName = "Map1";
-        Map<String, String> map = Helpers.createMap(streamName, rt1);
+        StreamingMap<String, String> map = Helpers.createMap(streamName, rt1);
         map.put("k1", "v1");
 
         UUID stream1 = CorfuRuntime.getStreamID(streamName);
@@ -386,7 +387,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         long streamTail = getDefaultRuntime().getSequencerView().query(stream1);
         try {
             cpw.startCheckpoint(snapshot, streamTail);
-            cpw.appendObjectState(map.entrySet());
+            cpw.appendObjectState(map.entryStream());
         } finally {
             getDefaultRuntime().getObjectsView().TXEnd();
         }

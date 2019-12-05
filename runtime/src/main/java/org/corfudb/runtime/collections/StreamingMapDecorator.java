@@ -14,7 +14,7 @@ import java.util.stream.Stream;
  * @param <K> key type
  * @param <V> value type
  */
-public class StreamingMapDecorator<K, V> implements StreamingMap<K, V> {
+public class StreamingMapDecorator<K, V> implements ContextAwareMap<K, V> {
 
     final Map<K, V> mapImpl;
 
