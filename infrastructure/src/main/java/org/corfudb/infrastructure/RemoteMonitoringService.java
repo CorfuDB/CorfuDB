@@ -752,7 +752,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 //Add all layouts to the set
                 .forEach(optionalLayout -> optionalLayout.ifPresent(layouts::add));
 
-        return Optional.ofNullable(layouts.first());
+        return Optional.ofNullable(layouts.isEmpty() ? null : layouts.first());
     }
 
     /**
