@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -407,7 +408,7 @@ public class StreamViewTest extends AbstractViewTest {
     @Test
     public void testPreviousWithStreamCheckpoint() throws Exception {
         String stream = "stream1";
-        Map<String, String> map = r.getObjectsView()
+        StreamingMap<String, String> map = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})

@@ -4,8 +4,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.function.Predicate;
 
-public interface ICorfuMap<K, V>
-    extends Map<K, V> {
+public interface ICorfuTable<K, V>
+        extends StreamingMap<K, V> {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
      *
@@ -35,5 +35,5 @@ public interface ICorfuMap<K, V>
      * @return a view of the entries contained in this map meeting the predicate condition.
      */
     Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Entry<K, V>>
-                                                                    entryPredicate);
+                                                             entryPredicate);
 }

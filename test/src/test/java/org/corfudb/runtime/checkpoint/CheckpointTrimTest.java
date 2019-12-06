@@ -9,6 +9,7 @@ import java.util.Map;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -65,7 +66,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
      */
     @Test
     public void ensureMCWUsesRealTail() throws Exception {
-        Map<String, String> map = getDefaultRuntime().getObjectsView().build()
+        StreamingMap<String, String> map = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                 })
                 .setStreamName("test")

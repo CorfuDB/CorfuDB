@@ -7,5 +7,10 @@
             <username>${DEPLOY_USER}</username>
             <password>${DEPLOY_PASSWORD}</password>
         </server>
+        <server>
+            <id>corfudb-snapshots</id>
+            <username>${DEPLOY_USER}</username>
+            <password>${DEPLOY_PASSWORD}</password>
+        </server>
     </servers>
 </settings>
