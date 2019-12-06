@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -25,7 +26,17 @@ public abstract class AbstractServer {
      *
      * @return A message handler.
      */
-    public abstract CorfuMsgHandler getHandler();
+    public abstract HandlerMethods getHandlerMethods();
+
+    /**
+     * Get the message handler for this instance.
+     *
+     * @return A message handler.
+     */
+    public void process(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        //todo need to see if the server is shutdown
+        getHandlerMethods().execute(msg, ctx, r);
+    }
 
     /**
      * Seal the server with the epoch.
@@ -56,8 +67,13 @@ public abstract class AbstractServer {
             return;
         }
 
-        if (!getHandler().handle(msg, ctx, r)) {
-            log.warn("Received unhandled message type {}", msg.getMsgType());
+        try {
+            process(msg, ctx, r);
+        } catch (Exception ex) {
+            // Log the exception during handling
+            log.error("process: Unhandled exception processing {} message",
+                    msg.getMsgType(), ex);
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
         }
     }
 
@@ -74,8 +90,6 @@ public abstract class AbstractServer {
     public ServerState getState() {
         return state.get();
     }
-
-    public abstract ExecutorService getExecutor(CorfuMsgType corfuMsgType);
 
     public abstract List<ExecutorService> getExecutors();
 

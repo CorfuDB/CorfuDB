@@ -40,7 +40,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
     /**
-     * Creates a new ServerHandshakeHandler which will handle the handshake--initiated by a client
+     * Creates a new ServerHandshakeHandler which will process the handshake--initiated by a client
      * on the server side.
      *
      * @param nodeId Current Server Node Identifier.

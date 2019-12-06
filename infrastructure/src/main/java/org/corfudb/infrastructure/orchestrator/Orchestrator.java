@@ -131,7 +131,7 @@ public class Orchestrator {
                 dispatch(workflow, msg, ctx, r);
                 break;
             default:
-                log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
+                log.error("process: Unknown request type {}", orchReq.getRequest().getType());
         }
     }
 

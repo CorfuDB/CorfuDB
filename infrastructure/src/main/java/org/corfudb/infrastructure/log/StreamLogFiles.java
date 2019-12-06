@@ -698,7 +698,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Read a log entry in a file.
      *
-     * @param segment The file handle to use.
+     * @param segment The file process to use.
      * @param address The address of the entry.
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
@@ -900,7 +900,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Write a list of LogData entries to the log file.
      *
-     * @param segment segment handle to the logfile
+     * @param segment segment process to the logfile
      * @param entries list of LogData entries to write.
      * @return A map of AddressMetaData for the written records
      * @throws IOException IO exception
@@ -970,7 +970,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      * Write a log entry record to a file.
      *
-     * @param segment The file handle to use.
+     * @param segment The file process to use.
      * @param address The address of the entry.
      * @param entry   The LogData to append.
      * @return Returns metadata for the written record

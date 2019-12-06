@@ -83,10 +83,10 @@ public class TestServerRouter implements IServerRouter {
     @Override
     public void addServer(AbstractServer server) {
         servers.add(server);
-        server.getHandler()
+        server.getHandlerMethods()
                 .getHandledTypes().forEach(x -> {
             handlerMap.put(x, server);
-            log.trace("Registered {} to handle messages of type {}", server, x);
+            log.trace("Registered {} to process messages of type {}", server, x);
         });
     }
 
@@ -114,14 +114,7 @@ public class TestServerRouter implements IServerRouter {
         AbstractServer as = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, null)) {
             if (as != null) {
-                try {
-                    as.getExecutor(msg.getMsgType()).submit(() -> as.handleMessage(msg, null, this)).get();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
-                } catch (ExecutionException ee) {
-                    throw (RuntimeException) ee.getCause();
-                }
+                as.handleMessage(msg, null, this);
             } else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
             }
@@ -134,14 +127,7 @@ public class TestServerRouter implements IServerRouter {
         AbstractServer as = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, ctx)) {
             if (as != null) {
-                try {
-                    as.getExecutor(msg.getMsgType()).submit(() -> as.handleMessage(msg, ctx, this)).get();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
-                } catch (ExecutionException ee) {
-                    throw (RuntimeException) ee.getCause();
-                }
+                as.handleMessage(msg, ctx, this);
             }
             else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());

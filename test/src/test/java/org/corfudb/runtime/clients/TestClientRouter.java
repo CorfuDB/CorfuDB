@@ -157,7 +157,7 @@ public class TestClientRouter implements IClientRouter {
         client.getHandledTypes().stream()
                 .forEach(x -> {
                     handlerMap.put(x, client);
-                    log.trace("Registered {} to handle messages of type {}", client, x);
+                    log.trace("Registered {} to process messages of type {}", client, x);
                 });
 
         // Register this type

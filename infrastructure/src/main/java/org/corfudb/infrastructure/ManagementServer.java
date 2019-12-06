@@ -37,6 +37,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
+import static org.corfudb.infrastructure.utils.AnnotationProcessing.generateHandler;
+
 
 /**
  * Handles reconfiguration and workflow requests to the Management Server.
@@ -58,7 +60,7 @@ public class ManagementServer extends AbstractServer {
             SingletonResource.withInitial(this::getNewCorfuRuntime);
 
     /**
-     * Policy to be used to handle failures/healing.
+     * Policy to be used to process failures/healing.
      */
     private final IReconfigurationHandlerPolicy failureHandlerPolicy;
 
@@ -99,14 +101,6 @@ public class ManagementServer extends AbstractServer {
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        if (corfuMsgType.equals(CorfuMsgType.NODE_STATE_REQUEST)) {
-            return heartbeatThread;
-        }
-        return executor;
     }
 
     @Override
@@ -174,11 +168,10 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handlerMethods = generateHandler(MethodHandles.lookup(), this);
 
     private boolean isBootstrapped(CorfuMsg msg) {
         if (serverContext.getManagementLayout() == null) {

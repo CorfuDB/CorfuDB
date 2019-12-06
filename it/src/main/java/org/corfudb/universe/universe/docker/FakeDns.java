@@ -77,7 +77,7 @@ public class FakeDns {
             Method method = InetAddress.class.getDeclaredMethod("createNameService");
             method.setAccessible(true);
             Object fallbackNameService = method.invoke(null);
-            // Create a proxy instance to set on the InetAddress field which will handle
+            // Create a proxy instance to set on the InetAddress field which will process
             // all NameService calls.
             Object proxy = Proxy.newProxyInstance(
                     nameServiceInterface.getClassLoader(),
@@ -94,7 +94,7 @@ public class FakeDns {
             Method method = InetAddress.class.getDeclaredMethod("createNSProvider", String.class);
             method.setAccessible(true);
             Object fallbackNameService = method.invoke(null, "default");
-            // Create a proxy instance to set on the InetAddress field which will handle
+            // Create a proxy instance to set on the InetAddress field which will process
             // all NameService calls.
             Object proxy = Proxy.newProxyInstance(
                     nameServiceInterface.getClassLoader(),
@@ -117,7 +117,7 @@ public class FakeDns {
         private final Object fallbackNameService;
 
         // Creates a NameServiceListener with a NameService implementation to
-        // fallback to. The parameter is untyped so we can handle the NameService
+        // fallback to. The parameter is untyped so we can process the NameService
         // type in all versions of Java with reflection.
         NameServiceListener(Object fallbackNameService) {
             this.fallbackNameService = fallbackNameService;

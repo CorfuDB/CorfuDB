@@ -95,7 +95,6 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void testHeartbeatSeparateThread() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        managementServer.getExecutor(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED).shutdownNow();
         assertThatThrownBy(() -> sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout)))
                 .isInstanceOf(RejectedExecutionException.class);
         sendMessage(CorfuMsgType.NODE_STATE_REQUEST.msg());

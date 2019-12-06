@@ -42,6 +42,8 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.corfudb.infrastructure.utils.AnnotationProcessing.generateHandler;
+
 /**
  * This server implements the sequencer functionality of Corfu.
  *
@@ -115,10 +117,10 @@ public class SequencerServer extends AbstractServer {
     private final Map<Byte, String> timerNameCache = new HashMap<>();
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler = CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handlerMethods = generateHandler(MethodHandles.lookup(), this);
 
     @Getter
     private final SequencerServerCache cache;
@@ -174,11 +176,6 @@ public class SequencerServer extends AbstractServer {
             return false;
         }
         return true;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
     }
 
     @Override

@@ -54,6 +54,7 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
+import static org.corfudb.infrastructure.utils.AnnotationProcessing.generateHandler;
 
 
 /**
@@ -85,10 +86,10 @@ public class LogUnitServer extends AbstractServer {
     private final ServerContext serverContext;
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler = CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handlerMethods = generateHandler(MethodHandles.lookup(), this);
 
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
@@ -101,11 +102,6 @@ public class LogUnitServer extends AbstractServer {
     private final BatchProcessor batchWriter;
 
     private ExecutorService executor;
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
 
     @Override
     public List<ExecutorService> getExecutors() {

@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.corfudb.infrastructure.utils.AnnotationProcessing.generateHandler;
+
 /**
  * Created by mwei on 12/8/15.
  */
@@ -35,11 +37,6 @@ public class BaseServer extends AbstractServer {
     }
 
     @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
-
-    @Override
     public List<ExecutorService> getExecutors() {
         return Collections.singletonList(executor);
     }
@@ -50,10 +47,9 @@ public class BaseServer extends AbstractServer {
                 new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
     }
 
-    /** Handler for the base server. */
+    /** HandlerMethod for the base server. */
     @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handlerMethods = generateHandler(MethodHandles.lookup(), this);
 
     /**
      * Respond to a ping message.

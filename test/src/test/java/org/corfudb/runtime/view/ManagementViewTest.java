@@ -77,7 +77,7 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * Scenario with 2 nodes: SERVERS.PORT_0 and SERVERS.PORT_1.
      * We fail SERVERS.PORT_0 and then listen to intercept the message
-     * sent by SERVERS.PORT_1's client to the server to handle the failure.
+     * sent by SERVERS.PORT_1's client to the server to process the failure.
      *
      * @throws Exception
      */
@@ -137,7 +137,7 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
-     * handle this failure, propose a new layout. The test asserts on a stable
+     * process this failure, propose a new layout. The test asserts on a stable
      * layout. The failure is handled by removing the failed node.
      */
     @Test
@@ -493,7 +493,7 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
-     * handle this failure, propose a new layout and we assert on the epoch change.
+     * process this failure, propose a new layout and we assert on the epoch change.
      * The failure is handled by ConserveFailureHandlerPolicy.
      * No nodes are removed from the layout, but are marked unresponsive.
      * A sequencer failover takes place where the next working sequencer is reset
@@ -791,7 +791,7 @@ public class ManagementViewTest extends AbstractViewTest {
         getTokenWriteAndAssertBackPointer(streamA, Address.NON_EXIST);
 
         resetDetected.acquire();
-        // Allow only SERVERS.PORT_0 to handle the failure.
+        // Allow only SERVERS.PORT_0 to process the failure.
         // Preventing PORT_2 from bootstrapping the sequencer.
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
                 new TestRule().matches(msg -> msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)).drop());

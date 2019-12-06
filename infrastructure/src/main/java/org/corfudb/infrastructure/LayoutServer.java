@@ -27,6 +27,8 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.corfudb.infrastructure.utils.AnnotationProcessing.generateHandler;
+
 /**
  * The layout server serves layouts, which are used by clients to find the
  * Corfu infrastructure.
@@ -66,11 +68,10 @@ public class LayoutServer extends AbstractServer {
     private final ServerContext serverContext;
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handlerMethods = generateHandler(MethodHandles.lookup(), this);
 
     @NonNull
     private final ExecutorService executor;
@@ -81,11 +82,6 @@ public class LayoutServer extends AbstractServer {
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
     }
 
     @Override
@@ -356,7 +352,7 @@ public class LayoutServer extends AbstractServer {
      */
     // TODO If a server does not get SEAL layout commit message cannot reach it
     // TODO as this message is not set to ignore EPOCH.
-    // TODO How do we handle holes in history if we let in layout commit message. Maybe we have a
+    // TODO How do we process holes in history if we let in layout commit message. Maybe we have a
     // hole filling process
     @ServerHandler(type = CorfuMsgType.LAYOUT_COMMITTED)
     public synchronized void handleMessageLayoutCommit(

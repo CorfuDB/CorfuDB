@@ -216,11 +216,11 @@ public class RemoteMonitoringService implements MonitoringService {
     }
 
     /**
-     * Checks if this management client is allowed to handle reconfigurations.
+     * Checks if this management client is allowed to process reconfigurations.
      * - This client is not authorized to trigger reconfigurations if this node is not a part
      * of the current layout.
      *
-     * @return True if node is allowed to handle reconfigurations. False otherwise.
+     * @return True if node is allowed to process reconfigurations. False otherwise.
      */
     private boolean canHandleReconfigurations() {
 
@@ -313,8 +313,8 @@ public class RemoteMonitoringService implements MonitoringService {
      *  - correct wrong epochs by resealing the servers and updating trailing layout servers.
      *    Fetch quorum layout and update the epoch according to the quorum.
      *  - check if current layout slot is unfilled then update layout to latest one.
-     *  - handle healed nodes.
-     *  - Looking for link failures in the cluster, handle failure if found.
+     *  - process healed nodes.
+     *  - Looking for link failures in the cluster, process failure if found.
      *  - Restore redundancy and merge segments if present in the layout.
      *  - bootstrap sequencer if needed
      * </pre>
@@ -482,7 +482,7 @@ public class RemoteMonitoringService implements MonitoringService {
             corfuRuntime.getLayoutView()
                     .getRuntimeLayout(layout)
                     .getManagementClient(serverContext.getLocalEndpoint())
-                    //handle healing asynchronously
+                    //process healing asynchronously
                     .handleHealing(pollReport.getPollEpoch(), healedNodes)
                     //completable future: wait this future to complete and get result
                     .get();
@@ -507,7 +507,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * ClusterAdvisor provides a failed node in the cluster.
      * If a failed node have found:
      * - save detected failure in the history
-     * - handle failure
+     * - process failure
      *
      * @param pollReport Poll report obtained from failure detection policy.
      * @return boolean result if failure was handled. False if there is no failure
