@@ -81,7 +81,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                                 log.error("Exception caught at address {}, {}, {}",
                                         getGlobalAddress(), getStreams(), getType());
                                 log.error("Raw data buffer {}",
-                                        copyBuf.toString(Charset.defaultCharset()));
+                                        copyBuf.resetReaderIndex().toString(Charset.defaultCharset()));
                                 copyBuf.release();
                                 data = null;
                                 throw throwable;
