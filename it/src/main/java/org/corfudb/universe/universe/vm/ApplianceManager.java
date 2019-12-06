@@ -7,15 +7,8 @@ import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.RES
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
-import com.vmware.vim25.CustomizationAdapterMapping;
-import com.vmware.vim25.CustomizationDhcpIpGenerator;
-import com.vmware.vim25.CustomizationFixedName;
-import com.vmware.vim25.CustomizationGlobalIPSettings;
-import com.vmware.vim25.CustomizationIPSettings;
-import com.vmware.vim25.CustomizationLinuxOptions;
-import com.vmware.vim25.CustomizationLinuxPrep;
-import com.vmware.vim25.CustomizationSpec;
 import com.vmware.vim25.GuestInfo;
+import com.vmware.vim25.LocalizedMethodFault;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
@@ -39,6 +32,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -164,7 +158,7 @@ public class ApplianceManager {
                 ImmutableMap<String, String> vmProps = Maps.fromProperties(vmPropsResult);
 
                 // Create customization for cloning process
-                VirtualMachineCloneSpec cloneSpec = createLinuxCustomization(vmName, vmProps, index);
+                VirtualMachineCloneSpec cloneSpec = createLinuxCustomization(vmProps, index);
 
                 String folderProp = String.format("vm%d.%s", index, ResourceType.FOLDER.resource);
 
@@ -181,14 +175,22 @@ public class ApplianceManager {
                     folder = (Folder) vmTemplate.getParent();
                 }
 
+                Optional<LocalizedMethodFault> cloneErr = Optional.empty();
                 try {
                     // Do the cloning - providing the clone specification
                     Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName, cloneSpec);
                     cloneTask.waitForTask();
+
+                    cloneErr = Optional.ofNullable(cloneTask.getTaskInfo().getError());
                 } catch (Exception e) {
                     String err = String.format("Deploy VM %s failed due to ", vmName);
                     throw new UniverseException(err, e);
                 }
+
+                cloneErr.ifPresent(err -> {
+                    throw new UniverseException(err.getLocalizedMessage());
+                });
+
                 // After the clone task completes, get the VM from the inventory
                 vm = (VirtualMachine) inventoryNavigator
                         .searchManagedEntity(ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName);
@@ -217,7 +219,7 @@ public class ApplianceManager {
      * @return VirtualMachineCloneSpec instance
      */
     private VirtualMachineCloneSpec createLinuxCustomization(
-            String cloneName, ImmutableMap<String, String> props, long index) {
+            ImmutableMap<String, String> props, long index) {
 
         VirtualMachineCloneSpec vmCloneSpec = new VirtualMachineCloneSpec();
 
@@ -250,41 +252,6 @@ public class ApplianceManager {
         //Clone is powered on, not a template.
         vmCloneSpec.setPowerOn(true);
         vmCloneSpec.setTemplate(false);
-
-        //Create customization specs/linux specific options
-        CustomizationSpec customSpec = new CustomizationSpec();
-        CustomizationLinuxOptions linuxOptions = new CustomizationLinuxOptions();
-        customSpec.setOptions(linuxOptions);
-
-        CustomizationLinuxPrep linuxPrep = new CustomizationLinuxPrep();
-        linuxPrep.setDomain(universeParams.getDomainName());
-        linuxPrep.setHwClockUTC(true);
-        linuxPrep.setTimeZone(universeParams.getTimeZone());
-
-        CustomizationFixedName fixedName = new CustomizationFixedName();
-        fixedName.setName(cloneName);
-        linuxPrep.setHostName(fixedName);
-        customSpec.setIdentity(linuxPrep);
-
-        //Network related settings
-        CustomizationGlobalIPSettings globalIPSettings = new CustomizationGlobalIPSettings();
-        globalIPSettings.setDnsServerList(universeParams.getDnsServers());
-        globalIPSettings.setDnsSuffixList(universeParams.getDomainSuffixes());
-        customSpec.setGlobalIPSettings(globalIPSettings);
-
-        CustomizationIPSettings customizationIPSettings = new CustomizationIPSettings();
-        customizationIPSettings.setIp(new CustomizationDhcpIpGenerator());
-        customizationIPSettings.setGateway(universeParams.getGateways());
-        customizationIPSettings.setSubnetMask(universeParams.getSubnet());
-
-        CustomizationAdapterMapping adapterMapping = new CustomizationAdapterMapping();
-        adapterMapping.setAdapter(customizationIPSettings);
-
-        CustomizationAdapterMapping[] adapterMappings = new CustomizationAdapterMapping[]{adapterMapping};
-        customSpec.setNicSettingMap(adapterMappings);
-
-        //Set all customization to clone specs
-        vmCloneSpec.setCustomization(customSpec);
         return vmCloneSpec;
     }
 
