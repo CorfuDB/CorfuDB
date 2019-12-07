@@ -31,6 +31,8 @@ public class ProcessCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
     protected ProcessCorfuCluster(
             CorfuClusterParams corfuClusterParams, UniverseParams universeParams) {
         super(corfuClusterParams, universeParams);
+
+        init();
     }
 
 

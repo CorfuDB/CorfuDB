@@ -1,6 +1,8 @@
 package org.corfudb.universe.node.server.process;
 
 import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.node.NodeException;
@@ -24,7 +26,9 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     private static final String LOCALHOST = "127.0.0.1";
 
     @NonNull
-    private final String ipAddress;
+    @Default
+    @Getter
+    private final String ipAddress = LOCALHOST;
 
     @NonNull
     private final CorfuProcessManager processManager;
@@ -35,7 +39,6 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     public ProcessCorfuServer(
             @NonNull CorfuServerParams params, @NonNull UniverseParams universeParams) {
         super(params, universeParams);
-        this.ipAddress = getIpAddress();
 
         Path corfuDir = Paths.get(System.getProperty("user.home"), "corfu");
         this.processManager = new CorfuProcessManager(corfuDir, params, getNetworkInterface());
@@ -117,6 +120,11 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         throw new UnsupportedOperationException("Not supported");
     }
 
+    @Override
+    public void execute(String command) {
+        executeCommand(Optional.empty(), command);
+    }
+
     /**
      * Reconnect a server to a list of servers.
      */
@@ -144,14 +152,6 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         } catch (IOException e) {
             throw new NodeException("Execution error. Cmd: " + cmdLine, e);
         }
-    }
-
-    /**
-     * @return the IpAddress of this local machine.
-     */
-    @Override
-    public String getIpAddress() {
-        return LOCALHOST;
     }
 
     /**

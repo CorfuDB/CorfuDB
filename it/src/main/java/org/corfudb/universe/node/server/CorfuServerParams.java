@@ -106,6 +106,7 @@ public class CorfuServerParams implements NodeParams {
      * https://docs.docker.com/config/containers/resource_constraints/
      */
     @Builder
+    @ToString
     public static class ContainerResources {
 
         /**
