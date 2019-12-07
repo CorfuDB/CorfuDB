@@ -241,6 +241,11 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         }
     }
 
+    @Override
+    public void execute(String command) {
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
     /**
      * Reconnect a server to a list of servers.
      *

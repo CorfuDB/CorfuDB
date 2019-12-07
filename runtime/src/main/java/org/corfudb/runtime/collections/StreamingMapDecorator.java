@@ -1,5 +1,7 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.util.ImmutableListSetWrapper;
+
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,7 +33,7 @@ public class StreamingMapDecorator<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public Stream<Entry<K, V>> entryStream() {
-        return mapImpl.entrySet().stream().parallel();
+        return ImmutableListSetWrapper.fromMap(mapImpl).stream().parallel();
     }
 
     /**

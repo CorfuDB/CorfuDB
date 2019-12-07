@@ -150,6 +150,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanOutput()));
     }
 
+    @Override
+    public void execute(String command) {
+        executeCommand(command);
+    }
+
     /**
      * Reconnect a server to a list of servers.
      */
@@ -179,10 +184,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * Executes a certain command on the VM.
      */
     private void executeCommand(String cmdLine) {
-        String ipAddress = getIpAddress();
-
         commandHelper.executeCommand(
-                ipAddress,
+                getIpAddress(),
                 universeParams.getCredentials().getVmCredentials(),
                 cmdLine
         );
@@ -192,10 +195,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * Executes a certain Sudo command on the VM.
      */
     private void executeSudoCommand(String cmdLine) {
-        String ipAddress = getIpAddress();
-
         commandHelper.executeSudoCommand(
-                ipAddress,
+                getIpAddress(),
                 universeParams.getCredentials().getVmCredentials(),
                 cmdLine
         );

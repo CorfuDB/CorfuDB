@@ -3,6 +3,7 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import java.nio.charset.Charset;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -81,6 +82,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                             } catch (Throwable throwable) {
                                 log.error("Exception caught at address {}, {}, {}",
                                         getGlobalAddress(), getStreams(), getType());
+                                log.error("Raw data buffer {}",
+                                        copyBuf.resetReaderIndex().toString(Charset.defaultCharset()));
                                 copyBuf.release();
                                 data = null;
                                 throw throwable;

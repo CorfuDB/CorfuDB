@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
@@ -17,7 +18,6 @@ import org.corfudb.universe.node.server.vm.VmCorfuServer;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
-import org.corfudb.common.util.ClassUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -37,6 +37,8 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmUniverseParams> {
                              ImmutableMap<String, VirtualMachine> vms) {
         super(corfuClusterParams, universeParams);
         this.vms = vms;
+
+        init();
     }
 
 

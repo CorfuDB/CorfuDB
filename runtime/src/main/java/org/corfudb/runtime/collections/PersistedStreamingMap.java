@@ -9,6 +9,7 @@ import org.apache.commons.io.FileUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
+import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
@@ -317,7 +318,12 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public Stream<Entry<K, V>> entryStream() {
-        final RocksIterator rocksIterator = rocksDb.newIterator();
+        final ReadOptions readOptions = new ReadOptions();
+        // If ReadOptions.snapshot is given, the iterator will return data as of the snapshot.
+        // If it is nullptr, the iterator will read from an implicit snapshot as of the time the
+        // iterator is created. The implicit snapshot is preserved by pinning resource.
+        readOptions.setSnapshot(null);
+        final RocksIterator rocksIterator = rocksDb.newIterator(readOptions);
         rocksIterator.seekToFirst();
         return Streams.stream(new RocksDbIterator(rocksIterator));
     }

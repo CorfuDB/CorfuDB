@@ -29,6 +29,13 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams>
         super(params, universeParams);
     }
 
+    protected void init() {
+        params.getNodesParams().forEach(serverParams -> {
+            CorfuServer server = (CorfuServer) buildServer(serverParams);
+            nodes.put(server.getEndpoint(), server);
+        });
+    }
+
     /**
      * Deploys a {@link Group}, including the following steps:
      * a) Deploy the Corfu nodes
@@ -40,21 +47,15 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams>
     public AbstractCorfuCluster deploy() {
         log.info("Deploy corfu cluster. Params: {}", params);
 
-        List<CompletableFuture<Node>> asyncDeployment = params
-                .<Node.NodeParams>getNodesParams()
-                .stream()
-                .map(serverParams -> {
-                    CorfuServer server = (CorfuServer) buildServer(serverParams);
-                    nodes.put(server.getEndpoint(), server);
-                    return server;
-                })
+        List<CompletableFuture<Node>> asyncDeployment = nodes.values().stream()
                 .map(this::deployAsync)
                 .collect(Collectors.toList());
 
         asyncDeployment.stream()
                 .map(CompletableFuture::join)
-                .forEach(server -> log.debug("Corfu server was deployed: {}",
-                        server.getParams().getName()));
+                .forEach(server ->
+                        log.debug("Corfu server was deployed: {}", server.getParams().getName())
+                );
 
         try {
             bootstrap();
