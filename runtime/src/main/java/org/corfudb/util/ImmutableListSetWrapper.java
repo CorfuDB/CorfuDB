@@ -1,9 +1,16 @@
 package org.corfudb.util;
 
+import com.google.common.collect.ImmutableList;
+import lombok.NonNull;
+
 import javax.annotation.Nonnull;
+import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.Consumer;
@@ -14,13 +21,19 @@ import java.util.stream.Stream;
  * An immutable set implementation that is backed by a list. This type is useful when
  * we have lists that we know conform to the set constraints, but creating the set is
  * too expensive.
- *
  */
+public class ImmutableListSetWrapper<E> extends AbstractSet<E> implements Set<E> {
+    private final List<E> internalList;
 
-public class ImmuableListSetWrapper<E> implements Set<E> {
-    final List<E> internalList;
+    public static <K, V> ImmutableListSetWrapper<Entry<K, V>> fromMap(@NonNull Map<K, V> original) {
+        return new ImmutableListSetWrapper<>(original
+                .entrySet()
+                .stream()
+                .map(entry -> new SimpleImmutableEntry<>(entry.getKey(), entry.getValue()))
+                .collect(ImmutableList.toImmutableList()));
+    }
 
-    public ImmuableListSetWrapper(@Nonnull List<E> internalList) {
+    public ImmutableListSetWrapper(@Nonnull List<E> internalList) {
         this.internalList = internalList;
     }
 
