@@ -558,6 +558,8 @@ public class AddressSpaceView extends AbstractView {
                                 + "Invalidate layout for this client and retry, attempt: {}/{}",
                         address, runtimeEpoch, serverEpoch, x + 1, numRetries);
                 runtime.invalidateLayout();
+            }  catch (CompletionException e) {
+                log.warn("prefixTrim[{}]: sequencer trim might have failed ", address, e);
             }
         }
     }

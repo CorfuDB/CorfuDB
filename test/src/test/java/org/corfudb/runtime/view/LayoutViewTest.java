@@ -276,6 +276,7 @@ public class LayoutViewTest extends AbstractViewTest {
         corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
 
+        System.out.println("check12");
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(newLayout);
         assertThat(getLayoutServer(SERVERS.PORT_1).getCurrentLayout()).isEqualTo(newLayout);
     }

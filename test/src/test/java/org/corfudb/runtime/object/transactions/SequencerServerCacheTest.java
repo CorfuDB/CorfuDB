@@ -51,6 +51,12 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         SequencerServerCache cache = sequencerServer.getCache();
         assertThat(cache.size()).isEqualTo(numTxn);
         getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);
+        // Since the addressSpace only sends a hint to the sequencer, its possible
+        // that the method returns before the sequencer receives the trim request,
+        // therefore it must be directly invoked to wait for the future.
+        getDefaultRuntime().getLayoutView().getRuntimeLayout()
+                .getPrimarySequencerClient()
+                .trimCache(trimAddress.getSequence()).join();
         assertThat(cache.size()).isEqualTo((int) trimAddress.getSequence());
     }
 

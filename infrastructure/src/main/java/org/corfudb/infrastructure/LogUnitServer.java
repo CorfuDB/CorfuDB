@@ -428,20 +428,6 @@ public class LogUnitServer extends AbstractServer {
         return batchWriter;
     }
 
-    // The following methods should only be used for unit tests, ideally the executor should be
-    // final, but this "hack" is needed to now when a task as completed
-    @VisibleForTesting
-    void startHandler() {
-        executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
-                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
-    }
-
-    @VisibleForTesting
-    void stopHandler() throws Exception {
-        executor.shutdown();
-        executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
     @VisibleForTesting
     StreamAddressSpace getStreamAddressSpace(UUID streamID) {
         return streamLog.getStreamsAddressSpace().getAddressMap().get(streamID);

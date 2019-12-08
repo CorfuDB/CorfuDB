@@ -14,12 +14,12 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
-import static org.corfudb.infrastructure.LogUnitServerTest.waitForLogUnit;
 
 /**
  * Created by WenbinZhu on 5/30/19.
@@ -63,21 +63,21 @@ public class LogUnitCacheTest extends AbstractServerTest {
         }
 
         // Range write is not cached on server.
-        sendMessage(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(payloads)));
-        waitForLogUnit(logUnitServer);
+        sendRequest(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(payloads))).join();
 
         // Non-cacheable reads should not affect the data cache on server.
-        sendMessage(CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, false)));
-        waitForLogUnit(logUnitServer);
+        CompletableFuture<ReadResponse> future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST
+                .payloadMsg(new MultipleReadRequest(addresses, false)));
 
-        checkReadResponse(getLastPayloadMessageAs(ReadResponse.class), size);
+
+        checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(0);
 
         // Cacheable reads should update the data cache on server.
-        sendMessage(CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, true)));
-        waitForLogUnit(logUnitServer);
+        future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST
+                .payloadMsg(new MultipleReadRequest(addresses, true)));
 
-        checkReadResponse(getLastPayloadMessageAs(ReadResponse.class), size);
+        checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(size);
     }
 
