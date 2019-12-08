@@ -42,8 +42,9 @@ public class UniverseManager {
 
     /**
      * Creates a universe workflow.
+     *
      * @param action testing logic
-     * @param <T> a fixture type
+     * @param <T>    a fixture type
      * @return universe workflow
      */
     public <T extends Fixture<UniverseParams>> UniverseWorkflow workflow(
@@ -86,10 +87,11 @@ public class UniverseManager {
     /**
      * Manages a testing workflow lifecycle.
      * Provides api to:
-     *  - customize the universe parameters
-     *  - initialize and deploy the clusters in the universe
-     *  - get the universe fixture to setup the initial parameters
-     *  - shutdown the universe
+     * - customize the universe parameters
+     * - initialize and deploy the clusters in the universe
+     * - get the universe fixture to setup the initial parameters
+     * - shutdown the universe
+     *
      * @param <T>
      */
     @Slf4j
