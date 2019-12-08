@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;

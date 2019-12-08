@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.log.compression;
 
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;

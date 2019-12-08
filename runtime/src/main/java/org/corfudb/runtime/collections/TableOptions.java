@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import lombok.Builder;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.Optional;
 

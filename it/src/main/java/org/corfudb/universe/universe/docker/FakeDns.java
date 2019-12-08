@@ -52,10 +52,6 @@ public class FakeDns {
         forwardResolutions.put(hostname, ip);
     }
 
-    public synchronized void addReverseResolution(InetAddress ip, String hostname) {
-        reverseResolutions.put(ip, hostname);
-    }
-
     /**
      * Install the fake DNS resolver into the Java runtime.
      */

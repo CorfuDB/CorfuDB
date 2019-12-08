@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.MetricRegistry;
-
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.runtime.CorfuRuntime;

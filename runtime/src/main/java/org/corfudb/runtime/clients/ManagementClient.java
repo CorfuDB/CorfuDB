@@ -8,7 +8,6 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
-import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -75,10 +74,6 @@ public class ManagementClient extends AbstractClient {
 
     public CompletableFuture<NodeState> sendNodeStateRequest() {
         return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());
-    }
-
-    public CompletableFuture<FailureDetectorMetrics> sendFailureDetectorMetricsRequest() {
-        return sendMessageWithFuture(CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST.msg());
     }
 
     /**

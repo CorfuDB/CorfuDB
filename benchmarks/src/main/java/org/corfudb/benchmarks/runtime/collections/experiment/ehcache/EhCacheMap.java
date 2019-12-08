@@ -105,9 +105,4 @@ public class EhCacheMap<K, V> implements Map<K, V> {
         throw new UnsupportedOperationException();
     }
 
-    public Stream<Entry<K, V>> entryStream() {
-        return Streams.stream(cache.iterator())
-                .map(entry -> new AbstractMap.SimpleEntry(entry.getKey(), entry.getValue()));
-    }
-
 }
