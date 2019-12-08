@@ -8,11 +8,11 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.corfudb.common.util.ClassUtils;
 
 import java.time.Duration;
 import java.util.List;
@@ -49,7 +49,7 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
     @Getter
     @Default
     @NonNull
-    private NodeType nodeType = NodeType.CORFU_SERVER;
+    private final NodeType nodeType = NodeType.CORFU_SERVER;
 
     @Default
     @Getter
@@ -89,7 +89,7 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
         return name + "-corfu-" + nodeName;
     }
 
-    public int size(){
+    public int size() {
         return getNodesParams().size();
     }
 

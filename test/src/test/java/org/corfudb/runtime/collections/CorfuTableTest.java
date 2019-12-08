@@ -9,7 +9,9 @@ import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
@@ -233,4 +235,17 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly("a");
     }
 
+    /**
+     * Ensure that {@link StreamingMap#entryStream()} always operates on a snapshot.
+     * If it does not, this test will throw {@link ConcurrentModificationException}.
+     */
+    @Test
+    public void snapshotInvariant() {
+        final int NUM_WRITES = 10;
+        final ContextAwareMap<Integer, Integer> map = new StreamingMapDecorator<>();
+        IntStream.range(0, NUM_WRITES).forEach(num -> map.put(num, num));
+
+        final Stream<Map.Entry<Integer, Integer>> result = map.entryStream();
+        result.forEach(e -> map.put(new Random().nextInt(), 0));
+    }
 }
