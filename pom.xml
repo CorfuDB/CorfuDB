@@ -5,7 +5,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.3.0-SNAPSHOT</version>
+    <version>${revision}</version>
 
     <modules>
         <module>infrastructure</module>
@@ -37,7 +37,7 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-
+        <revision>0.3.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>
