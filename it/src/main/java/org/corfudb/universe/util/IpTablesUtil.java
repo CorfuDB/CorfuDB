@@ -16,7 +16,7 @@ public class IpTablesUtil {
      * @return command line
      */
     public static String[] dropInput(String ipAddress) {
-        return new String[] {"iptables", "-A", "INPUT", "-s", ipAddress, "-j", "DROP"};
+        return new String[]{"iptables", "-A", "INPUT", "-s", ipAddress, "-j", "DROP"};
     }
 
     /**
@@ -26,7 +26,7 @@ public class IpTablesUtil {
      * @return command line
      */
     public static String[] dropOutput(String ipAddress) {
-        return new String[] {"iptables", "-A", "OUTPUT", "-d", ipAddress, "-j", "DROP"};
+        return new String[]{"iptables", "-A", "OUTPUT", "-d", ipAddress, "-j", "DROP"};
     }
 
     /**
@@ -36,7 +36,7 @@ public class IpTablesUtil {
      * @return command line
      */
     public static String[] revertDropInput(String ipAddress) {
-        return new String[] {"iptables", "-D", "INPUT", "-s", ipAddress, "-j", "DROP"};
+        return new String[]{"iptables", "-D", "INPUT", "-s", ipAddress, "-j", "DROP"};
     }
 
     /**
@@ -46,7 +46,7 @@ public class IpTablesUtil {
      * @return command line
      */
     public static String[] revertDropOutput(String ipAddress) {
-        return new String[] {"iptables", "-D", "OUTPUT", "-d", ipAddress, "-j", "DROP"};
+        return new String[]{"iptables", "-D", "OUTPUT", "-d", ipAddress, "-j", "DROP"};
     }
 
     /**

@@ -1,9 +1,13 @@
 package org.corfudb.universe.node.server;
 
+import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.universe.UniverseParams;
+
+import java.util.Optional;
 
 @Slf4j
 @Getter
@@ -54,6 +58,15 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
         log.trace("Corfu server. Command line parameters: {}", cmdLineParams);
 
         return cmdLineParams;
+    }
+
+    @Override
+    public LocalCorfuClient getLocalCorfuClient() {
+        return LocalCorfuClient.builder()
+                .serverEndpoints(ImmutableSortedSet.of(getEndpoint()))
+                .prometheusMetricsPort(Optional.empty())
+                .build()
+                .deploy();
     }
 
     @Override

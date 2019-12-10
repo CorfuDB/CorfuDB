@@ -39,7 +39,7 @@ import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.util.ImmuableListSetWrapper;
+import org.corfudb.util.ImmutableListSetWrapper;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 
@@ -587,9 +587,7 @@ public class CorfuTable<K ,V> implements
     @Override
     @Accessor
     public @Nonnull Set<Entry<K, V>> entrySet() {
-        return new ImmuableListSetWrapper(mainMap.entryStream().map(entry ->
-                new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue()))
-                .collect(ImmutableList.toImmutableList()));
+        return ImmutableListSetWrapper.fromMap(mainMap);
     }
 
     /**
