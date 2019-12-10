@@ -11,7 +11,6 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Utility to Reboot a server which includes reset or restart

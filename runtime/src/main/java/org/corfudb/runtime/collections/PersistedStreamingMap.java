@@ -5,7 +5,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
@@ -16,18 +15,14 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.AbstractMap;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**

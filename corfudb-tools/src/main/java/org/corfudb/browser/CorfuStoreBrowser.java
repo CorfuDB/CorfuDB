@@ -2,7 +2,6 @@ package org.corfudb.browser;
 
 import com.google.common.reflect.TypeToken;
 
-import java.util.Collection;
 import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;

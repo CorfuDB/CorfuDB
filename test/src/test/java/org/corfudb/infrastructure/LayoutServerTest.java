@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 
-import java.io.File;
 import java.util.UUID;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -600,9 +599,5 @@ public class LayoutServerTest extends AbstractServerTest {
 
     private void sendPropose(UUID clientId, long epoch, long rank, Layout layout) {
         sendMessage(clientId, CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch, rank, layout)));
-    }
-
-    private void sendCommitted(UUID clientId, long epoch, Layout layout) {
-        sendMessage(clientId, CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch, layout)));
     }
 }

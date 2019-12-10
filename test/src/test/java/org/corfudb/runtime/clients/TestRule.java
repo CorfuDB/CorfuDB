@@ -35,47 +35,10 @@ public class TestRule {
     }
 
     /**
-     * Transform the matched message
-     *
-     * @param transformation A function which transforms the supplied message.
-     */
-    public TestRule transform(Consumer<CorfuMsg> transformation) {
-        transformer = transformation;
-        return this;
-    }
-
-    /**
      * Drop this message.
      */
     public TestRule drop() {
         this.drop = true;
-        return this;
-    }
-
-    /**
-     * Drop this message on even matches (first match is even)
-     */
-    public TestRule dropEven() {
-        this.dropEven = true;
-        return this;
-    }
-
-    /**
-     * Drop this message on odd matches
-     */
-    public TestRule dropOdd() {
-        this.dropOdd = true;
-        return this;
-    }
-
-    /**
-     * Supply a message to be injected before this message is delivered.
-     *
-     * @param injectBefore A function which takes the CorfuMsg the rule is being
-     *                     applied to and returns a CorfuMsg to be injected.
-     */
-    public TestRule injectBefore(Function<CorfuMsg, CorfuMsg> injectBefore) {
-        this.injectBefore = injectBefore;
         return this;
     }
 

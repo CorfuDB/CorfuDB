@@ -89,7 +89,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
                     if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
-                        addToResolvedQueue(getCurrentContext(), currentRead, ld);
+                        addToResolvedQueue(getCurrentContext(), currentRead);
                         readNext = false;
                     } else {
                         log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",

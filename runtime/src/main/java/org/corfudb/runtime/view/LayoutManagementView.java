@@ -488,18 +488,4 @@ public class LayoutManagementView extends AbstractView {
             }, service);
         });
     }
-
-    /**
-     * Verifies whether there are any invalid stream tails.
-     *
-     * @param streamTails Stream tails map obtained from the fastSMRLoader.
-     */
-    private void verifyStreamTailsMap(Map<UUID, Long> streamTails) {
-        for (Long value : streamTails.values()) {
-            if (value < 0) {
-                log.error("Stream Tails map verification failed. Map = {}", streamTails);
-                throw new RecoveryException("Invalid stream tails found in map.");
-            }
-        }
-    }
 }

@@ -2,8 +2,6 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 
-import java.util.UUID;
-
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 

@@ -196,40 +196,6 @@ public class Layout {
         return sequencers.get(0);
     }
 
-    /**
-     * Given the log's global address, return equivalent local address for a striped log segment.
-     *
-     * @param globalAddress The global address
-     */
-    public long getLocalAddress(long globalAddress) {
-        for (LayoutSegment ls : segments) {
-            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
-                // TODO: this does not account for shifting segments.
-                return globalAddress / ls.getNumberOfStripes();
-            }
-        }
-        throw new RuntimeException("Unmapped address!");
-    }
-
-    /**
-     * Return global address for a given stripe.
-     *
-     * @param stripe The layout stripe.
-     * @param localAddress The local address.
-     */
-    public long getGlobalAddress(LayoutStripe stripe, long localAddress) {
-        for (LayoutSegment ls : segments) {
-            if (ls.getStripes().contains(stripe)) {
-                for (int i = 0; i < ls.getNumberOfStripes(); i++) {
-                    if (ls.getStripes().get(i).equals(stripe)) {
-                        return (localAddress * ls.getNumberOfStripes()) + i;
-                    }
-                }
-            }
-        }
-        throw new RuntimeException("Unmapped address!");
-    }
-
     /** Return a list of segments which contain global
      * addresses less than or equal to the given address
      * (known as the prefix).

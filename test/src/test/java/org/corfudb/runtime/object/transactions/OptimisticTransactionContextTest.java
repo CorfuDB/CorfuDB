@@ -8,7 +8,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -23,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;

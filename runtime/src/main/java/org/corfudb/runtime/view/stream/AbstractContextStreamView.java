@@ -322,19 +322,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         return streamContexts.first();
     }
 
-    /** Add a new context. */
-    protected void pushNewContext(UUID id, long maxGlobal) {
-        streamContexts.add(contextFactory.apply(id, maxGlobal));
-    }
-
-    protected void popContext() {
-        if (streamContexts.size() <= 1) {
-            throw new RuntimeException("Attempted to pop context with less"
-                    + " than 1 context remaining!");
-        }
-        streamContexts.pollFirst();
-    }
-
     @Override
     public String toString() {
         return Utils.toReadableId(baseContext.id) + "@" + getCurrentContext().getGlobalPointer();

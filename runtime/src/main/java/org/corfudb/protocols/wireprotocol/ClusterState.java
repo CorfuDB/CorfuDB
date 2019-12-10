@@ -2,10 +2,8 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Singular;
@@ -15,7 +13,6 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;

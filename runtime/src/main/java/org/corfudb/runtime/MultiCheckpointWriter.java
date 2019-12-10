@@ -5,8 +5,6 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -18,7 +16,6 @@ import org.corfudb.util.serializer.ISerializer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**

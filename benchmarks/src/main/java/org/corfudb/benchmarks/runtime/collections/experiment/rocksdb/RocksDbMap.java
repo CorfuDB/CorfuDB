@@ -16,7 +16,6 @@ import org.rocksdb.RocksIterator;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;

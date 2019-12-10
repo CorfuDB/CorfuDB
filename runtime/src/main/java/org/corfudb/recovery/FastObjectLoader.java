@@ -26,7 +26,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
-import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;

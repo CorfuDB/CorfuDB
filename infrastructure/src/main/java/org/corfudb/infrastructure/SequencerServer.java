@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Counter;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;

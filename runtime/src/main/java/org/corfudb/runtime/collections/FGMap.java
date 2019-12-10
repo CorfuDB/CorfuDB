@@ -93,13 +93,6 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
                 .collect(Collectors.toList());
     }
 
-    @PassThrough
-    Set<UUID> getAllStreamIDs() {
-        return IntStream.range(0, numBuckets)
-                .mapToObj(this::getStreamID)
-                .collect(Collectors.toSet());
-    }
-
     /**
      * Returns the number of key-value mappings in this map.  If the
      * map contains more than <tt>Integer.MAX_VALUE</tt> elements, returns
@@ -294,20 +287,6 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
     public void putAll(Map<? extends K, ? extends V> m) {
         m.entrySet().stream()
                 .forEach(e -> getPartition(e.getKey()).put(e.getKey(), e.getValue()));
-    }
-
-    /**
-     * Get the set of streams which will be touched by this put all operation.
-     *
-     * @param m The map used for the putAll operation
-     * @return A set of stream IDs
-     */
-    Set<UUID> putAllGetStreams(Map<? extends K, ? extends V> m) {
-        return m.keySet().stream()
-                .map(this::getPartitionNumber)
-                .distinct()
-                .map(this::getStreamID)
-                .collect(Collectors.toSet());
     }
 
     /**
