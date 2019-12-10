@@ -3,7 +3,6 @@ package org.corfudb.protocols.wireprotocol;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableRangeSet;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
@@ -18,7 +17,6 @@ import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.JsonUtils;
-import org.corfudb.util.serializer.Serializers;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.DataOutputStream;

@@ -8,7 +8,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
-import lombok.val;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 import java.util.HashMap;
@@ -211,9 +210,5 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
          * Two nodes disconnected form each other
          */
         FAILED;
-
-        public static ConnectionStatus fromBool(boolean connected) {
-            return connected ? OK : FAILED;
-        }
     }
 }

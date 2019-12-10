@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;

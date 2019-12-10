@@ -134,9 +134,4 @@ public class ServerContextBuilder {
             .build();
         return sc;
     }
-
-    public static ServerContext emptyContext() {
-        return new ServerContextBuilder().build();
-    }
-
 }

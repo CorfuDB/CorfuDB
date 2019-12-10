@@ -336,6 +336,13 @@
                     <execution>
                         <id>validate</id>
                         <phase>validate</phase>
+                        <configuration>
+                            <encoding>UTF-8</encoding>
+                            <configLocation>checks.xml</configLocation>
+                            <suppressionsLocation>checkstyle-suppressions.xml</suppressionsLocation>
+                            <consoleOutput>true</consoleOutput>
+                            <failsOnError>false</failsOnError>
+                        </configuration>
                         <goals>
                             <goal>check</goal>
                         </goals>

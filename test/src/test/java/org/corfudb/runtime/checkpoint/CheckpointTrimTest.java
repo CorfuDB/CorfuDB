@@ -1,7 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.google.common.reflect.TypeToken;
 
 import java.util.Map;

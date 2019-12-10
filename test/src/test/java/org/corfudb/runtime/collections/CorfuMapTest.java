@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.reflect.TypeToken;
 
 import java.util.AbstractMap;
 import java.util.Collection;
@@ -25,14 +24,12 @@ import lombok.Getter;
 import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**

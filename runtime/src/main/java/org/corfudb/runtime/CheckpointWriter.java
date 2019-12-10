@@ -15,7 +15,6 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;

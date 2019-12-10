@@ -87,16 +87,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
-     * Returns the underlying CorfuTable object.
-     * NOTE: For internal use only.
-     *
-     * @return CorfuTable instance.
-     */
-    public CorfuTable<K, CorfuRecord<V, M>> getUnderlyingObject() {
-        return corfuTable;
-    }
-
-    /**
      * Begins an optimistic transaction under the assumption that no transactional reads would be done.
      */
     private boolean TxBegin() {

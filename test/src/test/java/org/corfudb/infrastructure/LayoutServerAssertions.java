@@ -16,15 +16,6 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
         return new LayoutServerAssertions(actual);
     }
 
-    public LayoutServerAssertions layoutHasSequencerCount(int count) {
-        isNotNull();
-        if (actual.getCurrentLayout().getSequencers().size() != count) {
-            failWithMessage("Expected server to be have <%d> sequencers but it had <%d>", count,
-                    actual.getCurrentLayout().getSequencers().size());
-        }
-        return this;
-    }
-
     public LayoutServerAssertions isInEpoch(long epoch) {
         isNotNull();
         final long serverEpoch = actual.getServerContext().getServerEpoch();

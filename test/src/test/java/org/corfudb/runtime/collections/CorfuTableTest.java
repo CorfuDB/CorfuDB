@@ -6,9 +6,7 @@ import com.google.common.reflect.TypeToken;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -16,7 +14,6 @@ import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;

@@ -1,23 +1,14 @@
 package org.corfudb.runtime.collections;
 
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.LinkedList;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.Comparator;
-import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.ObjectsView;

@@ -78,8 +78,7 @@ public abstract class AbstractQueuedStreamView extends
      * @param globalAddress     The resolved global address.
      */
     protected void addToResolvedQueue(QueuedStreamContext context,
-                                      long globalAddress,
-                                      ILogData ld) {
+                                      long globalAddress) {
         context.resolvedQueue.add(globalAddress);
 
         if (context.maxResolution < globalAddress) {
@@ -363,7 +362,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // Transfer the addresses of the read entries to the resolved queue
         readFrom.stream()
-                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress(), x));
+                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress()));
 
         // Update the global pointer
         if (readFrom.size() > 0) {
