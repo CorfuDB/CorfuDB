@@ -408,10 +408,10 @@ public abstract class AbstractQueuedStreamView extends
             // Find the checkpoint, if present
             try {
                 if (discoverAddressSpace(checkpointId, context.readCpQueue,
-                        runtime.getSequencerView()
-                                .query(checkpointId),
-                        Address.NEVER_READ, d -> scanCheckpointStream(context, d, maxGlobal),
-                        true, maxGlobal)) {
+                        runtime.getSequencerView().query(checkpointId),
+                        Address.NEVER_READ,
+                        d -> scanCheckpointStream(context, d, maxGlobal),
+                        maxGlobal)) {
                     log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
                             this, context.readCpQueue.size());
 
@@ -499,7 +499,7 @@ public abstract class AbstractQueuedStreamView extends
         discoverAddressSpace(context.id, context.readQueue,
                 latestTokenValue,
                 stopAddress,
-                d -> true, false, maxGlobal);
+                d -> true, maxGlobal);
 
         return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
     }
@@ -517,7 +517,6 @@ public abstract class AbstractQueuedStreamView extends
      * @param startAddress read start address (inclusive)
      * @param stopAddress read stop address (exclusive)
      * @param filter filter to apply to data
-     * @param checkpoint true if checkpoint discovery, false otherwise.
      * @param maxGlobal max address to resolve discovery.
      *
      * @return true if addresses were discovered, false, otherwise.
@@ -527,7 +526,6 @@ public abstract class AbstractQueuedStreamView extends
                                                     final long startAddress,
                                                     final long stopAddress,
                                                     final Function<ILogData, Boolean> filter,
-                                                    final boolean checkpoint,
                                                     final long maxGlobal);
 
     protected boolean fillFromResolved(final long maxGlobal,

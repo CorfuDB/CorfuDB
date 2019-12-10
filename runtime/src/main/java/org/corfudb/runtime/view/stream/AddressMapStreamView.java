@@ -122,6 +122,47 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         return ld;
     }
 
+    private void checkTrimmed(final long trimMark,
+                              final long bottomAddress,
+                              final long maxGlobal) {
+        if (!Address.isAddress(trimMark)) {
+            return; // No trim address has been set.
+        }
+
+        if (trimMark <= bottomAddress) {
+            return; // We are reading above the trimmed address.
+        }
+
+        if (getReadOptions().isIgnoreTrim()) {
+            log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
+                    this, trimMark);
+            return;
+        }
+
+        // In case we are dealing with a stream that does not have the checkpoint
+        // capability, check to see if we are trying to access an address that has been
+        // previously trimmed.
+        if (!isCheckpointCapable()) {
+            String message = String.format("getStreamAddressMap[{%s}] stream has been " +
+                    "trimmed at address %s and we are trying to access the " +
+                    "stream starting at address %s. This stream does not have " +
+                    "the checkpoint capability.", this, trimMark, bottomAddress);
+            log.info(message);
+            throw new TrimmedException(message);
+        }
+        // Address maps might have been trimmed, hence not reflecting all updates to the stream
+        // For this reason, in the case of a valid trim mark, we must be sure this space is
+        // already resolved or loaded by a checkpoint.
+        if (!isTrimCoveredByCheckpointOrLocalView(trimMark)) {
+            String message = String.format("getStreamAddressMap[{%s}] stream has been " +
+                            "trimmed at address %s and this space is not covered by the " +
+                            "loaded checkpoint with start address %s, while accessing the " +
+                            "stream at version %s. Looking for a new checkpoint.",this,
+                    trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
+            throw new TrimmedException(message);
+        }
+    }
+
     /**
      * Retrieve this stream's address map, i.e., a map of all addresses corresponding to this stream between
      * (stop address, start address] and return a boolean indicating if addresses were found in this range.
@@ -150,7 +191,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // If startAddress is equal to stopAddress there is nothing to resolve.
         if (Address.isAddress(startAddress) && (startAddress > stopAddress)) {
 
-            StreamAddressSpace streamAddressSpace = getStreamAddressMap(startAddress, stopAddress, streamId);
+            final StreamAddressSpace streamAddressSpace =
+                    getStreamAddressMap(startAddress, stopAddress, streamId);
 
             if (checkpoint) {
                 processCheckpoint(streamAddressSpace, filter, queue);
@@ -160,39 +202,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // the tail of the stream.
                 queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));
 
-                long trimMark = streamAddressSpace.getTrimMark();
-
-                // In case we are dealing with a stream that does not have the checkpoint
-                // capability, check to see if we are trying to access an address that has been
-                // previously trimmed.
-                if (!isCheckpointCapable()
-                        && Address.isAddress(trimMark)
-                        && trimMark > stopAddress) {
-                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                    "trimmed at address %s and we are trying to access the " +
-                                    "stream starting at address %s. This stream does not have " +
-                                    "the checkpoint capability.", this, trimMark, stopAddress);
-                    log.info(message);
-                    throw new TrimmedException(message);
-                }
-                // Address maps might have been trimmed, hence not reflecting all updates to the stream
-                // For this reason, in the case of a valid trim mark, we must be sure this space is
-                // already resolved or loaded by a checkpoint.
-                if (isCheckpointCapable()
-                        && Address.isAddress(trimMark)
-                        && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
-                    if (getReadOptions().isIgnoreTrim()) {
-                        log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
-                                this, streamAddressSpace.getTrimMark());
-                    } else {
-                        String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                        "trimmed at address %s and this space is not covered by the " +
-                                        "loaded checkpoint with start address %s, while accessing the " +
-                                        "stream at version %s. Looking for a new checkpoint.",this,
-                                trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
-                        throw new TrimmedException(message);
-                    }
-                }
+                final long trimMark = streamAddressSpace.getTrimMark();
+                checkTrimmed(trimMark, stopAddress, maxGlobal);
             }
         }
 
