@@ -6,7 +6,6 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.google.common.collect.ImmutableSortedSet;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -14,13 +13,9 @@ import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.UniverseManager.UniverseWorkflow;
-import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.universe.node.server.vm.VmCorfuServer;
-import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
-import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.scenario.fixture.Fixture;
 import org.corfudb.universe.universe.UniverseParams;
 import org.junit.Test;
