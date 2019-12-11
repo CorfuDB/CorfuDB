@@ -20,26 +20,27 @@ import org.docopt.Docopt;
 @Slf4j
 public class CorfuStoreBrowserMain {
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
-        "--port=<port> --tlsEnabled=<tls_enabled> " +
+        "--port=<port> --namespace=<namespace> --tablename=<tablename> " +
+        "--operation=<operation> "+
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
-        "--operation=(listTables [--namespace=<namespace>]" +
-        "|showTable --namespace=<namespace> --tablename=<tablename>)\n"
+        "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--tlsEnabled=<tls_enabled>\n"
+        + "--operation=<showTables|listTables> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
         + "--ks_password=<keystore_password> KeyStore Password\n"
         + "--truststore=<truststore_file> TrustStore File\n"
         + "--truststore_password=<truststore_password> Truststore Password\n"
-        + "--operation=<operation - listTables|showTable>\n";
+        + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
         try {
             CorfuRuntime runtime;
+            log.info("CorfuBrowser starting...");
             // Parse the options given, using docopt.
             Map<String, Object> opts =
                 new Docopt(USAGE)
@@ -70,6 +71,7 @@ public class CorfuStoreBrowserMain {
             runtime = CorfuRuntime.fromParameters(builder.build());
             String singleNodeEndpoint = String.format("%s:%d", host, port);
             runtime.parseConfigurationString(singleNodeEndpoint);
+            log.info("Connecting to corfu cluster at {}", singleNodeEndpoint);
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
@@ -79,8 +81,9 @@ public class CorfuStoreBrowserMain {
                     String namespace = opts.containsKey("--namespace") ?
                         opts.get("--namespace").toString() : null;
                     browser.listTables(namespace);
+                    break;
 
-                case "showTable":
+                default:
                     CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                         browser.getTable(opts.get("--namespace").toString(),
                         opts.get("--tablename").toString());
