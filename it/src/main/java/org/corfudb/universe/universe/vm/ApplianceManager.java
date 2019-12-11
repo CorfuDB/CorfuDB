@@ -134,7 +134,7 @@ public class ApplianceManager {
 
             // First check if a VM with this name already exists or not
             VirtualMachine vm = (VirtualMachine) inventoryNavigator.searchManagedEntity(
-                    ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName.getHost()
+                    ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName.getName()
             );
 
             if (vm == null) {
@@ -174,7 +174,7 @@ public class ApplianceManager {
                 Optional<LocalizedMethodFault> cloneErr = Optional.empty();
                 try {
                     // Do the cloning - providing the clone specification
-                    Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName.getHost(), cloneSpec);
+                    Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName.getName(), cloneSpec);
                     cloneTask.waitForTask();
 
                     cloneErr = Optional.ofNullable(cloneTask.getTaskInfo().getError());
@@ -189,7 +189,7 @@ public class ApplianceManager {
 
                 // After the clone task completes, get the VM from the inventory
                 vm = (VirtualMachine) inventoryNavigator.searchManagedEntity(
-                        ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName.getHost()
+                        ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName.getName()
                 );
             }
 

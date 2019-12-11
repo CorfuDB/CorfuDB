@@ -43,16 +43,16 @@ public class VmCorfuServerParams extends CorfuServerParams {
     @Getter
     public static class VmName implements Comparable<VmName> {
         @NonNull
-        private final String host;
+        private final String name;
 
         @Override
         public int compareTo(VmName other) {
-            return host.compareTo(other.host);
+            return name.compareTo(other.name);
         }
 
         @Override
         public String toString() {
-            return host;
+            return name;
         }
     }
 }
