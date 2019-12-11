@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.primitives.UnsignedBytes;
-import groovy.json.internal.Byt;
 import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;

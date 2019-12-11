@@ -1,7 +1,6 @@
 package org.corfudb.universe.node;
 
 import com.google.common.collect.ComparisonChain;
-import com.spotify.docker.client.exceptions.DockerException;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.universe.Universe;
 
@@ -20,6 +19,7 @@ public interface Node {
      * @throws NodeException thrown when can not deploy {@link Node}
      */
     Node deploy();
+
     /**
      * Stops a {@link Node} gracefully within the timeout provided to this method.
      *

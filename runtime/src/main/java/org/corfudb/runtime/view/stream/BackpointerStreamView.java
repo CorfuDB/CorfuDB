@@ -65,7 +65,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
 
             if (queue == getCurrentContext().readQueue && ld != null) {
-                addToResolvedQueue(getCurrentContext(), thisRead, ld);
+                addToResolvedQueue(getCurrentContext(), thisRead);
             }
             return ld;
         } while (readNext);

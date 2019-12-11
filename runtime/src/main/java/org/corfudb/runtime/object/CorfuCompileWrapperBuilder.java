@@ -1,9 +1,7 @@
 package org.corfudb.runtime.object;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.UUID;
 
-import lombok.NonNull;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;

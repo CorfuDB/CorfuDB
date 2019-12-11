@@ -3,6 +3,7 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import java.nio.charset.Charset;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -20,8 +21,6 @@ import org.corfudb.util.serializer.Serializers;
  */
 @Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
-
-    public final static LogData EMPTY = new LogData(DataType.EMPTY);
 
     public static final int NOT_KNOWN = -1;
 
@@ -81,6 +80,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                             } catch (Throwable throwable) {
                                 log.error("Exception caught at address {}, {}, {}",
                                         getGlobalAddress(), getStreams(), getType());
+                                log.error("Raw data buffer {}",
+                                        copyBuf.resetReaderIndex().toString(Charset.defaultCharset()));
                                 copyBuf.release();
                                 data = null;
                                 throw throwable;

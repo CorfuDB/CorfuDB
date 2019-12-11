@@ -29,7 +29,8 @@ public class FixtureUtil {
 
     /**
      * Generates a list of docker corfu server params
-     * @param cluster corfu cluster
+     *
+     * @param cluster       corfu cluster
      * @param serverBuilder corfu server builder with predefined parameters
      * @return list of docker corfu server params
      */
@@ -57,7 +58,8 @@ public class FixtureUtil {
 
     /**
      * Generates a list of VMs corfu server params
-     * @param cluster VM corfu cluster
+     *
+     * @param cluster             VM corfu cluster
      * @param serverParamsBuilder corfu server builder with predefined parameters
      * @return list of VM corfu server params
      */

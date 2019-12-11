@@ -3,13 +3,11 @@ package org.corfudb.universe.scenario.fixture;
 import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.common.result.Result;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.group.cluster.CorfuClusterParams.CorfuClusterParamsBuilder;
 import org.corfudb.universe.group.cluster.SupportClusterParams;
 import org.corfudb.universe.group.cluster.SupportClusterParams.SupportClusterParamsBuilder;
 import org.corfudb.universe.logging.LoggingParams;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.ClientParams.ClientParamsBuilder;
@@ -24,7 +22,6 @@ import org.corfudb.universe.scenario.fixture.FixtureUtil.FixtureUtilBuilder;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.universe.UniverseParams.UniverseParamsBuilder;
 import org.corfudb.universe.universe.vm.VmConfigPropertiesLoader;
-import org.corfudb.universe.universe.vm.VmConfigPropertiesLoader.PropsLoaderException;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
 import org.corfudb.universe.universe.vm.VmUniverseParams.VmCredentialsParams;
@@ -149,13 +146,9 @@ public interface Fixtures {
                     //empty
                     .orElse(new Properties());
 
-            Result<Properties, PropsLoaderException> vmPropertiesResult = VmConfigPropertiesLoader
-                    .loadVmProperties();
-
-            if (vmPropertiesResult.isError()) {
-                throw vmPropertiesResult.getError();
-            }
-            Properties vmProperties = vmPropertiesResult.get();
+            Properties vmProperties = VmConfigPropertiesLoader
+                    .loadVmProperties()
+                    .get();
 
             servers
                     .logLevel(Level.INFO)

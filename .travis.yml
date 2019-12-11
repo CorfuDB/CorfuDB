@@ -3,6 +3,8 @@ sudo: required
 dist: xenial
 jdk: openjdk8
 
+script: "mvn cobertura:cobertura"
+
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
 
@@ -10,11 +12,10 @@ cache:
   directories:
   - "$HOME/.m2"
 
-before_install: |
-  ./mvnw build-helper:parse-version versions:set \
-    -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
-    -q
-
+stages:
+  - name: Tests
+  - name: Deploy
+    if: branch = master AND type != pull_request
 
 install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
@@ -33,6 +34,10 @@ jobs:
     # Run integration tests
     - ./mvnw -pl :universe clean verify -Pit
     name: Universe Tests
+  - stage: Deploy
+    name: Deployment
+    script:
+    - ./mvnw clean deploy -s .travis_scripts/settings.xml -DskipTests -Dmaven.javadoc.skip=true -T 1C -q
 
 notifications:
   email:
@@ -45,6 +50,9 @@ notifications:
 addons:
   apt:
     packages: reprepro
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
 
 env:
   global:

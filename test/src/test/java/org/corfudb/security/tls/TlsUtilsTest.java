@@ -1,14 +1,9 @@
 package org.corfudb.security.tls;
 
-import java.io.ByteArrayOutputStream;
-import java.io.StringWriter;
 import java.security.KeyStore;
-import java.security.cert.Certificate;
-import java.util.Enumeration;
 import javax.net.ssl.SSLException;
 import org.junit.Test;
-import sun.misc.BASE64Encoder;
-import sun.security.provider.X509Factory;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;

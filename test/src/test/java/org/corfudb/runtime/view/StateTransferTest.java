@@ -32,7 +32,6 @@ import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSeg
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;

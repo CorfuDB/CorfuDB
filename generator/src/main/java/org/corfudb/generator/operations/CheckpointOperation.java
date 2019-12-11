@@ -1,6 +1,5 @@
 package org.corfudb.generator.operations;
 
-import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;

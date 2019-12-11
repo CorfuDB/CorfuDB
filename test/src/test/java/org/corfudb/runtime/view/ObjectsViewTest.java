@@ -25,13 +25,6 @@ import org.junit.Test;
  */
 public class ObjectsViewTest extends AbstractViewTest {
 
-    public static boolean referenceTX(Map<String, String> smrMap) {
-        smrMap.put("a", "b");
-        assertThat(smrMap)
-                .containsEntry("a", "b");
-        return true;
-    }
-
     @Test
     @SuppressWarnings("unchecked")
     public void canAbortNoTransaction()
