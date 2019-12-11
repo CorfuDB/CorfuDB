@@ -3,6 +3,8 @@ sudo: required
 dist: xenial
 jdk: openjdk8
 
+script: "mvn cobertura:cobertura"
+
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
 
@@ -48,6 +50,9 @@ notifications:
 addons:
   apt:
     packages: reprepro
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
 
 env:
   global:
