@@ -296,6 +296,18 @@ public class ApplianceManager {
             });
         }
 
+        public Result<Void, UniverseException> reboot() {
+            return Result.of(() -> {
+                try {
+                    vm.rebootGuest();
+                } catch (RemoteException e) {
+                    throw new UniverseException(e);
+                }
+
+                return null;
+            });
+        }
+
         public Result<TaskInfo, UniverseException> reset() {
             return executeTask(vm::resetVM_Task);
         }
