@@ -10,6 +10,7 @@ import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.UniverseParams;
+import org.corfudb.universe.util.IpAddress;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -23,12 +24,12 @@ import java.util.Optional;
  */
 @Slf4j
 public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, UniverseParams> {
-    private static final String LOCALHOST = "127.0.0.1";
+    private static final IpAddress LOCALHOST = IpAddress.builder().ip("127.0.0.1").build();
 
     @NonNull
     @Default
     @Getter
-    private final String ipAddress = LOCALHOST;
+    private final IpAddress ipAddress = LOCALHOST;
 
     @NonNull
     private final CorfuProcessManager processManager;
@@ -211,7 +212,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     }
 
     @Override
-    public String getNetworkInterface() {
+    public IpAddress getNetworkInterface() {
         return ipAddress;
     }
 }

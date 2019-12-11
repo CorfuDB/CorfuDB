@@ -1,7 +1,5 @@
 package org.corfudb.universe.node.server.vm;
 
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +9,9 @@ import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.process.CorfuProcessManager;
 import org.corfudb.universe.node.stress.vm.VmStress;
+import org.corfudb.universe.universe.vm.ApplianceManager.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
+import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
 
 import java.nio.file.Path;
@@ -26,9 +26,9 @@ import java.util.List;
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
 
     @NonNull
-    private final VirtualMachine vm;
+    private final VmManager vm;
     @NonNull
-    private final String ipAddress;
+    private final IpAddress ipAddress;
     @NonNull
     private final RemoteOperationHelper commandHelper;
     @NonNull
@@ -38,7 +38,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
 
     @Builder
     public VmCorfuServer(
-            VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams,
+            VmCorfuServerParams params, VmManager vm, VmUniverseParams universeParams,
             VmStress stress) {
         super(params, universeParams);
         this.vm = vm;
@@ -206,9 +206,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * @return the IpAddress of this VM.
      */
     @Override
-    public String getIpAddress() {
-        GuestInfo guest = vm.getGuest();
-        return guest.getIpAddress();
+    public IpAddress getIpAddress() {
+        return vm.getResolvedIpAddress();
     }
 
     /**
@@ -271,7 +270,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     }
 
     @Override
-    public String getNetworkInterface() {
+    public IpAddress getNetworkInterface() {
         return ipAddress;
     }
 }

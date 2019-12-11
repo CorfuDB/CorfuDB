@@ -1,7 +1,5 @@
 package org.corfudb.universe.node.stress.vm;
 
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +7,9 @@ import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.stress.Stress;
+import org.corfudb.universe.universe.vm.ApplianceManager.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
+import org.corfudb.universe.util.IpAddress;
 
 @Slf4j
 @Builder
@@ -17,7 +17,7 @@ public class VmStress implements Stress {
     @NonNull
     private final CorfuServerParams params;
     @NonNull
-    private final VirtualMachine vm;
+    private final VmManager vm;
     private final RemoteOperationHelper commandHelper = RemoteOperationHelper.getInstance();
     @NonNull
     private final VmUniverseParams universeParams;
@@ -29,7 +29,7 @@ public class VmStress implements Stress {
     public void stressCPULoad() {
         log.info("Stressing CPU on corfu server: {}", params.getName());
 
-        String cmd = "stress -c " + vm.getSummary().getConfig().getNumCpu();
+        String cmd = "stress -c " + vm.getVm().getSummary().getConfig().getNumCpu();
         executeOnVm(cmd);
     }
 
@@ -40,7 +40,7 @@ public class VmStress implements Stress {
     public void stressIOLoad() {
         log.info("Stressing I/O on corfu server: {}", params.getName());
 
-        String cmd = "stress -i " + vm.getSummary().getConfig().getNumCpu();
+        String cmd = "stress -i " + vm.getVm().getSummary().getConfig().getNumCpu();
         executeOnVm(cmd);
     }
 
@@ -51,7 +51,7 @@ public class VmStress implements Stress {
     public void stressMemoryLoad() {
         log.info("Stressing Memory (RAM) on corfu server: {}", params.getName());
 
-        String cmd = "stress -m " + vm.getSummary().getConfig().getNumCpu() + " --vm-bytes 1G";
+        String cmd = "stress -m " + vm.getVm().getSummary().getConfig().getNumCpu() + " --vm-bytes 1G";
         executeOnVm(cmd);
     }
 
@@ -62,7 +62,7 @@ public class VmStress implements Stress {
     public void stressDiskLoad() {
         log.info("Stressing disk on corfu server: {}", params.getName());
 
-        String cmd = "stress -d " + vm.getSummary().getConfig().getNumCpu() + " --hdd-bytes 5G";
+        String cmd = "stress -d " + vm.getVm().getSummary().getConfig().getNumCpu() + " --hdd-bytes 5G";
         executeOnVm(cmd);
     }
 
@@ -80,10 +80,8 @@ public class VmStress implements Stress {
      * Executes a certain command on the VM.
      */
     private void executeOnVm(String cmdLine) {
-        String ipAddress = getIpAddress();
-
         commandHelper.executeCommand(
-                ipAddress,
+                getIpAddress(),
                 universeParams.getCredentials().getVmCredentials(),
                 cmdLine
         );
@@ -92,8 +90,7 @@ public class VmStress implements Stress {
     /**
      * @return the IpAddress of this VM.
      */
-    private String getIpAddress() {
-        GuestInfo guest = vm.getGuest();
-        return guest.getIpAddress();
+    private IpAddress getIpAddress() {
+        return vm.getResolvedIpAddress();
     }
 }

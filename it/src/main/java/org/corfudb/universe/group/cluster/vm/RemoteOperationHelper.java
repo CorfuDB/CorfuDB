@@ -5,6 +5,7 @@ import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.optional.ssh.SSHExec;
 import org.apache.tools.ant.taskdefs.optional.ssh.Scp;
 import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
+import org.corfudb.universe.util.IpAddress;
 
 import java.nio.file.Path;
 
@@ -33,7 +34,7 @@ public class RemoteOperationHelper {
      * @param remoteDir   remote directory
      */
     public void copyFile(
-            String vmIpAddress, Credentials credentials, Path localFile, Path remoteDir) {
+            IpAddress vmIpAddress, Credentials credentials, Path localFile, Path remoteDir) {
         Scp scp = new Scp();
 
         scp.setLocalFile(localFile.toString());
@@ -57,12 +58,12 @@ public class RemoteOperationHelper {
      * @param credentials user credentials
      * @param command     shell command
      */
-    public void executeCommand(String vmIpAddress, Credentials credentials, String command) {
+    public void executeCommand(IpAddress vmIpAddress, Credentials credentials, String command) {
         SSHExec sshExec = new SSHExec();
 
         sshExec.setUsername(credentials.getUsername());
         sshExec.setPassword(credentials.getPassword());
-        sshExec.setHost(vmIpAddress);
+        sshExec.setHost(vmIpAddress.getIp());
         sshExec.setCommand(command);
         sshExec.setProject(PROJECT);
         sshExec.setTrust(true);
@@ -77,7 +78,7 @@ public class RemoteOperationHelper {
      * @param credentials user credentials
      * @param command     shell command
      */
-    public void executeSudoCommand(String vmIpAddress, Credentials credentials, String command) {
+    public void executeSudoCommand(IpAddress vmIpAddress, Credentials credentials, String command) {
         String cmdLine = String.format(
                 "echo %s | sudo -S -p '' %s",
                 credentials.getPassword(), command

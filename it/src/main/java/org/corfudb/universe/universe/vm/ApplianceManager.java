@@ -10,6 +10,7 @@ import com.google.common.collect.Streams;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.LocalizedMethodFault;
 import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.TaskInfo;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
@@ -20,12 +21,16 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.corfudb.common.result.Result;
+import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.universe.UniverseException;
+import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
+import org.corfudb.universe.util.IpAddress;
 
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 import java.util.Arrays;
@@ -51,8 +56,9 @@ import java.util.stream.Stream;
 @Slf4j
 public class ApplianceManager {
 
-    private final ConcurrentMap<String, VirtualMachine> vms = new ConcurrentHashMap<>();
+    private final ConcurrentMap<VmName, VmManager> vms = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
+
     @NonNull
     private final VmUniverseParams universeParams;
 
@@ -75,11 +81,11 @@ public class ApplianceManager {
     public void deploy() {
         log.info("Vm deployment");
 
-        Map<String, VirtualMachine> deployment = new HashMap<>();
+        Map<VmName, VmManager> deployment = new HashMap<>();
 
-        Stream<String> ipAddressStream = universeParams.getVmIpAddresses().keySet().stream();
+        Stream<VmName> ipAddressStream = universeParams.getVmIpAddresses().keySet().stream();
 
-        List<CompletableFuture<VirtualMachine>> asyncDeployment = Streams
+        List<CompletableFuture<VmManager>> asyncDeployment = Streams
                 .mapWithIndex(ipAddressStream, ImmutablePair::new)
                 .map(pair -> deployVmAsync(pair.left, pair.right))
                 .collect(Collectors.toList());
@@ -88,8 +94,8 @@ public class ApplianceManager {
                 .stream()
                 .map(CompletableFuture::join)
                 .forEach(vm -> {
-                    universeParams.updateIpAddress(vm.getName(), vm.getGuest().getIpAddress());
-                    deployment.put(vm.getName(), vm);
+                    universeParams.updateIpAddress(vm.getVmName(), vm.getResolvedIpAddress());
+                    deployment.put(vm.getVmName(), vm);
                 });
 
         log.info("The deployed VMs are: {}", universeParams.getVmIpAddresses());
@@ -97,7 +103,7 @@ public class ApplianceManager {
         vms.putAll(deployment);
     }
 
-    private CompletableFuture<VirtualMachine> deployVmAsync(String vmName, long index) {
+    private CompletableFuture<VmManager> deployVmAsync(VmName vmName, long index) {
         log.info("Deploy vm asynchronously: {}", vmName);
         return CompletableFuture.supplyAsync(() -> deployVm(vmName, index), executor);
     }
@@ -107,13 +113,13 @@ public class ApplianceManager {
      *
      * @return VirtualMachine instance
      */
-    private VirtualMachine deployVm(String vmName, long index) {
+    private VmManager deployVm(VmName vmName, long index) {
         log.info("Deploy VM: {}", vmName);
 
-        VirtualMachine vm;
+        VmManager vmManager;
         try {
             // Connect to vSphere server using VIJAVA
-            VmUniverseParams.Credentials vSphereCredentials = universeParams
+            Credentials vSphereCredentials = universeParams
                     .getCredentials()
                     .getVSphereCredentials();
 
@@ -127,21 +133,11 @@ public class ApplianceManager {
             InventoryNavigator inventoryNavigator = new InventoryNavigator(si.getRootFolder());
 
             // First check if a VM with this name already exists or not
-            vm = (VirtualMachine) inventoryNavigator
-                    .searchManagedEntity(ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName);
+            VirtualMachine vm = (VirtualMachine) inventoryNavigator.searchManagedEntity(
+                    ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName.getHost()
+            );
 
-            if (vm != null) {
-                // If the VM already exists, ensure the power state is 'on' before return the VM
-                if (vm.getSummary().runtime.powerState == VirtualMachinePowerState.poweredOff) {
-                    log.info("{} already exists, but found in 'poweredOff' state, powering it on...",
-                            vmName);
-
-                    Task task = vm.powerOnVM_Task((HostSystem) inventoryNavigator
-                            .searchManagedEntity(HOST_SYSTEM.resource, "host"));
-
-                    task.waitForTask();
-                }
-            } else {
+            if (vm == null) {
                 // Find the template machine in the inventory
                 VirtualMachine vmTemplate = (VirtualMachine) inventoryNavigator.searchManagedEntity(
                         ManagedEntityType.VIRTUAL_MACHINE.typeName,
@@ -178,7 +174,7 @@ public class ApplianceManager {
                 Optional<LocalizedMethodFault> cloneErr = Optional.empty();
                 try {
                     // Do the cloning - providing the clone specification
-                    Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName, cloneSpec);
+                    Task cloneTask = vmTemplate.cloneVM_Task(folder, vmName.getHost(), cloneSpec);
                     cloneTask.waitForTask();
 
                     cloneErr = Optional.ofNullable(cloneTask.getTaskInfo().getError());
@@ -192,24 +188,26 @@ public class ApplianceManager {
                 });
 
                 // After the clone task completes, get the VM from the inventory
-                vm = (VirtualMachine) inventoryNavigator
-                        .searchManagedEntity(ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName);
+                vm = (VirtualMachine) inventoryNavigator.searchManagedEntity(
+                        ManagedEntityType.VIRTUAL_MACHINE.typeName, vmName.getHost()
+                );
             }
-            // Ensure we get the VM's IP address before we return its instance
-            String cloneVmIpAddress = null;
-            log.info("Getting IP address for {} from DHCP...please wait...", vmName);
-            while (cloneVmIpAddress == null) {
-                log.info("Waiting for ip address. Vm: {}", vmName);
-                TimeUnit.SECONDS.sleep(universeParams.getReadinessTimeout().getSeconds());
-                GuestInfo guest = vm.getGuest();
-                cloneVmIpAddress = guest.getIpAddress();
-            }
-        } catch (RemoteException | MalformedURLException | InterruptedException e) {
-            Thread.currentThread().interrupt();
+
+            vmManager = VmManager.builder()
+                    .vm(vm)
+                    .vmName(vmName)
+                    .serviceInstance(si)
+                    .build();
+
+            vmManager.powerOn().get();
+            vmManager.getIpAddress().join();
+
+        } catch (Exception e) {
             String err = String.format("Deploy VM %s failed due to ", vmName);
             throw new UniverseException(err, e);
         }
-        return vm;
+
+        return vmManager;
     }
 
 
@@ -255,7 +253,7 @@ public class ApplianceManager {
         return vmCloneSpec;
     }
 
-    public ImmutableMap<String, VirtualMachine> getVms() {
+    public ImmutableMap<VmName, VmManager> getVms() {
         return ImmutableMap.copyOf(vms);
     }
 
@@ -266,6 +264,137 @@ public class ApplianceManager {
 
         ManagedEntityType(String typeName) {
             this.typeName = typeName;
+        }
+    }
+
+    @Builder
+    @Slf4j
+    public static class VmManager {
+        @NonNull
+        @Getter
+        private final VmName vmName;
+
+        @NonNull
+        @Getter
+        private final VirtualMachine vm;
+
+        @NonNull
+        private final ServiceInstance serviceInstance;
+
+        @NonNull
+        private final VmUniverseParams universeParams;
+
+        public Result<Void, UniverseException> shutdown() {
+            return Result.of(() -> {
+                try {
+                    vm.shutdownGuest();
+                } catch (RemoteException e) {
+                    throw new UniverseException(e);
+                }
+
+                return null;
+            });
+        }
+
+        public Result<TaskInfo, UniverseException> reset() {
+            return executeTask(vm::resetVM_Task);
+        }
+
+        public Result<TaskInfo, UniverseException> powerOff() {
+            return executeTask(vm::powerOffVM_Task);
+        }
+
+        public Result<TaskInfo, UniverseException> destroy() {
+            return executeTask(vm::destroy_Task);
+        }
+
+        public CompletableFuture<IpAddress> getIpAddress() {
+            log.info("Getting IP address for {} from DHCP...please wait...", vmName);
+
+            CompletableFuture<IpAddress> result = new CompletableFuture<>();
+            CompletableFuture.supplyAsync(() -> {
+                IpAddress ipAddress = null;
+                while (ipAddress == null) {
+                    log.info("Waiting for ip address. Vm: {}", vmName);
+
+                    try {
+                        TimeUnit.SECONDS.sleep(universeParams.getReadinessTimeout().getSeconds());
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new UniverseException("Error ", e);
+                    }
+                    GuestInfo guest = vm.getGuest();
+                    ipAddress = IpAddress.builder().ip(guest.getIpAddress()).build();
+                }
+
+                return ipAddress;
+            }).whenComplete((ip, ex) -> {
+                if(ex != null) {
+                    result.completeExceptionally(ex);
+                }
+
+                result.complete(ip);
+            });
+
+            return result;
+        }
+
+        public IpAddress getResolvedIpAddress() {
+            return IpAddress.builder().ip(vm.getGuest().getIpAddress()).build();
+        }
+
+        public Result<TaskInfo, UniverseException> powerOn() {
+            return executeTask(() -> {
+                // If the VM already exists, ensure the power state is 'on' before return the VM
+                VirtualMachinePowerState powerState = vm.getSummary().runtime.powerState;
+                if (powerState != VirtualMachinePowerState.poweredOff) {
+                    String err = "Can't power on a vm: " + vmName + ", state: " + powerState;
+                    throw new UniverseException(err);
+                }
+
+                log.info("{} already exists, but found in 'poweredOff' state, powering it on...",
+                        vmName);
+
+                InventoryNavigator inventoryNavigator = new InventoryNavigator(
+                        serviceInstance.getRootFolder()
+                );
+                HostSystem hostSystem = (HostSystem) inventoryNavigator
+                        .searchManagedEntity(HOST_SYSTEM.resource, "host");
+
+                return vm.powerOnVM_Task(hostSystem);
+
+            });
+        }
+
+        private Result<TaskInfo, UniverseException> executeTask(VmSupplier<Task> action) {
+            return Result.<TaskInfo, UniverseException>of(() -> {
+                try {
+                    Task task = action.get();
+                    task.waitForTask();
+                    return task.getTaskInfo();
+                } catch (UniverseException ex) {
+                    throw ex;
+                } catch (Exception ex) {
+                    throw new UniverseException(ex);
+                }
+            }).map(taskInfo -> {
+                if (taskInfo.getError() != null) {
+                    throw new UniverseException(taskInfo.getError().getLocalizedMessage());
+                }
+
+                return taskInfo;
+            });
+        }
+
+        @FunctionalInterface
+        public interface VmSupplier<T> {
+
+            /**
+             * Gets a result.
+             *
+             * @return a result
+             */
+            T get() throws Exception;
         }
     }
 }
