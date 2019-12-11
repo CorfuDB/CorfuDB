@@ -3,8 +3,6 @@ sudo: required
 dist: xenial
 jdk: openjdk8
 
-script: "mvn cobertura:cobertura"
-
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
 
