@@ -25,11 +25,11 @@ import java.util.stream.Collectors;
  * Provides `Process` implementation of a {@link CorfuCluster}.
  */
 @Slf4j
-public class ProcessCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
+public class ProcessCorfuCluster extends AbstractCorfuCluster<CorfuServerParams, UniverseParams> {
 
     @Builder
     protected ProcessCorfuCluster(
-            CorfuClusterParams corfuClusterParams, UniverseParams universeParams) {
+            CorfuClusterParams<CorfuServerParams> corfuClusterParams, UniverseParams universeParams) {
         super(corfuClusterParams, universeParams);
 
         init();

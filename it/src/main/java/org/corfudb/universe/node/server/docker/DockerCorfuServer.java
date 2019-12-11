@@ -59,14 +59,14 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @NonNull
     private final LoggingParams loggingParams;
     @NonNull
-    private final CorfuClusterParams clusterParams;
+    private final CorfuClusterParams<CorfuServerParams> clusterParams;
     private final AtomicReference<IpAddress> ipAddress = new AtomicReference<>();
     private final AtomicBoolean destroyed = new AtomicBoolean();
 
     @Builder
     public DockerCorfuServer(
             DockerClient docker, CorfuServerParams params, UniverseParams universeParams,
-            CorfuClusterParams clusterParams, LoggingParams loggingParams,
+            CorfuClusterParams<CorfuServerParams> clusterParams, LoggingParams loggingParams,
             DockerManager dockerManager) {
         super(params, universeParams);
         this.docker = docker;

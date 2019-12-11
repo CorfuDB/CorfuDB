@@ -19,13 +19,13 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 @Slf4j
-public abstract class AbstractCorfuCluster<U extends UniverseParams>
-        extends AbstractCluster<CorfuServer, CorfuServerParams, CorfuClusterParams, U>
-        implements CorfuCluster<CorfuServer, CorfuClusterParams> {
+public abstract class AbstractCorfuCluster<P extends CorfuServerParams, U extends UniverseParams>
+        extends AbstractCluster<CorfuServer, P, CorfuClusterParams<P>, U>
+        implements CorfuCluster<CorfuServer, CorfuClusterParams<P>> {
 
     private final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
 
-    public AbstractCorfuCluster(CorfuClusterParams params, U universeParams) {
+    public AbstractCorfuCluster(CorfuClusterParams<P> params, U universeParams) {
         super(params, universeParams);
     }
 
@@ -44,7 +44,7 @@ public abstract class AbstractCorfuCluster<U extends UniverseParams>
      * @return an instance of {@link AbstractCorfuCluster}
      */
     @Override
-    public AbstractCorfuCluster deploy() {
+    public AbstractCorfuCluster<P, U> deploy() {
         log.info("Deploy corfu cluster. Params: {}", params);
 
         List<CompletableFuture<Node>> asyncDeployment = nodes.values().stream()
