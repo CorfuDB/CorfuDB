@@ -34,26 +34,27 @@ public class BaseServer extends AbstractServer {
         return getState() == ServerState.READY;
     }
 
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
-
-    @Override
-    public List<ExecutorService> getExecutors() {
-        return Collections.singletonList(executor);
-    }
-
     public BaseServer(@Nonnull ServerContext context) {
         this.serverContext = context;
         executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumBaseServerThreads(),
                 new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
     }
 
-    /** Handler for the base server. */
+    /** HandlerMethod for the base server. */
     @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handler =
+            HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    @Override
+    void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
+    }
 
     /**
      * Respond to a ping message.

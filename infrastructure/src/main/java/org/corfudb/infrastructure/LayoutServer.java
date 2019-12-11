@@ -66,11 +66,11 @@ public class LayoutServer extends AbstractServer {
     private final ServerContext serverContext;
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handler =
+            HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @NonNull
     private final ExecutorService executor;
@@ -81,16 +81,6 @@ public class LayoutServer extends AbstractServer {
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
-
-    @Override
-    public List<ExecutorService> getExecutors() {
-        return Collections.singletonList(executor);
     }
 
     /**
@@ -113,6 +103,18 @@ public class LayoutServer extends AbstractServer {
             setLayoutInHistory(getCurrentLayout());
         }
     }
+
+    @Override
+    void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
+    }
+
 
     private boolean isBootstrapped(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {
