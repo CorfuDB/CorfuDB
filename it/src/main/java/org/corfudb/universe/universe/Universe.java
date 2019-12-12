@@ -23,14 +23,14 @@ public interface Universe {
      * Create a {@link Universe} according to the desired state mentioned by {@link UniverseParams}
      *
      * @return an instance of applied change in the {@link Universe}
-     * @throws UniverseException
+     * @throws UniverseException universe exception
      */
     Universe deploy();
 
     /**
      * Shutdown the entire {@link Universe} by shutting down all the {@link Group}s in {@link Universe}
      *
-     * @throws UniverseException
+     * @throws UniverseException universe exception
      */
     void shutdown();
 
