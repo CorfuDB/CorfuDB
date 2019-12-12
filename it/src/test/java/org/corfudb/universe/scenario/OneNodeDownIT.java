@@ -13,6 +13,7 @@ import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.UniverseManager.UniverseWorkflow;
+import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
@@ -51,7 +52,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
     private void oneNodeDown(UniverseWorkflow<Fixture<UniverseParams>> wf) throws InterruptedException {
         String groupName = wf.getFixture().data().getGroupParamByIndex(0).getName();
-        VmCorfuCluster corfuCluster = wf.getUniverse().getGroup(groupName);
+        CorfuCluster corfuCluster = wf.getUniverse().getGroup(groupName);
 
         CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
