@@ -3,11 +3,13 @@ package org.corfudb.infrastructure.configuration;
 
 import io.netty.channel.EventLoopGroup;
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.corfudb.comm.ChannelImplementation;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -67,7 +69,8 @@ public class ServerConfiguration extends PropertiesConfiguration {
 
 
 
-    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine cmdOptions) {
+    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine cmdOptions) throws
+            ConfigurationException {
         ServerConfiguration conf = new ServerConfiguration();
         // merge command line with conf
         // This mapping is a temporary solution until we merge the command line config names
@@ -99,6 +102,13 @@ public class ServerConfiguration extends PropertiesConfiguration {
             conf.setServerPort(port);
         } else if (!cmdOptions.getArgList().isEmpty()) {
             throw new IllegalArgumentException("Unknown arguments " + cmdOptions.getArgList());
+        }
+
+        if (cmdOptions.hasOption("conf")) {
+            // if a config file is specified, it will override default values and
+            // other command like parameters
+            String confPath = cmdOptions.getOptionValue("conf");
+            conf.load(confPath);
         }
 
         return conf;
@@ -479,6 +489,19 @@ public class ServerConfiguration extends PropertiesConfiguration {
 
     public int getNumManagementServerThreads() {
         return getInt(NUM_MANAGEMENT_SERVER_THREADS, 4);
+    }
+
+    @Override
+    public String toString() {
+        Iterator<String> keys = getKeys();
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        while (keys.hasNext()) {
+            String key = keys.next();
+            sb.append(key).append(" = ").append(getProperty(key)).append("\n");
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
 }
