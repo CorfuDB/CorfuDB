@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -52,5 +53,13 @@ public class CorfuCompileWrapperBuilder {
         }
 
         return (T) wrapperObject;
+    }
+
+    public static <T extends ICorfuSMR<T>> T getWrapper(SMRObject<T> smrObject) throws Exception {
+        return getWrapper(smrObject.getType(),
+                smrObject.getRuntime(),
+                smrObject.getStreamID(),
+                smrObject.getArguments(),
+                smrObject.getSerializer());
     }
 }

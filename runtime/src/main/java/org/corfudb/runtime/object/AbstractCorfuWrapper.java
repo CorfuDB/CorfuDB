@@ -15,14 +15,6 @@ public abstract class AbstractCorfuWrapper<T> implements ICorfuSMRProxyWrapper<T
     ICorfuSMRProxy<T> proxy;
 
     /**
-     * Get a builder, which allows the construction of
-     * new Corfu objects.
-     */
-    protected IObjectBuilder<?> getBuilder() {
-        return proxy.getObjectBuilder();
-    }
-
-    /**
      * Get the stream ID that this container belongs to.
      *
      * @return Returns the StreamID of this Corfu Wrapper.
