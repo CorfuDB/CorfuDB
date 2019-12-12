@@ -199,7 +199,7 @@ public interface Fixtures {
 
             ConcurrentMap<VmName, IpAddress> vmIpAddresses = new ConcurrentHashMap<>();
             for (int i = 0; i < clusterParams.getNumNodes(); i++) {
-                vmIpAddresses.put(VmName.builder().host(vmPrefix + (i + 1)).build(), ANY_ADDRESS);
+                vmIpAddresses.put(VmName.builder().name(vmPrefix + (i + 1)).build(), ANY_ADDRESS);
             }
 
             VmUniverseParams universeParams = universe

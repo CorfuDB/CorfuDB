@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.corfudb.universe.util.IpAddress;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -29,14 +28,10 @@ public class CorfuProcessManager {
     private final Path serverJar;
     private final Path serverJarRelativePath;
 
-    private final IpAddress networkInterface;
-
-    public CorfuProcessManager(
-            Path corfuDir, @NonNull CorfuServerParams params, IpAddress networkInterface) {
+    public CorfuProcessManager(Path corfuDir, @NonNull CorfuServerParams params) {
 
         this.corfuDir = corfuDir;
         this.params = params;
-        this.networkInterface = networkInterface;
 
         serverDir = corfuDir.resolve(params.getName());
         dbDir = corfuDir.resolve(params.getStreamLogDir());

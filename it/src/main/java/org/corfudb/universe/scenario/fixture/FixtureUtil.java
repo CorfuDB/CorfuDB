@@ -76,7 +76,7 @@ public class FixtureUtil {
 
             VmCorfuServerParams serverParam = serverParamsBuilder
                     .clusterName(cluster.getName())
-                    .vmName(VmCorfuServerParams.VmName.builder().host(vmNamePrefix + (i + 1)).build() )
+                    .vmName(VmCorfuServerParams.VmName.builder().name(vmNamePrefix + (i + 1)).build() )
                     .port(port)
                     .serverVersion(cluster.getServerVersion())
                     .build();

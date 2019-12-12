@@ -47,7 +47,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         commandHelper = RemoteOperationHelper.getInstance();
 
         Path corfuDir = Paths.get("~");
-        this.processManager = new CorfuProcessManager(corfuDir, params, getNetworkInterface());
+        this.processManager = new CorfuProcessManager(corfuDir, params);
     }
 
     /**

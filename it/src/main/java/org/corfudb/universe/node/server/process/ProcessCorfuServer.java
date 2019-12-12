@@ -42,7 +42,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         super(params, universeParams);
 
         Path corfuDir = Paths.get(System.getProperty("user.home"), "corfu");
-        this.processManager = new CorfuProcessManager(corfuDir, params, getNetworkInterface());
+        this.processManager = new CorfuProcessManager(corfuDir, params);
     }
 
     /**
