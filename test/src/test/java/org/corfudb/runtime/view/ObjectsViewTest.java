@@ -54,7 +54,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(mapA)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
 
