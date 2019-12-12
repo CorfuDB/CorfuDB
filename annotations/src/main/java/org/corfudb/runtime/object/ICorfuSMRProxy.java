@@ -68,11 +68,11 @@ public interface ICorfuSMRProxy<T> {
      */
     <R> R TXExecute(Supplier<R> txFunction);
 
-    /** Get an object builder to build new objects.
+    /** Return the type of the object being replicated.
      *
-     * @return  An object which permits the construction of new objects.
+     * @return              The type of the replicated object.
      */
-    IObjectBuilder<?> getObjectBuilder();
+    Class<T> getObjectType();
 
     /** Get the latest version read by the proxy.
      *
