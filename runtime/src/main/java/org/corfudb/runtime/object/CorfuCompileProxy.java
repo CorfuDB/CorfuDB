@@ -384,13 +384,13 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     }
 
     /**
-     * Get an object builder to build new objects.
+     * Return the type of the object being replicated.
      *
-     * @return An object which permits the construction of new objects.
+     * @return The type of the replicated object.
      */
     @Override
-    public IObjectBuilder<?> getObjectBuilder() {
-        return rt.getObjectsView().build();
+    public Class<T> getObjectType() {
+        return type;
     }
 
     /**

@@ -13,7 +13,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
-import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.test.SampleSchema.ManagedResources;
@@ -197,7 +197,7 @@ public class CorfuStoreIT extends AbstractIT {
                 })
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         mcw.addMap(corfuTable);

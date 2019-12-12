@@ -429,7 +429,7 @@ public class StreamViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(stream)
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setOptions(Collections.singleton(ObjectOpenOptions.NO_CACHE))
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
         mapCopy.size();
