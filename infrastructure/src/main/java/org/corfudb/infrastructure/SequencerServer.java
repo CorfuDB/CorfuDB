@@ -159,7 +159,7 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
-    void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandler().handle(msg, ctx, r));
     }
 

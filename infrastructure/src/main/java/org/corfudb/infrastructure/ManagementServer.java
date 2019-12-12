@@ -102,7 +102,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @Override
-    void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (msg.getMsgType() == CorfuMsgType.NODE_STATE_REQUEST) {
             heartbeatThread.submit(() -> getHandler().handle(msg, ctx, r));
         } else {

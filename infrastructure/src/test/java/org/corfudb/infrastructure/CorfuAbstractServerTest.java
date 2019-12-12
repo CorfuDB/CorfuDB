@@ -34,6 +34,11 @@ public class CorfuAbstractServerTest {
             public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
                 return getState() == ServerState.READY;
             }
+
+            @Override
+            protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+                getHandler().handle(msg, ctx, r);
+            }
         };
 
         server.shutdown();
