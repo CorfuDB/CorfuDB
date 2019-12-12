@@ -10,6 +10,7 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
@@ -48,7 +49,7 @@ public class CorfuServer {
      *
      * @param args command line argument strings
      */
-    public static void main(String[] args) throws ParseException {
+    public static void main(String[] args) throws Exception {
         try {
             startServer(args);
         } catch (Throwable err) {
@@ -57,7 +58,7 @@ public class CorfuServer {
         }
     }
 
-    private static void startServer(String[] args) throws ParseException {
+    private static void startServer(String[] args) throws ParseException, ConfigurationException {
         Options options = new Options();
         options.addOption("l", "log-path", true,
                 "Directory where the server outputs its binary logs and metadata");
@@ -90,13 +91,14 @@ public class CorfuServer {
                 "The max size as percentage of underlying file-store size If this limit is exceeded " +
                         "write requests will be rejected");
         options.addOption("mp", "metrics-port", true, "Metrics provider server port ");
+        options.addOption("conf", "configuration", true,
+                "path of the server configuration file");
 
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
 
         ServerConfiguration conf = ServerConfiguration.getServerConfigFromCommandLineArg(cmd);
-
 
         // Print a nice welcome message.
         printStartupMsg(conf);

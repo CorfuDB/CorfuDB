@@ -43,9 +43,7 @@ public abstract class AbstractServer {
      * @param ctx
      * @param r
      */
-    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        getHandler().handle(msg, ctx, r);
-    }
+    protected abstract void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r);
 
     /**
      * Handle a incoming Netty message.

@@ -4,6 +4,7 @@ package org.corfudb.infrastructure.configuration;
 import ch.qos.logback.classic.Level;
 import io.netty.channel.EventLoopGroup;
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -71,7 +72,8 @@ public class ServerConfiguration extends PropertiesConfiguration {
     private Map<String, EventLoopGroup> testEventLoops = new HashMap<>();
 
 
-    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine cmdOptions) {
+    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine cmdOptions) throws
+            ConfigurationException {
         ServerConfiguration conf = new ServerConfiguration();
         // merge command line with conf
         // This mapping is a temporary solution until we merge the command line config names
@@ -108,6 +110,13 @@ public class ServerConfiguration extends PropertiesConfiguration {
             conf.setServerPort(port);
         } else if (!cmdOptions.getArgList().isEmpty()) {
             throw new IllegalArgumentException("Unknown arguments: " + cmdOptions.getArgList());
+        }
+
+        if (cmdOptions.hasOption("conf")) {
+            // if a config file is specified, it will override default values and
+            // other command like parameters
+            String confPath = cmdOptions.getOptionValue("conf");
+            conf.load(confPath);
         }
 
         return conf;
@@ -164,7 +173,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getNumIOThreads() {
-        return getInt(NUM_IO_THREADS, Runtime.getRuntime().availableProcessors());
+        return getInt(NUM_IO_THREADS, 8);
     }
 
     public ServerConfiguration setHostAddress(String address) {
@@ -403,7 +412,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getNumLayoutServerThreads() {
-        return getInt(NUM_LAYOUT_SERVER_THREADS, 8);
+        return getInt(NUM_LAYOUT_SERVER_THREADS, 4);
     }
 
     public ServerConfiguration setInMemoryMode(boolean inMemoryMode) {

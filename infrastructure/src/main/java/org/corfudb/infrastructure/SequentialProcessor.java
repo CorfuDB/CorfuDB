@@ -35,7 +35,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
  * the backing storage.
  */
 @Slf4j
-public class BatchProcessor implements AutoCloseable {
+public class SequentialProcessor implements AutoCloseable {
 
     final private int BATCH_SIZE = 50;
 
@@ -48,7 +48,7 @@ public class BatchProcessor implements AutoCloseable {
     private ExecutorService processorService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()
                     .setDaemon(false)
-                    .setNameFormat("LogUnit-BatchProcessor-%d")
+                    .setNameFormat("LogUnit-SequentialProcessor-%d")
                     .build());
 
     /**
@@ -60,7 +60,7 @@ public class BatchProcessor implements AutoCloseable {
     private long sealEpoch;
 
     /**
-     * Returns a new BatchProcessor for a stream log.
+     * Returns a new SequentialProcessor for a stream log.
      *
      * @param streamLog      stream log for writes (can be in memory or file)
      * @param sealEpoch All operations stamped with epoch less than the epochWaterMark are
@@ -68,7 +68,7 @@ public class BatchProcessor implements AutoCloseable {
      * @param streamLog the backing log (can be in memory or file)
      * @param sync    If true, the batch writer will sync writes to secondary storage
      */
-    public BatchProcessor(StreamLog streamLog, long sealEpoch, boolean sync) {
+    public SequentialProcessor(StreamLog streamLog, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
@@ -218,7 +218,7 @@ public class BatchProcessor implements AutoCloseable {
             processorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(),
                     TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            throw new UnrecoverableCorfuInterruptedError("BatchProcessor close interrupted.", e);
+            throw new UnrecoverableCorfuInterruptedError("SequentialProcessor close interrupted.", e);
         }
     }
 }
