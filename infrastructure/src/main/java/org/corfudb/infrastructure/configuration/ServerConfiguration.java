@@ -67,30 +67,40 @@ public class ServerConfiguration extends PropertiesConfiguration {
 
 
 
-    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine options) {
+    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine cmdOptions) {
         ServerConfiguration conf = new ServerConfiguration();
         // merge command line with conf
         // This mapping is a temporary solution until we merge the command line config names
         // with the config names in this file
-        conf.setServerDirectory(options.getOptionValue("log-path"));
-        conf.setInMemoryMode(options.hasOption("memory"));
-        conf.setSingleMode(options.hasOption("single"));
-        conf.setHostAddress(options.getOptionValue("address", "localhost"));
-        conf.setServerPort(Integer.parseInt(options.getOptionValue("port", "9000")));
-        conf.setNetworkInterface(options.getOptionValue("network-interface"));
+        conf.setServerDirectory(cmdOptions.getOptionValue("log-path"));
+        conf.setInMemoryMode(cmdOptions.hasOption("memory"));
+        conf.setSingleMode(cmdOptions.hasOption("single"));
+        conf.setHostAddress(cmdOptions.getOptionValue("address", "localhost"));
+        conf.setServerPort(Integer.parseInt(cmdOptions.getOptionValue("port", "9000")));
+        conf.setNetworkInterface(cmdOptions.getOptionValue("network-interface"));
         conf.setLogUnitCacheRatio(Double
-                .parseDouble(options.getOptionValue("cache-heap-ratio", "0.5")));
+                .parseDouble(cmdOptions.getOptionValue("cache-heap-ratio", "0.5")));
         conf.setSequencerConflictWindowSize(Integer
-                .parseInt(options.getOptionValue("sequencer-cache-size", "250000")));
-        conf.setLogLevel(options.getOptionValue("log-level", "INFO"));
-        conf.setEnableTls(options.hasOption("enable-tls"));
-        conf.setEnableTlsMutualAuth(options.hasOption("enable-tls-mutual-auth"));
-        conf.setKeystore(options.getOptionValue("keystore"));
-        conf.setKeystorePasswordFile(options.getOptionValue("keystore-password-file"));
-        conf.setTruststore(options.getOptionValue("truststore"));
-        conf.setTruststorePasswordFile(options.getOptionValue("truststore-password-file"));
-        conf.setLogSizeQuota(Double.parseDouble(options
+                .parseInt(cmdOptions.getOptionValue("sequencer-cache-size", "250000")));
+        conf.setLogLevel(cmdOptions.getOptionValue("log-level", "INFO"));
+        conf.setEnableTls(cmdOptions.hasOption("enable-tls"));
+        conf.setEnableTlsMutualAuth(cmdOptions.hasOption("enable-tls-mutual-auth"));
+        conf.setKeystore(cmdOptions.getOptionValue("keystore"));
+        conf.setKeystorePasswordFile(cmdOptions.getOptionValue("keystore-password-file"));
+        conf.setTruststore(cmdOptions.getOptionValue("truststore"));
+        conf.setTruststorePasswordFile(cmdOptions.getOptionValue("truststore-password-file"));
+        conf.setLogSizeQuota(Double.parseDouble(cmdOptions
                 .getOptionValue("log-size-quota-percentage", "100.0")));
+
+        // Special handling is needed because the port can be specified without
+        // an option name
+        if (cmdOptions.getArgList().size() == 1) {
+            int port = Integer.valueOf(cmdOptions.getArgList().get(0));
+            conf.setServerPort(port);
+        } else if (!cmdOptions.getArgList().isEmpty()) {
+            throw new IllegalArgumentException("Unknown arguments " + cmdOptions.getArgList());
+        }
+
         return conf;
     }
 
