@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * Provides Docker implementation of {@link CorfuCluster}.
  */
 @Slf4j
-public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
+public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuServerParams, UniverseParams> {
 
     @NonNull
     private final DockerClient docker;
@@ -38,7 +38,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
     private final DockerManager dockerManager;
 
     @Builder
-    public DockerCorfuCluster(DockerClient docker, CorfuClusterParams params,
+    public DockerCorfuCluster(DockerClient docker, CorfuClusterParams<CorfuServerParams> params,
                               UniverseParams universeParams, LoggingParams loggingParams) {
         super(params, universeParams);
         this.docker = docker;
