@@ -1,6 +1,7 @@
 package org.corfudb.universe.node.server.vm;
 
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
@@ -27,24 +28,29 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
 
     @NonNull
     private final VmManager vm;
+
     @NonNull
     private final IpAddress ipAddress;
+
+    @Getter
     @NonNull
-    private final RemoteOperationHelper commandHelper;
+    private final RemoteOperationHelper remoteOperationHelper;
+
     @NonNull
     private final VmStress stress;
+
     @NonNull
     private final CorfuProcessManager processManager;
 
     @Builder
     public VmCorfuServer(
             VmCorfuServerParams params, VmManager vm, VmUniverseParams universeParams,
-            VmStress stress) {
+            VmStress stress, RemoteOperationHelper remoteOperationHelper) {
         super(params, universeParams);
         this.vm = vm;
         this.ipAddress = getIpAddress();
         this.stress = stress;
-        commandHelper = RemoteOperationHelper.getInstance();
+        this.remoteOperationHelper = remoteOperationHelper;
 
         Path corfuDir = Paths.get("~");
         this.processManager = new CorfuProcessManager(corfuDir, params);
@@ -60,9 +66,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         executeCommand(processManager.createServerDirCommand());
         executeCommand(processManager.createStreamLogDirCommand());
 
-        commandHelper.copyFile(
-                ipAddress,
-                universeParams.getCredentials().getVmCredentials(),
+        remoteOperationHelper.copyFile(
                 params.getInfrastructureJar(),
                 processManager.getServerJar()
         );
@@ -184,22 +188,14 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * Executes a certain command on the VM.
      */
     private void executeCommand(String cmdLine) {
-        commandHelper.executeCommand(
-                getIpAddress(),
-                universeParams.getCredentials().getVmCredentials(),
-                cmdLine
-        );
+        remoteOperationHelper.executeCommand(cmdLine);
     }
 
     /**
      * Executes a certain Sudo command on the VM.
      */
     private void executeSudoCommand(String cmdLine) {
-        commandHelper.executeSudoCommand(
-                getIpAddress(),
-                universeParams.getCredentials().getVmCredentials(),
-                cmdLine
-        );
+        remoteOperationHelper.executeSudoCommand(cmdLine);
     }
 
     /**

@@ -53,10 +53,16 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
 
         VmManager vm = vms.get(params.getVmName());
 
+        RemoteOperationHelper commandHelper = RemoteOperationHelper.builder()
+                .ipAddress(vm.getResolvedIpAddress())
+                .credentials(universeParams.getCredentials().getVmCredentials())
+                .build();
+
         VmStress stress = VmStress.builder()
                 .params(params)
                 .universeParams(universeParams)
                 .vm(vm)
+                .commandHelper(commandHelper)
                 .build();
 
         return VmCorfuServer.builder()
@@ -64,6 +70,7 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
                 .params(params)
                 .vm(vm)
                 .stress(stress)
+                .remoteOperationHelper(commandHelper)
                 .build();
     }
 

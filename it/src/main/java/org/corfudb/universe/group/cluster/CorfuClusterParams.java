@@ -53,7 +53,6 @@ public class CorfuClusterParams<T extends CorfuServerParams> implements GroupPar
 
     @Default
     @Getter
-    @NonNull
     private final int bootStrapRetries = 20;
 
     @Default

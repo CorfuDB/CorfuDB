@@ -9,7 +9,6 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.stress.Stress;
 import org.corfudb.universe.universe.vm.ApplianceManager.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
-import org.corfudb.universe.util.IpAddress;
 
 @Slf4j
 @Builder
@@ -18,7 +17,8 @@ public class VmStress implements Stress {
     private final CorfuServerParams params;
     @NonNull
     private final VmManager vm;
-    private final RemoteOperationHelper commandHelper = RemoteOperationHelper.getInstance();
+    @NonNull
+    private final RemoteOperationHelper commandHelper;
     @NonNull
     private final VmUniverseParams universeParams;
 
@@ -80,17 +80,6 @@ public class VmStress implements Stress {
      * Executes a certain command on the VM.
      */
     private void executeOnVm(String cmdLine) {
-        commandHelper.executeCommand(
-                getIpAddress(),
-                universeParams.getCredentials().getVmCredentials(),
-                cmdLine
-        );
-    }
-
-    /**
-     * @return the IpAddress of this VM.
-     */
-    private IpAddress getIpAddress() {
-        return vm.getResolvedIpAddress();
+        commandHelper.executeCommand(cmdLine);
     }
 }
