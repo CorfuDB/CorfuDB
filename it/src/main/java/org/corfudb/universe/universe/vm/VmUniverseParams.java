@@ -22,15 +22,24 @@ import java.util.concurrent.ConcurrentMap;
 @ToString(callSuper = true)
 public class VmUniverseParams extends UniverseParams {
 
+    /**
+     * Default https://10.173.65.98/sdk
+     */
     @NonNull
     private final String vSphereUrl;
+
+    /**
+     * Default "10.172.208.208"
+     */
     @NonNull
     private final List<String> vSphereHost;
 
+    @NonNull
     private final VmCredentialsParams credentials;
 
     @NonNull
     private final String templateVMName;
+
     @NonNull
     private final ConcurrentMap<VmName, IpAddress> vmIpAddresses;
     @NonNull

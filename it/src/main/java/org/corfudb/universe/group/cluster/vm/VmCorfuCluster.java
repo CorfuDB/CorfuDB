@@ -16,7 +16,7 @@ import org.corfudb.universe.node.server.vm.VmCorfuServer;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.node.stress.vm.VmStress;
-import org.corfudb.universe.universe.vm.ApplianceManager.VmManager;
+import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 
 import java.util.Collections;
@@ -51,24 +51,24 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
         log.info("Deploy corfu server: {}", nodeParams);
         VmCorfuServerParams params = getVmServerParams(nodeParams);
 
-        VmManager vm = vms.get(params.getVmName());
+        VmManager vmManager = vms.get(params.getVmName());
 
         RemoteOperationHelper commandHelper = RemoteOperationHelper.builder()
-                .ipAddress(vm.getResolvedIpAddress())
+                .ipAddress(vmManager.getResolvedIpAddress())
                 .credentials(universeParams.getCredentials().getVmCredentials())
                 .build();
 
         VmStress stress = VmStress.builder()
                 .params(params)
                 .universeParams(universeParams)
-                .vm(vm)
+                .vmManager(vmManager)
                 .commandHelper(commandHelper)
                 .build();
 
         return VmCorfuServer.builder()
                 .universeParams(universeParams)
                 .params(params)
-                .vm(vm)
+                .vmManager(vmManager)
                 .stress(stress)
                 .remoteOperationHelper(commandHelper)
                 .build();
