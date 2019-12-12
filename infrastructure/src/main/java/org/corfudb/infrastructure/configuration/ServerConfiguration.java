@@ -152,7 +152,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getNumIOThreads() {
-        return getInt(NUM_IO_THREADS, Runtime.getRuntime().availableProcessors());
+        return getInt(NUM_IO_THREADS, 8);
     }
 
     public ServerConfiguration setHostAddress(String address) {
@@ -392,7 +392,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getNumLayoutServerThreads() {
-        return getInt(NUM_LAYOUT_SERVER_THREADS, 8);
+        return getInt(NUM_LAYOUT_SERVER_THREADS, 4);
     }
 
     public ServerConfiguration setInMemoryMode(boolean inMemoryMode) {

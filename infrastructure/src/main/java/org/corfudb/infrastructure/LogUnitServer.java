@@ -36,7 +36,6 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -91,9 +90,9 @@ public class LogUnitServer extends AbstractServer {
     private final LogUnitServerCache dataCache;
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
-    private final BatchProcessor batchWriter;
+    private final SequentialProcessor sequentialProcessor;
 
-    private ExecutorService executor;
+    private ExecutorService commonPool;
 
     /**
      * Returns a new LogUnitServer.
@@ -102,7 +101,7 @@ public class LogUnitServer extends AbstractServer {
      */
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        executor = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
+        commonPool = Executors.newFixedThreadPool(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
                 new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
 
         if (serverContext.getConfiguration().getInMemoryMode()) {
@@ -118,16 +117,40 @@ public class LogUnitServer extends AbstractServer {
         }
 
         dataCache = new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
-        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(),
+        sequentialProcessor = new SequentialProcessor(streamLog, serverContext.getServerEpoch(),
                 serverContext.getConfiguration().getSyncData());
 
-        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES,
+                ServerContext.SHUTDOWN_TIMER);
     }
-
 
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandler().handle(msg, ctx, r));
+        switch (msg.getMsgType()) {
+            case TAIL_REQUEST:
+            case LOG_ADDRESS_SPACE_REQUEST:
+            case WRITE:
+            case RANGE_WRITE:
+            case PREFIX_TRIM:
+                // Since these handlers will add work items to the sequential
+                // processor, we don't need to dispatch the request to a secondary
+                // executor
+                getHandler().handle(msg, ctx, r);
+                break;
+            case TRIM_MARK_REQUEST:
+            case READ_REQUEST:
+            case MULTIPLE_READ_REQUEST:
+            case KNOWN_ADDRESS_REQUEST:
+            case COMPACT_REQUEST:
+            case FLUSH_CACHE:
+            case RESET_LOGUNIT:
+                // These requests are blocking and need to be dispatched to
+                // a secondary executor
+                commonPool.submit(() -> getHandler().handle(msg, ctx, r));
+                break;
+            default:
+                throw new IllegalStateException("Unknown message type " + msg.getMsgType());
+        }
     }
 
     /**
@@ -136,7 +159,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest: received a tail request {}", msg);
-        batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
+        sequentialProcessor.<TailsResponse>addTask(TAILS_QUERY, msg)
                 .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -153,7 +176,7 @@ public class LogUnitServer extends AbstractServer {
         CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
         payloadMsg.copyBaseFields(msg);
         log.debug("handleLogAddressSpaceRequest: received a log address space request {}", msg);
-        batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
+        sequentialProcessor.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
                 .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
                         CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
                 .exceptionally(ex -> {
@@ -212,11 +235,11 @@ public class LogUnitServer extends AbstractServer {
             msg.setPriorityLevel(PriorityLevel.HIGH);
         }
 
-        batchWriter.addTask(WRITE, msg)
+        sequentialProcessor.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
+                }, commonPool).exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
         });
@@ -232,7 +255,7 @@ public class LogUnitServer extends AbstractServer {
         log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
-        batchWriter.addTask(RANGE_WRITE, msg)
+        sequentialProcessor.addTask(RANGE_WRITE, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -251,7 +274,7 @@ public class LogUnitServer extends AbstractServer {
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
         log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
-        batchWriter.addTask(PREFIX_TRIM, msg)
+        sequentialProcessor.addTask(PREFIX_TRIM, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -347,7 +370,7 @@ public class LogUnitServer extends AbstractServer {
         msg.setEpoch(epoch);
         msg.setPriorityLevel(PriorityLevel.HIGH);
         try {
-            batchWriter.addTask(SEAL, msg).join();
+            sequentialProcessor.addTask(SEAL, msg).join();
         } catch (CompletionException ce) {
             if (ce.getCause() instanceof WrongEpochException) {
                 // The BaseServer expects to observe this exception,
@@ -364,7 +387,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Resets the log unit server via the BatchProcessor.
+     * Resets the log unit server via the SequentialProcessor.
      * Warning: Clears all data.
      * <p>
      * - The epochWaterMark is set to prevent resetting log unit multiple times during
@@ -382,7 +405,7 @@ public class LogUnitServer extends AbstractServer {
         if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
                 && msg.getPayload() == serverContext.getServerEpoch()) {
             serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.addTask(RESET, msg)
+            sequentialProcessor.addTask(RESET, msg)
                     .thenRun(() -> {
                         dataCache.invalidateAll();
                         log.info("LogUnit Server Reset.");
@@ -405,9 +428,9 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void shutdown() {
         super.shutdown();
-        executor.shutdown();
+        commonPool.shutdown();
         logCleaner.shutdown();
-        batchWriter.close();
+        sequentialProcessor.close();
     }
 
     @VisibleForTesting
@@ -421,8 +444,8 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    BatchProcessor getBatchWriter() {
-        return batchWriter;
+    SequentialProcessor getSequentialProcessor() {
+        return sequentialProcessor;
     }
 
     @VisibleForTesting
