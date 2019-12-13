@@ -32,7 +32,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
     @Test(timeout = 600000)
     public void concurrentClusterResizeTest() {
         // Deploy a five nodes cluster
-        final int numNodes = 5;
+        final int numNodes = 4;
 
         workflow(wf -> {
             wf.setupDocker(fixture -> fixture.getCluster().numNodes(numNodes));
