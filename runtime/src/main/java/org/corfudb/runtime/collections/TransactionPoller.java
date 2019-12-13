@@ -35,16 +35,29 @@ public class TransactionPoller implements Runnable {
     private final List<StreamingSubscriptionContext> streamContexts;
 
     /**
+     * A reference to the transaction stream
+     */
+    private final IStreamView txnStream;
+
+    /**
      * Constructor.
      *
      * @param streams The list of StreamingSubscriptionContexts to process.
      */
     public TransactionPoller(@Nonnull CorfuRuntime runtime,
-            @Nonnull List<StreamingSubscriptionContext> streams) {
+                             @Nonnull List<StreamingSubscriptionContext> streams) {
         this.runtime = runtime;
         this.streamContexts = streams.stream()
                 .sorted(Comparator.comparingLong(sc -> sc.getLastReadAddress()))
                 .collect(Collectors.toList());
+
+        StreamOptions options = StreamOptions.builder()
+                .ignoreTrimmed(true)
+                .cacheEntries(false)
+                .build();
+
+        txnStream = runtime.getStreamsView()
+                .get(ObjectsView.TRANSACTION_STREAM_ID, options);
     }
 
     /**
@@ -69,18 +82,12 @@ public class TransactionPoller implements Runnable {
  
         long lastReadAddress = streamContexts.get(0).getLastReadAddress();
 
-        StreamOptions options = StreamOptions.builder()
-                .ignoreTrimmed(true)
-                .cacheEntries(false)
-                .build();
-        IStreamView txStream = runtime.getStreamsView()
-                .get(ObjectsView.TRANSACTION_STREAM_ID, options);
         log.trace("Seeking txStream to {}", lastReadAddress + 1);
-        txStream.seek(lastReadAddress + 1);
+        txnStream.seek(lastReadAddress + 1);
         log.trace("txStream current global position after seeking {}, hasNext {}",
-                txStream.getCurrentGlobalPosition(), txStream.hasNext());
+                txnStream.getCurrentGlobalPosition(), txnStream.hasNext());
 
-        List<ILogData> updates = txStream.remaining();
+        List<ILogData> updates = txnStream.remaining();
 
         log.trace("{} updates remaining in the txStream", updates.size());
 
