@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -757,8 +758,9 @@ public class FastObjectLoader {
                 ContiguousSet<Long> addresses = ContiguousSet.create(
                         Range.closed(lower, upper), DiscreteDomain.longs());
 
-                Map<Long, ILogData> range = runtime.getAddressSpaceView().read(addresses,
-                        RecoveryUtils.fastLoaderReadOptions);
+                Map<Long, ILogData> range = new TreeMap<>(
+                        runtime.getAddressSpaceView().read(addresses,
+                                RecoveryUtils.fastLoaderReadOptions));
 
                 // Sanity
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {
