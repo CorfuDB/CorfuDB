@@ -126,14 +126,12 @@ public class CmdletIT extends AbstractIT {
 
         final String command = CORFU_PROJECT_DIR + "bin/corfu_query " + ENDPOINT;
         final String expectedLogPath = "--log-path=" + CORFU_LOG_PATH;
-        final String expectedInitialToken = "--initial-token=-1";
         final String expectedStartupArgs = new CorfuServerRunner()
                 .setPort(PORT)
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .getOptionsString();
         String output = runCmdletGetOutput(command);
         assertThat(output.contains(expectedLogPath)).isTrue();
-        assertThat(output.contains(expectedInitialToken)).isTrue();
         assertThat(output.contains(expectedStartupArgs)).isTrue();
         shutdownCorfuServer(corfuServerProcess);
     }

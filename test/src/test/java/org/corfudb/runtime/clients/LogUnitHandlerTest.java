@@ -83,7 +83,6 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     Set<AbstractServer> getServersForTest() {
         String dirPath = PARAMETERS.TEST_TEMP_DIR;
         serverContext = new ServerContextBuilder()
-                .setInitialToken(0)
                 .setSingle(false)
                 .setNoVerify(false)
                 .setMemory(false)
