@@ -22,6 +22,8 @@ import org.junit.Test;
  * Created by mwei on 5/25/17.
  */
 public class CheckpointTrimTest extends AbstractViewTest {
+    final static long NUM_ENTRIES = 5000;
+    final static long Round3 = 3;
 
     @Test
     public void testCheckpointTrim() throws Exception {
@@ -31,21 +33,48 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        // Place 3 entries into the map
-        testMap.put("a", "a");
-        testMap.put("b", "b");
-        testMap.put("c", "c");
+        long size0 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        System.out.println("init size:" + size0);
+
+        long numEntries = NUM_ENTRIES;
+
+        for (long i = 0; i < numEntries; i++) {
+                testMap.put (String.valueOf (i), String.valueOf (i));
+        }
+
+        long size1 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        System.out.println("put " + numEntries + " entries:" + (size1 - size0));
+
+        for (long i = 0; i < numEntries; i++) {
+            testMap.put (String.valueOf (i), String.valueOf (i));
+        }
+
+        long size2 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        System.out.println("put another " + numEntries + " entries: " + (size2 - size1));
+        assert(size2 / (size1 - size0) >= 2);
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
+        long size3 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        System.out.println("after writing checkpoint:" + (size3 - size2));
+        assert( size3 / (size1 - size0) >= Round3);
+
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
+
+        long size4 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        System.out.println("after perfixTrim:" + size4);
+
         getRuntime().getAddressSpaceView().gc();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
         getRuntime().getAddressSpaceView().invalidateClientCache();
+
+        long size5 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        System.out.println("after gc: " + size5);
+        assert (size5 < size4);
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
@@ -56,8 +85,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         // Reading an entry from scratch should be ok
-        assertThat(newTestMap)
-                .containsKeys("a", "b", "c");
+        for(long i = 0; i < numEntries; i++) {
+            assertThat (newTestMap).containsKeys(String.valueOf (i));
+        }
     }
 
     /**

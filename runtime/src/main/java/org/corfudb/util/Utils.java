@@ -232,6 +232,29 @@ public class Utils {
         return globalLogTail;
     }
 
+
+    public static long getMaxLogFileSize(Layout layout, CorfuRuntime runtime) {
+        long size = 0;
+
+        Layout.LayoutSegment segment = layout.getLatestSegment();
+
+        // Query the head log unit in every stripe.
+        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                Long response = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
+                                .getLogFileSize ());
+                size = Long.max(size, response);
+            }
+        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
+            throw new UnsupportedOperationException();
+        }
+
+        return size;
+    }
+
+
     /**
      * Fetches the max global log tail and all stream tails from the log unit cluster. This depends on the mode of
      * replication being used.

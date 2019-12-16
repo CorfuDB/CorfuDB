@@ -17,6 +17,7 @@ public class ResourceQuota {
     @Getter
     private final long limit;
 
+    @Getter
     private final AtomicLong used = new AtomicLong();
 
     public ResourceQuota(String name, long limit) {

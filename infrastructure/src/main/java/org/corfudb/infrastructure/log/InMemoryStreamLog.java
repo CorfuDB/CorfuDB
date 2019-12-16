@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -29,7 +30,8 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     private final Set<Long> trimmed;
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
-
+    private ResourceQuota logSizeQuota;
+    final long MAX_MEM_SIZE = (1 << 30); //1GB
     /**
      * Returns an object that stores a stream log in memory.
      */
@@ -38,6 +40,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
         logMetadata = new LogMetadata();
+        logSizeQuota = new ResourceQuota("LogSizeQuota", MAX_MEM_SIZE);
     }
 
     @Override
@@ -49,6 +52,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
             logCache.put(entry.getGlobalAddress(), entry);
             logMetadata.update(entry, false);
+            logSizeQuota.consume(entry.getSizeEstimate ());
         }
     }
 
@@ -62,6 +66,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
+        logSizeQuota.consume(entry.getSizeEstimate ());
         logMetadata.update(entry, false);
     }
 
@@ -169,12 +174,18 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         // Prefix Trim
         for (long address : logCache.keySet()) {
             if (address < startingAddress) {
+                LogData data = logCache.get(address);
+                if (data != null)
+                    logSizeQuota.release (data.getSizeEstimate ());
                 logCache.remove(address);
             }
         }
 
         // Sparse trim
         for (long address : trimmed) {
+            LogData data = logCache.get(address);
+            if (data != null)
+                logSizeQuota.release (data.getSizeEstimate ());
             logCache.remove(address);
         }
 
@@ -193,5 +204,20 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         trimmed.clear();
         // Clearing all data from the cache.
         logCache.clear();
+        logSizeQuota = new ResourceQuota("LogSizeQuota", MAX_MEM_SIZE);
+    }
+
+    @Override
+    public boolean quotaExceeded() {
+        return !logSizeQuota.hasAvailable();
+    }
+
+    public long quotaUsed() {
+        return logSizeQuota.getUsed().get();
+    }
+
+    @Override
+    public long quotaLimitInBytes() {
+        return logSizeQuota.getLimit();
     }
 }

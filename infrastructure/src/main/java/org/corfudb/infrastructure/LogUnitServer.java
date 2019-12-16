@@ -182,6 +182,12 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
+    @ServerHandler(type = CorfuMsgType.LOG_FILE_SIZE_REQUEST)
+    public void handleLogFileSizeRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("handleLogFileSizeRequest: received a request {}", msg);
+        r.sendResponse(ctx, msg, CorfuMsgType.LOG_FILE_SIZE_RESPONSE.payloadMsg(streamLog.quotaUsed ()));
+    }
+
     /**
      * A helper function that maps an exception to the appropriate response message.
      */

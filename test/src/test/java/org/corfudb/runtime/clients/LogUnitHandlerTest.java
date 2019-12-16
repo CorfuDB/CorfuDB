@@ -119,6 +119,16 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
+    public void canGetTrimMarkAndLogSize()
+            throws Exception {
+        byte[] testString = "hello world".getBytes();
+        client.write(0, null, testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getAddresses().get(0L);
+        assertThat (client.getTrimMark().get());
+        assertThat (client.getLogFileSize ().get());
+    }
+
+    @Test
     public void readingEmptyAddress() throws Exception {
         final long address0 = 0;
         LogData r = client.read(address0).get().getAddresses().get(0L);

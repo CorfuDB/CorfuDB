@@ -137,15 +137,17 @@ public interface StreamLog {
     /**
      * Query if the StreamLog has enough quota to accept writes
      */
-    default boolean quotaExceeded() {
-        return false;
-    }
+    boolean quotaExceeded();
 
     /**
      * Query the exact Quota value in bytes
      * @return the quota set in bytes
      */
-    default long quotaLimitInBytes() {
-        return Long.MAX_VALUE;
-    }
+    long quotaLimitInBytes();
+
+    /**
+     * Query the space used in bytes
+     * @return the space used in bytes
+     */
+    long quotaUsed();
 }

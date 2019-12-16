@@ -497,6 +497,11 @@ public class AddressSpaceView extends AbstractView {
                 e -> Utils.getAllTails(e.getLayout(), runtime));
     }
 
+    public Long getMaxLogFileSize() {
+        return layoutHelper(
+                e -> Utils.getMaxLogFileSize (e.getLayout(), runtime));
+    }
+
     /**
      * Get log address space, which includes:
      *     1. Addresses belonging to each stream.

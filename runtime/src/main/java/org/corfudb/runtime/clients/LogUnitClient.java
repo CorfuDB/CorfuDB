@@ -226,6 +226,15 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Get the size of log file in bytes.
+     *
+     * @return a CompletableFuture for the starting address
+     */
+    public CompletableFuture<Long> getLogFileSize() {
+        return sendMessageWithFuture(CorfuMsgType.LOG_FILE_SIZE_REQUEST.msg());
+    }
+
+    /**
      * Request for known addresses in the specified range.
      *
      * @param startRange Start of range.
