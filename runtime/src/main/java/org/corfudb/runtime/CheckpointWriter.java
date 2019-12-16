@@ -4,7 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-
+import com.google.common.collect.Iterables;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -25,21 +25,14 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.Iterator;
-import java.util.concurrent.Future;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
+
 
 /** Checkpoint writer for SMRMaps: take a snapshot of the
  *  object via TXBegin(), then dump the frozen object's
@@ -51,7 +44,6 @@ import java.util.stream.Stream;
 public class CheckpointWriter<T extends StreamingMap> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
-    private final int MAX_WRITER = 8;
     private final UUID streamId;
     private final String author;
     @Getter
@@ -59,9 +51,8 @@ public class CheckpointWriter<T extends StreamingMap> {
     private LocalDateTime startTime;
     private long startAddress;
     private long endAddress;
-    private AtomicLong numEntries = new AtomicLong(0);
-    private AtomicLong numBytes = new AtomicLong(0);
-    private AtomicLong entryCount = new AtomicLong(0);
+    private long numEntries = 0;
+    private long numBytes = 0;
 
     // Registry and Timer used for measuring append checkpoint
     private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
@@ -172,13 +163,13 @@ public class CheckpointWriter<T extends StreamingMap> {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
             log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
-
+            Stream<Map.Entry> entries = this.map.entryStream();
             // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
             // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
             startCheckpoint(snapshotTimestamp, streamTail);
-            long entryCount = appendObjectState(this.map.entryStream ());
+            int entryCount = appendObjectState(entries);
             finishCheckpoint();
             long cpDuration = System.currentTimeMillis() - start;
             log.info("appendCheckpoint: completed checkpoint for {}, entries({}), " +
@@ -229,36 +220,6 @@ public class CheckpointWriter<T extends StreamingMap> {
         return sv.append(object, null, CacheOption.WRITE_AROUND, streamIDs);
     }
 
-    /**
-     * @param partition the set of values to be written.
-     * @param num the current batch number
-     * @return
-     */
-    void writeCKJob(List<Map.Entry> partition, int num) {
-        log.info("checkpoint for {} partition {} entries {}", streamId, num, partition.size());
-        MultiSMREntry smrEntries = new MultiSMREntry ();
-        for (Map.Entry entry : partition) {
-            smrEntries.addTo (new SMREntry ("put",
-                    new Object[]{keyMutator.apply (entry.getKey ()),
-                            valueMutator.apply (entry.getValue ())},
-                    serializer));
-            entryCount.getAndIncrement ();
-        }
-
-        CheckpointEntry cp = new CheckpointEntry (CheckpointEntry
-                .CheckpointEntryType.CONTINUATION,
-                author, checkpointId, streamId, mdkv, smrEntries);
-        long pos = nonCachedAppend (cp, checkpointStreamID);
-        postAppendFunc.accept (cp, pos);
-        numEntries.getAndIncrement ();
-        // CheckpointEntry::serialize() has a side-effect we use
-        // for an accurate count of serialized bytes of SRMEntries.
-        numBytes.getAndAdd(cp.getSmrEntriesBytes());
-        log.info("checkpoint for {} partition {} entries {} entryCount {} numEntries {} numBytes {}",
-                streamId, num, partition.size(), entryCount, numEntries, numBytes);
-    }
-
-
     /** Append zero or more CONTINUATION records to this
      *  object's stream.  Each will contain a fraction of
      *  the state of the object that we're checkpointing
@@ -283,41 +244,36 @@ public class CheckpointWriter<T extends StreamingMap> {
      *
      * @return Stream of global log addresses of the CONTINUATION records written.
      */
-    public long appendObjectState(Stream<Map.Entry> entryStream ) {
+    public int appendObjectState(Stream<Map.Entry> entryStream) {
         ImmutableMap<CheckpointEntry.CheckpointDictKey, String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
 
-        List<Future<String>> taskList = new ArrayList<>();
-        ExecutorService executor = Executors.newFixedThreadPool(MAX_WRITER);
-        Iterator streamIter  = entryStream.iterator ();
+        final Iterable<List<Map.Entry>> partitions =
+                Iterables.partition(entryStream::iterator, batchSize);
+        int entryCount = 0;
 
-        int i = 0;
-        List<Map.Entry> partition = new ArrayList();
-        while (streamIter.hasNext()) {
-            partition.add((Map.Entry)streamIter.next());
-            if (partition.size () == batchSize || !streamIter.hasNext()) {
-                int finalI = i++;
-                List<Map.Entry> current = partition;
-                Future<String> future = executor.submit (new Callable () {
-                    public Object call() {
-                        writeCKJob (current, finalI);
-                        return "Done" + finalI;
-                    }
-                });
-                taskList.add (future);
-                partition = new ArrayList<Map.Entry> ();
+        for (List<Map.Entry> partition : partitions) {
+            MultiSMREntry smrEntries = new MultiSMREntry();
+            for (Map.Entry entry : partition) {
+                smrEntries.addTo(new SMREntry("put",
+                        new Object[]{keyMutator.apply(entry.getKey()),
+                                valueMutator.apply(entry.getValue())},
+                        serializer));
+                entryCount++;
             }
+
+            CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
+                    .CheckpointEntryType.CONTINUATION,
+                    author, checkpointId, streamId, mdkv, smrEntries);
+            long pos = nonCachedAppend(cp, checkpointStreamID);
+            postAppendFunc.accept(cp, pos);
+            numEntries++;
+            // CheckpointEntry::serialize() has a side-effect we use
+            // for an accurate count of serialized bytes of SRMEntries.
+            numBytes += cp.getSmrEntriesBytes();
         }
-        try {
-            for (Future<String> task : taskList) {
-                log.debug ("task done: ", task.get());
-            }
-        } catch (ExecutionException | InterruptedException e) {
-            log.error ("Checkpoint failure with exception ", e);
-        }
-        log.info("Checkpoint total {} batches {} entries.", i, entryCount.get());
-        executor.shutdown();
-        return entryCount.get();
+
+        return entryCount;
     }
 
     /** Append a checkpoint END record to this object's stream.
@@ -330,10 +286,10 @@ public class CheckpointWriter<T extends StreamingMap> {
     public void finishCheckpoint() {
         LocalDateTime endTime = LocalDateTime.now();
         mdkv.put(CheckpointEntry.CheckpointDictKey.END_TIME, endTime.toString());
-        numEntries.getAndIncrement();
-        numBytes.getAndIncrement();
-        mdkv.put(CheckpointEntry.CheckpointDictKey.ENTRY_COUNT, Long.toString(numEntries.get()));
-        mdkv.put(CheckpointEntry.CheckpointDictKey.BYTE_COUNT, Long.toString(numBytes.get()));
+        numEntries++;
+        numBytes++;
+        mdkv.put(CheckpointEntry.CheckpointDictKey.ENTRY_COUNT, Long.toString(numEntries));
+        mdkv.put(CheckpointEntry.CheckpointDictKey.BYTE_COUNT, Long.toString(numBytes));
 
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointId, streamId, mdkv, null);
