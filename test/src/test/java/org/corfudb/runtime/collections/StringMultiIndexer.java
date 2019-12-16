@@ -10,19 +10,19 @@ import java.util.Optional;
 /**
  * Created by Sam Behnam on 5/10/18.
  */
-public class StringMultiIndexer implements CorfuTable.IndexRegistry<String, String> {
-    public static final CorfuTable.IndexName BY_EACH_WORD = () -> "BY_EACH_WORD";
+public class StringMultiIndexer implements Index.Registry<String, String> {
+    public static final Index.Name BY_EACH_WORD = () -> "BY_EACH_WORD";
 
-    private static final CorfuTable.Index<String, String, ? extends Comparable<?>> BY_WORD_INDEX =
-            new CorfuTable.Index<>(BY_EACH_WORD,
-                    (CorfuTable.MultiValueIndexFunction<String, String, String>) (key, val) -> keySetOWords(val));
+    private static final Index.Spec<String, String, ? extends Comparable<?>> BY_WORD_INDEX =
+            new Index.Spec<>(BY_EACH_WORD,
+                    (Index.MultiValueFunction<String, String, String>) (key, val) -> keySetOWords(val));
 
     private static Iterable<String> keySetOWords(String val) {
         return new HashSet<>(Arrays.asList(val.split(" ")));
     }
 
     @Override
-    public Optional<CorfuTable.Index<String, String, ? extends Comparable<?>>> get(CorfuTable.IndexName name) {
+    public Optional<Index.Spec<String, String, ? extends Comparable<?>>> get(Index.Name name) {
         String indexName = (name != null) ? name.get() : null;
         if (BY_EACH_WORD.get().equals(indexName)) {
             return Optional.of(BY_WORD_INDEX);
@@ -32,8 +32,8 @@ public class StringMultiIndexer implements CorfuTable.IndexRegistry<String, Stri
     }
 
     @Override
-    public Iterator<CorfuTable.Index<String, String, ? extends Comparable<?>>> iterator() {
-        final List<CorfuTable.Index<String, String, ? extends Comparable<?>>> indices = new ArrayList<>();
+    public Iterator<Index.Spec<String, String, ? extends Comparable<?>>> iterator() {
+        final List<Index.Spec<String, String, ? extends Comparable<?>>> indices = new ArrayList<>();
         indices.add(BY_WORD_INDEX);
         return indices.iterator();
 

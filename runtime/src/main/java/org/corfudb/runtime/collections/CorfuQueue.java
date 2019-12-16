@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
@@ -44,7 +43,7 @@ public class CorfuQueue<E> {
     private final CorfuGuidGenerator guidGenerator;
 
     public CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer,
-                      IndexRegistry<Long, E> indices) {
+                      Index.Registry<Long, E> indices) {
         final Supplier<StreamingMap<Long, E>> mapSupplier =
                 () -> new StreamingMapDecorator<>(new LinkedHashMap<Long, E>());
         this.runtime = runtime;
@@ -58,7 +57,7 @@ public class CorfuQueue<E> {
     }
 
     public CorfuQueue(CorfuRuntime runtime, String streamName) {
-        this(runtime, streamName, Serializers.getDefaultSerializer(), IndexRegistry.empty());
+        this(runtime, streamName, Serializers.getDefaultSerializer(), Index.Registry.empty());
 
     }
 
