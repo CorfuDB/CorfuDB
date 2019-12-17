@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -149,5 +150,5 @@ public interface StreamLog {
      * Query the space used in bytes
      * @return the space used in bytes
      */
-    long quotaUsed();
+    ResourceQuota getLogSizeQuota();
 }

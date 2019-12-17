@@ -56,4 +56,8 @@ public class ResourceQuota {
         return Math.max(limit - used.get(), 0);
     }
 
+    /**
+     * Returns the amount of used resources
+     */
+    public long getUsed() { return used.get(); };
 }

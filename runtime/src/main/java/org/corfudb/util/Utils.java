@@ -244,7 +244,7 @@ public class Utils {
                 Long response = CFUtils.getUninterruptibly(
                         runtime.getLayoutView().getRuntimeLayout(layout)
                                 .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                                .getLogFileSize ());
+                                .getLogSize ());
                 size = Long.max(size, response);
             }
         } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {

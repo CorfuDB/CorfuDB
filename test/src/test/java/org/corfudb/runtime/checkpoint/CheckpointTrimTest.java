@@ -33,7 +33,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        long size0 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        long size0 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
         System.out.println("init size:" + size0);
 
         long numEntries = NUM_ENTRIES;
@@ -42,39 +42,39 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 testMap.put (String.valueOf (i), String.valueOf (i));
         }
 
-        long size1 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        long size1 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
         System.out.println("put " + numEntries + " entries:" + (size1 - size0));
 
         for (long i = 0; i < numEntries; i++) {
             testMap.put (String.valueOf (i), String.valueOf (i));
         }
 
-        long size2 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        long size2 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
         System.out.println("put another " + numEntries + " entries: " + (size2 - size1));
-        assert(size2 / (size1 - size0) >= 2);
+        assertThat(size2 / (size1 - size0) >= 2);
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
-        long size3 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        long size3 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
         System.out.println("after writing checkpoint:" + (size3 - size2));
-        assert( size3 / (size1 - size0) >= Round3);
+        assertThat(size3 / (size1 - size0) >= Round3);
 
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
 
-        long size4 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        long size4 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
         System.out.println("after perfixTrim:" + size4);
 
         getRuntime().getAddressSpaceView().gc();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
         getRuntime().getAddressSpaceView().invalidateClientCache();
 
-        long size5 = getRuntime ().getAddressSpaceView ().getMaxLogFileSize ();
+        long size5 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
         System.out.println("after gc: " + size5);
-        assert (size5 < size4);
+        assertThat(size5 < size4);
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()

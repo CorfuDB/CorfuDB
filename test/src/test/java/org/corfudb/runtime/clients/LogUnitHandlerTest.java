@@ -124,8 +124,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         client.write(0, null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
-        assertThat (client.getTrimMark().get());
-        assertThat (client.getLogFileSize ().get());
+        assertThat (client.getTrimMark().get()==0);
+        assertThat (client.getLogSize().get()>testString.length);
     }
 
     @Test

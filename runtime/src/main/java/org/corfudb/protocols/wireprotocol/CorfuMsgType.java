@@ -61,8 +61,8 @@ public enum CorfuMsgType {
     MULTIPLE_READ_REQUEST(35, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
 
-    LOG_FILE_SIZE_REQUEST(39, TypeToken.of(CorfuMsg.class)),
-    LOG_FILE_SIZE_RESPONSE(40, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    LOG_SIZE_REQUEST(39, TypeToken.of(CorfuMsg.class)),
+    LOG_SIZE_RESPONSE(40, new TypeToken<CorfuPayloadMsg<Long>>(){}),
 
     TAIL_REQUEST(41, new TypeToken<CorfuPayloadMsg<TailsRequest>>(){}),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
