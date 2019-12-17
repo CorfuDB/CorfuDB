@@ -233,7 +233,7 @@ public class Utils {
     }
 
 
-    public static long getMaxLogFileSize(Layout layout, CorfuRuntime runtime) {
+    public static long getMaxLogSize(Layout layout, CorfuRuntime runtime) {
         long size = 0;
 
         Layout.LayoutSegment segment = layout.getLatestSegment();

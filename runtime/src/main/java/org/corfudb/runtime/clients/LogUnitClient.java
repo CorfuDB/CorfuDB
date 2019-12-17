@@ -231,7 +231,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture for the starting address
      */
     public CompletableFuture<Long> getLogSize() {
-        return sendMessageWithFuture(CorfuMsgType.LOG_FILE_SIZE_REQUEST.msg());
+        return sendMessageWithFuture(CorfuMsgType.LOG_SIZE_REQUEST.msg());
     }
 
     /**

@@ -22,8 +22,8 @@ import org.junit.Test;
  * Created by mwei on 5/25/17.
  */
 public class CheckpointTrimTest extends AbstractViewTest {
-    final static long NUM_ENTRIES = 5000;
-    final static long Round3 = 3;
+    final private static long NUM_ENTRIES = 5000;
+    final private static long Round3 = 3;
 
     @Test
     public void testCheckpointTrim() throws Exception {

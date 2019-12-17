@@ -499,7 +499,7 @@ public class AddressSpaceView extends AbstractView {
 
     public Long getMaxLogSize() {
         return layoutHelper(
-                e -> Utils.getMaxLogFileSize (e.getLayout(), runtime));
+                e -> Utils.getMaxLogSize (e.getLayout(), runtime));
     }
 
     /**

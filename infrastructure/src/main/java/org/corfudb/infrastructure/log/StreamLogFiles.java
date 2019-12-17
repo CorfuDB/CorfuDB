@@ -74,9 +74,7 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  */
 
 @Slf4j
-public class StreamLogFiles implements StreamLog,
-
-        StreamLogWithRankedAddressSpace {
+public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpace {
 
     public static final int METADATA_SIZE = Metadata.newBuilder()
             .setLengthChecksum(-1)
@@ -288,11 +286,6 @@ public class StreamLogFiles implements StreamLog,
     @Override
     public long quotaLimitInBytes() {
         return logSizeQuota.getLimit();
-    }
-
-    @Override
-    public long quotaUsed() {
-        return logSizeQuota.getUsed().get();
     }
 
     @Override

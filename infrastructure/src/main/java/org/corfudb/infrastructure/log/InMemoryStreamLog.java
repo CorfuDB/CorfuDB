@@ -31,7 +31,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     private final Set<Long> trimmed;
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
-    final long MAX_MEM_SIZE = Runtime.getRuntime ().maxMemory ();
+    final private long MAX_MEM_SIZE = Runtime.getRuntime().maxMemory();
 
     @Getter
     private ResourceQuota logSizeQuota;
