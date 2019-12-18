@@ -148,6 +148,7 @@ public class TxnStreamingManager {
         if (!lockedStreamingSubscriptionContexts.isEmpty()) {
             log.trace("Locked {} StreamingSubscriptionContexts for processing",
                     lockedStreamingSubscriptionContexts.size());
+
             pollerExecutor.submit(new TransactionPoller(runtime, lockedStreamingSubscriptionContexts));
         }
 

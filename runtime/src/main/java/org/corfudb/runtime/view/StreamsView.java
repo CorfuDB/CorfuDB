@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
