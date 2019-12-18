@@ -567,7 +567,6 @@ public class ServerRestartIT extends AbstractIT {
 
         // Start a new client with cache disabled and fast object loading disabled.
         CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
-                .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
         CorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringIndexer());
@@ -641,7 +640,6 @@ public class ServerRestartIT extends AbstractIT {
 
         // Start a new client with cache and fast object loading disabled and verify multi index.
         CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
-                .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
         CorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringMultiIndexer());
