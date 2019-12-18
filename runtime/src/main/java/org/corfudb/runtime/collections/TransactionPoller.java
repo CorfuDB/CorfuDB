@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -37,6 +38,7 @@ public class TransactionPoller implements Runnable {
     /**
      * A reference to the transaction stream
      */
+    @Getter
     private final IStreamView txnStream;
 
     /**
@@ -52,12 +54,11 @@ public class TransactionPoller implements Runnable {
                 .collect(Collectors.toList());
 
         StreamOptions options = StreamOptions.builder()
-                .ignoreTrimmed(true)
                 .cacheEntries(false)
                 .build();
 
         txnStream = runtime.getStreamsView()
-                .get(ObjectsView.TRANSACTION_STREAM_ID, options);
+                .getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, options);
     }
 
     /**
