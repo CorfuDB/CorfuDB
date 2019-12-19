@@ -87,7 +87,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setSingle(false)
                 .setNoVerify(false)
                 .setMemory(false)
-                //.setLogPath(dirPath)
+                .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .build();
         LogUnitServer server = new LogUnitServer(serverContext);
