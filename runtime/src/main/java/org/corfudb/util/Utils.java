@@ -1,52 +1,28 @@
 package org.corfudb.util;
 
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
-import io.netty.buffer.ByteBuf;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
 import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by crossbach on 5/22/15.
  */
 @Slf4j
 public class Utils {
-
     private static final int DEFAULT_LOGUNIT = 0;
 
     private Utils() {
@@ -228,32 +204,31 @@ public class Utils {
         } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
             throw new UnsupportedOperationException();
         }
-
         return globalLogTail;
     }
 
-
-    public static long getMaxLogSize(Layout layout, CorfuRuntime runtime) {
+    public static long getLogSize(Layout layout, CorfuRuntime runtime, long startAddress, long endAddress) {
         long size = 0;
+        long segmentSize = 0;
+        long currentEnd = 0;
+        for (Layout.LayoutSegment segment : layout.getSegments()) {
+            if (segment.getEnd() > 0 && segment.getEnd() <= startAddress || endAddress <= segment.getStart())
+                    continue;
 
-        Layout.LayoutSegment segment = layout.getLatestSegment();
+            currentEnd = endAddress;
+            if (segment.getEnd() > 0)
+                currentEnd = Long.min(endAddress, segment.getEnd() -1);
 
-        // Query the head log unit in every stripe.
-        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                Long response = CFUtils.getUninterruptibly(
-                        runtime.getLayoutView().getRuntimeLayout(layout)
-                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                                .getLogSize ());
-                size = Long.max(size, response);
-            }
-        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
-            throw new UnsupportedOperationException();
+            Layout.LayoutStripe stripe = segment.getStripes().get(0);
+            size += CFUtils.getUninterruptibly (runtime.getLayoutView()
+                    .getRuntimeLayout (layout)
+                    .getLogUnitClient (stripe.getLogServers().get(DEFAULT_LOGUNIT))
+                    .getSegmentSize(startAddress, endAddress));
+            startAddress = currentEnd + 1;
         }
 
         return size;
     }
-
 
     /**
      * Fetches the max global log tail and all stream tails from the log unit cluster. This depends on the mode of

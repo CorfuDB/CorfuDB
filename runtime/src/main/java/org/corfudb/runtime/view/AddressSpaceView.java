@@ -497,9 +497,14 @@ public class AddressSpaceView extends AbstractView {
                 e -> Utils.getAllTails(e.getLayout(), runtime));
     }
 
-    public Long getMaxLogSize() {
+    public Long getLogSize(long start, long end) {
         return layoutHelper(
-                e -> Utils.getMaxLogSize (e.getLayout(), runtime));
+                e -> Utils.getLogSize(e.getLayout(), runtime, start, end));
+    }
+
+    public Long getLogSize() {
+        return getLogSize(runtime.getAddressSpaceView().getTrimMark().getSequence(),
+                runtime.getAddressSpaceView().getLogTail());
     }
 
     /**

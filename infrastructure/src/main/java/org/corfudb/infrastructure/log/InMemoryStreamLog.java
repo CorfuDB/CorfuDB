@@ -221,4 +221,18 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     public long quotaLimitInBytes() {
         return logSizeQuota.getLimit();
     }
+
+    @Override
+    /**
+     * startAddress the startAddress of the segment file
+     */
+    public long getSegmentSize(long startAddress) {
+        long size = 0;
+        for(long i = 0; i < RECORDS_PER_LOG_FILE; i++) {
+            LogData data = logCache.get(i + startAddress);
+            if (data != null)
+                size += data.getSizeEstimate();
+        }
+        return size;
+     }
 }

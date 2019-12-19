@@ -30,6 +30,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.protocols.wireprotocol.SegmentSizeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
@@ -226,12 +227,22 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Get the size of log file in bytes.
+     * Get a log server's quota used in bytes.
      *
      * @return a CompletableFuture for the starting address
      */
-    public CompletableFuture<Long> getLogSize() {
-        return sendMessageWithFuture(CorfuMsgType.LOG_SIZE_REQUEST.msg());
+    public CompletableFuture<Long> getQuotaUsed() {
+        return sendMessageWithFuture(CorfuMsgType.QUOTA_USED_REQUEST.msg());
+    }
+
+    /**
+     * Get the size of a segment in bytes.
+     *
+     * @return a CompletableFuture for the starting address
+     */
+    public CompletableFuture<Long> getSegmentSize(long startAddress, long endAddress) {
+        SegmentSizeRequest req = new SegmentSizeRequest(startAddress, endAddress);
+        return sendMessageWithFuture(CorfuMsgType.SEGMENT_SIZE_REQUEST.payloadMsg(req));
     }
 
     /**

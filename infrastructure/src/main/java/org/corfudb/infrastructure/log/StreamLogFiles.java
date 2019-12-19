@@ -83,7 +83,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             .build()
             .getSerializedSize();
     public static final int VERSION = 2;
-    public static final int RECORDS_PER_LOG_FILE = 10000;
     private final Path logDir;
     private final boolean verify;
 
@@ -1363,5 +1362,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } catch (IOException ioe) {
             throw new IllegalStateException(ioe);
         }
+    }
+
+    public long getSegmentSize(long startAddress) {
+        long size = 0;
+        try {
+            size = getSegmentHandleForAddress(startAddress).getWriteChannel().size();
+        } catch (IOException e) {
+            log.error("Could not get file size for address {} ", startAddress, e);
+        }
+        return size;
     }
 }

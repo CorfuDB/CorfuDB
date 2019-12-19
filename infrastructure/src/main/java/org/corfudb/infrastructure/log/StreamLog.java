@@ -5,8 +5,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import lombok.Getter;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.SegmentSizeRequest;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -18,6 +20,8 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
  */
 
 public interface StreamLog {
+
+    int RECORDS_PER_LOG_FILE = 10000;
 
     /**
      * Append an entry to the stream log.
@@ -151,4 +155,27 @@ public interface StreamLog {
      * @return the space used in bytes
      */
     ResourceQuota getLogSizeQuota();
+
+    /**
+     *
+     * @param startAddress the startAddress of a segment file
+     * @return the size of the segment
+     */
+    long getSegmentSize(long startAddress);
+
+    /**
+     * get the log size including startAddress and endAddress
+     * @param startAddress
+     * @param endAddress
+     * @return
+     */
+    default long getSegmentSize(long startAddress, long endAddress) {
+        long  size = 0;
+        while(startAddress <= endAddress) {
+            size += getSegmentSize(startAddress);
+            startAddress += RECORDS_PER_LOG_FILE;
+        }
+        return size;
+    };
+
 }

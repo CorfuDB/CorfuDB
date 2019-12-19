@@ -87,7 +87,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setSingle(false)
                 .setNoVerify(false)
                 .setMemory(false)
-                .setLogPath(dirPath)
+                //.setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .build();
         LogUnitServer server = new LogUnitServer(serverContext);
@@ -125,7 +125,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.write(0, null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat (client.getTrimMark().get()==0);
-        assertThat (client.getLogSize().get()>testString.length);
+        assertThat(client.getQuotaUsed().get() > testString.length);
+        assertThat (client.getSegmentSize(client.getTrimMark().get(), client.getLogTail().getNumberOfDependents()).get() > testString.length);
     }
 
     @Test

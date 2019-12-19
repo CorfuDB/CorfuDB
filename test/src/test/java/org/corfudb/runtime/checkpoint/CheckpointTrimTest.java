@@ -7,22 +7,20 @@ import com.google.common.reflect.TypeToken;
 import java.util.Map;
 
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.runtime.view.*;
 import org.junit.Test;
 
 /**
  * Created by mwei on 5/25/17.
  */
 public class CheckpointTrimTest extends AbstractViewTest {
-    final private static long NUM_ENTRIES = 5000;
+    final private static long NUM_ENTRIES = 203;
     final private static long Round3 = 3;
 
     @Test
@@ -33,24 +31,26 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        long size0 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
+        AddressSpaceView sv = getRuntime().getAddressSpaceView();
+        long size0 = sv.getLogSize(sv.getTrimMark().getSequence(), sv.getLogTail());
         System.out.println("init size:" + size0);
 
         long numEntries = NUM_ENTRIES;
 
         for (long i = 0; i < numEntries; i++) {
-                testMap.put (String.valueOf (i), String.valueOf (i));
+                testMap.put(String.valueOf(i), String.valueOf(i));
         }
 
-        long size1 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
-        System.out.println("put " + numEntries + " entries:" + (size1 - size0));
+        long size1 = sv.getLogSize();
+        System.out.println("put " + numEntries + " entries logsize:" + size1 + " trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
         for (long i = 0; i < numEntries; i++) {
             testMap.put (String.valueOf (i), String.valueOf (i));
         }
 
-        long size2 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
-        System.out.println("put another " + numEntries + " entries: " + (size2 - size1));
+        long size2 = sv.getLogSize();
+        System.out.println("put another " + numEntries + " entries logsize : " + size2);
+        System.out.println("trimMark:" + sv.getTrimMark().getSequence() + " tail:" + sv.getLogTail());
         assertThat(size2 / (size1 - size0) >= 2);
 
         // Insert a checkpoint
@@ -58,22 +58,26 @@ public class CheckpointTrimTest extends AbstractViewTest {
         mcw.addMap((SMRMap) testMap);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
-        long size3 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
-        System.out.println("after writing checkpoint:" + (size3 - size2));
+        long size3 = sv.getLogSize();
+        System.out.println("after writing checkpoint logsize: " + size3);
+        System.out.println("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
+
         assertThat(size3 / (size1 - size0) >= Round3);
 
         // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
+        sv.prefixTrim(checkpointAddress);
 
-        long size4 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
-        System.out.println("after perfixTrim:" + size4);
+        long size4 = sv.getLogSize();
+        System.out.println("after perfixTrim logsize " + size4);
 
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
+        sv.gc();
+        sv.invalidateServerCaches();
+        sv.invalidateClientCache();
 
-        long size5 = getRuntime ().getAddressSpaceView ().getMaxLogSize ();
-        System.out.println("after gc: " + size5);
+        long size5 = getRuntime ().getAddressSpaceView().getLogSize ();
+        System.out.println("after gc logsize " + size5);
+        System.out.println("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
+
         assertThat(size5 < size4);
 
         // Ok, get a new view of the map
@@ -86,7 +90,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Reading an entry from scratch should be ok
         for(long i = 0; i < numEntries; i++) {
-            assertThat (newTestMap).containsKeys(String.valueOf (i));
+            assertThat (newTestMap).containsKeys(String.valueOf(i));
         }
     }
 
