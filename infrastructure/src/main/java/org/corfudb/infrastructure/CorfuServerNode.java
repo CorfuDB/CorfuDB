@@ -239,7 +239,7 @@ public class CorfuServerNode implements AutoCloseable {
      *
      * @param context The {@link ServerContext} to use.
      * @param router  The {@link NettyServerRouter} to initialize the channel with.
-     * @return A {@link ChannelInitializer} to intialize the channel.
+     * @return A {@link ChannelInitializer} to initialize the channel.
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
                                                                   @Nonnull NettyServerRouter router) {

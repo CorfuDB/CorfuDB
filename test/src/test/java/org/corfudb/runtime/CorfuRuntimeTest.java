@@ -263,6 +263,5 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         assertThatThrownBy(() -> sv.append("testPayload".getBytes())).
                 isInstanceOf(SystemUnavailableError.class);
-
     }
 }

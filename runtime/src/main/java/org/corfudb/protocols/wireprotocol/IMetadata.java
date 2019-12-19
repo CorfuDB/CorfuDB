@@ -20,6 +20,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
 
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
@@ -206,6 +207,47 @@ public interface IMetadata {
         getMetadataMap().put(CHECKPOINTED_STREAM_START_LOG_ADDRESS, startLogAddress);
     }
 
+    /**
+     * Set the codec type to encode/decode the payload.
+     *
+     * @param type codec type (NONE, LZ4, ZSTD...)
+     */
+    default void setPayloadCodecType(Codec.Type type) {
+        getMetadataMap().put(LogUnitMetadataType.PAYLOAD_CODEC, type);
+    }
+
+    /**
+     * Get the payloads encoder/decoder type.
+     *
+     * @return codec type (NONE, LZ4, ZSTD...)
+     */
+    default Codec.Type getPayloadCodecType() {
+        return (Codec.Type) getMetadataMap().getOrDefault(LogUnitMetadataType.PAYLOAD_CODEC, Codec.Type.NONE);
+    }
+
+    /**
+     * Check if payload has a specified codec.
+     *
+     * @return true, if codec is set for this payload. False, otherwise.
+     */
+    default boolean hasPayloadCodec() {
+        return getPayloadCodecType() != Codec.Type.NONE;
+    }
+
+    // This field is required ad the server uses the same serialization/deserialization path as the runtime,
+    // we need a flag to let the server not re-encode an already encoded payload.
+    default boolean isCompressed() {
+        return (boolean) getMetadataMap().getOrDefault(LogUnitMetadataType.COMPRESSED, false);
+    }
+
+    /**
+     * Sets the compressed flag to true. This flag is used in order to avoid sthe server re-encoding an already
+     * encoded payload as the code path is shared by server and runtime.
+     */
+    default void setCompressedFlag() {
+        getMetadataMap().put(LogUnitMetadataType.COMPRESSED, true);
+    }
+
     @RequiredArgsConstructor
     enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
@@ -217,7 +259,9 @@ public interface IMetadata {
         CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),
         CLIENT_ID(10, TypeToken.of(UUID.class)),
         THREAD_ID(11, TypeToken.of(Long.class)),
-        EPOCH(12, TypeToken.of(Long.class))
+        EPOCH(12, TypeToken.of(Long.class)),
+        PAYLOAD_CODEC(13, TypeToken.of(Codec.Type.class)),
+        COMPRESSED(14, TypeToken.of(Boolean.class))
         ;
         final int type;
         @Getter

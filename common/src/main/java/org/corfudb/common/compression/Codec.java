@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.compression;
+package org.corfudb.common.compression;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -22,7 +22,7 @@ public interface Codec {
      */
     enum Type {
 
-        None(0, NoCompression::getInstance),
+        NONE(0, NoCompression::getInstance),
         LZ4(1, LZ4Compression::getInstance),
         ZSTD(2, ZSTDCompression::getInstance);
 
@@ -33,6 +33,9 @@ public interface Codec {
         final int id;
 
         private Supplier<Codec> func;
+
+        public static Map<Integer, Type> typeMap = Arrays.stream(Codec.Type.values())
+                .collect(Collectors.toMap(Codec.Type::getId, Function.identity()));
 
         Type(int id, Supplier<Codec> func) {
             this.id = id;
@@ -46,15 +49,12 @@ public interface Codec {
         public int getId() {
             return id;
         }
-
-        public static Map<Integer, Type> typeMap = Arrays.stream(Codec.Type.values())
-                .collect(Collectors.toMap(Codec.Type::getId, Function.identity()));
     }
 
-    static Codec getById(int id) {
+    static Codec.Type getCodecTypeById(int id) {
         Codec.Type type = Type.typeMap.get(id);
         Objects.requireNonNull(type, "Unknown codec id " + id);
-        return type.getInstance();
+        return type;
     }
 
     /**
