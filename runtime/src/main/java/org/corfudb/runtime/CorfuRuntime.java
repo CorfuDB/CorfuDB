@@ -414,7 +414,7 @@ public class CorfuRuntime {
          * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
          */
         @Default
-        List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
+        List<MsgHandlingFilter> nettyClientInboundMsgFilters = new ArrayList<>();
 
         /**
          * The default priority of the requests made by this client.
