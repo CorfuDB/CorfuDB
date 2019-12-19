@@ -174,8 +174,6 @@ public abstract class AbstractQueuedStreamView extends
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         final LogData ld = new LogData(DataType.DATA, object);
-        // Validate if the  size of the log data is under max write size.
-        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
         // First, we get a token from the sequencer.
         TokenResponse tokenResponse = runtime.getSequencerView()

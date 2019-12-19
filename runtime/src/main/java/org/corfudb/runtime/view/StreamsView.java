@@ -114,7 +114,6 @@ public class StreamsView extends AbstractView {
                        @Nonnull CacheOption cacheOption, @Nonnull UUID... streamIDs) {
 
         final LogData ld = new LogData(DataType.DATA, object);
-        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
         TokenResponse tokenResponse = null;
         for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {

@@ -11,8 +11,10 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.EncoderException;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
@@ -50,6 +52,7 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.SaslUtils;
@@ -282,7 +285,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                 }
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
-                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new NettyCorfuMessageEncoder(parameters.getMaxWriteSize()));
                 ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
                     node.getNodeId(), parameters.getHandshakeTimeout()));
 
@@ -437,7 +440,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         // Write the message out to the channel.
         if (ctx == null) {
-            channel.writeAndFlush(message, channel.voidPromise());
+
+
+            ChannelPromise promise = channel.newPromise().addListener(future -> {
+                if (!future.isSuccess() && future.cause() instanceof EncoderException) {
+                    completeExceptionally(thisRequest, ((EncoderException) future.cause()).getCause());
+                }
+            });
+
+            channel.writeAndFlush(message, promise);
         } else {
             ctx.writeAndFlush(message, ctx.voidPromise());
         }
