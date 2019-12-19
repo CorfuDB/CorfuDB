@@ -522,8 +522,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         if (oldRequest.isPresent()) {
             oldRequest.get().completeExceptionally(cause);
-            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestId, node,
-                    cause.getClass().getSimpleName(), cause);
+            log.debug("completeExceptionally: Remove request {} to {} due to {}, cause: {}.",
+                    requestId, node, cause.getClass().getSimpleName(), cause.getLocalizedMessage());
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                     requestId);
