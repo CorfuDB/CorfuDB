@@ -145,15 +145,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      */
     public LogData(ByteBuf buf) {
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
-        if (type == DataType.DATA) {
-            data = ICorfuPayload.fromBuffer(buf, byte[].class);
-        } else {
-            data = null;
-        }
+        
         if (type.isMetadataAware()) {
             metadataMap = ICorfuPayload.enumMapFromBuffer(buf, IMetadata.LogUnitMetadataType.class);
         } else {
             metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+        }
+
+        if (type == DataType.DATA) {
+            data = ICorfuPayload.fromBuffer(buf, byte[].class);
+        } else {
+            data = null;
         }
     }
 
@@ -238,6 +240,11 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     void doSerializeInternal(ByteBuf buf) {
         ICorfuPayload.serialize(buf, type);
+
+        if (type.isMetadataAware()) {
+            ICorfuPayload.serialize(buf, metadataMap);
+        }
+
         if (type == DataType.DATA) {
             if (data == null) {
                 int lengthIndex = buf.writerIndex();
@@ -250,9 +257,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             } else {
                 ICorfuPayload.serialize(buf, data);
             }
-        }
-        if (type.isMetadataAware()) {
-            ICorfuPayload.serialize(buf, metadataMap);
         }
     }
 
