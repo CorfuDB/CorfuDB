@@ -519,7 +519,7 @@ public class FastObjectLoader {
     private void cleanUpForRetry() {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
-        runtime.getStreamsView().getStreamCache().clear();
+        runtime.getStreamsView().clear();
 
         // Re ask for the Head, if it changes while we were trying.
         findAndSetLogHead();
