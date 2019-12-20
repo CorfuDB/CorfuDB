@@ -26,10 +26,10 @@ class SegmentHandle {
     final long segment;
 
     @NonNull
-    final FileChannel writeChannel;
+    final FileChannelPerf writeChannel;
 
     @NonNull
-    final FileChannel readChannel;
+    final FileChannelPerf readChannel;
 
     @NonNull
     String fileName;
@@ -52,11 +52,11 @@ class SegmentHandle {
     }
 
     public void close() {
-        Set<FileChannel> channels = new HashSet<>(
+        Set<FileChannelPerf> channels = new HashSet<>(
                 Arrays.asList(writeChannel, readChannel)
         );
 
-        for (FileChannel channel : channels) {
+        for (FileChannelPerf channel : channels) {
             try {
                 channel.force(true);
             } catch (IOException e) {

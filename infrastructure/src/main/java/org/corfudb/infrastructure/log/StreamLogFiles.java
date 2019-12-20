@@ -89,7 +89,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private final StreamLogDataStore dataStore;
 
     private ConcurrentMap<String, SegmentHandle> writeChannels;
-    private final Set<FileChannel> channelsToSync;
+    private final Set<FileChannelPerf> channelsToSync;
     private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
 
     //=================Log Metadata=================
@@ -237,7 +237,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param verify      Checksum verify flag
      * @throws IOException I/O exception
      */
-    public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
+    public void writeHeader(FileChannelPerf fileChannel, int version, boolean verify) throws IOException {
 
         LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
@@ -245,8 +245,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         ByteBuffer buf = getByteBufferWithMetaData(header);
-        IOLatencyDetector.write(fileChannel,buf, false, 0);
-        IOLatencyDetector.force (fileChannel, true);
+        fileChannel.write(buf);
+        fileChannel.force(true);
     }
 
     private static Metadata getMetadata(AbstractMessage message) {
@@ -348,7 +348,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         for (File file : files) {
             LogHeader header;
 
-            try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
+            try (FileChannelPerf fileChannel = FileChannelPerf.open(file.toPath())) {
                 header = parseHeader(fileChannel, file.getAbsolutePath());
             } catch (IOException e) {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
@@ -376,8 +376,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void sync(boolean force) throws IOException {
         if (force) {
-            for (FileChannel ch : channelsToSync) {
-                IOLatencyDetector.force (ch, true);
+            for (FileChannelPerf ch : channelsToSync) {
+                ch.force (true);
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
@@ -476,7 +476,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return metadata field of null if it was partially written.
      * @throws IOException IO exception
      */
-    private Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
+    private Metadata parseMetadata(FileChannelPerf fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
             log.error("Meta data has wrong size. Actual size: {}, expected: {}",
@@ -486,7 +486,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         ByteBuffer buf = ByteBuffer.allocate(METADATA_SIZE);
-        IOLatencyDetector.read(fileChannel, buf, false, 0);
+        fileChannel.read(buf);
         buf.flip();
 
         Metadata metadata;
@@ -511,7 +511,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     private String getDataCorruptionErrorMessage(
-            String message, FileChannel fileChannel, String segmentFile) throws IOException {
+            String message, FileChannelPerf fileChannel, String segmentFile) throws IOException {
         return message +
                 ". Segment File: " + segmentFile +
                 ". File size: " + fileChannel.size() +
@@ -529,7 +529,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return ByteBuffer for the payload
      * @throws IOException IO exception
      */
-    private ByteBuffer getPayloadForMetadata(FileChannel fileChannel, Metadata metadata) throws IOException {
+    private ByteBuffer getPayloadForMetadata(FileChannelPerf fileChannel, Metadata metadata) throws IOException {
         if (fileChannel.size() - fileChannel.position() < metadata.getLength()) {
             return null;
         }
@@ -537,7 +537,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         ByteBuffer buf = ByteBuffer.allocate(metadata.getLength());
         long start = System.nanoTime() ;
         int size = buf.remaining();
-        IOLatencyDetector.read(fileChannel, buf, false, 0);
+        fileChannel.read(buf);
         buf.flip();
         return buf;
     }
@@ -550,7 +550,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return log header
      * @throws IOException IO exception
      */
-    private LogHeader parseHeader(FileChannel channel, String segmentFile) throws IOException {
+    private LogHeader parseHeader(FileChannelPerf channel, String segmentFile) throws IOException {
         Metadata metadata = parseMetadata(channel, segmentFile);
         if (metadata == null) {
             // Partial write on the metadata for the header
@@ -596,7 +596,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return an log entry
      * @throws IOException IO exception
      */
-    private LogEntry parseEntry(FileChannel channel, Metadata metadata, String fileName)
+    private LogEntry parseEntry(FileChannelPerf channel, Metadata metadata, String fileName)
             throws IOException {
 
         if (metadata == null) {
@@ -640,7 +640,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param segment Object containing state for the segment to be read
      */
     private void readAddressSpace(SegmentHandle segment) throws IOException {
-        FileChannel fileChannel = segment.getWriteChannel();
+        FileChannelPerf fileChannel = segment.getWriteChannel();
         fileChannel.position(0);
 
         LogHeader header = parseHeader(fileChannel, segment.getFileName());
@@ -667,7 +667,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 // to be ignored, or if the bytes correspond to a corrupted metadata field.
                 long start = System.nanoTime ();
                 fileChannel.truncate(fileChannel.position());
-                IOLatencyDetector.force (fileChannel, true);
+                fileChannel.force(true);
                 return;
             }
 
@@ -689,7 +689,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
     private LogData readRecord(SegmentHandle segment, long address) throws IOException {
-        FileChannel fileChannel = segment.getReadChannel();
+        FileChannelPerf fileChannel = segment.getReadChannel();
 
         AddressMetaData metaData = segment.getKnownAddresses().get(address);
         if (metaData == null) {
@@ -698,7 +698,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            IOLatencyDetector.read(fileChannel, entryBuf, true, metaData.offset);
+            fileChannel.read(entryBuf, metaData.offset);
             return getLogData(LogEntry.parseFrom(entryBuf.array()));
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
@@ -709,13 +709,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Nullable
-    private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
+    private FileChannelPerf getChannel(String filePath, boolean readOnly) throws IOException {
         if (readOnly) {
             if (!new File(filePath).exists()) {
                 throw new FileNotFoundException(filePath);
             }
 
-            return FileChannel.open(
+            return FileChannelPerf.open(
                     FileSystems.getDefault().getPath(filePath),
                     EnumSet.of(StandardOpenOption.READ)
             );
@@ -727,14 +727,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     StandardOpenOption.WRITE,
                     StandardOpenOption.CREATE_NEW
             );
-            FileChannel channel = FileChannel.open(FileSystems.getDefault().getPath(filePath), options);
+            FileChannelPerf channel = FileChannelPerf.open(FileSystems.getDefault().getPath(filePath), options);
 
             // First time creating this segment file, need to sync the parent directory
             File segFile = new File(filePath);
             syncDirectory(segFile.getParent());
             return channel;
         } catch (FileAlreadyExistsException ex) {
-            return FileChannel.open(
+            return FileChannelPerf.open(
                     FileSystems.getDefault().getPath(filePath),
                     EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE)
             );
@@ -756,8 +756,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         filePath += ".log";
 
         SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
-            FileChannel writeCh = null;
-            FileChannel readCh = null;
+            FileChannelPerf writeCh = null;
+            FileChannelPerf readCh = null;
 
             try {
                 writeCh = getChannel(a, false);
@@ -941,7 +941,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param buf     the buffer to write
      * @throws IOException IO exception
      */
-    private void writeByteBuffer(FileChannel channel, ByteBuffer buf) throws IOException {
+    private void writeByteBuffer(FileChannelPerf channel, ByteBuffer buf) throws IOException {
         // On IOExceptions this class should be reinitialized, so consuming
         // the buffer size and failing on the write should be an issue
         logSizeQuota.consume(buf.remaining());
@@ -951,7 +951,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         int size = buf.remaining();
 
         while (buf.hasRemaining()) {
-            IOLatencyDetector.write(channel, buf, false, 0);
+            channel.write(buf);
         }
     }
 
@@ -1285,7 +1285,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @VisibleForTesting
-    Set<FileChannel> getChannelsToSync() {
+    Set<FileChannelPerf> getChannelsToSync() {
         return channelsToSync;
     }
 

@@ -32,7 +32,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.infrastructure.log.IOLatencyDetector;
+import org.corfudb.infrastructure.log.FileChannelPerf;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
@@ -120,7 +120,7 @@ public class ServerContext implements AutoCloseable {
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
     private static final int OP_SPIKE_LATENCY = 1; //Consider 1 second as the spike for r/w/sync disk operation
-    private static final int OP_SPIKE_DURATION = 30; //If continuously the spike happens for 30 seconds, report a disk problem.
+    private static final int OP_SPIKE_CNT = 30; //If continuously the spike happens for 30 seconds, report a disk problem.
 
     @Getter
     private final Map<String, Object> serverConfig;
@@ -194,7 +194,7 @@ public class ServerContext implements AutoCloseable {
             logMetricsSize();
         }
 
-        IOLatencyDetector.setupIOLatencyDetector (OP_SPIKE_LATENCY, OP_SPIKE_DURATION, false);
+        FileChannelPerf.setupParameters(OP_SPIKE_CNT, OP_SPIKE_LATENCY, false);
         logMetricsSize ();
     }
 
