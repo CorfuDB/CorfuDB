@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
@@ -29,12 +30,13 @@ public class Helpers{
         return data.getSerializedForm();
     }
 
-    static Map<String, String> createMap(String streamName, CorfuRuntime cr) {
+    static StreamingMap<String, String> createMap(String streamName, CorfuRuntime cr) {
         return createMap(streamName, cr, SMRMap.class);
     }
 
-    static <T> Map<String, String> createMap(String streamName, CorfuRuntime cr, Class<T> type) {
-        return (Map<String, String>) cr.getObjectsView().build()
+    static <T extends ICorfuSMR> StreamingMap<
+            String, String> createMap(String streamName, CorfuRuntime cr, Class<T> type) {
+        return (StreamingMap<String, String>) cr.getObjectsView().build()
                 .setStreamName(streamName)
                 .setType(type)
                 .open();

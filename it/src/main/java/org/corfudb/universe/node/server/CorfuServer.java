@@ -2,7 +2,9 @@ package org.corfudb.universe.node.server;
 
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
+import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.util.IpAddress;
 
 import java.util.List;
 
@@ -62,6 +64,12 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
     void reconnect();
 
     /**
+     * Execute a shell command on a vm
+     * @param command shell command
+     */
+    void execute(String command);
+
+    /**
      * Reconnect a {@link CorfuServer} to the list of servers
      *
      * @param servers List of servers to reconnect.
@@ -76,13 +84,15 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
      */
     void resume();
 
-    String getIpAddress();
+    IpAddress getIpAddress();
 
-    String getNetworkInterface();
+    IpAddress getNetworkInterface();
 
     default String getEndpoint() {
         return getNetworkInterface() + ":" + getParams().getPort();
     }
+
+    LocalCorfuClient getLocalCorfuClient();
 
     enum Mode {
         SINGLE, CLUSTER

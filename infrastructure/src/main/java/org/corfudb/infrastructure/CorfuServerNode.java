@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -32,7 +31,6 @@ import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -67,14 +65,12 @@ public class CorfuServerNode implements AutoCloseable {
      * Corfu Server initialization.
      *
      * @param serverContext Initialized Server Context.
-     *
-     * @param metricRegistry Centralized Dropwizard Metric Registry.
      */
-    public CorfuServerNode(@Nonnull ServerContext serverContext, MetricRegistry metricRegistry) {
+    public CorfuServerNode(@Nonnull ServerContext serverContext) {
         this(serverContext,
                 ImmutableMap.<Class, AbstractServer>builder()
                         .put(BaseServer.class, new BaseServer(serverContext))
-                        .put(SequencerServer.class, new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-server", metricRegistry)))
+                        .put(SequencerServer.class, new SequencerServer(serverContext))
                         .put(LayoutServer.class, new LayoutServer(serverContext))
                         .put(LogUnitServer.class, new LogUnitServer(serverContext))
                         .put(ManagementServer.class, new ManagementServer(serverContext))
@@ -106,8 +102,8 @@ public class CorfuServerNode implements AutoCloseable {
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
-                (String) serverContext.getServerConfig().get("--address"),
-                Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
+                (String)serverContext.getServerConfig().get("--address"),
+                Integer.parseInt((String)serverContext.getServerConfig().get("<port>")));
 
         return bindFuture.syncUninterruptibly();
     }
@@ -159,23 +155,6 @@ public class CorfuServerNode implements AutoCloseable {
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
         log.info("close: Server shutdown and resources released");
-    }
-
-    /**
-     * Get the requested Corfu server.
-     *
-     * @param serverClass Server class.
-     * @param <T>         Type of server.
-     * @return T Server Object.
-     */
-    @SuppressWarnings("unchecked")
-    public @Nonnull
-    <T extends AbstractServer> T getServer(@Nonnull Class<T> serverClass) {
-        T server = (T) serverMap.get(serverClass);
-        if (server == null) {
-            throw new UnrecoverableCorfuError("Server does not exist");
-        }
-        return server;
     }
 
     /**

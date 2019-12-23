@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -80,7 +81,7 @@ public class LargeWriteIT extends AbstractIT {
 
         Map<String, String> map = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName(tableName)
                 .open();
 

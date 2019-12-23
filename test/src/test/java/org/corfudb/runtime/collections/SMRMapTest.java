@@ -25,7 +25,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -290,7 +290,7 @@ public class SMRMapTest extends AbstractViewTest {
                             .setStreamID(UUID.randomUUID())
                             .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                             })
-                            .addOption(ObjectOpenOptions.NO_CACHE)
+                            .option(ObjectOpenOption.NO_CACHE)
                             .open();
                 })
                 .toArray(Map[]::new);
@@ -581,8 +581,8 @@ public class SMRMapTest extends AbstractViewTest {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("A")
-                    .setSerializer(Serializers.JSON)
-                    .addOption(ObjectOpenOptions.NO_CACHE)
+                    .setSerializer(Serializers.getDefaultSerializer())
+                    .option(ObjectOpenOption.NO_CACHE)
                     .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                     .open();
 
@@ -672,7 +672,7 @@ public class SMRMapTest extends AbstractViewTest {
                                     .setStreamID(mapStream)
                                     .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                                     })
-                                    .addOption(ObjectOpenOptions.NO_CACHE)
+                                    .option(ObjectOpenOption.NO_CACHE)
                                     .open();
                         })
                         .toArray(Map[]::new);
@@ -768,9 +768,9 @@ public class SMRMapTest extends AbstractViewTest {
 
         long startTime = System.nanoTime();
         Map<String, String> testMap2 = getRuntime().getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamID(stream)
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
         // Do a get to prompt the sync
         assertThat(testMap2.get(Integer.toString(0)))

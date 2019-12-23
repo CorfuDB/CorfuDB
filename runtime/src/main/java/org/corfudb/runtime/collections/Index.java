@@ -1,0 +1,127 @@
+package org.corfudb.runtime.collections;
+
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
+
+public class Index {
+
+    /**
+     * Denotes a function that supplies the unique name of an index registered to
+     * {@link CorfuTable}.
+     */
+    @FunctionalInterface
+    public interface Name extends Supplier<String> {
+    }
+
+    /**
+     * Denotes a function that takes as input the key and value of an {@link CorfuTable}
+     * record, and computes the associated index value for the record.
+     *
+     * @param <K> type of the record key.
+     * @param <V> type of the record value.
+     * @param <I> type of the index value computed.
+     */
+    @FunctionalInterface
+    public interface Function<K, V, I extends Comparable<?>> extends BiFunction<K, V, I> {
+    }
+
+    @FunctionalInterface
+    public interface MultiValueFunction<K, V, I extends Comparable<?>>
+            extends BiFunction<K, V, Iterable<I>> {
+    }
+
+    /**
+     * Descriptor of named indexing function entry. The indexing function can
+     * be single indexer {@link Function} mapping a value to single
+     * secondary index value, or a multi indexer {@link Function}
+     * mapping a value to multiple secondary index values.
+     *
+     * @param <K> type of the record key associated with {@code IndexKey}.
+     * @param <V> type of the record value associated with {@code IndexKey}.
+     * @param <I> type of the index value computed using the {@code IndexKey}.
+     */
+    public static class Spec<K, V, I extends Comparable<?>> {
+        private final Name name;
+        private final MultiValueFunction<K, V, I> indexFunction;
+
+        public Spec(Name name, Function<K, V, I> indexFunction) {
+            this.name = name;
+            this.indexFunction =
+                    (k, v) -> Collections.singletonList(indexFunction.apply(k, v));
+        }
+
+        public Spec(Name name, MultiValueFunction<K, V, I> indexFunction) {
+            this.name = name;
+            this.indexFunction = indexFunction;
+        }
+
+        public Name getName() {
+            return name;
+        }
+
+        public MultiValueFunction<K, V, I> getMultiValueIndexFunction() {
+            return indexFunction;
+        }
+
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof Index)) return false;
+            Spec<?, ?, ?> index = (Spec<?, ?, ?>) o;
+            return Objects.equals(name.get(), index.name.get());
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name.get());
+        }
+    }
+
+    /**
+     * Registry hosting of a collection of {@link Index}.
+     *
+     * @param <K> type of the record key associated with {@code Index}.
+     * @param <V> type of the record value associated with {@code Index}.
+     */
+    public interface Registry<K, V>
+            extends Iterable<Spec<K, V, ? extends Comparable<?>>> {
+
+        Registry<?, ?> EMPTY = new Registry<Object, Object>() {
+            @Override
+            public <I extends Comparable<?>> Optional<Spec<Object, Object, I>> get(Name name) {
+                return Optional.empty();
+            }
+
+            @Override
+            public Iterator<Spec<Object, Object, ? extends Comparable<?>>> iterator() {
+                return Collections.emptyIterator();
+            }
+        };
+
+        /**
+         * Obtain the {@link Function} via its registered {@link Name}.
+         *
+         * @param name name of the {@code IndexKey} previously registered.
+         * @return the instance of {@link Function} registered to the lookup name.
+         */
+        <I extends Comparable<?>> Optional<Spec<K, V, I>> get(Name name);
+
+        /**
+         * Obtain a static {@link Registry} with no registered {@link Function}s.
+         *
+         * @param <K> type of the record key associated with {@code Index}.
+         * @param <V> type of the record value associated with {@code Index}.
+         * @return a static instance of {@link Registry}.
+         */
+        static <K, V> Registry<K, V> empty() {
+            @SuppressWarnings("unchecked")
+            Registry<K, V> result = (Registry<K, V>) EMPTY;
+            return result;
+        }
+    }
+}

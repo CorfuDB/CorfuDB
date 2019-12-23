@@ -32,4 +32,8 @@ public class JsonUtils {
     public static <T> String toJson(T obj){
         return REGULAR_PARSER.toJson(obj);
     }
+
+    public static <T> T fromJson(String json, Class<T> type) {
+        return REGULAR_PARSER.fromJson(json, type);
+    }
 }

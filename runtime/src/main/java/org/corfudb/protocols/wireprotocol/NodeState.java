@@ -23,6 +23,7 @@ import org.corfudb.runtime.view.Layout;
  */
 @Getter
 @Builder
+@ToString
 @AllArgsConstructor
 @EqualsAndHashCode
 public class NodeState implements ICorfuPayload<NodeState> {

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %30.30thread | %30.30logger{30} | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+
+    <logger name="org.corfudb.browser" level="INFO" />
+    <logger name="org.corfudb.infrastructure" level="INFO"/>
+    <logger name="org.corfudb.protocols" level="WARN"/>
+    <logger name="org.corfudb.runtime" level="INFO"/>
+    <logger name="org.corfudb.security" level="WARN"/>
+    <logger name="io.netty" level="WARN"/>
+
+    <root level="info">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

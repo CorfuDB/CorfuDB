@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.channel.DefaultEventLoopGroup;
@@ -12,7 +11,6 @@ import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.common.metrics.providers.DropwizardMetricsProvider;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.LayoutServer;
@@ -199,17 +197,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.shutdown();
     }
 
-    /** Add a server at a specific port, using the given configuration options.
-     *
-     * @param port      The port to use.
-     * @param config    The configuration to use for the server.
-     */
-    public void addServer(int port, Map<String, Object> config) {
-        ServerContext sc = new ServerContext(config);
-        sc.setServerRouter(new TestServerRouter(port));
-        addServer(port, sc);
-    }
-
     /**
      * Add a server to a specific port, using the given ServerContext.
      * @param port
@@ -224,7 +211,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addServer(int port) {
-        new TestServer(new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(port)).setPort(port).build()).addToTest(port, this);
+        new TestServer(new ServerContextBuilder().setSingle(false)
+            .setServerRouter(new TestServerRouter(port))
+            .setPort(port).build())
+            .addToTest(port, this);
     }
 
 
@@ -281,15 +271,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     public ManagementServer getManagementServer(int port) {
         return getServer(port).getManagementServer();
-    }
-
-    /** Get a instance of base server, given a port.
-     *
-     * @param port      The port of the base server to retrieve.
-     * @return          A base server instance.
-     */
-    public BaseServer getBaseServer(int port) {
-        return getServer(port).getBaseServer();
     }
 
     public IServerRouter getServerRouter(int port) {
@@ -405,11 +386,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return runtime;
     }
 
-    /** Clear installed rules for the default runtime.
-     */
-    public void clearClientRules() {
-        clearClientRules(getRuntime());
-    }
 
     /** Clear installed rules for a given runtime.
      *
@@ -488,16 +464,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return "test:" + port;
     }
 
-    /**
-     * Get the port from the endpoint.
-     *
-     * @param endpoint The endpoint string.
-     * @return The port in the endpoint.
-     */
-    public Integer getPort(String endpoint) {
-        return Integer.parseInt(endpoint.split(":")[1]);
-    }
-
     // Private
 
     /**
@@ -526,8 +492,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 serverRouter = new TestServerRouter();
             }
             this.baseServer = new BaseServer(serverContext);
-            MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-            this.sequencerServer = new SequencerServer(serverContext, new DropwizardMetricsProvider("corfu-runtime", metricRegistry));
+            this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
             this.managementServer = new ManagementServer(serverContext);

@@ -14,51 +14,69 @@ import org.corfudb.universe.node.server.CorfuServer.Mode;
 import org.corfudb.universe.node.server.CorfuServer.Persistence;
 import org.slf4j.event.Level;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 
 @Builder(builderMethodName = "serverParamsBuilder")
 @AllArgsConstructor
-@EqualsAndHashCode(exclude = {"logLevel", "stopTimeout"})
+@EqualsAndHashCode
 @ToString
+@Getter
 public class CorfuServerParams implements NodeParams {
+    public static final String DOCKER_IMAGE_NAME = "corfudb-universe/corfu-server";
+
     @NonNull
     private final String streamLogDir = "db";
 
     @Default
-    @Getter
     private final int port = ServerUtil.getRandomOpenPort();
 
     @Default
     @NonNull
-    @Getter
     private final Mode mode = Mode.CLUSTER;
 
     @Default
     @NonNull
-    @Getter
     private final Persistence persistence = Persistence.DISK;
 
     @Default
     @NonNull
-    @Getter
-    private final Level logLevel = Level.DEBUG;
+    @EqualsAndHashCode.Exclude
+    private final Level logLevel = Level.INFO;
 
     @NonNull
-    @Getter
     private final NodeType nodeType = NodeType.CORFU_SERVER;
 
     /**
      * A name of the Corfu cluster
      */
-    @Getter
     @NonNull
     private final String clusterName;
 
-    @Getter
     @Default
     @NonNull
+    @EqualsAndHashCode.Exclude
     private final Duration stopTimeout = Duration.ofSeconds(1);
+
+    @Default
+    private final Optional<ContainerResources> containerResources = Optional.empty();
+
+    /**
+     * Corfu server version, for instance: 0.3.0-SNAPSHOT
+     */
+    @NonNull
+    private final String serverVersion;
+
+    @NonNull
+    @Default
+    private final Path serverJarDirectory = Paths.get("target");
+
+    @NonNull
+    @Default
+    private final String dockerImage = DOCKER_IMAGE_NAME;
 
     @Override
     public String getName() {
@@ -72,5 +90,30 @@ public class CorfuServerParams implements NodeParams {
     @Override
     public Set<Integer> getPorts() {
         return ImmutableSet.of(port);
+    }
+
+    public String getDockerImageNameFullName() {
+        return dockerImage + ":" + serverVersion;
+    }
+
+    public Path getInfrastructureJar() {
+        return serverJarDirectory.resolve(
+                String.format("infrastructure-%s-shaded.jar", serverVersion)
+        );
+    }
+
+    /**
+     * https://docs.docker.com/config/containers/resource_constraints/
+     */
+    @Builder
+    @ToString
+    public static class ContainerResources {
+
+        /**
+         * Memory limit in mb
+         */
+        @Getter
+        @Default
+        private final long memory = 1048 * 1024 * 1024;
     }
 }

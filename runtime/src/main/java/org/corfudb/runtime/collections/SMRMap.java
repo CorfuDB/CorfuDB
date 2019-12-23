@@ -17,17 +17,22 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.runtime.object.ICorfuExecutionContext;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
  * Created by mwei on 1/7/16.
  */
 @CorfuObject
 @SuppressWarnings("checkstyle:abbreviation")
-public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
+public class SMRMap<K, V>
+        extends HashMap<K, V>
+        implements ISMRMap<K,V>, ICorfuSMR<SMRMap<K, V>> {
 
     /**
      * Returns a {@link Set} view of the keys contained in this map.
@@ -694,5 +699,21 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
             put(key, newValue);
         }
         return newValue;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public SMRMap<K, V> getContext(ICorfuExecutionContext.Context context) {
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Stream<Entry<K, V>> entryStream() {
+        return entrySet().stream();
     }
 }

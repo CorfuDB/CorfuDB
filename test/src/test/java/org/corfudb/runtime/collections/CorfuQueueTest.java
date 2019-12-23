@@ -1,11 +1,17 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.primitives.UnsignedBytes;
+import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Created by Sundar Sridharan on May 22, 2019
@@ -59,5 +65,50 @@ public class CorfuQueueTest extends AbstractViewTest {
 
         assertThat(records.get(0).compareTo(records2.get(1))).isLessThan(0);
         assertThat(records.get(0).getRecordId().compareTo(records2.get(1).getRecordId())).isLessThan(0);
+    }
+
+    @Test
+    public void queueWithSecondaryIndexCheck() {
+        CorfuQueue<String>
+                corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
+                Index.Registry.empty());
+
+        CorfuRecordId idC = corfuQueue.enqueue("c");
+        CorfuRecordId idB = corfuQueue.enqueue("b");
+        CorfuRecordId idA = corfuQueue.enqueue("a");
+
+        final int expected = 3;
+        List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
+        assertThat(records.size()).isEqualTo(expected);
+    }
+
+    @Test
+    public void byteArraylexComparatorCheck() {
+        class ByteArray implements Comparable<ByteArray>{
+            @Getter
+            byte[] bytes;
+            Comparator<byte[]> comparator = UnsignedBytes.lexicographicalComparator();
+            ByteArray(byte[] bytes) { this.bytes = bytes;}
+
+            @Override
+            public int compareTo(ByteArray x) {
+                return comparator.compare(this.bytes, x.bytes);
+            }
+
+            @Override
+            public String toString() {
+                return bytes.toString();
+            }
+        }
+        Map<ByteArray, String> bmap = new TreeMap<>();
+        bmap.put(new ByteArray("xyz".getBytes()), "xyz");
+        bmap.put(new ByteArray("lmn".getBytes()), "lmn");
+        bmap.put(new ByteArray("fg".getBytes()), "fg");
+        bmap.put(new ByteArray("abcd".getBytes()), "abcd");
+        for (Map.Entry<ByteArray, String> b : bmap.entrySet()) {
+            System.out.println(b);
+        }
+
+
     }
 }

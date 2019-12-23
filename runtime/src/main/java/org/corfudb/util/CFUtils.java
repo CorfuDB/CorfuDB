@@ -116,15 +116,6 @@ public final class CFUtils {
     }
 
     /**
-     * Schedules a runnable after a given time
-     *
-     * @param duration The duration to timeout after.
-     */
-    public static void runAfter(Duration duration, Runnable toRun) {
-        SCHEDULER.schedule(toRun::run, duration.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
-    /**
      * Takes a completable future, and ensures that it completes within a certain duration.
      * If it does not, it is cancelled and completes exceptionally with TimeoutException.
      * inspired by NoBlogDefFound: www.nurkiewicz.com/2014/12/asynchronous-timeouts-with.html
@@ -170,14 +161,5 @@ public final class CFUtils {
             throw (Error) unwrapThrowable;
         }
         throw new RuntimeException(unwrapThrowable);
-    }
-
-    /**
-     * Unwraps ExecutionException thrown from a CompletableFuture.
-     *
-     * @param throwable Throwable to unwrap.
-     */
-    public static void unwrap(Throwable throwable) {
-        unwrap(throwable, RuntimeException.class);
     }
 }

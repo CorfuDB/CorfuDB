@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Counter;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
@@ -10,7 +9,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.common.metrics.MetricsProvider;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -140,14 +138,13 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    private final Counter tokenCounter;
 
     /**
      * Returns a new SequencerServer.
      *
      * @param serverContext context object providing parameters and objects
      */
-    public SequencerServer(ServerContext serverContext, MetricsProvider metricsProvider) {
+    public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         Config config = Config.parse(serverContext.getServerConfig());
 
@@ -159,7 +156,7 @@ public class SequencerServer extends AbstractServer {
         globalLogTail = config.getInitialToken();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
-        this.tokenCounter = metricsProvider.getCounter(getClass().getName() + ".token-request");
+
 
         setUpTimerNameCache();
     }
@@ -478,7 +475,6 @@ public class SequencerServer extends AbstractServer {
 
         TokenRequest req = msg.getPayload();
         final Timer timer = getTimer(req.getReqType());
-        tokenCounter.inc();
 
         // dispatch request handler according to request type while collecting the timer metrics
         try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {

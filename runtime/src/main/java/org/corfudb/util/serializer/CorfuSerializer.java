@@ -12,7 +12,7 @@ public class CorfuSerializer implements ISerializer {
     private final byte type;
 
     /* The magic that denotes this is a corfu payload */
-    final byte corfuPayloadMagic = 0x42;
+    public static final byte corfuPayloadMagic = 0x42;
 
     public CorfuSerializer(byte type) {
         this.type = type;

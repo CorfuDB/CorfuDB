@@ -38,10 +38,6 @@ public class Address {
     @Getter
     private static long minAddress = 0L;
 
-    public static boolean isMinAddress(long addr) {
-        return addr == minAddress;
-    }
-
     // TODO should clean this up soon
     public static long maxNonAddress() {
         return -1L;

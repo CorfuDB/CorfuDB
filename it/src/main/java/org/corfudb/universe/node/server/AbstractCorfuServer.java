@@ -1,32 +1,26 @@
 package org.corfudb.universe.node.server;
 
+import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
-import org.corfudb.universe.node.NodeException;
+import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.universe.UniverseParams;
 
-import java.io.FileReader;
-import java.io.IOException;
+import java.util.Optional;
 
 @Slf4j
-public abstract class AbstractCorfuServer<
-        T extends CorfuServerParams,
-        U extends UniverseParams> implements CorfuServer {
+@Getter
+public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends UniverseParams>
+        implements CorfuServer {
 
-    private static final String POM_FILE = "pom.xml";
-
-    @Getter
     @NonNull
     protected final T params;
+
     @NonNull
-    @Getter
     protected final U universeParams;
 
-    protected AbstractCorfuServer(T params, U universeParams) {
+    protected AbstractCorfuServer(@NonNull T params, @NonNull U universeParams) {
         this.params = params;
         this.universeParams = universeParams;
     }
@@ -48,6 +42,8 @@ public abstract class AbstractCorfuServer<
             case MEMORY:
                 cmd.append(" -m");
                 break;
+            default:
+                throw new IllegalStateException("Unknown persistence mode");
         }
 
         if (params.getMode() == Mode.SINGLE) {
@@ -65,32 +61,16 @@ public abstract class AbstractCorfuServer<
     }
 
     @Override
+    public LocalCorfuClient getLocalCorfuClient() {
+        return LocalCorfuClient.builder()
+                .serverEndpoints(ImmutableSortedSet.of(getEndpoint()))
+                .prometheusMetricsPort(Optional.empty())
+                .build()
+                .deploy();
+    }
+
+    @Override
     public int compareTo(CorfuServer other) {
         return Integer.compare(getParams().getPort(), other.getParams().getPort());
-    }
-
-    /**
-     * Provides a current version of this project. It parses the version from pom.xml
-     *
-     * @return maven/project version
-     */
-    protected static String getAppVersion() {
-        String version = System.getProperty("project.version");
-        if (version != null && !version.isEmpty()) {
-            return version;
-        }
-
-        return parseAppVersionInPom();
-    }
-
-    private static String parseAppVersionInPom() {
-        MavenXpp3Reader reader = new MavenXpp3Reader();
-        Model model;
-        try {
-            model = reader.read(new FileReader(POM_FILE));
-            return model.getParent().getVersion();
-        } catch (IOException | XmlPullParserException e) {
-            throw new NodeException("Can't parse application version", e);
-        }
     }
 }

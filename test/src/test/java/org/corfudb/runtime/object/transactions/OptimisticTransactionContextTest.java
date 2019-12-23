@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,7 +46,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ConflictParameterClass testObject = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setType(ConflictParameterClass.class)
+                .setTypeToken(new TypeToken<ConflictParameterClass>() {})
                 .open();
 
         final String TEST_0 = "0";
@@ -147,7 +146,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> map = rtWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
@@ -187,7 +186,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> map = rtSlowWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
         int[] retry = new int[1];
@@ -296,7 +295,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     @Test
     public void customSameHashAlwaysConflicts() {
         // Register a custom hasher which always hashes to an empty byte array
-        Serializers.JSON.registerCustomHasher(CustomSameHashConflictObject.class,
+        Serializers.getDefaultSerializer().registerCustomHasher(CustomSameHashConflictObject.class,
                 o -> new byte[0]);
 
         CustomSameHashConflictObject c1 = new CustomSameHashConflictObject("a", "a");
@@ -336,7 +335,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     public void customHasDoesNotConflict() {
         // Register a custom hasher which always hashes to the two strings together as a
         // byte array
-        Serializers.JSON.registerCustomHasher(CustomSameHashConflictObject.class,
+        Serializers.getDefaultSerializer().registerCustomHasher(CustomSameHashConflictObject.class,
                 o -> {
                     ByteBuffer b = ByteBuffer.wrap(new byte[o.k1.length() + o.k2.length()]);
                     b.put(o.k1.getBytes());

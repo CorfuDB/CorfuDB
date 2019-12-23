@@ -9,7 +9,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.StreamOptions;
-import org.corfudb.util.Sleep;
 import org.junit.Ignore;
 import org.junit.Test;
 

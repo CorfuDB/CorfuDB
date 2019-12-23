@@ -78,8 +78,7 @@ public abstract class AbstractQueuedStreamView extends
      * @param globalAddress     The resolved global address.
      */
     protected void addToResolvedQueue(QueuedStreamContext context,
-                                      long globalAddress,
-                                      ILogData ld) {
+                                      long globalAddress) {
         context.resolvedQueue.add(globalAddress);
 
         if (context.maxResolution < globalAddress) {
@@ -363,7 +362,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // Transfer the addresses of the read entries to the resolved queue
         readFrom.stream()
-                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress(), x));
+                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress()));
 
         // Update the global pointer
         if (readFrom.size() > 0) {
@@ -601,39 +600,7 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Override
     public void close() {}
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public synchronized long find(long globalAddress, SearchDirection direction) {
-        final QueuedStreamContext context = getCurrentContext();
-        // First, check if we have resolved up to the given address
-        if (context.maxResolution < globalAddress) {
-            // If not we need to read to that position
-            // to resolve all the addresses.
-            remainingUpTo(globalAddress + 1);
-        }
-
-        // Now we can do the search.
-        // First, check for inclusive searches.
-        if (direction.isInclusive()
-                && context.resolvedQueue.contains(globalAddress)) {
-            return globalAddress;
-        }
-        // Next, check all elements excluding
-        // in the correct direction.
-        Long result;
-        if (direction.isForward()) {
-            result = context.resolvedQueue.higher(globalAddress);
-        }  else {
-            result = context.resolvedQueue.lower(globalAddress);
-        }
-
-        // Convert the address to never read if there was no result.
-        return result == null ? Address.NOT_FOUND : result;
-    }
-
+    
     // Keeps the latest valid checkpoint (based on the snapshot it covers)
     private StreamCheckpoint latestValidCheckpoint = new StreamCheckpoint();
 

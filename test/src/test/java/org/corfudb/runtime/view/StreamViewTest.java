@@ -1,13 +1,13 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -16,7 +16,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -242,62 +241,6 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void canFindInStream()
-            throws Exception
-    {
-        CorfuRuntime r = getDefaultRuntime().connect();
-        IStreamView svA = r.getStreamsView().get(
-                CorfuRuntime.getStreamID("stream  A"));
-        IStreamView svB = r.getStreamsView().get(
-                CorfuRuntime.getStreamID("stream  B"));
-
-        // Append some entries
-        final long A_GLOBAL = 0;
-        svA.append("a".getBytes());
-        final long B_GLOBAL = 1;
-        svB.append("b".getBytes());
-        final long C_GLOBAL = 2;
-        svA.append("c".getBytes());
-        final long D_GLOBAL = 3;
-        svB.append("d".getBytes());
-        final long E_GLOBAL = 4;
-        svA.append("e".getBytes());
-
-        // See if we can find entries:
-        // Should find entry "c"
-        assertThat(svA.find(B_GLOBAL,
-                IStreamView.SearchDirection.FORWARD))
-                .isEqualTo(C_GLOBAL);
-        // Should find entry "a"
-        assertThat(svA.find(B_GLOBAL,
-                IStreamView.SearchDirection.REVERSE))
-                .isEqualTo(A_GLOBAL);
-        // Should find entry "e"
-        assertThat(svA.find(E_GLOBAL,
-                IStreamView.SearchDirection.FORWARD_INCLUSIVE))
-                .isEqualTo(E_GLOBAL);
-        // Should find entry "c"
-        assertThat(svA.find(C_GLOBAL,
-                IStreamView.SearchDirection.REVERSE_INCLUSIVE))
-                .isEqualTo(C_GLOBAL);
-
-        // From existing to existing:
-        // Should find entry "b"
-        assertThat(svB.find(D_GLOBAL,
-                IStreamView.SearchDirection.REVERSE))
-                .isEqualTo(B_GLOBAL);
-        // Should find entry "d"
-        assertThat(svB.find(B_GLOBAL,
-                IStreamView.SearchDirection.FORWARD))
-                .isEqualTo(D_GLOBAL);
-
-        // Bounds:
-        assertThat(svB.find(D_GLOBAL,
-                IStreamView.SearchDirection.FORWARD))
-                .isEqualTo(Address.NOT_FOUND);
-    }
-
-    @Test
     public void canDoPreviousOnStream()
             throws Exception
     {
@@ -463,10 +406,10 @@ public class StreamViewTest extends AbstractViewTest {
     @Test
     public void testPreviousWithStreamCheckpoint() throws Exception {
         String stream = "stream1";
-        Map<String, String> map = r.getObjectsView()
+        StreamingMap<String, String> map = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         map.put("k1", "k1");
@@ -485,8 +428,8 @@ public class StreamViewTest extends AbstractViewTest {
         Map<String, String> mapCopy = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setType(CorfuTable.class)
-                .setOptions(Collections.singleton(ObjectOpenOptions.NO_CACHE))
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
         mapCopy.size();

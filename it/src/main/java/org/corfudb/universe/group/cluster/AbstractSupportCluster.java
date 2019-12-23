@@ -1,5 +1,7 @@
 package org.corfudb.universe.group.cluster;
 
+import static lombok.Builder.Default;
+
 import com.google.common.collect.ImmutableSortedMap;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -19,30 +21,23 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import static lombok.Builder.Default;
-
 @Slf4j
-public abstract class AbstractSupportCluster extends AbstractCluster<
-        SupportServer,
-        SupportServerParams,
-        SupportClusterParams,
-        UniverseParams> {
+public abstract class AbstractSupportCluster extends
+        AbstractCluster<SupportServer, SupportServerParams, SupportClusterParams, UniverseParams> {
 
     @Default
     private final ConcurrentNavigableMap<String, SupportServer> nodes =
             new ConcurrentSkipListMap<>();
 
     @NonNull
-    protected final UniverseParams universeParams;
-
-    @NonNull
-    protected final SupportClusterParams clusterParams;
+    private final SupportClusterParams clusterParams;
 
     private final ExecutorService executor;
 
-    protected AbstractSupportCluster(UniverseParams universeParams, SupportClusterParams monitoringParams) {
+    protected AbstractSupportCluster(
+            UniverseParams universeParams, SupportClusterParams monitoringParams) {
+
         super(monitoringParams, universeParams);
-        this.universeParams = universeParams;
         this.clusterParams = monitoringParams;
         this.executor = Executors.newCachedThreadPool();
     }

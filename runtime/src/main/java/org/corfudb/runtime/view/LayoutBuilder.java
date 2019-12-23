@@ -53,16 +53,6 @@ public class LayoutBuilder {
     }
 
     /**
-     * Clears the existing unresponsive servers.
-     *
-     * @return this builder
-     */
-    public LayoutBuilder clearUnResponsiveServers() {
-        layout.getUnresponsiveServers().clear();
-        return this;
-    }
-
-    /**
      * Adds unresponsive servers in the list.
      *
      * @param endpoints a non null set of Strings representing endpoints to

@@ -20,6 +20,13 @@ public class Serializers {
     public static final ISerializer JSON = new JsonSerializer((byte) 2);
     public static final ISerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
 
+    /**
+     * @return the recommended default serializer used for converting objects into write format.
+     */
+    public static final ISerializer getDefaultSerializer() {
+        return Serializers.JSON;
+    }
+
     private static final Map<Byte, ISerializer> serializersMap;
 
     static {

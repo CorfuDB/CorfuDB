@@ -10,7 +10,7 @@ import org.corfudb.annotations.Mutator;
  * Created by dmalkhi on 12/2/16.
  */
 @CorfuObject
-public class CorfuCompoundObj {
+public class CorfuCompoundObj implements ICorfuSMR<CorfuCompoundObj> {
 
     public class Inner {
         @Setter @Getter
@@ -33,4 +33,12 @@ public class CorfuCompoundObj {
 
     @Accessor
     public int getID() { return ID;}
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CorfuCompoundObj getContext(Context context) {
+        return this;
+    }
 }

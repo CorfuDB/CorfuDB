@@ -1,5 +1,7 @@
 package org.corfudb.universe.node.client;
 
+import static org.corfudb.runtime.CorfuRuntime.fromParameters;
+
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.reflect.TypeToken;
 import lombok.Builder;
@@ -19,8 +21,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.CorfuRuntime.fromParameters;
-
 /**
  * Provides Corfu client (utility class) used in the local machine
  * (in current process) which is basically a wrapper of CorfuRuntime.
@@ -36,9 +36,10 @@ public class LocalCorfuClient implements CorfuClient {
     private final ImmutableSortedSet<String> serverEndpoints;
 
     @Builder
-    public LocalCorfuClient(ClientParams params,
-                            ImmutableSortedSet<String> serverEndpoints,
-                            Optional<Integer> prometheusMetricsPort) {
+    public LocalCorfuClient(
+            ClientParams params, ImmutableSortedSet<String> serverEndpoints,
+            Optional<Integer> prometheusMetricsPort) {
+
         this.params = params;
         this.serverEndpoints = serverEndpoints;
 
@@ -49,18 +50,18 @@ public class LocalCorfuClient implements CorfuClient {
 
         CorfuRuntimeParametersBuilder parametersBuilder =
                 CorfuRuntimeParameters
-                .builder()
-                .layoutServers(layoutServers)
-                .systemDownHandler(this::systemDownHandler);
+                        .builder()
+                        .layoutServers(layoutServers)
+                        .systemDownHandler(this::systemDownHandler);
 
-        prometheusMetricsPort.map(port -> parametersBuilder.prometheusMetricsPort(port));
+        prometheusMetricsPort.ifPresent(parametersBuilder::prometheusMetricsPort);
         this.runtime = fromParameters(parametersBuilder.build());
     }
 
     /**
      * Connect corfu runtime to the server
      *
-     * @return
+     * @return LocalCorfuClient
      */
     @Override
     public LocalCorfuClient deploy() {

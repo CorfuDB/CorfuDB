@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
         constructorType = ConstructorType.RUNTIME,
         stateSource = StateSource.SELF
 )
-public class TestClassUsingAnnotation {
+public class TestClassUsingAnnotation implements ICorfuSMR<TestClassUsingAnnotation> {
 
     AtomicInteger a1;
 
@@ -37,5 +37,13 @@ public class TestClassUsingAnnotation {
     @Mutator(name = "reset")
     public void reset() {
         a1.set(0);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public TestClassUsingAnnotation getContext(ICorfuExecutionContext.Context context) {
+        return this;
     }
 }

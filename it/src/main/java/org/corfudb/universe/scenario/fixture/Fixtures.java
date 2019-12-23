@@ -1,39 +1,49 @@
 package org.corfudb.universe.scenario.fixture;
 
 import com.google.common.collect.ImmutableList;
-import lombok.Data;
-import lombok.experimental.Accessors;
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
+import org.corfudb.universe.group.cluster.CorfuClusterParams.CorfuClusterParamsBuilder;
 import org.corfudb.universe.group.cluster.SupportClusterParams;
-import org.corfudb.universe.node.Node;
+import org.corfudb.universe.group.cluster.SupportClusterParams.SupportClusterParamsBuilder;
+import org.corfudb.universe.logging.LoggingParams;
+import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.client.ClientParams;
+import org.corfudb.universe.node.client.ClientParams.ClientParamsBuilder;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.corfudb.universe.node.server.ServerUtil;
+import org.corfudb.universe.node.server.CorfuServerParams.CorfuServerParamsBuilder;
 import org.corfudb.universe.node.server.SupportServerParams;
+import org.corfudb.universe.node.server.SupportServerParams.SupportServerParamsBuilder;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
+import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmCorfuServerParamsBuilder;
+import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
+import org.corfudb.universe.scenario.fixture.FixtureUtil.FixtureUtilBuilder;
 import org.corfudb.universe.universe.UniverseParams;
+import org.corfudb.universe.universe.UniverseParams.UniverseParamsBuilder;
+import org.corfudb.universe.universe.vm.VmConfigPropertiesLoader;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
+import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
+import org.corfudb.universe.universe.vm.VmUniverseParams.VmCredentialsParams;
+import org.corfudb.universe.universe.vm.VmUniverseParams.VmUniverseParamsBuilder;
+import org.corfudb.universe.util.IpAddress;
 import org.slf4j.event.Level;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Fixture factory provides predefined fixtures
  */
 public interface Fixtures {
+
+    IpAddress ANY_ADDRESS = IpAddress.builder().ip("0.0.0.0").build();
 
     /**
      * Common constants used for test
@@ -57,149 +67,150 @@ public interface Fixtures {
         public static final int DEFAULT_WAIT_TIME = 1;
     }
 
-    /**
-     * Common configuration for Universe initialization
-     */
-    class UniverseFixture extends AbstractUniverseFixture<UniverseParams> {
-        public UniverseParams data;
+    @Getter
+    class UniverseFixture implements Fixture<UniverseParams> {
 
-        @Override
+        private final UniverseParamsBuilder universe = UniverseParams.universeBuilder();
+
+        private final CorfuClusterParamsBuilder cluster = CorfuClusterParams.builder();
+
+        private final CorfuServerParamsBuilder server = CorfuServerParams.serverParamsBuilder();
+
+        private final SupportServerParamsBuilder supportServer = SupportServerParams.builder();
+
+        private final SupportClusterParamsBuilder monitoringCluster = SupportClusterParams
+                .builder();
+
+        private final ClientParamsBuilder client = ClientParams.builder();
+
+        private final FixtureUtilBuilder fixtureUtilBuilder = FixtureUtil.builder();
+
+        private final LoggingParams.LoggingParamsBuilder logging = LoggingParams.builder()
+                .enabled(false);
+
+        private Optional<UniverseParams> data = Optional.empty();
+
         public UniverseParams data() {
-            if (data != null){
-                return data;
+
+            if (data.isPresent()) {
+                return data.get();
             }
 
-            this.servers = FixtureUtil.buildMultipleServers(numNodes, corfuCluster.getName());
-            servers.forEach(corfuCluster::add);
-            data = UniverseParams.universeBuilder()
-                    .build()
-                    .add(corfuCluster);
+            UniverseParams universeParams = universe.build();
+            CorfuClusterParams clusterParams = cluster.build();
 
-            if (metricsPorts.isEmpty()) {
-                return data;
+            SupportClusterParams monitoringClusterParams = monitoringCluster.build();
+            SupportServerParams monitoringServerParams = supportServer
+                    .clusterName(monitoringClusterParams.getName())
+                    .nodeType(NodeType.METRICS_SERVER)
+                    .build();
+
+            FixtureUtil fixtureUtil = fixtureUtilBuilder.build();
+            List<CorfuServerParams> serversParams = fixtureUtil.buildServers(
+                    clusterParams, server
+            );
+
+            serversParams.forEach(clusterParams::add);
+            universeParams.add(clusterParams);
+
+            if (monitoringServerParams.isEnabled()) {
+                monitoringClusterParams.add(monitoringServerParams);
+                universeParams.add(monitoringClusterParams);
             }
 
-            final SupportServerParams monitoring =
-                    SupportServerParams.builder()
-                            .clusterName(monitoringCluster.getName())
-                            .metricPorts(metricsPorts)
-                            .nodeType(Node.NodeType.METRICS_SERVER)
-                            .build();
-
-            monitoringCluster.add(monitoring);
-            data.add(monitoringCluster);
-            return data;
+            data = Optional.of(universeParams);
+            return universeParams;
         }
     }
 
-    /**
-     * Configuration for VM specific Universe initialization
-     */
-    class VmUniverseFixture extends AbstractUniverseFixture<VmUniverseParams> {
-        private static final String VM_PREFIX = "corfu-vm-";
+    @Getter
+    class VmUniverseFixture implements Fixture<VmUniverseParams> {
+        private static final String DEFAULT_VM_PREFIX = "corfu-vm-";
 
-        public VmUniverseParams data;
+        private final VmUniverseParamsBuilder universe;
+
+        private final CorfuClusterParamsBuilder cluster = CorfuClusterParams.builder();
+
+        private final VmCorfuServerParamsBuilder servers = VmCorfuServerParams.builder();
+
+        private final ClientParamsBuilder client = ClientParams.builder();
+
+        @Setter
+        private String vmPrefix = DEFAULT_VM_PREFIX;
+
+        private Optional<VmUniverseParams> data = Optional.empty();
+
+        private final FixtureUtilBuilder fixtureUtilBuilder = FixtureUtil.builder();
+
+        public VmUniverseFixture() {
+            Properties credentials = VmConfigPropertiesLoader
+                    .loadVmCredentialsProperties()
+                    //empty
+                    .orElse(new Properties());
+
+            Properties vmProperties = VmConfigPropertiesLoader
+                    .loadVmProperties()
+                    .get();
+
+            servers
+                    .logLevel(Level.INFO)
+                    .mode(CorfuServer.Mode.CLUSTER)
+                    .persistence(CorfuServer.Persistence.DISK)
+                    .stopTimeout(Duration.ofSeconds(1))
+                    .serverJarDirectory(Paths.get("target"))
+                    .dockerImage(CorfuServerParams.DOCKER_IMAGE_NAME);
+
+            Credentials vSphereCred = Credentials.builder()
+                    .username(credentials.getProperty("vsphere.username"))
+                    .password(credentials.getProperty("vsphere.password"))
+                    .build();
+
+            Credentials vmCred = Credentials.builder()
+                    .username(credentials.getProperty("vm.username"))
+                    .password(credentials.getProperty("vm.password"))
+                    .build();
+
+            VmCredentialsParams credentialParams = VmCredentialsParams.builder()
+                    .vSphereCredentials(vSphereCred)
+                    .vmCredentials(vmCred)
+                    .build();
+
+            universe = VmUniverseParams.builder()
+                    .vSphereUrl(vmProperties.getProperty("vsphere.url"))
+                    .networkName(vmProperties.getProperty("vm.network"))
+                    .templateVMName("debian-buster-thin-provisioned")
+                    .credentials(credentialParams)
+                    .cleanUpEnabled(true);
+        }
 
         @Override
         public VmUniverseParams data() {
-            if (data != null){
-                return data;
+            if (data.isPresent()) {
+                return data.get();
             }
 
-            this.servers = FixtureUtil.buildVmMultipleServers(numNodes, corfuCluster.getName(), VM_PREFIX);
-            servers.forEach(corfuCluster::add);
+            CorfuClusterParams clusterParams = cluster.build();
 
-            ConcurrentMap<String, String> vmIpAddresses = new ConcurrentHashMap<>();
-            for (int i = 0; i < numNodes; i++) {
-                vmIpAddresses.put(VM_PREFIX + (i + 1), "0.0.0.0");
+            FixtureUtil fixtureUtil = fixtureUtilBuilder.build();
+            ImmutableList<CorfuServerParams> serversParams = fixtureUtil.buildVmServers(
+                    clusterParams, servers, vmPrefix
+            );
+            serversParams.forEach(clusterParams::add);
+
+            ConcurrentMap<VmName, IpAddress> vmIpAddresses = new ConcurrentHashMap<>();
+            for (int i = 0; i < clusterParams.getNumNodes(); i++) {
+                vmIpAddresses.put(VmName.builder().name(vmPrefix + (i + 1)).build(), ANY_ADDRESS);
             }
 
-            Properties credentials = new Properties();
-            try (InputStream is = ClassLoader.getSystemResource("vm.properties").openStream()) {
-                credentials.load(is);
-            } catch (IOException e) {
-                throw new IllegalStateException("Can't load credentials", e);
-            }
-
-            VmUniverseParams params = VmUniverseParams.builder()
-                    .vSphereUrl("https://10.173.65.98/sdk")
-                    .vSphereUsername(credentials.getProperty("vsphere.username"))
-                    .vSpherePassword(credentials.getProperty("vsphere.password"))
-                    .vSphereHost("10.172.208.208")
-                    .templateVMName("IntegTestVMTemplate")
-                    .vmUserName("vmware")
-                    .vmPassword("vmware")
+            VmUniverseParams universeParams = universe
                     .vmIpAddresses(vmIpAddresses)
-                    .networkName("corfu_network")
                     .build();
-            params.add(corfuCluster);
 
-            data = params;
+            universeParams.add(clusterParams);
 
-            return data;
-        }
-    }
+            data = Optional.of(universeParams);
 
-    @Data
-    @Accessors(chain = true)
-    abstract class AbstractUniverseFixture<T extends UniverseParams> implements Fixture<T> {
-        protected int numNodes;
-        protected Set<Integer> metricsPorts;
-        protected ClientParams client;
-        protected CorfuClusterParams corfuCluster;
-        protected SupportClusterParams monitoringCluster;
-        protected ImmutableList<CorfuServerParams> servers;
-
-        public AbstractUniverseFixture() {
-            this.numNodes = 3;
-            this.client = ClientParams.builder().build();
-            this.corfuCluster = CorfuClusterParams.builder().build();
-            this.monitoringCluster = SupportClusterParams.builder().build();
-        }
-    }
-
-    class FixtureUtil {
-
-        private FixtureUtil() {
-            // prevent instantiation of this class
-        }
-
-        static ImmutableList<CorfuServerParams> buildMultipleServers(int numNodes, String clusterName) {
-
-            List<CorfuServerParams> serversParams = IntStream
-                    .rangeClosed(1, numNodes)
-                    .map(i -> ServerUtil.getRandomOpenPort())
-                    .boxed()
-                    .sorted()
-                    .map(port -> CorfuServerParams.serverParamsBuilder()
-                            .port(port)
-                            .clusterName(clusterName)
-                            .build()
-                    )
-                    .collect(Collectors.toList());
-
-            return ImmutableList.copyOf(serversParams);
-        }
-
-        static ImmutableList<CorfuServerParams> buildVmMultipleServers(int numNodes, String clusterName, String vmNamePrefix) {
-            List<CorfuServerParams> serversParams = new ArrayList<>();
-
-            for (int i = 0; i < numNodes; i++) {
-                final int port = ServerUtil.getRandomOpenPort();
-
-                VmCorfuServerParams serverParam = VmCorfuServerParams.builder()
-                        .clusterName(clusterName)
-                        .vmName(vmNamePrefix + (i + 1))
-                        .mode(CorfuServer.Mode.CLUSTER)
-                        .logLevel(Level.TRACE)
-                        .persistence(CorfuServer.Persistence.DISK)
-                        .port(port)
-                        .stopTimeout(Duration.ofSeconds(1))
-                        .build();
-
-                serversParams.add(serverParam);
-            }
-            return ImmutableList.copyOf(serversParams);
+            return universeParams;
         }
     }
 }

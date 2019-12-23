@@ -19,7 +19,6 @@ import org.corfudb.util.Sleep;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Utility to bootstrap a cluster.

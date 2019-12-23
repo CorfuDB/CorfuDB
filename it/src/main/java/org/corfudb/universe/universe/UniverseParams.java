@@ -1,6 +1,7 @@
 package org.corfudb.universe.universe;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -25,9 +26,14 @@ public class UniverseParams {
     @Default
     @NonNull
     private final String networkName = NETWORK_PREFIX + UUID.randomUUID().toString();
+
     @Default
     @NonNull
     private final ConcurrentMap<String, GroupParams> groups = new ConcurrentHashMap<>();
+
+    @Getter
+    @Default
+    private final boolean cleanUpEnabled = true;
 
     /**
      * Returns the configuration of a particular service by the name
@@ -46,5 +52,14 @@ public class UniverseParams {
 
     public ImmutableMap<String, GroupParams> getGroups() {
         return ImmutableMap.copyOf(groups);
+    }
+
+    public GroupParams getGroupParamByIndex(int index) {
+        return ImmutableSortedMap.copyOf(groups)
+                .values()
+                .stream()
+                .skip(index)
+                .findFirst()
+                .orElseThrow(() -> new UniverseException("Group not found. Index: " + index));
     }
 }

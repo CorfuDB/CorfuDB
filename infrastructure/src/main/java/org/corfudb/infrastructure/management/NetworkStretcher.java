@@ -6,7 +6,6 @@ import lombok.Builder.Default;
 import lombok.Getter;
 
 import java.time.Duration;
-import java.util.Set;
 
 /**
  * NetworkStretcher increases or decreases the timeout intervals for polling based on

@@ -26,7 +26,6 @@ import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -133,8 +132,9 @@ public class BatchProcessor implements AutoCloseable {
                     streamLog.sync(true);
                     break;
                 } else if (streamLog.quotaExceeded() && currOp.getMsg().getPriorityLevel() != PriorityLevel.HIGH) {
-                    // TODO(Maithem): should the exception include the used/limit metrics?
-                    currOp.getFutureResult().completeExceptionally(new QuotaExceededException());
+                    currOp.getFutureResult().completeExceptionally(
+                            new QuotaExceededException("Quota of "
+                                    + streamLog.quotaLimitInBytes() + " bytes"));
                     log.warn("batchprocessor: quota exceeded, dropping msg {}", currOp.getMsg());
                 } else if (currOp.getType() == Type.SEAL && currOp.getMsg().getEpoch() >= sealEpoch) {
                     log.info("batchWriteProcessor: updating from {} to {}", sealEpoch, currOp.getMsg().getEpoch());

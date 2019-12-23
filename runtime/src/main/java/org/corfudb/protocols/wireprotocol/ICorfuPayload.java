@@ -3,7 +3,6 @@ package org.corfudb.protocols.wireprotocol;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableRangeSet;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
@@ -11,6 +10,7 @@ import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -104,6 +104,11 @@ public interface ICorfuPayload<T> {
      * A lookup representing the context we'll use to do lookups.
      */
     Lookup lookup = MethodHandles.lookup();
+
+    static <T> T fromBuffer(byte[] data, Class<T> cls) {
+        ByteBuf buffer = Unpooled.wrappedBuffer(data);
+        return fromBuffer(buffer, cls);
+    }
 
     /**
      * Build payload from Buffer
