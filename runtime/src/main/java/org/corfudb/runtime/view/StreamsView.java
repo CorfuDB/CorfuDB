@@ -1,8 +1,6 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -23,7 +21,9 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -38,15 +38,20 @@ public class StreamsView extends AbstractView {
      */
     public static final String CHECKPOINT_SUFFIX = "_cp";
 
-    @Getter
-    Multimap<UUID, IStreamView> streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());
+    /**
+     * This list should have references to all opened streams. The ViewsGarbageCollector
+     * will use this list to clear trimmed addresses from streams. Since new streams
+     * can be opened during a runtime garbage collection cycle, the collection has
+     * to be thread-safe.
+     */
+    private List<IStreamView> openedStreams = new CopyOnWriteArrayList<>();
 
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
     }
 
     /**
-     * Get a view on a stream. The view has its own pointer to the stream.
+     * Creates and returns a new StreamView on a stream. 
      *
      * @param stream The UUID of the stream to get a view on.
      * @return A view
@@ -69,21 +74,35 @@ public class StreamsView extends AbstractView {
     }
 
     /**
-     * Get a view on a stream. The view has its own pointer to the stream.
+     * Create and return a new stream. This stream will automatically
+     * garbage collected by ViewsGarbageCollector.
      *
-     * @param stream The UUID of the stream to get a view on.
+     * @param streamId The UUID of the stream to get a view on.
      * @return A view
      */
-    public IStreamView get(UUID stream, StreamOptions options) {
-        IStreamView streamView = runtime.getLayoutView().getLayout().getLatestSegment()
-                .getReplicationMode().getStreamView(runtime, stream, options);
-        streamCache.put(stream, streamView);
-        return streamView;
+    public IStreamView get(UUID streamId, StreamOptions options) {
+        IStreamView stream = runtime.getLayoutView().getLayout().getLatestSegment()
+                .getReplicationMode()
+                .getStreamView(runtime, streamId, options);
+        openedStreams.add(stream);
+        return stream;
     }
 
+    /**
+     * Create and return a stream that won't be automatically garbage collected.
+     * @param stream stream id
+     * @param options open options
+     */
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
         return runtime.getLayoutView().getLayout().getLatestSegment()
                 .getReplicationMode().getUnsafeStreamView(runtime, stream, options);
+    }
+
+    /**
+     * Remove all opened streams.
+     */
+    public void clear() {
+        openedStreams.clear();
     }
 
     /**
@@ -93,7 +112,7 @@ public class StreamsView extends AbstractView {
      * thread).
      */
     public void gc(long trimMark) {
-        for (IStreamView streamView : getStreamCache().values()) {
+        for (IStreamView streamView : openedStreams) {
             streamView.gc(trimMark);
         }
     }
@@ -195,5 +214,10 @@ public class StreamsView extends AbstractView {
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull UUID... streamIDs) {
         return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);
+    }
+
+    @VisibleForTesting
+    List<IStreamView> getOpenedStreams() {
+        return openedStreams;
     }
 }
