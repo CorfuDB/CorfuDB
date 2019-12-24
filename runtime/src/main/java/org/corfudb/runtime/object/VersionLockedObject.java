@@ -601,7 +601,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 // This entry actually resets the object. So here
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
-                entry.setUndoRecord(object.getContext(context));
+                entry.setUndoRecord(object);
                 object.close();
                 object = newObjectFn.get();
                 log.trace("Apply[{}] Undo->RESET", this);

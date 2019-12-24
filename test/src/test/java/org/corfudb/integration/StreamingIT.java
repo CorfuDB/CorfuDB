@@ -144,8 +144,9 @@ public class StreamingIT extends AbstractIT {
         store.subscribe(s1n1t1, "n1",
                 Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), ts1);
 
-        // After a brief wait verify that the listener go all the updates.
+        // After a brief wait verify that the listener gets all the updates.
         TimeUnit.SECONDS.sleep(2);
+
         LinkedList<CorfuStreamEntries> updates = s1n1t1.getUpdates();
         assertThat(updates.size() == numUpdates).isTrue();
         for (int i = 0; i < numUpdates; i++) {

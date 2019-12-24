@@ -14,8 +14,9 @@ from subprocess import check_call, check_output
 import sys
 
 
-PATTERN_POM = r"<version>([0-9]+.[0-9]+.[0-9]+.[0-9]+.[0-9]+)</version>"
+PATTERN_POM = r"<revision>([0-9]+.[0-9]+.[0-9]+.[0-9]+.[0-9]+)</revision>"
 PATTERN_TANUKI = r"/usr/share/corfu/lib/cmdlets-([0-9A-Z.]+)-shaded.jar"
+POM_FILE_LOCATION = "pom.xml"
 
 
 def update_version_number(base_version=None):
@@ -60,25 +61,17 @@ def verify_and_get_version_number():
     The format of return value is a list of int that forms a valid version number.
     If verification doesn't pass, print error message and exit.
     """
-    pom_files = check_output("find . -name pom.xml", shell=True).splitlines()
+    # check_output("find . -name pom.xml", shell=True).splitlines()
     version = None
-    mismatch = False
-    for pom_file in pom_files:
-        with open(pom_file, "r") as pf:
-            for line in pf:
-                re_match = re.search(PATTERN_POM, line)
-                if re_match != None:
-                    found_version = re_match.group(1)
-                    if version == None:
-                        version = found_version
-                    elif version != found_version:
-                        mismatch = True
-                    break  # only first <version> tag should be checked
-        if mismatch:
-            break
-    if mismatch:
-        print("[ERROR] Version numbers in pom files don't match!")
-        print("[ERROR] Found version numbers {} and {}.".format(version, found_version))
+    with open(POM_FILE_LOCATION, "r") as pf:
+       for line in pf:
+           re_match = re.search(PATTERN_POM, line)
+           if re_match != None:
+               version = re_match.group(1)
+               print("[INFO] Old version number ", version)
+               return map(lambda x: int(x), version.split("."))
+    if version is None:
+        print("[ERROR] No version number found with pattern", PATTERN_POM)
         sys.exit(-1)
     return map(lambda x: int(x), version.split("."))
 
@@ -106,6 +99,7 @@ def generate_new_version_number(old_version):
     else:
         new_version[3] = timestamp
         new_version[4] = rand
+    print("[INFO] New version is", version_number_to_string(new_version))
     return version_number_to_string(new_version)
 
 
@@ -136,7 +130,7 @@ def write_version_string_to_pom(new_version):
     str -> None
     Replace old_version with new_version in all pom files.
     """
-    pom_files = check_output("find . -name pom.xml", shell=True).splitlines()
+    pom_files = [POM_FILE_LOCATION]
     for pom_file in pom_files:
         content = []
         with open(pom_file, "r") as pf:
@@ -147,7 +141,7 @@ def write_version_string_to_pom(new_version):
             while i < len(content):
                 line = content[i]
                 if not replaced:
-                    result = re.sub(PATTERN_POM, "<version>" + new_version + "</version>", line)
+                    result = re.sub(PATTERN_POM, "<revision>" + new_version + "</revision>", line)
                     if result != line:
                         content[i] = result
                         replaced = True

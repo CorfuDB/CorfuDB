@@ -25,13 +25,6 @@ import org.junit.Test;
  */
 public class ObjectsViewTest extends AbstractViewTest {
 
-    public static boolean referenceTX(Map<String, String> smrMap) {
-        smrMap.put("a", "b");
-        assertThat(smrMap)
-                .containsEntry("a", "b");
-        return true;
-    }
-
     @Test
     @SuppressWarnings("unchecked")
     public void canAbortNoTransaction()
@@ -61,7 +54,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(mapA)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
 

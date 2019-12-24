@@ -55,6 +55,10 @@
         <module name="SuppressWarningsHolder" />
     </module>
 
+    <module name="SuppressionFilter">
+        <property name="file" value="${checkstyle.suppressions.file}" />
+    </module>
+
 
     <module name="SuppressWarningsFilter" />
 

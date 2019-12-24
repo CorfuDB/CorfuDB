@@ -54,11 +54,6 @@ public interface ICorfuSMRProxy<T> {
      */
     <R> R getUpcallResult(long timestamp, Object[] conflictObject);
 
-    /**
-     * Update the proxy to the latest committed version.
-     */
-    void sync();
-
     /** Get the ID of the stream this proxy is subscribed to.
      *
      * @return  The UUID of the stream this proxy is subscribed to.
@@ -72,12 +67,6 @@ public interface ICorfuSMRProxy<T> {
      * @return              The value supplied by the function.
      */
     <R> R TXExecute(Supplier<R> txFunction);
-
-    /** Get an object builder to build new objects.
-     *
-     * @return  An object which permits the construction of new objects.
-     */
-    IObjectBuilder<?> getObjectBuilder();
 
     /** Return the type of the object being replicated.
      *

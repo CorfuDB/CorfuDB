@@ -25,7 +25,6 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.Optional;
 
 public class ClusterGraphTest {

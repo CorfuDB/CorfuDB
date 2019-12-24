@@ -16,7 +16,6 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;

@@ -5,7 +5,6 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.List;
 import java.util.Optional;
 
 /**

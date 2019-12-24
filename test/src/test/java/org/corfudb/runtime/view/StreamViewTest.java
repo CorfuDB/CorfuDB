@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -17,7 +16,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -431,7 +429,7 @@ public class StreamViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(stream)
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setOptions(Collections.singleton(ObjectOpenOptions.NO_CACHE))
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
         mapCopy.size();

@@ -5,29 +5,29 @@ import java.util.Iterator;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
+public class StringIndexer implements Index.Registry<String, String> {
 
-    public static final CorfuTable.IndexName BY_VALUE = () -> "BY_VALUE";
-    public static final CorfuTable.IndexName BY_FIRST_LETTER = () -> "BY_FIRST_LETTER";
+    public static final Index.Name BY_VALUE = () -> "BY_VALUE";
+    public static final Index.Name BY_FIRST_LETTER = () -> "BY_FIRST_LETTER";
 
-    private static final CorfuTable.Index<String, String, ? extends Comparable<?>> BY_VALUE_INDEX =
-            new CorfuTable.Index<>(
+    private static final Index.Spec<String, String, ? extends Comparable<?>> BY_VALUE_INDEX =
+            new Index.Spec<>(
                                    BY_VALUE,
-                                   (CorfuTable.IndexFunction<String, String, String>) (key, val) -> val);
+                                   (Index.Function<String, String, String>) (key, val) -> val);
 
-    private static final CorfuTable.Index<String, String, ? extends Comparable<?>> BY_FIRST_LETTER_INDEX =
-            new CorfuTable.Index<>(
+    private static final Index.Spec<String, String, ? extends Comparable<?>> BY_FIRST_LETTER_INDEX =
+            new Index.Spec<>(
                                    BY_FIRST_LETTER,
-                                   (CorfuTable.IndexFunction<String, String, String>) (key, val) ->
+                                   (Index.Function<String, String, String>) (key, val) ->
                                            Character.toString(val.charAt(0)));
 
     @Override
-    public Iterator<CorfuTable.Index<String, String, ? extends Comparable<?>>> iterator() {
+    public Iterator<Index.Spec<String, String, ? extends Comparable<?>>> iterator() {
         return Stream.of(BY_VALUE_INDEX, BY_FIRST_LETTER_INDEX).iterator();
     }
 
     @Override
-    public Optional<CorfuTable.Index<String, String, ? extends Comparable<?>>> get(CorfuTable.IndexName name) {
+    public Optional<Index.Spec<String, String, ? extends Comparable<?>>> get(Index.Name name) {
         String indexName = (name != null)? name.get() : null;
 
         if (BY_VALUE.get().equals(indexName)) {
@@ -41,17 +41,17 @@ public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
     }
 
     public static class FailingIndex extends StringIndexer {
-        public static final CorfuTable.IndexName FAILING = () -> "FAILING";
+        public static final Index.Name FAILING = () -> "FAILING";
 
-        private static final CorfuTable.Index<String, String, ? extends Comparable<?>> FAILING_INDEX =
-                new CorfuTable.Index<>(
+        private static final Index.Spec<String, String, ? extends Comparable<?>> FAILING_INDEX =
+                new Index.Spec<>(
                         FAILING,
-                        (CorfuTable.IndexFunction<String, String, String>) (key, value) -> {
+                        (Index.Function<String, String, String>) (key, value) -> {
                             throw new ConcurrentModificationException();
                         });
 
         @Override
-        public Iterator<CorfuTable.Index<String, String, ? extends Comparable<?>>> iterator() {
+        public Iterator<Index.Spec<String, String, ? extends Comparable<?>>> iterator() {
             return Stream.of(FAILING_INDEX, FAILING_INDEX).iterator();
         }
     }

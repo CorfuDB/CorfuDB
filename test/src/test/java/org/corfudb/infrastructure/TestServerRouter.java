@@ -151,28 +151,6 @@ public class TestServerRouter implements IServerRouter {
         }
     }
 
-    /**
-     * This simulates the serialization and deserialization that happens in the Netty pipeline for all messages
-     * from server to client.
-     *
-     * @param message
-     * @return
-     */
-
-    public CorfuMsg simulateSerialization(CorfuMsg message) {
-        /* simulate serialization/deserialization */
-        ByteBuf oBuf = Unpooled.buffer();
-        //Class<? extends CorfuMsg> type = message.getMsgType().messageType;
-        //extra assert needed to simulate real Netty behavior
-        //assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());
-        //type.cast(message).serialize(oBuf);
-        message.serialize(oBuf);
-        oBuf.resetReaderIndex();
-        CorfuMsg msgOut = CorfuMsg.deserialize(oBuf);
-        oBuf.release();
-        return msgOut;
-    }
-
     public void setServerEpoch(long serverEpoch) {
         this.serverEpoch = serverEpoch;
         getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));

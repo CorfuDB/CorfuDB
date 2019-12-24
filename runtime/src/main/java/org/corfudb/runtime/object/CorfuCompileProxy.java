@@ -6,7 +6,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -32,8 +31,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -109,8 +106,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     private final Timer timerLogWrite;
     private final Timer timerTxn;
     private final Timer timerUpcall;
-    private final Counter counterAccessOptimistic;
-    private final Counter counterAccessLocked;
     private final Counter counterTxnRetry1;
     private final Counter counterTxnRetryN;
 
@@ -150,8 +145,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         timerLogWrite = metrics.timer(CorfuComponent.OBJECT + "log-write");
         timerTxn = metrics.timer(CorfuComponent.OBJECT + "txn");
         timerUpcall = metrics.timer(CorfuComponent.OBJECT + "upcall");
-        counterAccessOptimistic = metrics.counter(CorfuComponent.OBJECT + "access-optimistic");
-        counterAccessLocked = metrics.counter(CorfuComponent.OBJECT + "access-locked");
         counterTxnRetry1 = metrics.counter(CorfuComponent.OBJECT + "txn-first-retry");
         counterTxnRetryN = metrics.counter(CorfuComponent.OBJECT + "txn-extra-retries");
     }
@@ -258,24 +251,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
             return getUpcallResultInner(timestamp, conflictObject);
         }
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void sync() {
-        // Linearize this read against a timestamp
-        TokenResponse response = rt.getSequencerView()
-                .query(new UUID[]{getStreamID()});
-        final Token timestamp = new Token(response.getEpoch(), response.getStreamTail(getStreamID()));
-
-        log.debug("Sync[{}] {}", this, timestamp);
-        // Acquire locks and perform read.
-        underlyingObject.update(o -> {
-            o.syncObjectUnsafe(timestamp.getSequence());
-            return null;
-        });
     }
 
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
@@ -406,16 +381,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                 this.abortTransaction(e);
             }
         }
-    }
-
-    /**
-     * Get an object builder to build new objects.
-     *
-     * @return An object which permits the construction of new objects.
-     */
-    @Override
-    public IObjectBuilder<?> getObjectBuilder() {
-        return rt.getObjectsView().build();
     }
 
     /**

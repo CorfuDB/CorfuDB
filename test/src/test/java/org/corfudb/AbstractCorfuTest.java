@@ -29,8 +29,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
 
-import javax.annotation.Nonnull;
-
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
@@ -98,7 +96,7 @@ public class AbstractCorfuTest {
                                 description.getTestClass()
                                     .getAnnotation(DisabledOnTravis.class)
                                     != null) {
-                            travisSkipped(description);
+                            travisSkipped();
                         } else {
                             // Test will complete with a throwable if failed,
                             // otherwise it will contain null.
@@ -122,7 +120,7 @@ public class AbstractCorfuTest {
                                 t = timeoutCompletion.join();
                             } catch (CompletionException e) {
                                 if (e.getCause() instanceof TimeoutException) {
-                                    timedOut(description);
+                                    timedOut();
                                 } else {
                                     failed(e, description);
                                 }
@@ -135,9 +133,9 @@ public class AbstractCorfuTest {
                                 }
                             }
                             if (t == null) {
-                                succeeded(description);
+                                succeeded();
                             } else if (t instanceof org.junit.internal.AssumptionViolatedException) {
-                                skipped(t, description);
+                                skipped(t);
                                 throw t;
                             } else {
                                 failed(t, description);
@@ -145,7 +143,7 @@ public class AbstractCorfuTest {
                             }
                         }
                     } finally {
-                        finished(description);
+                        finished();
                         if (testThread != null && testThread.isAlive()) {
                             // Wait a short timeout for the testThread to end after
                             // being interrupted
@@ -168,9 +166,8 @@ public class AbstractCorfuTest {
         }
 
         /** Run when the test successfully completes.
-         * @param description   A description of the method run.
          */
-        protected void succeeded(Description description) {
+        protected void succeeded() {
             if (!testStatus.equals("")) {
                 testStatus = " [" + testStatus + "]";
             }
@@ -223,9 +220,8 @@ public class AbstractCorfuTest {
         }
 
         /** Run when the test fails to complete in time.
-         * @param description   A description of the method run.
          */
-        protected void timedOut(@Nonnull Description description) {
+        protected void timedOut() {
             System.out.print(ansi().a("[")
                 .fg(Ansi.Color.RED)
                 .a("TIMED OUT").reset()
@@ -274,16 +270,14 @@ public class AbstractCorfuTest {
         }
 
         /** Run when the test is finished.
-         * @param description   A description of the method run.
          */
-        protected void finished(Description description) {
+        protected void finished() {
         }
 
         /** Run when a test is skipped due to being disabled on Travis-CI.
          * This method doesn't provide an exception, unlike skipped().
-         * @param description   A description of the method run.
          */
-        protected void travisSkipped(Description description) {
+        protected void travisSkipped() {
             System.out.print(ansi().a("[")
                     .fg(Ansi.Color.YELLOW)
                     .a("SKIPPED").reset()
@@ -293,9 +287,9 @@ public class AbstractCorfuTest {
 
         /** Run when a test is skipped due to not meeting prereqs.
          * @param e             The exception that was thrown.
-         * @param description   A description of the method run.
+         *
          */
-        protected void skipped(Throwable e, Description description) {
+        protected void skipped(Throwable e) {
             System.out.print(ansi().a("[")
                     .fg(Ansi.Color.YELLOW)
                     .a("SKIPPED -").reset()
@@ -663,51 +657,6 @@ public class AbstractCorfuTest {
     @SuppressWarnings("checkstyle:magicnumber")
     public <T> AssertableObject<T> t4(ExceptionFunction<T> toRun) {return t(4, toRun);}
 
-    /** Launch a thread on test thread 5.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t5(ExceptionFunction<T> toRun) {return t(5, toRun);}
-
-    /** Launch a thread on test thread 6.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t6(ExceptionFunction<T> toRun) {return t(6, toRun);}
-
-    /** Launch a thread on test thread 7.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t7(ExceptionFunction<T> toRun) {return t(7, toRun);}
-
-    /** Launch a thread on test thread 8.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t8(ExceptionFunction<T> toRun) {return t(8, toRun);}
-
-    /** Launch a thread on test thread 9.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t9(ExceptionFunction<T> toRun) {return t(9, toRun);}
-
     /** Launch a thread on test thread 1.
      *
      * @param toRun The function to run.
@@ -725,69 +674,6 @@ public class AbstractCorfuTest {
      */
     @SuppressWarnings("checkstyle:magicnumber")
     public <T> AssertableObject<T> t2(VoidExceptionFunction toRun) {return t(2, toRun);}
-
-    /** Launch a thread on test thread 3.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t3(VoidExceptionFunction toRun) {return t(3, toRun);}
-
-    /** Launch a thread on test thread 4.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t4(VoidExceptionFunction toRun) {return t(4, toRun);}
-
-    /** Launch a thread on test thread 5.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t5(VoidExceptionFunction toRun) {return t(5, toRun);}
-
-    /** Launch a thread on test thread 6.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t6(VoidExceptionFunction toRun) {return t(6, toRun);}
-
-    /** Launch a thread on test thread 7.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t7(VoidExceptionFunction toRun) {return t(7, toRun);}
-
-    /** Launch a thread on test thread 8.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t8(VoidExceptionFunction toRun) {return t(8, toRun);}
-
-    /** Launch a thread on test thread 9.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t9(VoidExceptionFunction toRun) {return t(9, toRun);}
 
     public <T> AssertableObject<T> t(int threadNum, ExceptionFunction<T> toRun)
     throws RuntimeException {

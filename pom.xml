@@ -5,7 +5,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.3.0.20191207163157.4491</version>
+    <version>${revision}</version>
 
     <modules>
         <module>infrastructure</module>
@@ -22,6 +22,7 @@
         <module>generator</module>
         <module>it</module>
         <module>benchmarks</module>
+        <module>coverage</module>
     </modules>
 
 
@@ -37,7 +38,7 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-
+        <revision>0.3.0.20191230065514.7285</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>
@@ -178,13 +179,13 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.42.Final</version>
+            <version>4.1.43.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-tcnative</artifactId>
-            <version>2.0.25.Final</version>
+            <version>2.0.28.Final</version>
             <classifier>linux-x86_64</classifier>
         </dependency>
         <dependency>
@@ -285,6 +286,32 @@
 
         <plugins>
             <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.1.0</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                </configuration>
+                <executions>
+                    <!-- enable flattening -->
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <!-- ensure proper cleanup -->
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
                 <version>3.0.0-M1</version>
@@ -310,6 +337,13 @@
                     <execution>
                         <id>validate</id>
                         <phase>validate</phase>
+                        <configuration>
+                            <encoding>UTF-8</encoding>
+                            <configLocation>checks.xml</configLocation>
+                            <suppressionsLocation>checkstyle-suppressions.xml</suppressionsLocation>
+                            <consoleOutput>true</consoleOutput>
+                            <failsOnError>false</failsOnError>
+                        </configuration>
                         <goals>
                             <goal>check</goal>
                         </goals>
@@ -376,6 +410,19 @@
                     </execution>
                 </executions>
             </plugin>
+            <!--Plugin used for code coverage integration with Github-->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>cobertura-maven-plugin</artifactId>
+                <version>2.7</version>
+                <configuration>
+                    <formats>
+                        <format>html</format>
+                        <format>xml</format>
+                    </formats>
+                    <check />
+                </configuration>
+            </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>
                 <groupId>com.mycila</groupId>
@@ -429,27 +476,13 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.7.9</version>
+                <version>0.8.3</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
-                    </execution>
-                    <execution>
-                        <id>report-aggregate</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>report-aggregate</goal>
-                        </goals>
-                        <configuration>
-                            <excludes>
-                                <exclude>**/*$CORFUSMR.*</exclude>
-                                <exclude>**/format/*</exclude>
-                            </excludes>
-                            <outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>

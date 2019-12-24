@@ -336,16 +336,6 @@ public abstract class AbstractTransactionalContext implements
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
-    /**
-     * collect all the conflict-params from the write-set for this transaction
-     * into a set.
-     *
-     * @return A set of longs representing all the conflict params
-     */
-    Map<UUID, Set<byte[]>> collectWriteConflictParams() {
-        return getWriteSetInfo().getHashedConflictSet();
-    }
-
     void mergeWriteSetInto(WriteSetInfo other) {
         getWriteSetInfo().mergeInto(other);
     }

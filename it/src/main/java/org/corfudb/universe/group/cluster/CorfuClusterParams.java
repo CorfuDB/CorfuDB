@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 @Builder
 @EqualsAndHashCode
 @ToString
-public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
+public class CorfuClusterParams<T extends CorfuServerParams> implements GroupParams<T> {
 
     @Getter
     @Default
@@ -44,7 +44,7 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
 
     @Default
     @NonNull
-    private final SortedSet<CorfuServerParams> nodes = new TreeSet<>();
+    private final SortedSet<T> nodes = new TreeSet<>();
 
     @Getter
     @Default
@@ -53,7 +53,6 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
 
     @Default
     @Getter
-    @NonNull
     private final int bootStrapRetries = 20;
 
     @Default
@@ -67,12 +66,12 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
     }
 
     @Override
-    public ImmutableSortedSet<CorfuServerParams> getNodesParams() {
+    public ImmutableSortedSet<T> getNodesParams() {
         return ImmutableSortedSet.copyOf(nodes);
     }
 
-    public synchronized CorfuServerParams getNode(String serverName) {
-        Map<String, CorfuServerParams> nodesMap = nodes
+    public synchronized T getNode(String serverName) {
+        Map<String, T> nodesMap = nodes
                 .stream()
                 .collect(Collectors.toMap(CorfuServerParams::getName, n -> n));
 
@@ -80,7 +79,7 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
     }
 
     @Override
-    public synchronized CorfuClusterParams add(CorfuServerParams nodeParams) {
+    public synchronized CorfuClusterParams<T> add(T nodeParams) {
         nodes.add(ClassUtils.cast(nodeParams));
         return this;
     }

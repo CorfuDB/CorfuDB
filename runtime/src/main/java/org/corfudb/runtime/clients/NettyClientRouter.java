@@ -118,11 +118,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     private volatile Channel channel = null;
 
-    /** Whether to shutdown the {@code eventLoopGroup} or not. Only applies when
-     *  a deprecated constructor (which generates its own {@link EventLoopGroup} is used.
-     */
-    private boolean shutdownEventLoop = false;
-
     /**
      * Whether or not this router is shutdown.
      */
@@ -681,7 +676,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     .setDaemon(true)
                     .setNameFormat(parameters.getNettyEventLoopThreadFormat())
                     .build()), parameters);
-        shutdownEventLoop = true;
     }
 
     @Deprecated
