@@ -14,11 +14,12 @@ import java.nio.channels.FileChannel;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileAttribute;
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class FileChannelPerf implements Closeable {//implements Closeable {
+public class FileChannelPerf implements Closeable {
 
     @Getter
     static Timer writeMetrics;
@@ -26,36 +27,40 @@ public class FileChannelPerf implements Closeable {//implements Closeable {
     static Timer readMetrics;
     @Getter
     static Timer syncMetrics;
+    @Getter
+    static Timer syncMetaMetrics;
 
-    final static int MB_DATA = (1 << 20);
+    static final int MB_DATA = (1 << 20);
     static final String READ_METRICS = "FileReadMetrics";
     static final String WRITE_METRICS = "FileWriteMetrics";
     static final String SYNC_METRICS = "FileSyncMetrics";
+    static final String SYNC_META_METRICS = "FileMetaSyncMetrics";
     static boolean detectorEnabled;
-    static long spikeLatency;
+    static Duration spikeLatency;
     static SlidingWindow slidingWindow;
     private FileChannel fileChannel;
 
 
-    static public void setupParameters(int cntSpike, int maxLatencyVal, boolean report) {
+    public static void setupParameters(final Duration cntSpike, final Duration maxLatencyVal, final boolean report) {
         detectorEnabled = report;
         spikeLatency = maxLatencyVal;
-        readMetrics = ServerContext.getMetrics ().timer (READ_METRICS);
-        writeMetrics = ServerContext.getMetrics ().timer (WRITE_METRICS);
-        syncMetrics = ServerContext.getMetrics ().timer (SYNC_METRICS);
-        slidingWindow = new SlidingWindow(cntSpike, cntSpike, maxLatencyVal);
+        readMetrics = ServerContext.getMetrics().timer(READ_METRICS);
+        writeMetrics = ServerContext.getMetrics().timer(WRITE_METRICS);
+        syncMetrics = ServerContext.getMetrics().timer(SYNC_METRICS);
+        syncMetaMetrics = ServerContext.getMetrics().timer(SYNC_META_METRICS);
+        slidingWindow = new SlidingWindow(cntSpike.getSeconds(), cntSpike.getSeconds(), maxLatencyVal.getSeconds());
     }
 
-    static private long getUnit(long size) {
-        return (size + MB_DATA - 1) / MB_DATA;
+    private static long getUnit(long size) {
+        return(size + MB_DATA - 1) / MB_DATA;
     }
 
     public FileChannelPerf(FileChannel fc) {
-        fileChannel = fc;
+        this.fileChannel = fc;
     }
 
     public static FileChannelPerf open(Path path, Set<? extends OpenOption> options,
-             FileAttribute<?>... attrs) throws IOException {
+                                       FileAttribute<?>... attrs) throws IOException {
         FileChannel fileChannel = FileChannel.open(path, options, attrs);
         return new FileChannelPerf(fileChannel);
     }
@@ -66,7 +71,7 @@ public class FileChannelPerf implements Closeable {//implements Closeable {
     }
 
     public long size() throws IOException {
-        return fileChannel.size ();
+        return fileChannel.size();
     }
 
     public long position() throws IOException {
@@ -79,80 +84,80 @@ public class FileChannelPerf implements Closeable {//implements Closeable {
     }
 
     public int read(ByteBuffer buf, boolean use_position, long position) throws IOException {
-        long start = System.nanoTime ();
-        int size = buf.remaining ();
+        final long start = System.nanoTime();
+        final int size = buf.remaining();
         int res = 0;
 
-        if (!use_position) {
-            res = fileChannel.read (buf);
+        if(!use_position) {
+            res = fileChannel.read(buf);
         } else {
-            res = fileChannel.read (buf, position);
+            res = fileChannel.read(buf, position);
         }
         update(readMetrics, READ_METRICS, start, size);
         return res;
     }
 
     public int read(ByteBuffer dst) throws IOException {
-        return read (dst, false, 0);
+        return read(dst, false, 0);
     }
 
     public int read(ByteBuffer dst, long position) throws IOException {
-        return read (dst, true, position);
+        return read(dst, true, position);
     }
 
     public int write(ByteBuffer buf, boolean use_position, long position) throws IOException {
-        long start = System.nanoTime ();
-        int size = buf.remaining ();
+        long start = System.nanoTime();
+        int size = buf.remaining();
         int res = 0;
-        if (!use_position)
-            res = fileChannel.write (buf);
+        if(!use_position)
+            res = fileChannel.write(buf);
         else {
-            res = fileChannel.write (buf, position);
+            res = fileChannel.write(buf, position);
         }
         update(writeMetrics, WRITE_METRICS, start, size);
         return res;
     }
 
     public int write(ByteBuffer dst) throws IOException {
-        return write (dst, false, 0);
+        return write(dst, false, 0);
     }
 
-
     public int write(ByteBuffer dst, long position) throws IOException {
-        return write (dst, true, position);
+        return write(dst, true, position);
     }
 
     public void force(boolean force) throws IOException {
-        long start = System.nanoTime ();
-        fileChannel.force (force);
-        update(syncMetrics, SYNC_METRICS, start, MB_DATA);
+        final long start = System.nanoTime();
+        fileChannel.force(force);
+
+        if(force)
+            update(syncMetaMetrics, SYNC_META_METRICS, start, MB_DATA);
+        else
+            update(syncMetrics, SYNC_METRICS, start, MB_DATA);
     }
 
-    /*public boolean isOpen() {
-        return fileChannel.isOpen ();
-    }*/
-
-    static public void metricsHis(Timer timer, String name) {
-        log.info ("Timer {} Count {} Latency mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
-                timer.toString (),
-                timer.getCount (),
-                timer.getSnapshot ().getMean () / 1000000,
-                timer.getSnapshot ().get75thPercentile () / 1000000,
-                timer.getSnapshot ().get95thPercentile () / 1000000,
-                timer.getSnapshot ().get99thPercentile () / 1000000);
+    public static void metricsHis(Timer timer, String name) {
+        log.info("Timer {} Count {} Latency mean: {} ms  50%: {} ms  95%: {} ms  99%: {} ms",
+                timer,
+                timer.getCount(),
+                timer.getSnapshot().getMean() / 1000000,
+                timer.getSnapshot().get75thPercentile() / 1000000,
+                timer.getSnapshot().get95thPercentile() / 1000000,
+                timer.getSnapshot().get99thPercentile() / 1000000);
     }
 
-    static public void metricsHis() {
-        metricsHis (readMetrics, READ_METRICS);
-        metricsHis (writeMetrics, WRITE_METRICS);
-        metricsHis (syncMetrics, SYNC_METRICS);
+    public static void metricsHis() {
+        metricsHis(readMetrics, READ_METRICS);
+        metricsHis(writeMetrics, WRITE_METRICS);
+        metricsHis(syncMetrics, SYNC_METRICS);
+        metricsHis(syncMetaMetrics, SYNC_META_METRICS);
     }
 
-    final public boolean isOpen() {
-        return fileChannel.isOpen ();
+    public final boolean isOpen() {
+        return fileChannel.isOpen();
     }
 
-    final public FileChannelPerf truncate(long size) throws IOException {
+    public FileChannelPerf truncate(final long size) throws IOException {
         fileChannel.truncate(size);
         return this;
     }
@@ -161,23 +166,22 @@ public class FileChannelPerf implements Closeable {//implements Closeable {
         fileChannel.close();
     }
 
-    synchronized public static void update(Timer timer, String name, long start, long size) {
-        long dur = (System.nanoTime () - start);
+    public static synchronized void update(Timer timer, String name, long start, long size) {
+        long dur = (System.nanoTime() - start);
         long durSec = TimeUnit.SECONDS.convert(System.nanoTime() - start, TimeUnit.NANOSECONDS);
 
-        if (durSec > spikeLatency*getUnit(size)) {
+        if (durSec > spikeLatency.getSeconds() * getUnit(size)) {
             log.warn("There is a spike: {} {} MB data in {} seconds.", name, getUnit(size), durSec);
         }
         slidingWindow.update(durSec);
         timer.update(dur, TimeUnit.NANOSECONDS);
     }
 
-    static public  boolean reportSpike() {
+    public static boolean reportSpike() {
         if (detectorEnabled && slidingWindow.report()) {
-            metricsHis ();
+            metricsHis();
             return true;
-        }
-        else
+        } else
             return false;
     }
 }

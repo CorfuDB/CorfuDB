@@ -3,12 +3,13 @@ package org.corfudb.infrastructure.log;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class SlidingWindow {
-    int cntWindow;
+    long cntWindow;
     long timeWindow;
     long threshVal; //this is in seconds
     long startTime = 0;
@@ -16,7 +17,7 @@ public class SlidingWindow {
     @Getter
     ArrayList<Long> intervals;
 
-    public SlidingWindow(int cntWindow, long timeWindow, long threshval) {
+    public SlidingWindow(long cntWindow, long timeWindow, long threshval) {
         this.cntWindow = cntWindow;
         this.threshVal = threshval;
         this.timeWindow = timeWindow;
