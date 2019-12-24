@@ -5,7 +5,6 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.util.MetricsUtils;
 
 import java.io.Closeable;
 import java.io.IOException;

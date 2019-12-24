@@ -688,7 +688,6 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
-        logMetricsSize();
         CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
