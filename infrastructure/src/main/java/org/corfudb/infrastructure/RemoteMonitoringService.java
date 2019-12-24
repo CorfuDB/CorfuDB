@@ -8,6 +8,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.infrastructure.log.FileChannelPerf;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -517,6 +518,14 @@ public class RemoteMonitoringService implements MonitoringService {
 
         try {
             ClusterState clusterState = pollReport.getClusterState();
+
+            if (FileChannelPerf.reportSpike()) {
+                Set<String> failedNodes = new HashSet<>();
+                failedNodes.add(serverContext.getLocalEndpoint());
+                log.info ("detected failure");
+                return detectFailure(layout, failedNodes, pollReport).get ();
+            }
+
 
             if (clusterState.size() != layout.getAllServers().size()) {
                 String err = String.format(

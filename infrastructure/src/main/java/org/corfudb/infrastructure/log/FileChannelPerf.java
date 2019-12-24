@@ -177,10 +177,9 @@ public class FileChannelPerf implements Closeable {
     }
 
     public static boolean reportSpike() {
-        if (detectorEnabled && slidingWindow.report()) {
-            metricsHis();
+
+        if (detectorEnabled && slidingWindow.report())
             return true;
-        } else
-            return false;
+        return false;
     }
 }
