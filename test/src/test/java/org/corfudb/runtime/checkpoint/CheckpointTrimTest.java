@@ -13,7 +13,10 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.view.*;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.junit.Test;
 
 /**
@@ -84,7 +87,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                 })
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 
@@ -190,7 +193,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                 })
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 
@@ -226,7 +229,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                 })
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 

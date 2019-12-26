@@ -18,14 +18,15 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
+import org.corfudb.runtime.collections.Index;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.FastObjectLoaderException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.SMRObject.Builder;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -38,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -127,6 +129,11 @@ public class FastObjectLoader {
 
     private boolean whiteList = false;
     private final List<UUID> streamsToLoad = new ArrayList<>();
+    
+    /**
+     * We can register streams with non-default type
+     */
+    private final Map<UUID, Builder> customTypeStreams = new HashMap<>();
 
     @VisibleForTesting
     void setLogHead(long head) { this.logHead = head; }
@@ -136,6 +143,13 @@ public class FastObjectLoader {
 
     // A future to track the last submitted read request
     volatile private Future lastReadRequest;
+
+    /**
+     * We can add streams to be ignored during the
+     * reconstruction of the state (e.g. raw streams)
+     */
+    @Getter
+    private Set<UUID> streamsToIgnore = new HashSet<>();
 
     /**
      * Enable whiteList mode where we only reconstruct
@@ -160,19 +174,7 @@ public class FastObjectLoader {
         return this;
     }
 
-    /**
-     * We can add streams to be ignored during the
-     * reconstruction of the state (e.g. raw streams)
-     */
-    @Getter
-    private Set<UUID> streamsToIgnore = new HashSet<>();
-
-    /**
-     * We can register streams with non-default type
-     */
-    private final Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
-
-    public void addCustomTypeStream(UUID streamId, ObjectBuilder ob) {
+    public void addCustomTypeStream(UUID streamId, Builder ob) {
         customTypeStreams.put(streamId, ob);
     }
 
@@ -182,10 +184,13 @@ public class FastObjectLoader {
      * @param streamName    Stream name.
      * @param indexRegistry Index Registry.
      */
-    public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
+    public void addIndexerToCorfuTableStream(String streamName, Index.Registry indexRegistry) {
         UUID streamId = CorfuRuntime.getStreamID(streamName);
-        ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)
-                .setArguments(indexRegistry).setStreamID(streamId);
+        Builder ob = SMRObject.builder()
+                .runtime(runtime)
+                .setType(CorfuTable.class)
+                .setArguments(indexRegistry)
+                .setStreamID(streamId);
         addCustomTypeStream(streamId, ob);
     }
 
@@ -514,7 +519,7 @@ public class FastObjectLoader {
     private void cleanUpForRetry() {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
-        runtime.getStreamsView().getStreamCache().clear();
+        runtime.getStreamsView().clear();
 
         // Re ask for the Head, if it changes while we were trying.
         findAndSetLogHead();
@@ -753,8 +758,9 @@ public class FastObjectLoader {
                 ContiguousSet<Long> addresses = ContiguousSet.create(
                         Range.closed(lower, upper), DiscreteDomain.longs());
 
-                Map<Long, ILogData> range = runtime.getAddressSpaceView().read(addresses,
-                        RecoveryUtils.fastLoaderReadOptions);
+                Map<Long, ILogData> range = new TreeMap<>(
+                        runtime.getAddressSpaceView().read(addresses,
+                                RecoveryUtils.fastLoaderReadOptions));
 
                 // Sanity
                 for (Map.Entry<Long, ILogData> entry : range.entrySet()) {

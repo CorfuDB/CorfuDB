@@ -158,7 +158,7 @@ public class PrimitiveSerializer implements ISerializer {
                 }),
         CORFU_SMR(15, Object.class, null, (o, b) -> {
             String className = o.getClass().toString();
-            className = "CorfuObject";
+            className = "SMRObject";
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
             b.writeBytes(classNameBytes);
@@ -170,7 +170,7 @@ public class PrimitiveSerializer implements ISerializer {
                 Field f = o.getClass().getDeclaredField("_corfuStreamID");
                 f.setAccessible(true);
                 UUID id = (UUID) f.get(o);
-                log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}",
+                log.trace("Serializing a SMRObject of type {} as a stream pointer to {}",
                         smrClass, id);
                 b.writeLong(id.getMostSignificantBits());
                 b.writeLong(id.getLeastSignificantBits());

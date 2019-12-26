@@ -6,8 +6,6 @@ import com.google.protobuf.Message;
 
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuOptions;
-import org.corfudb.runtime.collections.CorfuTable.Index;
-import org.corfudb.runtime.collections.CorfuTable.IndexName;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -21,22 +19,23 @@ import java.util.Optional;
  *
  * Created by hisundar on 2019-08-12.
  */
-public class ProtobufIndexer implements CorfuTable.IndexRegistry<Message, CorfuRecord<Message, Message>> {
+public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Message,
+        Message>> {
 
     private final HashMap<String,
-            Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>>
+            Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>>
             indices = new HashMap<>();
 
     ProtobufIndexer(Message payloadSchema) {
         payloadSchema.getDescriptorForType().getFields().forEach(this::registerIndices);
     }
 
-    private <T extends Comparable<T>> Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
+    private <T extends Comparable<T>> Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
     getIndex(String indexName, FieldDescriptor fieldDescriptor) {
 
-        return new Index<>(
+        return new Index.Spec<>(
                 () -> indexName,
-                (CorfuTable.IndexFunction<Message, CorfuRecord<Message, Message>, T>)
+                (Index.Function<Message, CorfuRecord<Message, Message>, T>)
                         (key, val) -> ClassUtils.cast(val.getPayload().getField(fieldDescriptor)));
     }
 
@@ -52,12 +51,14 @@ public class ProtobufIndexer implements CorfuTable.IndexRegistry<Message, CorfuR
     }
 
     @Override
-    public Optional<Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>> get(IndexName name) {
+    public Optional<
+            Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
+            > get(Index.Name name) {
         return Optional.ofNullable(name).map(indexName -> indices.get(indexName));
     }
 
     @Override
-    public Iterator<Index<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>> iterator() {
+    public Iterator<Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>> iterator() {
         return indices.values().iterator();
 
     }

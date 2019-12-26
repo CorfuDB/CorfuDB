@@ -28,14 +28,10 @@ public class CorfuProcessManager {
     private final Path serverJar;
     private final Path serverJarRelativePath;
 
-    private final String networkInterface;
-
-    public CorfuProcessManager(
-            Path corfuDir, @NonNull CorfuServerParams params, String networkInterface) {
+    public CorfuProcessManager(Path corfuDir, @NonNull CorfuServerParams params) {
 
         this.corfuDir = corfuDir;
         this.params = params;
-        this.networkInterface = networkInterface;
 
         serverDir = corfuDir.resolve(params.getName());
         dbDir = corfuDir.resolve(params.getStreamLogDir());

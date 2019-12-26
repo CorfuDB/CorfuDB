@@ -6,9 +6,9 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.ReadOptions;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.UUID;
@@ -61,7 +61,7 @@ public class RecoveryUtils {
         }
     }
 
-    static void createObjectIfNotExist(ObjectBuilder ob, ISerializer serializer) {
+    static void createObjectIfNotExist(SMRObject.Builder ob, ISerializer serializer) {
         if (!ob.getRuntime().getObjectsView().getObjectCache()
                 .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){
                 ob.setSerializer(serializer).open();
