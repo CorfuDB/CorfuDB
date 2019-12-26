@@ -17,6 +17,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.junit.Test;
 
 /**
