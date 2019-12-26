@@ -20,7 +20,7 @@ import org.junit.Test;
  * Created by mwei on 5/25/17.
  */
 public class CheckpointTrimTest extends AbstractViewTest {
-    final private static long NUM_ENTRIES = 203;
+    final private static long NUM_ENTRIES = 10003;
     final private static long Round3 = 3;
 
     @Test

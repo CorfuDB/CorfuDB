@@ -171,6 +171,7 @@ public interface StreamLog {
      */
     default long getSegmentSize(long startAddress, long endAddress) {
         long  size = 0;
+        startAddress = startAddress/RECORDS_PER_LOG_FILE*RECORDS_PER_LOG_FILE;
         while(startAddress <= endAddress) {
             size += getSegmentSize(startAddress);
             startAddress += RECORDS_PER_LOG_FILE;
