@@ -21,22 +21,22 @@ import java.util.concurrent.TimeUnit;
 public class FileChannelPerf implements Closeable {
 
     @Getter
-    static Timer writeMetrics;
+    private static Timer writeMetrics;
     @Getter
-    static Timer readMetrics;
+    private static Timer readMetrics;
     @Getter
-    static Timer syncMetrics;
+    private static Timer syncMetrics;
     @Getter
     static Timer syncMetaMetrics;
 
-    static final int MB_DATA = (1 << 20);
-    static final String READ_METRICS = "FileReadMetrics";
-    static final String WRITE_METRICS = "FileWriteMetrics";
-    static final String SYNC_METRICS = "FileSyncMetrics";
-    static final String SYNC_META_METRICS = "FileMetaSyncMetrics";
-    static boolean detectorEnabled;
-    static Duration spikeLatency;
-    static SlidingWindow slidingWindow;
+    private static final int MB_DATA = (1 << 20);
+    private static final String READ_METRICS = "FileReadMetrics";
+    private static final String WRITE_METRICS = "FileWriteMetrics";
+    private static final String SYNC_METRICS = "FileSyncMetrics";
+    private static final String SYNC_META_METRICS = "FileMetaSyncMetrics";
+    private static boolean detectorEnabled;
+    private static Duration spikeLatency;
+    private static SlidingWindow slidingWindow;
     private FileChannel fileChannel;
 
 
@@ -177,9 +177,6 @@ public class FileChannelPerf implements Closeable {
     }
 
     public static boolean reportSpike() {
-
-        if (detectorEnabled && slidingWindow.report())
-            return true;
-        return false;
+        return detectorEnabled && slidingWindow.report();
     }
 }

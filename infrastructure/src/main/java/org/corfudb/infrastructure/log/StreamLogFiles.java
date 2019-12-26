@@ -36,7 +36,6 @@ import java.io.FileFilter;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
@@ -59,7 +58,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
@@ -965,10 +963,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // On IOExceptions this class should be reinitialized, so consuming
         // the buffer size and failing on the write should be an issue
         logSizeQuota.consume(buf.remaining());
-
-        // start to record the start time and size of the write operation
-        long start = System.nanoTime() ;
-        int size = buf.remaining();
 
         while (buf.hasRemaining()) {
             channel.write(buf);
