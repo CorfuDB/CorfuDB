@@ -59,6 +59,10 @@ public class BatchProcessor implements AutoCloseable {
      */
     private long sealEpoch;
 
+    // Indicates that the stream log quota has just exceeded its limit, this allows to print a warning message
+    // to syslog just once and not for every message drop until the size drops below the quota.
+    private boolean quotaRecentlyExceeded = false;
+
     /**
      * Returns a new BatchProcessor for a stream log.
      *
@@ -136,6 +140,10 @@ public class BatchProcessor implements AutoCloseable {
                             new QuotaExceededException("Quota of "
                                     + streamLog.quotaLimitInBytes() + " bytes"));
                     log.warn("batchprocessor: quota exceeded, dropping msg {}", currOp.getMsg());
+                    if (!quotaRecentlyExceeded) {
+                        quotaRecentlyExceeded = true;
+                        log.error("Corfu Server quota exceeded. Server is running in Read-only mode.");
+                    }
                 } else if (currOp.getType() == Type.SEAL && currOp.getMsg().getEpoch() >= sealEpoch) {
                     log.info("batchWriteProcessor: updating from {} to {}", sealEpoch, currOp.getMsg().getEpoch());
                     sealEpoch = currOp.getMsg().getEpoch();
@@ -203,6 +211,11 @@ public class BatchProcessor implements AutoCloseable {
 
                     processed++;
                     lastOp = currOp;
+                }
+
+                if (quotaRecentlyExceeded && !streamLog.quotaExceeded()) {
+                    quotaRecentlyExceeded = false;
+                    log.error("Corfu Server is no longer in Read-only mode.");
                 }
             }
         } catch (Exception e) {

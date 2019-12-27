@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
+    <!--appender that outputs to the console-->
     <appender name="std" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
@@ -9,6 +10,21 @@
         </encoder>
     </appender>
 
+    <!--appender that outputs to syslog-->
+    <appender name="syslog" class="ch.qos.logback.classic.net.SyslogAppender">
+        <syslogHost>localhost</syslogHost>
+        <facility>SYSLOG</facility>
+        <port>514</port>
+        <suffixPattern>java %d{ISO8601,UTC} %p %t %c %M - %m%n</suffixPattern>
+    </appender>
+
+    <!--Logger for batchProcessor which will output to syslog quota exceeded error messages-->
+    <!--set to error level so other batchProcessor messages are not print out to syslog-->
+    <logger name="org.corfudb.infrastructure.BatchProcessor" level="error">
+        <appender-ref ref="syslog" />
+    </logger>
+
+    <!-- set to WARN all logging (children can override) -->
     <root level="warn">
         <appender-ref ref="std"/>
     </root>
