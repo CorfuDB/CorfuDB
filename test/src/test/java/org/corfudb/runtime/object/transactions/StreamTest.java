@@ -141,13 +141,12 @@ public class StreamTest extends AbstractTransactionsTest {
             map.put("0", "0");
 
             t1(() -> {
-                for (int x = 0; x < numEntries; x++) {
+                for (int x = 1; x < numEntries + 1; x++) {
                     TXBegin();
                     map.put(Integer.toString(x), Integer.toString(x));
                     TXEnd();
                 }
             });
-
             TXEnd();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_OVERFLOW);
