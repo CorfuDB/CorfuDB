@@ -68,18 +68,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
     public void testCache() {
         final AtomicBoolean criticalVariable = new AtomicBoolean();
 
-        SequencerServerCache cache = new SequencerServerCache(1, new CacheWriter<ConflictTxStream, Long>() {
-            @Override
-            public void write(@Nonnull ConflictTxStream key, @Nonnull Long value) {
-                log.info("Write: [{}, {}]. Thread: {}", key, value, Thread.currentThread().getName());
-            }
-
-            @Override
-            public void delete(@Nonnull ConflictTxStream key, @Nullable Long value, @Nonnull RemovalCause cause) {
-                log.info("Delete record: {}. Thread: {}", key, Thread.currentThread().getName());
-                criticalVariable.set(true);
-            }
-        });
+        SequencerServerCache cache = new SequencerServerCache(1);
 
         final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
         final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});

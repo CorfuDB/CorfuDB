@@ -155,7 +155,7 @@ public class SequencerServer extends AbstractServer {
 
         globalLogTail = Address.getMinAddress();
 
-        this.cache = new SequencerServerCache(config.getCacheSize());
+        this.cache = new SequencerServerCache((int)config.getCacheSize());
 
 
         setUpTimerNameCache();
