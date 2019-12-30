@@ -4,8 +4,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Address;
-
-import java.nio.BufferOverflowException;
 import java.util.Comparator;
 import java.util.Hashtable;
 import java.util.PriorityQueue;
@@ -79,7 +77,7 @@ public class SequencerServerCache {
 
     private long firstAddress() {
         if (cacheEntries.peek() == null)
-            return Address.NOT_FOUND;;
+            return Address.NOT_FOUND;
         return cacheEntries.peek().txVersion;
     }
 
