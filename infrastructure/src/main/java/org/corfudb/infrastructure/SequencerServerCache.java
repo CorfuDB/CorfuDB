@@ -89,6 +89,12 @@ public class SequencerServerCache {
                 maxConflictWildcard, entry.txVersion, entry.conflictTxStream);
     }
 
+    long firstAddress() {
+        if (cacheEntries.peek() == null)
+            return Address.NOT_FOUND;;
+        return cacheEntries.peek().txVersion;
+    }
+
     /**
      * Invalidate all records up to a trim mark.
      *
@@ -97,8 +103,9 @@ public class SequencerServerCache {
     public void invalidateUpTo(long trimMark) {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
         AtomicLong entries = new AtomicLong();
-        ConflictTxStreamEntry entry;
-        while((entry = cacheEntries.peek())!= null && entry.txVersion >= trimMark) {
+        long first;
+
+        while((first = firstAddress()) != Address.NOT_FOUND && first <= trimMark) {
             invalidateFirst();
             entries.incrementAndGet();
         }
@@ -123,7 +130,7 @@ public class SequencerServerCache {
     public void put(ConflictTxStream conflictStream, long newTail) {
         if (cacheHashtable.size() == cacheSize) {
             ConflictTxStreamEntry entry = cacheEntries.peek();
-            invalidateUpTo(cacheEntries.peek().txVersion);
+            invalidateUpTo(firstAddress());
         }
 
         ConflictTxStreamEntry entry = new ConflictTxStreamEntry(conflictStream, newTail);
