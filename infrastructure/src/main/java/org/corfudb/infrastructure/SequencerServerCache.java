@@ -77,6 +77,12 @@ public class SequencerServerCache {
         return cacheHashtable.get(conflictKey);
     }
 
+    private long firstAddress() {
+        if (cacheEntries.peek() == null)
+            return Address.NOT_FOUND;;
+        return cacheEntries.peek().txVersion;
+    }
+
     /**
      * Invalidate one record.
      *
@@ -89,14 +95,8 @@ public class SequencerServerCache {
                 maxConflictWildcard, entry.txVersion, entry.conflictTxStream);
     }
 
-    long firstAddress() {
-        if (cacheEntries.peek() == null)
-            return Address.NOT_FOUND;;
-        return cacheEntries.peek().txVersion;
-    }
-
     /**
-     * Invalidate all records up to a trim mark.
+     * Invalidate all records up to a trim mark (not included).
      *
      * @param trimMark trim mark
      * */
@@ -105,7 +105,7 @@ public class SequencerServerCache {
         AtomicLong entries = new AtomicLong();
         long first;
 
-        while((first = firstAddress()) != Address.NOT_FOUND && first <= trimMark) {
+        while((first = firstAddress()) != Address.NOT_FOUND && first < trimMark) {
             invalidateFirst();
             entries.incrementAndGet();
         }
@@ -130,7 +130,7 @@ public class SequencerServerCache {
     public void put(ConflictTxStream conflictStream, long newTail) {
         if (cacheHashtable.size() == cacheSize) {
             ConflictTxStreamEntry entry = cacheEntries.peek();
-            invalidateUpTo(firstAddress());
+            invalidateUpTo(firstAddress() + 1);
         }
 
         ConflictTxStreamEntry entry = new ConflictTxStreamEntry(conflictStream, newTail);
@@ -190,13 +190,12 @@ public class SequencerServerCache {
     }
 
     class ConflictTxStreamEntryComparator implements Comparator<ConflictTxStreamEntry> {
-        // Overriding compare()method of Comparator
-        // for descending order of cgpa
+        // Overriding compare()method of Comparator for ascending order
         public int compare(ConflictTxStreamEntry s1, ConflictTxStreamEntry s2) {
             if (s1.txVersion < s2.txVersion)
-                return 1;
-            else if (s1.txVersion > s2.txVersion)
                 return -1;
+            else if (s1.txVersion > s2.txVersion)
+                return 1;
             return 0;
         }
     }
