@@ -12,9 +12,9 @@ import java.io.IOException;
  */
 
 public class StreamPerformanceTest extends PerformanceTest {
-    static MetricRegistry metricRegistry;
-    Timer producerTimer;
-    Timer consumerTimer;
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private final Timer producerTimer;
+    private final Timer consumerTimer;
     private static final String METRIC_PREFIX = "corfu-perf.";
     private static final String STREAM_NAME = "stream-perf-it";
     private static final String OBJECT_NUM = "appendObjectNum";
@@ -22,7 +22,6 @@ public class StreamPerformanceTest extends PerformanceTest {
     private static final String PRODUCER_NUM = "producerNum";
 
     public StreamPerformanceTest() {
-        metricRegistry = CorfuRuntime.getDefaultMetrics();
         producerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-producer");
         consumerTimer = metricRegistry.timer(METRIC_PREFIX + "stream-consumer");
     }

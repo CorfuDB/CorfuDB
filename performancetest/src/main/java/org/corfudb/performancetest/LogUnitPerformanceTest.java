@@ -17,9 +17,9 @@ import java.util.*;
  */
 
 public class LogUnitPerformanceTest extends PerformanceTest{
-    static MetricRegistry metricRegistry;
-    Timer readTimer;
-    Timer writeTimer;
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private final Timer readTimer;
+    private final Timer writeTimer;
     private static final int randomBoundary = 100;
     private static final String METRIC_PREFIX = "corfu-perf.";
     private static final String READ_PERCENT = "logunitReadPercent";
@@ -29,7 +29,6 @@ public class LogUnitPerformanceTest extends PerformanceTest{
     private static final String ENTRY_SIZE = "logEntrySize";
 
     public LogUnitPerformanceTest() {
-        metricRegistry = CorfuRuntime.getDefaultMetrics();
         readTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-read");
         writeTimer = metricRegistry.timer(METRIC_PREFIX + "logunit-write");
     }

@@ -17,10 +17,6 @@ import java.util.*;
 @Slf4j
 public class SequencerPerformanceTest extends PerformanceTest{
     /**
-     * Seed for Random Object.
-     */
-    private final long seed;
-    /**
      * The boundary of the integer randomly generated.
      */
     private final int randomBoundary;
@@ -37,7 +33,7 @@ public class SequencerPerformanceTest extends PerformanceTest{
      * Constructor. Initiate some variables.
      */
     public SequencerPerformanceTest() {
-        seed = Long.parseLong(PROPERTIES.getProperty("sequencerSeed", "1024"));
+        long seed = Long.parseLong(PROPERTIES.getProperty("sequencerSeed", "1024"));
         randomBoundary = Integer.parseInt(PROPERTIES.getProperty("sequencerRandomBoundary", "100"));
         time = Long.parseLong(PROPERTIES.getProperty("sequencerTime", "100"));
         random = new Random(seed);
