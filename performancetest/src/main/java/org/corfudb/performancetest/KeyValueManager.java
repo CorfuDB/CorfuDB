@@ -31,7 +31,7 @@ public class KeyValueManager {
      * Generate a key string if the length of keySet doesn't exceed keyNum.
      * @return key string
      */
-    String generateKey() {
+    protected String generateKey() {
         if (index < keyNum) {
             String key = "key_" + index;
             index++;
@@ -46,7 +46,7 @@ public class KeyValueManager {
      * Randomly return a key string from keySet.
      * @return key string
      */
-    String getKey() {
+    protected String getKey() {
         return keySet.get(random.nextInt(keySet.size()));
     }
 
@@ -54,7 +54,7 @@ public class KeyValueManager {
      * Randomly generate a value string.
      * @return value string
      */
-    String generateValue() {
+    protected String generateValue() {
         return RandomStringUtils.random(valueSize, true, true);
     }
 }
