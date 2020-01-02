@@ -8,7 +8,6 @@ import lombok.Setter;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.util.MetricsUtils;
 
 /**
