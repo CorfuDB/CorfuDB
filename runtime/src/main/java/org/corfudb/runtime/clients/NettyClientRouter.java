@@ -159,13 +159,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         this.parameters = parameters;
 
         // Set timer mapping
-        ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<CorfuMsgType, String> timerBuilder = ImmutableMap.builder();
         for (CorfuMsgType type : CorfuMsgType.values()) {
-            String router = CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase();
-            mapBuilder.put(type, router);
+            String timerName = CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase();
+            timerBuilder.put(type, timerName);
         }
 
-        timerNameCache = mapBuilder.build();
+        timerNameCache = timerBuilder.build();
 
         timeoutConnect = parameters.getConnectionTimeout().toMillis();
         timeoutResponse = parameters.getRequestTimeout().toMillis();

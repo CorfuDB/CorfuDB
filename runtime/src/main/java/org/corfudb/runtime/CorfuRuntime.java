@@ -410,8 +410,8 @@ public class CorfuRuntime {
 
         /**
          * Represents filtering logic to be applied on the inbound messages received by Netty Client
-         * Router. If filters are not null, Netty Client Router add a filter handler and configures it
-         * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
+         * Router. If filters are not empty, Netty Client Router add a filter handler and configures it
+         * with provided filters. If filters are empty, no filter handler will be added to Netty's pipeline.
          */
         @Default
         List<MsgHandlingFilter> nettyClientInboundMsgFilters = new ArrayList<>();
