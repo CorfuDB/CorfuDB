@@ -37,9 +37,11 @@ fi
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
 
-# If it's not a converged appliance (manager, policy manager, and controller) appliance then remove the
+# If it's not the converged appliance (manager, policy manager, and controller)
+# or the GM standalone (global-manager) appliance then remove the
 # converged appliance related configuration
-if [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ]; then
+if ( [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ] \
+  && [ "$NODE_TYPE" != "global-manager" ] ); then
     # Determine the absolute path to successfully
     # delete the converged appliance conf file
     SCRIPTPATH=$(readlink -f $0)
