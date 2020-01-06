@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Address;
 import java.util.Comparator;
-import java.util.Hashtable;
+import java.util.HashMap;
 import java.util.PriorityQueue;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Contains transaction conflict-resolution data structures.
  * <p>
  * The SequencerServer use its own thread/s. To guarantee correct tx conflict-resolution,
- * the {@link SequencerServerCache#cacheHashtable} must be updated
+ * the {@link SequencerServerCache#cacheHash} must be updated
  * along with {@link SequencerServerCache#maxConflictWildcard} at the same time (atomically) to prevent race condition
  * when the conflict stream is already evicted from the cache but `maxConflictWildcard` is not updated yet,
  * which can cause situation when sequencer let the transaction go but the tx has to be cancelled.
@@ -30,10 +30,11 @@ public class SequencerServerCache {
      * <p>
      * a cache of recent conflict keys and their latest global-log position.
      */
-    private final Hashtable<ConflictTxStream, Long> cacheHashtable;
+    //As the sequencer cache is used by a single thread, it is safe to use hashmap.
+    private final HashMap<ConflictTxStream, Long> cacheHash;
     private final PriorityQueue<ConflictTxStreamEntry> cacheEntries; //sorted according to address
     private final int cacheSize;
-    private long maxSequencer = Address.NOT_FOUND; //the max sequence in cacheEntries.
+    private long maxAddress = Address.NOT_FOUND; //the max sequence in cacheEntries.
     /**
      * A "wildcard" representing the maximal update timestamp of
      * all the conflict keys which were evicted from the cache
@@ -60,7 +61,7 @@ public class SequencerServerCache {
 
     public SequencerServerCache(int cacheSize) {
         this.cacheSize = cacheSize;
-        cacheHashtable = new Hashtable<> ();
+        cacheHash = new HashMap<>();
         cacheEntries = new PriorityQueue<> (cacheSize, new ConflictTxStreamEntryComparator());
     }
 
@@ -72,7 +73,7 @@ public class SequencerServerCache {
      * @return global address
      */
     public Long getIfPresent(ConflictTxStream conflictKey) {
-        return cacheHashtable.get(conflictKey);
+        return cacheHash.get(conflictKey);
     }
 
     private long firstAddress() {
@@ -82,12 +83,11 @@ public class SequencerServerCache {
     }
 
     /**
-     * Invalidate one record.
-     *
+     * Invalidate the first record with the minAddress.
      */
     private void invalidateFirst() {
         ConflictTxStreamEntry entry = cacheEntries.poll();
-        cacheHashtable.remove(entry.conflictTxStream);
+        cacheHash.remove(entry.conflictTxStream);
         maxConflictWildcard = Math.max(entry.txVersion, maxConflictWildcard);
         log.trace("Updating maxConflictWildcard. Old = '{}', new ='{}' conflictParam = '{}'.",
                 maxConflictWildcard, entry.txVersion, entry.conflictTxStream);
@@ -116,7 +116,7 @@ public class SequencerServerCache {
      * @return cache size
      */
     public long size() {
-        return cacheHashtable.size();
+        return cacheHash.size();
     }
 
     /**
@@ -126,24 +126,25 @@ public class SequencerServerCache {
      * @param newTail        global tail
      */
     public void put(ConflictTxStream conflictStream, long newTail) {
-        if (cacheHashtable.size() == cacheSize) {
+        if (cacheHash.size() == cacheSize) {
             ConflictTxStreamEntry entry = cacheEntries.peek();
             invalidateUpTo(firstAddress() + 1);
         }
 
         ConflictTxStreamEntry entry = new ConflictTxStreamEntry(conflictStream, newTail);
         cacheEntries.add(entry);
-        cacheHashtable.put(conflictStream, entry.txVersion);
-        maxSequencer = Math.max(newTail, maxSequencer);
+        cacheHash.put(conflictStream, entry.txVersion);
+        maxAddress = Math.max(newTail, maxAddress);
     }
 
     /**
      * Discard all entries in the cache
      */
     public void invalidateAll() {
-        cacheHashtable.clear();
+        log.info("Invalidate all entries in sequencer server cache and update maxConflictWildcard to {}", maxAddress);
+        cacheHash.clear();
         cacheEntries.clear();
-        maxConflictWildcard = maxSequencer;
+        maxConflictWildcard = maxAddress;
     }
 
     /**
@@ -155,7 +156,7 @@ public class SequencerServerCache {
         log.info("updateMaxConflictAddress, new address: {}", newMaxConflictWildcard);
         maxConflictWildcard = newMaxConflictWildcard;
         maxConflictNewSequencer = newMaxConflictWildcard;
-        maxSequencer = newMaxConflictWildcard;
+        maxAddress = newMaxConflictWildcard;
     }
 
     /**
@@ -177,7 +178,7 @@ public class SequencerServerCache {
         }
     }
 
-    public static class ConflictTxStreamEntry {
+    static class ConflictTxStreamEntry {
         private final ConflictTxStream conflictTxStream;
         private final long txVersion;
 
@@ -190,11 +191,7 @@ public class SequencerServerCache {
     class ConflictTxStreamEntryComparator implements Comparator<ConflictTxStreamEntry> {
         // Overriding compare()method of Comparator for ascending order
         public int compare(ConflictTxStreamEntry s1, ConflictTxStreamEntry s2) {
-            if (s1.txVersion < s2.txVersion)
-                return -1;
-            else if (s1.txVersion > s2.txVersion)
-                return 1;
-            return 0;
+            return Long.compare(s1.txVersion, s2.txVersion);
         }
     }
 }
