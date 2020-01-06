@@ -173,7 +173,8 @@ public abstract class AbstractQueuedStreamView extends
     public long append(Object object,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
-        final LogData ld = new LogData(DataType.DATA, object);
+        final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
+
         // Validate if the  size of the log data is under max write size.
         ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
@@ -232,7 +233,7 @@ public abstract class AbstractQueuedStreamView extends
         log.error("append[{}]: failed after {} retries, write size {} bytes",
                 tokenResponse.getSequence(),
                 runtime.getParameters().getWriteRetry(),
-                ILogData.getSerializedSize(object));
+                ILogData.getSerializedSize(object, runtime.getParameters().getCodecType()));
         throw new AppendException();
     }
 

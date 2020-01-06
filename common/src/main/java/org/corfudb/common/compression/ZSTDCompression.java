@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.compression;
+package org.corfudb.common.compression;
 
 import com.github.luben.zstd.Zstd;
 
@@ -46,6 +46,10 @@ public class ZSTDCompression implements Codec {
         return  wrappedBuf;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     */
     @Override
     public ByteBuffer decompress(ByteBuffer compressed) {
         Objects.requireNonNull(compressed);
