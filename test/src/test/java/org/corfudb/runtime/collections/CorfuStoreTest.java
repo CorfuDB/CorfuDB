@@ -193,7 +193,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .build();
         ManagedResources user_1 = ManagedResources.newBuilder().setCreateUser("user_1").build();
         ManagedResources user_2 = ManagedResources.newBuilder().setCreateUser("user_2").build();
-        long expectedVersion = 1L;
+        long expectedVersion = 0L;
 
         corfuStore.tx(nsxManager)
                 .create(tableName,
@@ -213,7 +213,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .update(tableName,
                         key1,
                         EventInfo.newBuilder().setName("bcd").build(),
-                        ManagedResources.newBuilder().setCreateUser("user_2").setVersion(1L).build())
+                        ManagedResources.newBuilder().setCreateUser("user_2").setVersion(0L).build())
                 .commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
@@ -238,7 +238,7 @@ public class CorfuStoreTest extends AbstractViewTest {
 
         corfuStore.tx(nsxManager).delete(tableName, key1).commit();
         assertThat(corfuStore.openTable(nsxManager, tableName).get(key1)).isNull();
-        expectedVersion = 1L;
+        expectedVersion = 0L;
 
         corfuStore.tx(nsxManager)
                 .update(tableName,

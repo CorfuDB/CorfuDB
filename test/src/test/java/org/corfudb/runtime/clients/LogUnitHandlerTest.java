@@ -34,7 +34,6 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -196,7 +195,6 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
-                .setCompressionCodec(Codec.Type.None.toString())
                 .build();
         LogUnitServer server = new LogUnitServer(sc);
         serverRouter.addServer(server);

@@ -47,13 +47,15 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
     private CorfuRuntime createDefaultRuntimeUsingFollowBackpointers() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT);
-        runtime.getParameters().setFollowBackpointersEnabled(true);
+        runtime.getParameters().setFollowBackpointersEnabled(true)
+                .setCacheDisabled(false);
         return runtime;
     }
 
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT);
-        runtime.getParameters().setFollowBackpointersEnabled(false);
+        runtime.getParameters().setFollowBackpointersEnabled(false)
+        .setCacheDisabled(false);
         runtime.getParameters().setStreamBatchSize(PARAMETERS.NUM_ITERATIONS_LOW);
         return runtime;
     }
@@ -110,7 +112,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         // Create Server & Runtime
         Process server = runDefaultServer();
         // Runtime writers
-        runtime = createDefaultRuntime();
+        runtime = createRuntimeWithCache();
 
         try {
             // Write 10K entries on S1 & S2
@@ -398,7 +400,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server = runDefaultServer();
 
         // Writer Runtime
-        CorfuRuntime rt1 = createDefaultRuntime();
+        CorfuRuntime rt1 = createRuntimeWithCache();
 
         // Reader Runtime (following backpointers)
         CorfuRuntime rt2 = createDefaultRuntimeUsingFollowBackpointers();

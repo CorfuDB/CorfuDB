@@ -133,7 +133,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                     throw new RuntimeException("Table::create needs non-null metadata");
                 }
                 M metadataDefaultInstance = (M) getMetadataOptions().getDefaultMetadataInstance();
-                newMetadata = getNewMetadata(metadataDefaultInstance, metadata);
+                newMetadata = mergeOldAndNewMetadata(metadataDefaultInstance, metadata, true);
             }
             return corfuTable.put(key, new CorfuRecord<>(value, newMetadata));
         } finally {
@@ -175,11 +175,16 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                     throw new RuntimeException("Table::update needs non-null metadata");
                 }
                 CorfuRecord<V, M> previous = corfuTable.get(key);
-                M previousMetadata = Optional.ofNullable(previous)
-                        .map(CorfuRecord::getMetadata)
-                        .orElse((M) metadataOptions.getDefaultMetadataInstance());
+                M previousMetadata;
+                boolean isCreate = false;
+                if (previous == null) { // Really a create() call not an update.
+                    previousMetadata = (M) metadataOptions.getDefaultMetadataInstance();
+                    isCreate = true;
+                } else {
+                    previousMetadata = previous.getMetadata();
+                }
                 validateVersion(previousMetadata, metadata);
-                newMetadata = getNewMetadata(previousMetadata, metadata);
+                newMetadata = mergeOldAndNewMetadata(previousMetadata, metadata, isCreate);
             }
             return corfuTable.put(key, new CorfuRecord<>(value, newMetadata));
         } finally {
@@ -300,15 +305,16 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             Descriptors.FieldDescriptor.Type.SFIXED64
     ));
 
-    private M getNewMetadata(@Nonnull M previousMetadata,
-                             @Nullable M userMetadata) {
+    private M mergeOldAndNewMetadata(@Nonnull M previousMetadata,
+                                     @Nullable M userMetadata, boolean isCreate) {
         M.Builder builder = previousMetadata.toBuilder();
         for (Descriptors.FieldDescriptor fieldDescriptor : previousMetadata.getDescriptorForType().getFields()) {
             if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getVersion()) {
+                // If an object is just being created, explicitly set its version field to 0
                 builder.setField(
                         fieldDescriptor,
                         Optional.ofNullable(previousMetadata.getField(fieldDescriptor))
-                                .map(previousVersion -> ((Long) previousVersion) + 1)
+                                .map(previousVersion -> (isCreate ? 0L : ((Long) previousVersion) + 1))
                                 .orElse(0L));
             } else if (userMetadata != null) { // Non-revision fields must retain previous values..
                 if (!userMetadata.hasField(fieldDescriptor)) { // ..iff not explicitly set..

@@ -388,10 +388,6 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" --log-size-quota-percentage ").append(logSizeLimitPercentage);
             }
 
-            if (compressionCodec != null) {
-                command.append(" --compression-codec ").append(compressionCodec);
-            }
-
             if (tlsEnabled) {
                 command.append(" -e");
                 if (keyStore != null) {
