@@ -7,7 +7,7 @@ import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.stress.Stress;
-import org.corfudb.universe.universe.vm.ApplianceManager.VmManager;
+import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 
 @Slf4j
@@ -16,7 +16,7 @@ public class VmStress implements Stress {
     @NonNull
     private final CorfuServerParams params;
     @NonNull
-    private final VmManager vm;
+    private final VmManager vmManager;
     @NonNull
     private final RemoteOperationHelper commandHelper;
     @NonNull
@@ -29,7 +29,7 @@ public class VmStress implements Stress {
     public void stressCPULoad() {
         log.info("Stressing CPU on corfu server: {}", params.getName());
 
-        String cmd = "stress -c " + vm.getVm().getSummary().getConfig().getNumCpu();
+        String cmd = "stress -c " + getNumCpu();
         executeOnVm(cmd);
     }
 
@@ -40,7 +40,7 @@ public class VmStress implements Stress {
     public void stressIOLoad() {
         log.info("Stressing I/O on corfu server: {}", params.getName());
 
-        String cmd = "stress -i " + vm.getVm().getSummary().getConfig().getNumCpu();
+        String cmd = "stress -i " + getNumCpu();
         executeOnVm(cmd);
     }
 
@@ -51,7 +51,7 @@ public class VmStress implements Stress {
     public void stressMemoryLoad() {
         log.info("Stressing Memory (RAM) on corfu server: {}", params.getName());
 
-        String cmd = "stress -m " + vm.getVm().getSummary().getConfig().getNumCpu() + " --vm-bytes 1G";
+        String cmd = "stress -m " + getNumCpu() + " --vm-bytes 1G";
         executeOnVm(cmd);
     }
 
@@ -62,7 +62,7 @@ public class VmStress implements Stress {
     public void stressDiskLoad() {
         log.info("Stressing disk on corfu server: {}", params.getName());
 
-        String cmd = "stress -d " + vm.getVm().getSummary().getConfig().getNumCpu() + " --hdd-bytes 5G";
+        String cmd = "stress -d " + getNumCpu() + " --hdd-bytes 5G";
         executeOnVm(cmd);
     }
 
@@ -81,5 +81,9 @@ public class VmStress implements Stress {
      */
     private void executeOnVm(String cmdLine) {
         commandHelper.executeCommand(cmdLine);
+    }
+
+    private int getNumCpu() {
+        return vmManager.getVm().get().getSummary().getConfig().getNumCpu();
     }
 }

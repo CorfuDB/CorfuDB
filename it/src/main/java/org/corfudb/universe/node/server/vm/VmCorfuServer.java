@@ -10,7 +10,7 @@ import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.process.CorfuProcessManager;
 import org.corfudb.universe.node.stress.vm.VmStress;
-import org.corfudb.universe.universe.vm.ApplianceManager.VmManager;
+import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
@@ -27,7 +27,8 @@ import java.util.List;
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
 
     @NonNull
-    private final VmManager vm;
+    @Getter
+    private final VmManager vmManager;
 
     @NonNull
     private final IpAddress ipAddress;
@@ -44,10 +45,10 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
 
     @Builder
     public VmCorfuServer(
-            VmCorfuServerParams params, VmManager vm, VmUniverseParams universeParams,
+            VmCorfuServerParams params, VmManager vmManager, VmUniverseParams universeParams,
             VmStress stress, RemoteOperationHelper remoteOperationHelper) {
         super(params, universeParams);
-        this.vm = vm;
+        this.vmManager = vmManager;
         this.ipAddress = getIpAddress();
         this.stress = stress;
         this.remoteOperationHelper = remoteOperationHelper;
@@ -63,6 +64,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public CorfuServer deploy() {
+        log.info("Deploy vm server: {}", params.getVmName());
+
         executeCommand(processManager.createServerDirCommand());
         executeCommand(processManager.createStreamLogDirCommand());
 
@@ -203,7 +206,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public IpAddress getIpAddress() {
-        return vm.getResolvedIpAddress();
+        return vmManager.getResolvedIpAddress();
     }
 
     /**
