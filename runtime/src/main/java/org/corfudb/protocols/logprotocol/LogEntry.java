@@ -98,17 +98,6 @@ public class LogEntry implements ICorfuSerializable {
         b.writeByte(type.asByte());
     }
 
-    /**
-     * Returns whether the entry changes the contents of the stream.
-     * For example, an aborted transaction does not change the content of the stream.
-     *
-     * @return True, if the entry changes the contents of the stream,
-     *         False otherwise.
-     */
-    public boolean isMutation(UUID stream) {
-        return true;
-    }
-
     @RequiredArgsConstructor
     public enum LogEntryType {
         // Base Messages

@@ -4,7 +4,6 @@ import lombok.Getter;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * A single corfu transaction can/may have updates to multiple tables.

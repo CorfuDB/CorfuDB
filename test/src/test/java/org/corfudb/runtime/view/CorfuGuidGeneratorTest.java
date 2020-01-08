@@ -2,11 +2,7 @@ package org.corfudb.runtime.view;
 
 import org.junit.Test;
 
-import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.HashSet;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

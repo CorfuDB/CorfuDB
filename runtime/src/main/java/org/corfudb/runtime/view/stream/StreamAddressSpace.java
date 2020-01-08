@@ -62,15 +62,6 @@ public class StreamAddressSpace {
     }
 
     /**
-     * Checks if this stream has addresses or not.
-     *
-     * @return true, if no addresses belong to this stream; false, otherwise.
-     */
-    public boolean isEmpty() {
-       return addressMap.getLongCardinality() == NO_ADDRESSES;
-    }
-
-    /**
      * Get tail for this stream.
      *
      * @return last address belonging to this stream

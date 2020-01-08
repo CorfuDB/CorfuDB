@@ -166,21 +166,6 @@ public class TestClientRouter implements IClientRouter {
     }
 
     /**
-     * Gets a client that matches a particular type.
-     *
-     * @param clientType The class of the client to match.
-     * @return The first client that matches that type.
-     * @throws NoSuchElementException If there are no clients matching that type.
-     */
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends IClient> T getClient(Class<T> clientType) {
-        return (T) clientList.stream()
-                .filter(clientType::isInstance)
-                .findFirst().get();
-    }
-
-    /**
      * Send a message and get a completable future to be fulfilled by the reply.
      *
      * @param ctx     The channel handler context to send the message under.

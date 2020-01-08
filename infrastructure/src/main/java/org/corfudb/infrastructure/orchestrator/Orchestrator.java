@@ -87,7 +87,7 @@ public class Orchestrator {
                         + threadNumber.getAndIncrement();
                 thread.setName(threadName);
                 thread.setUncaughtExceptionHandler(this::handleUncaughtException);
-                return new Thread(r);
+                return thread;
             }
 
             void handleUncaughtException(Thread t, @Nonnull Throwable e) {

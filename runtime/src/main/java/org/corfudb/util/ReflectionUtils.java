@@ -49,17 +49,7 @@ public class ReflectionUtils {
             .put("byte[]", byte[].class)
             .put("short[]", short[].class)
             .build();
-    private static final Pattern methodExtractor = Pattern.compile("([^.\\s]*)\\((.*)\\)$");
     private static final Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
-
-    public static String getShortMethodName(String longName) {
-        int packageIndex = longName.substring(0, longName.indexOf('(')).lastIndexOf('.');
-        return longName.substring(packageIndex + 1);
-    }
-
-    public static String getMethodNameOnlyFromString(String s) {
-        return s.substring(0, s.indexOf('('));
-    }
 
     public static Class<?> getPrimitiveType(String s) {
         return primitiveTypeMap.get(s);
@@ -85,18 +75,6 @@ public class ReflectionUtils {
                         return retVal;
                     }
                 })
-                .toArray(Class[]::new);
-    }
-
-    /**
-     * Extract argument types from a string that represents the method
-     * signature.
-     * @param args Signature string
-     * @return Array of types
-     */
-    public static Class[] getArgumentTypesFromArgumentList(Object[] args) {
-        return Arrays.stream(args)
-                .map(Object::getClass)
                 .toArray(Class[]::new);
     }
 
@@ -188,22 +166,6 @@ public class ReflectionUtils {
             return results.stream()
                     .max(Comparator.comparing(Integer::valueOf))
                     .orElse(newDepth);
-        }
-    }
-
-    /**
-     * Extract method name from to string path.
-     * @param methodString Method signature in the form of a string
-     * @return Method object
-     */
-    public static Method getMethodFromToString(String methodString) {
-        Class<?> cls = getClassFromMethodToString(methodString);
-        Matcher m = methodExtractor.matcher(methodString);
-        m.find();
-        try {
-            return cls.getDeclaredMethod(m.group(1), getArgumentTypesFromString(m.group(2)));
-        } catch (NoSuchMethodException nsme) {
-            throw new RuntimeException(nsme);
         }
     }
 

@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 /** A class which allows access to transactional contexts, which manage
  * transactions. The static methods of this class provide access to the

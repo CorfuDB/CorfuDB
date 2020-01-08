@@ -92,66 +92,6 @@ public class MsgHandlingFilter implements Function<CorfuMsg, List<CorfuMsg>> {
 
     /**
      * A convenience method for creating a handling filter which checks all inbound messages and
-     * drops them if they are in {@param toBeDroppedTypeSet}
-     *
-     * @return a handling filter that drops messages with types provided to this method
-     */
-    public static MsgHandlingFilter msgDropFilterFor(
-            Set<CorfuMsgType> toBeDroppedTypeSet) {
-        Function<CorfuMsg, Boolean> filter =
-                corfuMsg -> toBeDroppedTypeSet.contains(corfuMsg.getMsgType());
-        Function<CorfuMsg, CorfuMsg> droppingProcess = corfuMsg -> null;
-
-        return new MsgHandlingFilter(filter, droppingProcess);
-    }
-
-    /**
-     * A convenience method for creating a handling filter which drops all the inbound messages
-     *
-     * @return a handling filter that drops all messages
-     */
-    public static MsgHandlingFilter msgDropAllFilter() {
-        Function<CorfuMsg, Boolean> filter = corfuMsg -> true;
-        Function<CorfuMsg, CorfuMsg> droppingProcess = corfuMsg -> null;
-
-        return new MsgHandlingFilter(filter, droppingProcess);
-    }
-
-    /**
-     * A convenience method for creating a handling filter which duplicate each of the inbound messages
-     *
-     * @return a handling filter which duplicates all inbound messages
-     */
-    public static MsgHandlingFilter msgDuplicateAllFilter() {
-        Function<CorfuMsg, Boolean> filter = corfuMsg -> true;
-
-        Function<CorfuMsg, CorfuMsg> duplicatePreProcess = corfuMsg -> corfuMsg;
-        Function<CorfuMsg, CorfuMsg> allowProcess = corfuMsg -> corfuMsg;
-        final List<Function<CorfuMsg, CorfuMsg>> transformFunctions =
-                Arrays.asList(duplicatePreProcess, allowProcess);
-
-        return new MsgHandlingFilter(filter, transformFunctions);
-    }
-
-    /**
-     * A convenience method for creating a handling filter which checks all inbound messages and
-     * drops them according to probability {@param droppingProbability}. This function uses a uniform
-     * random function for dropping messages.
-     *
-     * @return a handling filter that randomly drops messages according to provided probability.
-     */
-    public static MsgHandlingFilter msgDropUniformRandomFilter(Double droppingProbability) {
-        Function<CorfuMsg, Boolean> filter = corfuMsg -> true;
-        Function<CorfuMsg, CorfuMsg> droppingProcess =
-                corfuMsg -> Double.compare(random.nextDouble(), droppingProbability) < 0 ?
-                        null :
-                        corfuMsg;
-
-        return new MsgHandlingFilter(filter, droppingProcess);
-    }
-
-    /**
-     * A convenience method for creating a handling filter which checks all inbound messages and
      * drops messages with types included in {@param toBeDroppedTypeSet} with a probability of
      * {@param droppingProbability}. This function uses a uniform random function for dropping
      * messages.
@@ -166,53 +106,6 @@ public class MsgHandlingFilter implements Function<CorfuMsg, List<CorfuMsg>> {
                 corfuMsg -> Double.compare(random.nextDouble(), droppingProbability) < 0 ?
                         null :
                         corfuMsg;
-
-        return new MsgHandlingFilter(filter, droppingProcess);
-    }
-
-    /**
-     * A convenience method for creating a handling filter which checks all inbound messages and
-     * using a gaussian (normal) distribution, drops the messages outside the standard
-     * deviation provided by {@param filteringSigma}. For example using 1.0, 2.0, or 3.0 for
-     * filtering sigma, correspondingly allows 68%, 95%, or 99.7% of inbound messages and drops
-     * the rest. This function uses a gaussian random generator for simulating the normal
-     * distribution.
-     *
-     * @param filteringSigma a positive double representing cut off for filtering the messages.
-     * @return a handling filter that randomly drops messages according to provided filtering sigma.
-     */
-    public static MsgHandlingFilter msgDropGaussianFilter(Double filteringSigma) {
-
-        double gaussianSample = random.nextGaussian();
-        Function<CorfuMsg, CorfuMsg> droppingProcess =
-                corfuMsg -> Double.compare(Math.abs(gaussianSample), filteringSigma) > 0 ?
-                        null :
-                        corfuMsg;
-        Function<CorfuMsg, Boolean> filter = corfuMsg -> true;
-
-        return new MsgHandlingFilter(filter, droppingProcess);
-    }
-
-    /**
-     * A convenience method for creating a handling filter. This filter drops the messages with
-     * types included {@param toBeDroppedTypeSet} a normal distribution. Using a gaussian (normal)
-     * distribution, it drops the messages outside the standard deviation provided by {@param filteringSigma}.
-     * For example using 1.0, 2.0, or 3.0 for filtering sigma, correspondingly allows 68%, 95%, or 99.7%
-     * of inbound messages and drops the rest. This function uses a gaussian random generator for simulating
-     * the normal distribution.
-     *
-     * @param filteringSigma a positive double representing cut off for filtering the messages.
-     * @return a handling filter that randomly drops messages according to provided filtering sigma.
-     */
-    public static MsgHandlingFilter msgDropGaussianFilterFor(Set<CorfuMsgType> toBeDroppedTypeSet,
-                                                             Double filteringSigma) {
-
-        double gaussianSample = random.nextGaussian();
-        Function<CorfuMsg, CorfuMsg> droppingProcess =
-                corfuMsg -> Double.compare(Math.abs(gaussianSample), filteringSigma) > 0 ?
-                        null :
-                        corfuMsg;
-        Function<CorfuMsg, Boolean> filter = corfuMsg -> toBeDroppedTypeSet.contains(corfuMsg.getMsgType());
 
         return new MsgHandlingFilter(filter, droppingProcess);
     }

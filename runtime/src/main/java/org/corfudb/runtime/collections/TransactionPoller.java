@@ -1,23 +1,15 @@
 package org.corfudb.runtime.collections;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.LinkedList;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import java.util.Comparator;
-import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.ObjectsView;
@@ -44,16 +36,29 @@ public class TransactionPoller implements Runnable {
     private final List<StreamingSubscriptionContext> streamContexts;
 
     /**
+     * A reference to the transaction stream
+     */
+    @Getter
+    private final IStreamView txnStream;
+
+    /**
      * Constructor.
      *
      * @param streams The list of StreamingSubscriptionContexts to process.
      */
     public TransactionPoller(@Nonnull CorfuRuntime runtime,
-            @Nonnull List<StreamingSubscriptionContext> streams) {
+                             @Nonnull List<StreamingSubscriptionContext> streams) {
         this.runtime = runtime;
         this.streamContexts = streams.stream()
                 .sorted(Comparator.comparingLong(sc -> sc.getLastReadAddress()))
                 .collect(Collectors.toList());
+
+        StreamOptions options = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+
+        txnStream = runtime.getStreamsView()
+                .getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, options);
     }
 
     /**
@@ -78,18 +83,12 @@ public class TransactionPoller implements Runnable {
  
         long lastReadAddress = streamContexts.get(0).getLastReadAddress();
 
-        StreamOptions options = StreamOptions.builder()
-                .ignoreTrimmed(true)
-                .cacheEntries(false)
-                .build();
-        IStreamView txStream = runtime.getStreamsView()
-                .get(ObjectsView.TRANSACTION_STREAM_ID, options);
         log.trace("Seeking txStream to {}", lastReadAddress + 1);
-        txStream.seek(lastReadAddress + 1);
+        txnStream.seek(lastReadAddress + 1);
         log.trace("txStream current global position after seeking {}, hasNext {}",
-                txStream.getCurrentGlobalPosition(), txStream.hasNext());
+                txnStream.getCurrentGlobalPosition(), txnStream.hasNext());
 
-        List<ILogData> updates = txStream.remaining();
+        List<ILogData> updates = txnStream.remaining();
 
         log.trace("{} updates remaining in the txStream", updates.size());
 

@@ -2,17 +2,11 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.Comparator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -154,6 +148,7 @@ public class TxnStreamingManager {
         if (!lockedStreamingSubscriptionContexts.isEmpty()) {
             log.trace("Locked {} StreamingSubscriptionContexts for processing",
                     lockedStreamingSubscriptionContexts.size());
+
             pollerExecutor.submit(new TransactionPoller(runtime, lockedStreamingSubscriptionContexts));
         }
 

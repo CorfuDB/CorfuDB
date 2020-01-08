@@ -34,9 +34,4 @@ abstract class AbstractClient implements IClient {
         return router.sendMessageAndGetCompletable(msg.setEpoch(epoch)
                 .setPriorityLevel(priorityLevel));
     }
-
-    public void sendMessage(CorfuMsg msg) {
-        router.sendMessage(msg.setEpoch(epoch)
-                .setPriorityLevel(priorityLevel));
-    }
 }

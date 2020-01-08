@@ -64,16 +64,6 @@ public class CorfuMsgHandler {
         return handlerMap.keySet();
     }
 
-    /** Get a handler for a specific message type.
-     *
-     * @param type  The type to retrieve a handler for.
-     * @return      A handler for the requested message type.
-     */
-    @SuppressWarnings("unchecked")
-    public Handler<CorfuMsg> getHandler(CorfuMsgType type) {
-        return handlerMap.get(type);
-    }
-
     /** Construct a new instance of CorfuMsgHandler. */
     public CorfuMsgHandler() {
         handlerMap = new EnumMap<>(CorfuMsgType.class);

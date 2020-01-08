@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.primitives.UnsignedBytes;
-import groovy.json.internal.Byt;
 import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
@@ -72,7 +71,7 @@ public class CorfuQueueTest extends AbstractViewTest {
     public void queueWithSecondaryIndexCheck() {
         CorfuQueue<String>
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
-                CorfuTable.IndexRegistry.empty());
+                Index.Registry.empty());
 
         CorfuRecordId idC = corfuQueue.enqueue("c");
         CorfuRecordId idB = corfuQueue.enqueue("b");

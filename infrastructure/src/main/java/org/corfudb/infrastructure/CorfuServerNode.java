@@ -158,23 +158,6 @@ public class CorfuServerNode implements AutoCloseable {
     }
 
     /**
-     * Get the requested Corfu server.
-     *
-     * @param serverClass Server class.
-     * @param <T>         Type of server.
-     * @return T Server Object.
-     */
-    @SuppressWarnings("unchecked")
-    public @Nonnull
-    <T extends AbstractServer> T getServer(@Nonnull Class<T> serverClass) {
-        T server = (T) serverMap.get(serverClass);
-        if (server == null) {
-            throw new UnrecoverableCorfuError("Server does not exist");
-        }
-        return server;
-    }
-
-    /**
      * A functional interface for receiving and configuring a {@link ServerBootstrap}.
      */
     @FunctionalInterface

@@ -4,6 +4,7 @@ import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.util.IpAddress;
 
 import java.util.List;
 
@@ -83,9 +84,9 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
      */
     void resume();
 
-    String getIpAddress();
+    IpAddress getIpAddress();
 
-    String getNetworkInterface();
+    IpAddress getNetworkInterface();
 
     default String getEndpoint() {
         return getNetworkInterface() + ":" + getParams().getPort();
