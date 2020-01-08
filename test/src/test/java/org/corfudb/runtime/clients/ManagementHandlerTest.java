@@ -39,7 +39,6 @@ public class ManagementHandlerTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         ServerContext serverContext = new ServerContextBuilder()
-                .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)

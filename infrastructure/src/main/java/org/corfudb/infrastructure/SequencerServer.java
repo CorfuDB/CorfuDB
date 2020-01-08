@@ -153,7 +153,7 @@ public class SequencerServer extends AbstractServer {
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
 
-        globalLogTail = config.getInitialToken();
+        globalLogTail = Address.getMinAddress();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
 
@@ -706,20 +706,14 @@ public class SequencerServer extends AbstractServer {
     public static class Config {
         private static final long DEFAULT_CACHE_SIZE = 250_000L;
 
-        private final long initialToken;
         @Default
         private final long cacheSize = DEFAULT_CACHE_SIZE;
 
         public static Config parse(Map<String, Object> opts) {
-            long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
-            long initialToken = Utils.parseLong(opts.get("--initial-token"));
-
-            if (Address.nonAddress(initialToken)) {
-                initialToken = Address.getMinAddress();
-            }
+            long cacheSize = opts.containsKey("--sequencer-cache-size") ?
+                    Long.parseLong((String) opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE;
 
             return Config.builder()
-                    .initialToken(initialToken)
                     .cacheSize(cacheSize)
                     .build();
         }
