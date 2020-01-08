@@ -14,6 +14,7 @@ import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
@@ -404,16 +405,6 @@ public class CorfuRuntime {
                         .build();
 
         /**
-         * Get the netty channel options to be used by the netty client implementation.
-         *
-         * @return A map containing options which should be applied to each netty channel.
-         */
-        public Map<ChannelOption, Object> getNettyChannelOptions() {
-            return customNettyChannelOptions.size() == 0
-                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
-        }
-
-        /**
          * A {@link UncaughtExceptionHandler} which handles threads that have an uncaught
          * exception. Used on all {@link ThreadFactory}s the runtime creates, but if you
          * generate your own thread factory, this field is ignored. If this field is not set,
@@ -435,6 +426,27 @@ public class CorfuRuntime {
          */
         @Default
         List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
+
+        /**
+         * The default priority of the requests made by this client.
+         * Under resource constraints non-high priority requests
+         * are dropped.
+         */
+        @Default
+        private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+        /**
+         * Port at which the {@link CorfuRuntime} will allow third-party
+         * collectors to pull for metrics.
+         */
+        @Default
+        private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
+
+        /**
+         * The compression codec to use to encode a write's payload
+         */
+        @Default
+        private String codecType = Codec.Type.ZSTD.toString();
 
         // Register handlers region
 
@@ -463,19 +475,15 @@ public class CorfuRuntime {
         //endregion
 
         /**
-         * The default priority of the requests made by this client.
-         * Under resource constraints non-high priority requests
-         * are dropped.
+         * Get the netty channel options to be used by the netty client implementation.
+         *
+         * @return A map containing options which should be applied to each netty channel.
          */
-        @Default
-        PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+        public Map<ChannelOption, Object> getNettyChannelOptions() {
+            return customNettyChannelOptions.size() == 0
+                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
+        }
 
-        /**
-         * Port at which the {@link CorfuRuntime} will allow third-party
-         * collectors to pull for metrics.
-         */
-        @Default
-        int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
     }
 
     /**

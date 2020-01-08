@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.common.compression.Codec;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -134,6 +135,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
+        r.getParameters().setCodecType(Codec.Type.NONE.toString());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();

@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.log.compression;
+package org.corfudb.common.compression;
 
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;

@@ -25,7 +25,6 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -53,76 +52,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             .setMemory(false)
             .build();
     }
-
-    @Test
-    public void testStreamAppendAndReadWithCompression() {
-        String path = getDirPath();
-        ServerContext sc =  new ServerContextBuilder()
-                .setCompressionCodec(Codec.Type.LZ4.toString())
-                .setLogPath(path)
-                .setMemory(false)
-                .build();
-
-        StreamLog log = new StreamLogFiles(sc, true);
-        final long address0 = 0;
-        final long address1 = 1;
-
-        ByteBuf payload = Unpooled.wrappedBuffer("Some Data!".getBytes());
-
-        LogData hole = new LogData(DataType.HOLE);
-        hole.setGlobalAddress(address0);
-        LogData ld = new LogData(DataType.DATA, payload);
-        ld.setGlobalAddress(address1);
-
-        log.append(address0, hole);
-        log.append(address1, ld);
-
-        assertThat(log.read(address0)).isEqualTo(hole);
-        assertThat(log.read(address0).getData()).isEmpty();
-        assertThat(log.read(address1)).isEqualTo(ld);
-        // Since the LogData equal doesn't consider the payload, we need to check it explicitly
-        assertThat(log.read(address1).getData()).isEqualTo(ld.getData());
-        log.close();
-    }
-
-    @Test
-    public void testInterleavedCompressedEntries() {
-        String path = getDirPath();
-        ServerContext[] contexts = new ServerContext[2];
-
-        // Create two configurations, where one enables compression
-        // and the other doesn't
-        contexts[0] = new ServerContextBuilder()
-                .setCompressionCodec(Codec.Type.ZSTD.toString())
-                .setLogPath(path)
-                .setMemory(false)
-                .build();
-        contexts[1] =  new ServerContextBuilder()
-                .setLogPath(path)
-                .setMemory(false)
-                .setCompressionCodec(Codec.Type.None.toString())
-                .build();
-
-        ByteBuf payload = Unpooled.wrappedBuffer("Some Data!".getBytes());
-
-        final long numWrites = 5;
-        LogData ld = new LogData(DataType.DATA, payload);
-        for (int x = 0; x < numWrites; x++) {
-            // Interleave compressed with non-compressed entries
-            StreamLog writer = new StreamLogFiles(contexts[x % contexts.length], true);
-            writer.append(x, ld);
-            writer.close();
-        }
-
-        StreamLog reader = new StreamLogFiles(getContext(), true);
-
-        // Verifiy both compressed and non-compressed entries and can be read retrieved
-        for (int x = 0; x < numWrites; x++) {
-            LogData data = reader.read(x);
-            assertThat(data.getGlobalAddress()).isEqualTo(x);
-            assertThat(data.getData()).isEqualTo(payload.array());
-        }
-    }
+    
 
     @Test
     public void testWriteReadWithChecksum() {

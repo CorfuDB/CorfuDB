@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -132,7 +131,8 @@ public class StreamsView extends AbstractView {
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull CacheOption cacheOption, @Nonnull UUID... streamIDs) {
 
-        final LogData ld = new LogData(DataType.DATA, object);
+        final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
+
         ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
         TokenResponse tokenResponse = null;
@@ -202,7 +202,7 @@ public class StreamsView extends AbstractView {
                 tokenResponse == null ? -1 : tokenResponse.getSequence(),
                 runtime.getParameters().getWriteRetry(),
                 Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
-                ILogData.getSerializedSize(object));
+                ILogData.getSerializedSize(object, runtime.getParameters().getCodecType()));
         throw new AppendException();
     }
 

@@ -23,17 +23,19 @@ import java.util.Optional;
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
 public class VmCorfuServerParams extends CorfuServerParams {
+    @NonNull
     private final VmName vmName;
 
     @Builder
     public VmCorfuServerParams(
             VmName vmName, int port, Mode mode, Persistence persistence,
             Level logLevel, String clusterName, Duration stopTimeout, String serverVersion,
-            Path serverJarDirectory, String dockerImage) {
+            Path serverJarDirectory, String dockerImage, int logSizeQuotaPercentage) {
 
         super(
                 port, mode, persistence, logLevel, clusterName, stopTimeout,
-                Optional.empty(), serverVersion, serverJarDirectory, dockerImage
+                Optional.empty(), serverVersion, serverJarDirectory, dockerImage,
+                logSizeQuotaPercentage
         );
         this.vmName = vmName;
     }
@@ -42,8 +44,17 @@ public class VmCorfuServerParams extends CorfuServerParams {
     @EqualsAndHashCode
     @Getter
     public static class VmName implements Comparable<VmName> {
+        /**
+         * Vm name in a vSphere cluster
+         */
         @NonNull
         private final String name;
+
+        /**
+         * Vm index in a vm.properties config
+         */
+        @NonNull
+        private final Integer index;
 
         @Override
         public int compareTo(VmName other) {

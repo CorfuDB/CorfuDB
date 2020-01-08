@@ -68,6 +68,13 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+
         <plugins>
             <!-- Disable integration tests by default -->
             <plugin>
@@ -134,10 +141,12 @@
                                 <artifactItem>
                                     <groupId>org.corfudb</groupId>
                                     <artifactId>infrastructure</artifactId>
+                                    <version>${revision}</version>
                                     <type>jar</type>
                                     <classifier>shaded</classifier>
                                     <overWrite>false</overWrite>
                                     <outputDirectory>${project.build.directory}</outputDirectory>
+                                    <destFileName>infrastructure-${version}-shaded.jar</destFileName>
                                 </artifactItem>
                             </artifactItems>
                         </configuration>

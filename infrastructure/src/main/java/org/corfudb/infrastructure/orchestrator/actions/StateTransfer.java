@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -219,7 +220,8 @@ public class StateTransfer {
                 log.error("Missing address {} in batch {}", address, chunk);
                 throw new IllegalStateException("Missing address");
             }
-            entries.add((LogData) dataMap.get(address));
+            LogData ld = (LogData) dataMap.get(address);
+            entries.add(ld);
         }
 
         try {
