@@ -221,7 +221,6 @@ public class StateTransfer {
                 throw new IllegalStateException("Missing address");
             }
             LogData ld = (LogData) dataMap.get(address);
-            ld.setPayloadCodecType(Codec.Type.valueOf(runtime.getParameters().getCodecType()));
             entries.add(ld);
         }
 
