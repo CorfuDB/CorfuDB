@@ -97,19 +97,6 @@ public class ManagementHandlerTest extends AbstractClientTest {
     }
 
     /**
-     * Tests the msg handler for failure detection.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void handleFailure()
-            throws Exception {
-        // Since the servers are started as single nodes thus already bootstrapped.
-        assertThat(client.handleFailure(0L, Collections.emptySet()).get())
-                .isEqualTo(true);
-    }
-
-    /**
      * Tests the Node State request and asserts if response is received.
      *
      * @throws Exception

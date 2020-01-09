@@ -590,18 +590,17 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         Map<UUID, Long> backpointerMap = new HashMap<>();
         backpointerMap.put(streamId, Address.NON_EXIST);
         ldOne.setBackpointerMap(backpointerMap);
-        client.write(ldOne);
+        client.write(ldOne).join();
 
         // 2. Entry in address 1
         LogData ldTwo = getLogDataWithoutId(addressTwo);
         backpointerMap = new HashMap<>();
         backpointerMap.put(streamId, addressOne);
         ldTwo.setBackpointerMap(backpointerMap);
-        client.write(ldTwo);
+        client.write(ldTwo).join();
 
         // Get Stream's Address Space
-        CompletableFuture<StreamsAddressResponse> cf = client.getLogAddressSpace();
-        StreamAddressSpace addressSpace = cf.get().getAddressMap().get(streamId);
+        StreamAddressSpace addressSpace = client.getLogAddressSpace().join().getAddressMap().get(streamId);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
         assertThat(addressSpace.getAddressMap().contains(addressOne));
