@@ -190,15 +190,15 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     /**
      * Executes a certain command on the VM.
      */
-    private void executeCommand(String cmdLine) {
-        remoteOperationHelper.executeCommand(cmdLine);
+    private String executeCommand(String cmdLine) {
+        return remoteOperationHelper.executeCommand(cmdLine);
     }
 
     /**
      * Executes a certain Sudo command on the VM.
      */
-    private void executeSudoCommand(String cmdLine) {
-        remoteOperationHelper.executeSudoCommand(cmdLine);
+    private String  executeSudoCommand(String cmdLine) {
+        return remoteOperationHelper.executeSudoCommand(cmdLine);
     }
 
     /**
