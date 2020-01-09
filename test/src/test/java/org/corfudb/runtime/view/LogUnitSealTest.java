@@ -56,8 +56,6 @@ public class LogUnitSealTest extends AbstractViewTest {
         RuntimeLayout runtimeLayout = getRuntimeLayout(epoch);
         Layout layout = runtimeLayout.getLayout();
         LogUnitClient client = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0);
-
-        List<CompletableFuture<Boolean>> successOpFutures1 = new ArrayList<>();
         List<CompletableFuture<Boolean>> successOpFutures2 = new ArrayList<>();
         List<CompletableFuture<Boolean>> failedOpFutures = new ArrayList<>();
 
@@ -66,7 +64,7 @@ public class LogUnitSealTest extends AbstractViewTest {
 
         for (int i = 0; i < numOp; i++) {
             LogData ld = LogData.getHole(address++);
-            successOpFutures1.add(client.write(ld));
+            client.write(ld).join();
         }
 
         // Seal server
@@ -98,7 +96,6 @@ public class LogUnitSealTest extends AbstractViewTest {
         }
 
         // Before sealing, all operations should complete normally
-        successOpFutures1.forEach(f -> assertThatCode(f::get).doesNotThrowAnyException());
         // After sealing, operations stamped with old epoch should fail
         failedOpFutures.forEach(f -> assertThatThrownBy(f::get)
                 .isInstanceOf(ExecutionException.class)
