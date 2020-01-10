@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
@@ -92,6 +94,16 @@ public class LayoutSealTest extends AbstractViewTest {
         });
     }
 
+    public Map<Long, Integer> collectServerEpochs(int ... ports) {
+        Map<Long, Integer> res = new HashMap<>();
+        for (int x = 0; x < ports.length; x++) {
+            long epoch = getLayoutServer(ports[x]).getServerContext().getServerEpoch();
+            int count = res.getOrDefault(epoch, 0);
+            res.put(epoch, count + 1);
+        }
+        return res;
+    }
+
     /**
      * Asserts the Layout Servers Epochs.
      * Params: Expected epoch values
@@ -107,11 +119,16 @@ public class LayoutSealTest extends AbstractViewTest {
      * Params: Expected epoch values
      */
     public void assertServerRouterEpochs(long epochServerRouter0, long epochServerRouter1, long epochServerRouter2, long epochServerRouter3, long epochServerRouter4) {
-        assertThat(getLayoutServer(SERVERS.PORT_0).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter0);
-        assertThat(getLayoutServer(SERVERS.PORT_1).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter1);
-        assertThat(getLayoutServer(SERVERS.PORT_2).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter2);
-        assertThat(getLayoutServer(SERVERS.PORT_3).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter3);
-        assertThat(getLayoutServer(SERVERS.PORT_4).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter4);
+        assertThat(getLayoutServer(SERVERS.PORT_0).getServerContext()
+                .getServerRouter().getServerEpoch()).isEqualTo(epochServerRouter0);
+        assertThat(getLayoutServer(SERVERS.PORT_1).getServerContext().getServerRouter()
+                .getServerEpoch()).isEqualTo(epochServerRouter1);
+        assertThat(getLayoutServer(SERVERS.PORT_2).getServerContext().getServerRouter()
+                .getServerEpoch()).isEqualTo(epochServerRouter2);
+        assertThat(getLayoutServer(SERVERS.PORT_3).getServerContext().getServerRouter()
+                .getServerEpoch()).isEqualTo(epochServerRouter3);
+        assertThat(getLayoutServer(SERVERS.PORT_4).getServerContext().getServerRouter()
+                .getServerEpoch()).isEqualTo(epochServerRouter4);
     }
 
     /**
@@ -124,13 +141,12 @@ public class LayoutSealTest extends AbstractViewTest {
         RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         Layout l = runtimeLayout.getLayout();
         l.setEpoch(l.getEpoch() + 1);
-        try {
-            runtimeLayout.sealMinServerSet();
-        } catch (QuorumUnreachableException e) {
-            e.printStackTrace();
-        }
-        assertLayoutEpochs(2, 2, 2);
-        assertServerRouterEpochs(2, 2, 2, 2, 2);
+        runtimeLayout.sealMinServerSet();
+
+        int[] ports = l.getAllServers().stream().mapToInt(s -> Integer.parseInt(s.split(":")[1])).toArray();
+        Map<Long, Integer> epochs = collectServerEpochs(ports);
+        // Check that we have a quorum of "sealed epochs"
+        assertThat(epochs.get(l.getEpoch())).isGreaterThanOrEqualTo((ports.length / 2) + 1);
     }
 
     /**

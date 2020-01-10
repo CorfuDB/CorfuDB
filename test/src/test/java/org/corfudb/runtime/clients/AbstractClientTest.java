@@ -85,7 +85,6 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
 
     public ServerContext defaultServerContext() {
         return new ServerContextBuilder()
-                .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(false)
                 .setServerRouter(serverRouter)

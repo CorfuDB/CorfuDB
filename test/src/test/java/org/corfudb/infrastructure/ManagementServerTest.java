@@ -3,11 +3,14 @@ package org.corfudb.infrastructure;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,10 +69,10 @@ public class ManagementServerTest extends AbstractServerTest {
     public void bootstrapManagementServer() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR);
+        CompletableFuture<Boolean> future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThat(future.join()).isEqualTo(true);
+        future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(AlreadyBootstrappedException.class);
     }
 
     /**
@@ -79,26 +82,14 @@ public class ManagementServerTest extends AbstractServerTest {
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+        CompletableFuture<Boolean> future = sendRequest(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-    }
+        assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(NoBootstrapException.class);
 
-    /**
-     * Shutting down the management server's executor and test whether the heartbeats can go through.
-     */
-    @Test
-    public void testHeartbeatSeparateThread() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        managementServer.getExecutor(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED).shutdownNow();
-        assertThatThrownBy(() -> sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout)))
-                .isInstanceOf(RejectedExecutionException.class);
-        sendMessage(CorfuMsgType.NODE_STATE_REQUEST.msg());
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.NODE_STATE_RESPONSE);
+        future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThat(future.join()).isEqualTo(true);
+        future = sendRequest(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
+        assertThat(future.join()).isEqualTo(true);
     }
 }
