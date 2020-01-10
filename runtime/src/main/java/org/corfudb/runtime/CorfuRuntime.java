@@ -18,7 +18,6 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -94,16 +93,6 @@ public class CorfuRuntime {
          */
         @Default
         int maxWriteSize = 0;
-
-        /**
-         * Use fast loader to restore objects on connection.
-         *
-         * <p>If using this utility, you need to be sure that no one
-         * is accessing objects until the tables are loaded
-         * (i.e. when connect returns)
-         */
-        @Default
-        boolean useFastLoader = false;
 
         /**
          * Set the bulk read size.
@@ -1080,13 +1069,6 @@ public class CorfuRuntime {
 
         checkVersion();
 
-        if (parameters.isUseFastLoader()) {
-            FastObjectLoader fastLoader = new FastObjectLoader(this)
-                    .setBatchReadSize(parameters.getBulkReadSize())
-                    .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());
-            fastLoader.loadMaps();
-        }
-
         garbageCollector.start();
 
         return this;
@@ -1164,20 +1146,6 @@ public class CorfuRuntime {
     public CorfuRuntime setCacheDisabled(boolean disable) {
         log.warn("setCacheDisabled: Deprecated, please set parameters instead");
         parameters.setCacheDisabled(disable);
-        return this;
-    }
-
-    /**
-     * Whether or not to use the fast loader.
-     *
-     * @param enable True, if the fast loader should be used, false otherwise.
-     * @return A CorfuRuntime to support chaining.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setLoadSmrMapsAtConnect(boolean enable) {
-        log.warn("setLoadSmrMapsAtConnect: Deprecated, please set parameters instead");
-        parameters.setUseFastLoader(enable);
         return this;
     }
 

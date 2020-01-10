@@ -53,7 +53,6 @@ public class CorfuStoreBrowserMain {
             String operation = opts.get("--operation").toString();
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
-                .useFastLoader(false)
                 .cacheDisabled(true)
                 .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
