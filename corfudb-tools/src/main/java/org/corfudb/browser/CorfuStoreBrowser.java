@@ -3,6 +3,7 @@ package org.corfudb.browser;
 import com.google.common.reflect.TypeToken;
 
 import java.util.Map;
+import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -81,10 +82,23 @@ public class CorfuStoreBrowser {
     {
         log.info("\n=====Tables=======\n");
         for (CorfuStoreMetadata.TableName tableName : runtime.getTableRegistry()
-            .listTables(namespace)) {
+                .listTables(namespace)) {
             log.info("Table: " + tableName.getTableName());
             log.info("Namespace: " + tableName.getNamespace());
         }
+        log.info("\n======================\n");
+    }
+
+    /**
+     * Print information about a specific table in CorfuStore
+     */
+    public void printTableInfo(String namespace, String tablename) {
+        log.info("\n======================\n");
+        String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
+        UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
+        log.info("Table {} in namespace {} with ID {} has {} entries",
+                table, namespace, streamUUID.toString(), table.size());
         log.info("\n======================\n");
     }
 }
