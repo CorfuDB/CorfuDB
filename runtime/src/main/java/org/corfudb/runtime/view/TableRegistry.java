@@ -350,8 +350,24 @@ public class TableRegistry {
     Table<K, V, M> getTable(String namespace, String tableName) {
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
         if (!tableMap.containsKey(fullyQualifiedTableName)) {
-            throw new NoSuchElementException(
-                    String.format("No such table found: namespace: %s, tableName: %s", namespace, tableName));
+            // Table has not been opened, but let's first find out if this table even exists
+            // To do so, consult the TableRegistry for an entry which indicates the table exists.
+            if (registryTable.containsKey(
+                    TableName.newBuilder()
+                    .setNamespace(namespace)
+                    .setTableName(tableName)
+                    .build())
+            ) {
+                // If table does exist then the caller must use the long form of the openTable()
+                // since there are too few arguments to open a table not seen by this runtime.
+                throw new IllegalArgumentException("Please provide Key, Value & Metadata schemas to re-open"
+                + " this existing table " + tableName + " in namespace " + namespace);
+            } else {
+                // If the table is completely unheard of return NoSuchElementException
+                throw new NoSuchElementException(
+                        String.format("No such table found: namespace: %s, tableName: %s",
+                        namespace, tableName));
+            }
         }
         return (Table<K, V, M>) tableMap.get(fullyQualifiedTableName);
     }
