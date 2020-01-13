@@ -79,8 +79,8 @@ public class VmStress implements Stress {
     /**
      * Executes a certain command on the VM.
      */
-    private void executeOnVm(String cmdLine) {
-        commandHelper.executeCommand(cmdLine);
+    private String executeOnVm(String cmdLine) {
+        return commandHelper.executeCommand(cmdLine);
     }
 
     private int getNumCpu() {
