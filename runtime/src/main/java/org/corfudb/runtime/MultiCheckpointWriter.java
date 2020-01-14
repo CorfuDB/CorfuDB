@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
+ * Checkpoint multiple CorfuTables serially as a prerequisite for a later log trim.
  */
 @Slf4j
 public class MultiCheckpointWriter<T extends StreamingMap> {
@@ -46,7 +46,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
         }
     }
 
-    /** Checkpoint multiple SMRMaps. Since this method is Map specific
+    /** Checkpoint multiple CorfuTables. Since this method is Map specific
      *  then the keys are unique and the order doesn't matter.
      *
      * @param rt CorfuRuntime

@@ -11,7 +11,7 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
@@ -536,13 +536,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             final int sizeMap2 = 6;
 
             StreamingMap<String, String> map1 = defaultRT.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
                     .setStreamName("stream1")
                     .open();
 
             StreamingMap<String, String> map2 = defaultRT.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
                     .setStreamName("stream2")
                     .open();
@@ -579,13 +579,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // New runtime read s1, read s2 (from checkpoint)
             Map<String, String> map1rt = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
                     .setStreamName("stream1")
                     .open();
 
             Map<String, String> map2rt = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
                     .setStreamName("stream2")
                     .open();
@@ -642,7 +642,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             final int sizeAtSnapshot = 6;
 
             StreamingMap<String, String> map1 = writeRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
                     .setStreamName("stream1")
                     .open();
@@ -672,7 +672,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // New runtime
             Map<String, String> map1rt = readRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
                     .setStreamName("stream1")
                     .open();

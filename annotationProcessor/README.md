@@ -25,7 +25,7 @@ The annotation processor searches for classes which are
 annotated with the @CorfuObject annotation. When such a
 class is encountered, the annotation processor generates
 a new class with the $CORFUSMR class suffix. For example,
-SMRMap becomes SMRMap$CORFUSMR. This is known as the "proxy"
+CorfuTable becomes CorfuTable$CORFUSMR. This is known as the "proxy"
 class. The annotation processor must generate a new class 
 because without hacks (such as the ones lombok exploits), 
 annotation processors are not capable of modifying existing 

@@ -6,8 +6,8 @@ import com.google.common.reflect.TypeToken;
 import java.util.concurrent.Semaphore;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
@@ -35,11 +35,11 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             CorfuRuntime myruntime = getNewRuntime(getDefaultNode());
             myruntime.connect();
 
-            ISMRMap<Integer, Integer> mymap =
+            ICorfuTable<Integer, Integer> mymap =
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {}) // object TokenType class 
+                            .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {}) // object TokenType class 
                             .open() ;
 
             assertThat(mymap.get("world1"))
@@ -73,11 +73,11 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             CorfuRuntime myruntime = getNewRuntime(getDefaultNode());
             myruntime.connect();
 
-            SMRMap<Integer, Integer> mymap =
+            CorfuTable<Integer, Integer> mymap =
                     myruntime.getObjectsView()
                         .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {}) // object TokenType class 
+                            .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {}) // object TokenType class 
                         .open();
 
             // start a transaction and then hand over to thread 1
@@ -141,11 +141,11 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             CorfuRuntime myruntime = new CorfuRuntime(getDefaultEndpoint());
             myruntime.connect();
 
-            ISMRMap<Integer, Integer> mymap =
+            ICorfuTable<Integer, Integer> mymap =
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {}) // object TokenType class
                             .open() ;
 
             assertThat(mymap.get("world1"))
@@ -181,11 +181,11 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             CorfuRuntime myruntime = getNewRuntime(getDefaultNode());
             myruntime.connect();
 
-            ISMRMap<Integer, Integer> mymap =
+            ICorfuTable<Integer, Integer> mymap =
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {}) // object TokenType class
                             .open();
 
                     // start a transaction and then hand over to thread 1

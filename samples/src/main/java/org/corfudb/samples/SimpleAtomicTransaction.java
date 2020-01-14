@@ -3,7 +3,7 @@ package org.corfudb.samples;
 import java.util.Map;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 
 /**
  * Consider again the code from {@link org.corfudb.samples::HeloCorfu.java}:
@@ -99,7 +99,7 @@ public class SimpleAtomicTransaction extends BaseCorfuAppUtils {
         Map<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                 .open();                // instantiate the object!
 
         /**
