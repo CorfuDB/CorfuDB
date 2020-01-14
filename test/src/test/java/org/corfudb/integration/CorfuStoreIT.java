@@ -25,8 +25,10 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Simple test that inserts data into CorfuStore via a separate server process
@@ -211,13 +213,22 @@ public class CorfuStoreIT extends AbstractIT {
         // PHASE 3
         // Read using protobuf serializer.
         runtime = createRuntime(singleNodeEndpoint);
-        store = new CorfuStore(runtime);
-        store.openTable(namespace, tableName, Uuid.class, Uuid.class, ManagedResources.class,
+        final CorfuStore store3 = new CorfuStore(runtime);
+
+        // Attempting to open an unopened table with the short form should throw the IllegalArgumentException
+        assertThatThrownBy(() -> store3.openTable(namespace, tableName)).
+        isExactlyInstanceOf(IllegalArgumentException.class);
+
+        // Attempting to open a non-existent table should throw NoSuchElementException
+        assertThatThrownBy(() -> store3.openTable(namespace, "NonExistingTableName")).
+                isExactlyInstanceOf(NoSuchElementException.class);
+
+        store3.openTable(namespace, tableName, Uuid.class, Uuid.class, ManagedResources.class,
                 TableOptions.builder().build());
-        CorfuRecord<Uuid, ManagedResources> record = store.query(namespace).getRecord(tableName, uuidKey);
+        CorfuRecord<Uuid, ManagedResources> record = store3.query(namespace).getRecord(tableName, uuidKey);
         assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
 
-        store.tx(namespace).update(tableName, uuidKey, uuidVal, metadata).commit();
+        store3.tx(namespace).update(tableName, uuidKey, uuidVal, metadata).commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
