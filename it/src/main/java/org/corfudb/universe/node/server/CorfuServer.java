@@ -65,9 +65,10 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
 
     /**
      * Execute a shell command on a vm
-     * @param command shell command
+     * @param command a shell command
+     * @return command output
      */
-    void execute(String command);
+    String execute(String command);
 
     /**
      * Reconnect a {@link CorfuServer} to the list of servers
