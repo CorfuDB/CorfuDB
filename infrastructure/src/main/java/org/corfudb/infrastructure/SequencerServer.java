@@ -152,13 +152,8 @@ public class SequencerServer extends AbstractServer {
         this.executor = Executors.newSingleThreadExecutor(
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
-
         globalLogTail = Address.getMinAddress();
-
         this.cache = new SequencerServerCache((int)config.getCacheSize());
-
-
-        setUpTimerNameCache();
     }
 
     @Override
@@ -260,7 +255,7 @@ public class SequencerServer extends AbstractServer {
             // for each key pair, check for conflict; if not present, check against the wildcard
             for (byte[] conflictParam : conflictParamSet) {
 
-                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(), conflictParam));
+                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(), conflictParam, Address.NON_ADDRESS));
 
                 log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
 
@@ -622,7 +617,7 @@ public class SequencerServer extends AbstractServer {
                         // insert an entry with the new timestamp using the
                         // hash code based on the param and the stream id.
                         value.forEach(conflictParam ->
-                                cache.put(new ConflictTxStream(key, conflictParam), newTail - 1));
+                                cache.put(new ConflictTxStream(key, conflictParam, newTail - 1)));
                     });
         }
 
@@ -704,15 +699,15 @@ public class SequencerServer extends AbstractServer {
     @Builder
     @Getter
     public static class Config {
-        private static final long DEFAULT_CACHE_SIZE = 250_000L;
+        private static final int DEFAULT_CACHE_SIZE = 250_000;
 
         @Default
-        private final long cacheSize = DEFAULT_CACHE_SIZE;
+        private final int cacheSize = DEFAULT_CACHE_SIZE;
 
         public static Config parse(Map<String, Object> opts) {
-            long cacheSize = opts.containsKey("--sequencer-cache-size") ?
-                    Long.parseLong((String) opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE;
-
+            int cacheSize = (int)(opts.containsKey("--sequencer-cache-size") ?
+                    Long.parseLong((String) opts.get("--sequencer-cache-size")) :
+                    DEFAULT_CACHE_SIZE);
             return Config.builder()
                     .cacheSize(cacheSize)
                     .build();

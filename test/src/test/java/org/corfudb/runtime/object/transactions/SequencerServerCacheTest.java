@@ -2,8 +2,6 @@ package org.corfudb.runtime.object.transactions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.github.benmanes.caffeine.cache.CacheWriter;
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.SequencerServer;
@@ -13,9 +11,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.junit.Test;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,6 +21,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class SequencerServerCacheTest extends AbstractObjectTest {
+    public static final int entryPerAddress = 20;
+    public static final int iterations = 100;
+    public static final int cacheSize = iterations*entryPerAddress;
 
     @Test
     public void testSequencerCacheTrim() {
@@ -69,18 +68,17 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         final AtomicBoolean criticalVariable = new AtomicBoolean();
 
         SequencerServerCache cache = new SequencerServerCache(1);
-
-        final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
-        final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{});
         final long firstValue = 1L;
         final long secondValue = 2L;
         final int iterations = 10;
+        final ConflictTxStream firstKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{}, firstValue);
+        final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{}, secondValue);
 
         for (int i = 0; i < iterations; i++) {
             criticalVariable.set(false);
 
-            cache.put(firstKey, firstValue);
-            cache.put(secondKey, secondValue);
+            cache.put(firstKey);
+            cache.put(secondKey);
 
             assertThat(cache.size()).isOne();
             assertThat(cache.getIfPresent(firstKey)).isNull();
@@ -89,4 +87,88 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
             assertThat(cache.size()).isZero();
         }
     }
+
+    /**
+     * generate data with given address and verify that the entries with firstAddress are correctly evicted
+     */
+    void generateData(HashMap recordMap, SequencerServerCache cache, long address, boolean verifyFirst) {
+         final ConflictTxStream key = new ConflictTxStream(UUID.randomUUID(), new byte[]{}, address);
+         if (verifyFirst) {
+             System.out.println("cache.firstAddress: " + cache.firstAddress() + " cacheSize: " + cache.size());
+             assertThat(cache.firstAddress() == address - cacheSize);
+         }
+         cache.put(key);
+         assertThat(cache.getIfPresent(key) != null);
+         recordMap.put(key, address);
+         assertThat(cache.size() <= cacheSize);
+     }
+
+     // Verify cache contains all the data in recordMap that address >= firstAddress.
+     void verifyData(HashMap<ConflictTxStream, Long> recordMap, SequencerServerCache cache) {
+         for (ConflictTxStream oldKey : recordMap.keySet()) {
+             long oldAddress = oldKey.txVersion;
+             if (oldAddress < cache.firstAddress())
+                 continue;
+             ConflictTxStream key =  new ConflictTxStream(oldKey.getStreamId(), oldKey.getConflictParam(), 0);
+             System.out.println("address " + cache.getIfPresent(key) + " expected " + oldAddress);
+             assertThat(cache.getIfPresent(key) == oldAddress);
+         }
+     }
+
+    @Test
+    /*
+        Test the evication the firstAddress while the cache is full, by generating address out of order
+     */
+    public void testSequencerCacheEvict1() {
+        SequencerServerCache cache = new SequencerServerCache(cacheSize);
+        long address = 0;
+        HashMap<ConflictTxStream, Long> recordMap = new HashMap<>();
+
+        // put entries to the cache with duplicate address not in order
+        while (cache.size() < cacheSize) {
+            address = 0;
+            for (int i = 0; i < cacheSize/entryPerAddress; i++) {
+                generateData(recordMap, cache, address++, false);
+            }
+        }
+
+        assertThat(cache.size() == cacheSize);
+        verifyData(recordMap, cache);
+
+        // Each put should evict all streams with the same address
+        for (int i = 0; i < iterations; i++, address++) {
+            generateData(recordMap, cache, address, true);
+        }
+
+        verifyData(recordMap, cache);
+    }
+
+    @Test
+    /*
+        Test the evication the firstAddress while the cache is full, by generating address in order
+     */
+    public void testSequencerCacheEvict2() {
+        SequencerServerCache cache = new SequencerServerCache(cacheSize);
+        long address = 0;
+        HashMap<ConflictTxStream, Long> recordMap = new HashMap<>();
+
+        // put entries to the cache, make it full, some entries have the same address
+        while (cache.size() < cacheSize) {
+            for (int j = 0; j < entryPerAddress; j++) {
+                generateData(recordMap, cache, address++, false);
+            }
+        }
+
+        verifyData(recordMap, cache);
+
+        assertThat(cache.size() == cacheSize);
+        // Each put should evict all streams with the same address
+        for (int i = 0; i < iterations; i++, address++) {
+            generateData(recordMap, cache, address, true);
+        }
+
+        verifyData(recordMap, cache);
+        System.out.println("test finished sucessfully");
+    }
+
 }
