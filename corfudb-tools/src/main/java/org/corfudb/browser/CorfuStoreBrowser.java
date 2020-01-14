@@ -34,6 +34,28 @@ public class CorfuStoreBrowser {
     }
 
     /**
+     * Validate that the namespace is not null
+     * @param namespace
+     */
+    private static void verifyNamespace(String namespace) {
+        if (namespace == null) {
+            throw new IllegalArgumentException("Please specify --namespace");
+        }
+    }
+
+    /**
+     * Validate that both namespace and tablename are present
+     * @param namespace - the namespace where the table belongs
+     * @param tableName - table name without the namespace
+     */
+    private static void verifyNamespaceAndTablename(String namespace, String tableName) {
+        verifyNamespace(namespace);
+        if (tableName == null) {
+            throw new IllegalArgumentException("Please specify --tablename");
+        }
+    }
+
+    /**
      * Fetches the table from the given namespace
      * @param namespace Namespace of the table
      * @param tableName Tablename
@@ -60,10 +82,16 @@ public class CorfuStoreBrowser {
 
     /**
      * Prints the payload and metadata in the given table
-     * @param table
+     * @param namespace - the namespace where the table belongs
+     * @param tablename - table name without the namespace
+     * @return - number of entries in the table
      */
-    public void printTable(
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table) {
+    public int printTable(String namespace, String tablename) {
+        verifyNamespaceAndTablename(namespace, tablename);
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
+        int size = table.size();
+        log.info("======Printing Table {} in namespace {} with {} entries======",
+                tablename, namespace, size);
         StringBuilder builder;
         for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry :
             table.entrySet()) {
@@ -73,32 +101,66 @@ public class CorfuStoreBrowser {
                 .append("\n====================\n");
             log.info(builder.toString());
         }
+        return size;
     }
 
     /**
      * List all tables in CorfuStore
+     * @param namespace - the namespace where the table belongs
+     * @return - number of tables in this namespace
      */
-    public void listTables(String namespace)
+    public int listTables(String namespace)
     {
+        verifyNamespace(namespace);
+        int numTables = 0;
         log.info("\n=====Tables=======\n");
         for (CorfuStoreMetadata.TableName tableName : runtime.getTableRegistry()
                 .listTables(namespace)) {
             log.info("Table: " + tableName.getTableName());
             log.info("Namespace: " + tableName.getNamespace());
+            numTables++;
         }
         log.info("\n======================\n");
+        return numTables;
     }
 
     /**
      * Print information about a specific table in CorfuStore
+     * @param namespace - the namespace where the table belongs
+     * @param tablename - table name without the namespace
+     * @return - number of entries in the table
      */
-    public void printTableInfo(String namespace, String tablename) {
+    public int printTableInfo(String namespace, String tablename) {
+        verifyNamespaceAndTablename(namespace, tablename);
         log.info("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
+        int tableSize = table.size();
         log.info("Table {} in namespace {} with ID {} has {} entries",
-                table, namespace, streamUUID.toString(), table.size());
+                tablename, namespace, streamUUID.toString(), tableSize);
         log.info("\n======================\n");
+        return tableSize;
+    }
+
+    /**
+     * Clear the table contents
+     * @param namespace - the namespace where the table belongs
+     * @param tablename - table name without the namespace
+     * @return - number of entries in the table before clearing the table
+     */
+    public int dropTable(String namespace, String tablename) {
+        verifyNamespaceAndTablename(namespace, tablename);
+        log.info("\n======================\n");
+        String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
+        UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
+        int tableSize = table.size();
+        log.info("Table {} in namespace {} with ID {} with {} entries will be dropped...",
+                tablename, namespace, streamUUID.toString(), tableSize);
+        table.clear();
+        log.info("Table cleared successfully");
+        log.info("\n======================\n");
+        return tableSize;
     }
 }
