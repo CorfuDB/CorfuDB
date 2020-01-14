@@ -5,7 +5,6 @@ import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -32,9 +31,6 @@ public class ClusterStateCollector {
     private final String localEndpoint;
     @NonNull
     private final Map<String, CompletableFuture<NodeState>> clusterState;
-
-    @NonNull
-    private final HeartbeatCounter heartbeatCounter;
 
     /**
      * Provides cluster state
@@ -132,7 +128,6 @@ public class ClusterStateCollector {
 
         return NodeState.builder()
                 .connectivity(localConnectivity)
-                .heartbeat(new NodeState.HeartbeatTimestamp(epoch, heartbeatCounter.incrementHeartbeat()))
                 .sequencerMetrics(sequencerMetrics)
                 .build();
     }

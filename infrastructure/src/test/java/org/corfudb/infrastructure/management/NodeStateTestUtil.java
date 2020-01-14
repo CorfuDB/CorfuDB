@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
@@ -40,7 +39,6 @@ public class NodeStateTestUtil {
 
         return NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new HeartbeatTimestamp(0, 0))
                 .connectivity(nodeConnectivity)
                 .build();
     }
