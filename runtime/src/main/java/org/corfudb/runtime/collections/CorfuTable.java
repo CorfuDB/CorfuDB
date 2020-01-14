@@ -624,7 +624,6 @@ public class CorfuTable<K ,V> implements
     @SuppressWarnings("unchecked")
     protected void unmapSecondaryIndexes(K key, V value) {
         if (value == null) {
-            log.trace("Attempting to build an index with a null value, skipping.");
             return;
         }
 
