@@ -1,11 +1,11 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
 import org.corfudb.runtime.view.Layout;
+
+import java.util.Comparator;
 
 /**
  * {@link org.corfudb.infrastructure.LayoutServer} response in phase1 of paxos
@@ -22,6 +22,12 @@ import org.corfudb.runtime.view.Layout;
 public class LayoutPrepareResponse implements ICorfuPayload<LayoutPrepareResponse> {
     private long rank;
     private Layout layout;
+
+    /**
+     * Sorting layoutPrepareResponse according to ranks in descending order
+     */
+    public static final Comparator<LayoutPrepareResponse> LAYOUT_PREPARE_RESPONSE_COMPARATOR
+            = Comparator.comparing(LayoutPrepareResponse::getRank).reversed();
 
     /**
      * Constructor for layout server response in first phase of Paxos.

@@ -3,6 +3,8 @@ package org.corfudb.runtime.exceptions;
 import lombok.Getter;
 import org.corfudb.runtime.view.Layout;
 
+import java.util.Comparator;
+
 /**
  * Created by mwei on 12/14/15.
  */
@@ -12,6 +14,12 @@ public class OutrankedException extends Exception {
 
     @Getter
     Layout layout;
+
+    /**
+     * Sorting OutrankedException according to newRanks in descending order
+     */
+    public static final Comparator<OutrankedException> OUTRANKED_EXCEPTION_COMPARATOR
+            = Comparator.comparing(OutrankedException::getNewRank).reversed();
 
     /**
      * Constructor.
