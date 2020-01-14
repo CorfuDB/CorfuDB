@@ -108,18 +108,27 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .commit();
         runtime.shutdown();
 
-        // Invoke the browser and go through each item
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(browser.listTables(namespace), 1);
+
+        // Invoke the browser and go through each item
         CorfuTable table = browser.getTable(namespace, tableName);
-        browser.printTable(table);
-        Assert.assertEquals(1, table.size());
+        Assert.assertEquals(browser.printTable(namespace, tableName), 1);
         for(Object obj : table.values()) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
                 UnknownFieldSet.newBuilder().build(),
                 record.getPayload().getUnknownFields());
         }
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 1);
+        // Invoke dropTable and verify size
+        Assert.assertEquals(browser.dropTable(namespace, tableName), 1);
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
     }
 
     /**
@@ -177,7 +186,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         CorfuTable table = browser.getTable(namespace, tableName);
-        browser.printTable(table);
+        browser.printTable(namespace, tableName);
         Assert.assertEquals(1, table.size());
 
         for(Object obj : table.values()) {
