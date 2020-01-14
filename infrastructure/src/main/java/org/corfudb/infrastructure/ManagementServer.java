@@ -6,7 +6,6 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
@@ -129,9 +128,8 @@ public class ManagementServer extends AbstractServer {
 
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
 
-        HeartbeatCounter counter = new HeartbeatCounter();
 
-        FailureDetector failureDetector = new FailureDetector(counter, serverContext.getLocalEndpoint());
+        FailureDetector failureDetector = new FailureDetector(serverContext.getLocalEndpoint());
 
         // Creating a management agent.
         ClusterState defaultView = ClusterState.builder()
@@ -140,7 +138,6 @@ public class ManagementServer extends AbstractServer {
                 .unresponsiveNodes(ImmutableList.of())
                 .build();
         clusterContext =  ClusterStateContext.builder()
-                .counter(counter)
                 .clusterView(new AtomicReference<>(defaultView))
                 .build();
 
@@ -418,9 +415,7 @@ public class ManagementServer extends AbstractServer {
         //Node state is connected by default.
         //We believe two servers are connected if another servers is able to send command NODE_STATE_REQUEST
         // and get a response. If we are able to provide NodeState we believe that the state is CONNECTED.
-        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint(),
-                                              epoch,
-                                              clusterContext.getCounter().get());
+        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint());
     }
 
     /**
