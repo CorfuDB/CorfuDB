@@ -5,8 +5,8 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -118,7 +118,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
     /**
      * This workload operates over three distinct maps
      */
-    ISMRMap<String, Integer> map1, map2, map3;
+    ICorfuTable<String, Integer> map1, map2, map3;
 
     /**
      * Set up a repeatable PRNG
@@ -134,9 +134,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         /**
          * Instantiate three streams with three SMRmap objects
          */
-        map1 = instantiateCorfuObject(new TypeToken<SMRMap<String, Integer>>() {}, "A");
-        map2 = instantiateCorfuObject(new TypeToken<SMRMap<String, Integer>>() {}, "B");
-        map3 = instantiateCorfuObject(new TypeToken<SMRMap<String, Integer>>() {}, "C");
+        map1 = instantiateCorfuObject(new TypeToken<CorfuTable<String, Integer>>() {}, "A");
+        map2 = instantiateCorfuObject(new TypeToken<CorfuTable<String, Integer>>() {}, "B");
+        map3 = instantiateCorfuObject(new TypeToken<CorfuTable<String, Integer>>() {}, "C");
 
         // populate maps
         System.out.print("generating maps..");

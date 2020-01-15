@@ -6,7 +6,7 @@ import com.google.common.reflect.TypeToken;
 import java.util.ArrayList;
 import java.util.Map;
 
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
@@ -26,7 +26,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .open();
 
@@ -70,7 +70,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .open();
 
@@ -130,7 +130,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<Integer, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                 })
                 .open();
         final int specialKey = 10;
@@ -212,7 +212,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<Integer, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
                 })
                 .open();
 
@@ -274,8 +274,8 @@ public class UndoTest extends AbstractTransactionsTest {
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (SMRMap<Integer, String>) instantiateCorfuObject(
-                new TypeToken<SMRMap<Integer, String>>() {}, "test stream" + i)
+            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
+                new TypeToken<CorfuTable<Integer, String>>() {}, "test stream" + i)
             );
 
         // before t1 starts
@@ -373,8 +373,8 @@ public class UndoTest extends AbstractTransactionsTest {
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (SMRMap<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<SMRMap<Integer, String>>() {}, "test stream" + i)
+            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<CorfuTable<Integer, String>>() {}, "test stream" + i)
             );
 
         // before t1 starts
