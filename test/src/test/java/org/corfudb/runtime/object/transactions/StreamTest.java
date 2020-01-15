@@ -147,6 +147,7 @@ public class StreamTest extends AbstractTransactionsTest {
                     TXEnd();
                 }
             });
+
             TXEnd();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_OVERFLOW);
