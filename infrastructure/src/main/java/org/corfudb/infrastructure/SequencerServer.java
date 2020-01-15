@@ -153,7 +153,7 @@ public class SequencerServer extends AbstractServer {
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
         globalLogTail = Address.getMinAddress();
-        this.cache = new SequencerServerCache((int)config.getCacheSize());
+        this.cache = new SequencerServerCache(config.getCacheSize());
     }
 
     @Override
