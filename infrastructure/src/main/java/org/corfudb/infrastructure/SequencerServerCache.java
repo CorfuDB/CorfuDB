@@ -43,7 +43,6 @@ public class SequencerServerCache {
     private final PriorityQueue<ConflictTxStream> cacheEntries; //sorted according to address
 
     private final int cacheSize;
-    private long maxAddress = Address.NOT_FOUND; //the max sequence in cacheEntries.
     /**
      * A "wildcard" representing the maximal update timestamp of
      * all the conflict keys which were evicted from the cache
@@ -152,17 +151,6 @@ public class SequencerServerCache {
 
         cacheEntries.add(conflictStream);
         cacheConflictKeys.put(conflictStream, conflictStream.txVersion);
-        maxAddress = Math.max(conflictStream.txVersion, maxAddress);
-    }
-
-    /**
-     * Discard all entries in the cache
-     */
-    public void invalidateAll() {
-        log.info("Invalidate all entries in sequencer server cache and update maxConflictWildcard to {}", maxAddress);
-        cacheConflictKeys.clear();
-        cacheEntries.clear();
-        maxConflictWildcard = maxAddress;
     }
 
     /**

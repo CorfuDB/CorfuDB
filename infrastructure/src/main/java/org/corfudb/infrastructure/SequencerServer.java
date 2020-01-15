@@ -401,7 +401,6 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
-            cache.invalidateAll();
             globalLogTail = initialToken;
             cache.updateMaxConflictAddress(initialToken - 1);
 

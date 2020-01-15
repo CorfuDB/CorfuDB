@@ -21,10 +21,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class SequencerServerCacheTest extends AbstractObjectTest {
-    public static final int entryPerAddress = 20;
-    public static final int iterations = 100;
-    public static final int cacheSize = iterations*entryPerAddress;
-
     @Test
     public void testSequencerCacheTrim() {
 
@@ -82,19 +78,20 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
             assertThat(cache.size()).isOne();
             assertThat(cache.getIfPresent(firstKey)).isNull();
-
-            cache.invalidateAll();
-            assertThat(cache.size()).isZero();
         }
     }
 
+    public static final int entryPerAddress = 20;
+    public static final int iterations = 100;
+    public static final int cacheSize = iterations*entryPerAddress;
+    public static final int numRemains = 10;
     /**
      * generate data with given address and verify that the entries with firstAddress are correctly evicted
      */
     void generateData(HashMap recordMap, SequencerServerCache cache, long address, boolean verifyFirst) {
          final ConflictTxStream key = new ConflictTxStream(UUID.randomUUID(), new byte[]{}, address);
          if (verifyFirst) {
-             System.out.println("cache.firstAddress: " + cache.firstAddress() + " cacheSize: " + cache.size());
+             log.debug("cache.firstAddress: " + cache.firstAddress() + " cacheSize: " + cache.size());
              assertThat(cache.firstAddress() == address - cacheSize);
          }
          cache.put(key);
@@ -110,7 +107,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
              if (oldAddress < cache.firstAddress())
                  continue;
              ConflictTxStream key =  new ConflictTxStream(oldKey.getStreamId(), oldKey.getConflictParam(), 0);
-             System.out.println("address " + cache.getIfPresent(key) + " expected " + oldAddress);
+             log.debug("address " + cache.getIfPresent(key) + " expected " + oldAddress);
              assertThat(cache.getIfPresent(key) == oldAddress);
          }
      }
@@ -141,6 +138,11 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         }
 
         verifyData(recordMap, cache);
+
+        cache.invalidateUpTo(address - 1);
+        assertThat(cache.size() == 1);
+        cache.invalidateUpTo(address);
+        assertThat(cache.size() == 0);
     }
 
     @Test
@@ -168,7 +170,10 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         }
 
         verifyData(recordMap, cache);
-        System.out.println("test finished sucessfully");
-    }
 
+        cache.invalidateUpTo(address - numRemains);
+        assertThat(cache.size() == numRemains);
+        cache.invalidateUpTo(address);
+        assertThat(cache.size() == 0);
+    }
 }
