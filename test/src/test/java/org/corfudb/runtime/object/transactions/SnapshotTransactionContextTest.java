@@ -1,7 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
 
 /**
@@ -68,9 +68,9 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
     /* Test if we can have implicit nested transaction for SnapshotTransactions. */
     @Test
     public void testSnapshotTxNestedImplicitTx() {
-        SMRMap<String, Integer> map = (SMRMap<String, Integer>)
+        CorfuTable<String, Integer> map = (CorfuTable<String, Integer>)
                 instantiateCorfuObject(
-                        new TypeToken<SMRMap<String, Integer>>() {
+                        new TypeToken<CorfuTable<String, Integer>>() {
                         },
                         "A"
                 );
@@ -86,9 +86,9 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
     /* Test if we can have explicit nested transaction for SnapshotTransactions. */
     @Test
     public void testSnapshotTxNestedExplicitTx() {
-        SMRMap<String, Integer> map = (SMRMap<String, Integer>)
+        CorfuTable<String, Integer> map = (CorfuTable<String, Integer>)
                 instantiateCorfuObject(
-                        new TypeToken<SMRMap<String, Integer>>() {
+                        new TypeToken<CorfuTable<String, Integer>>() {
                         },
                         "A"
                 );

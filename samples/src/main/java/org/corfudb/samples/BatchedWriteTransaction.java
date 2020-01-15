@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 
 /**
  * Sometimes developers may group mutator operations into transactions for performance reasons.
@@ -71,7 +71,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         Map<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                 .open();                // instantiate the object!
 
         // populate map: sequentially
@@ -105,7 +105,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
                     getCorfuRuntime().getObjectsView()
                             .build()
                             .setStreamName("C" + m)
-                            .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                            .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                             .open()
             );
         }

@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.SequencerServerCache;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.junit.Test;
 
@@ -34,7 +34,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         Map<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
                 })
                 .setStreamName("test")
                 .open();

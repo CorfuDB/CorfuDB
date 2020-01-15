@@ -50,7 +50,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
 
     /**
      * Single Thread.
-     * Test a read after write on SMRMap.
+     * Test a read after write on CorfuTable.
      */
     @Test
     public void simpleWriteRead() {
@@ -58,7 +58,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         assertEquals(testMap.put("1", "a"), null);
         assertEquals(testMap.get("1"), "a");
@@ -67,7 +67,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
     /**
      * Single Thread.
      * Verifies a read after 2 writes on the same key.
-     * The writes are done across 2 different instantiations of the same SMRMap.
+     * The writes are done across 2 different instantiations of the same CorfuTable.
      */
     @Test
     public void writeDualRead() {
@@ -75,7 +75,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         assertEquals(null, testMap.put("1", "a"));
         assertEquals("a", testMap.get("1"));
@@ -83,7 +83,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         assertEquals("a", anotherMap.put("1", "b"));
         assertEquals("b", testMap.get("1"));
@@ -99,7 +99,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         for (int i=0; i < ONE_THOUSAND; i++) {
             String key = "key" + String.valueOf(i);
@@ -111,7 +111,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         for (int i=0; i < ONE_THOUSAND; i++) {
             String key = "key" + String.valueOf(i);
@@ -137,7 +137,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         // concurrently run two conflicting transactions:  one or the other should succeed without overlap
@@ -212,7 +212,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         AtomicInteger threadsComplete = new AtomicInteger(0);

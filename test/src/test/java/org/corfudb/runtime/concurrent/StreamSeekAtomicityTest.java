@@ -2,7 +2,7 @@ package org.corfudb.runtime.concurrent;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Assert;
 import org.junit.Test;
@@ -32,7 +32,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
     @Test
     public void ckCommitAtomicity() throws Exception {
         String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
         CountDownLatch l1 = new CountDownLatch(2);
         AtomicBoolean commitDone = new AtomicBoolean(false);
         final int NTHREADS = 3;
@@ -98,9 +98,9 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
     @Test
     public void ckCommitAtomicity2() throws Exception {
         String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
         String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
 
         CountDownLatch l1 = new CountDownLatch(2);
         AtomicBoolean commitDone = new AtomicBoolean(false);
@@ -170,9 +170,9 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
     @Test
     public void ckCommitAtomicity3() throws Exception {
         String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
         String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
 
         CountDownLatch l1 = new CountDownLatch(2);
         AtomicBoolean commitDone = new AtomicBoolean(false);
