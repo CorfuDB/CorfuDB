@@ -8,7 +8,7 @@ import java.util.Map;
 
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -26,7 +26,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
     @Test
     public void testCheckpointTrim() throws Exception {
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -38,7 +38,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) testMap);
+        mcw.addMap((CorfuTable) testMap);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
@@ -49,7 +49,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
@@ -67,7 +67,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
     @Test
     public void ensureMCWUsesRealTail() throws Exception {
         StreamingMap<String, String> map = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -126,7 +126,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final long ckpointGap = 5;
 
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -141,7 +141,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
             // Insert a checkpoint
             MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-            mcw.addMap((SMRMap) testMap);
+            mcw.addMap((CorfuTable) testMap);
             checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
         }
 
@@ -154,7 +154,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
@@ -178,7 +178,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
     @Test
     public void testCheckpointTrimDuringPlayback() throws Exception {
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -190,7 +190,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
@@ -212,7 +212,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) testMap);
+        mcw.addMap((CorfuTable) testMap);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
@@ -236,7 +236,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
     public void testTrimRetryServerEpochChange() throws Exception{
         // Initialize map.
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();

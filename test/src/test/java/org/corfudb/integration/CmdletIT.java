@@ -3,7 +3,7 @@ package org.corfudb.integration;
 import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Ignore;
@@ -305,13 +305,13 @@ public class CmdletIT extends AbstractIT {
         final String commandPut = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
-                " " + SMRMap.class.getCanonicalName() + " putIfAbsent x " + payload;
+                " " + CorfuTable.class.getCanonicalName() + " putIfAbsent x " + payload;
         runCmdletGetOutput(commandPut);
 
         final String commandGet = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
-                " " + SMRMap.class.getCanonicalName() + " getOrDefault x none";
+                " " + CorfuTable.class.getCanonicalName() + " getOrDefault x none";
 
         assertThat(runCmdletGetOutput(commandGet).contains(payload)).isTrue();
 

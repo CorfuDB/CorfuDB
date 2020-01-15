@@ -8,7 +8,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
@@ -105,7 +105,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<CustomConflictObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<CustomConflictObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -146,7 +146,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> map = rtWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
@@ -186,7 +186,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> map = rtSlowWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         int[] retry = new int[1];
@@ -265,7 +265,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<CustomConflictObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<CustomConflictObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -303,7 +303,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<CustomSameHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<CustomSameHashConflictObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<CustomSameHashConflictObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -348,7 +348,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<CustomHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<CustomHashConflictObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<CustomHashConflictObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -385,7 +385,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<IHashAlwaysConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<IHashAlwaysConflictObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<IHashAlwaysConflictObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -427,7 +427,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<IHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<IHashConflictObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<IHashConflictObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -467,7 +467,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         Map<ExtendedIHashObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<ExtendedIHashObject, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<ExtendedIHashObject, String>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -787,14 +787,14 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         Map<String, String> m1 = rt.getObjectsView()
                 .build()
                 .setStreamName("test-1")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .open();
 
         Map<String, String> m2 = rt.getObjectsView()
                 .build()
                 .setStreamName("test-2")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .open();
 

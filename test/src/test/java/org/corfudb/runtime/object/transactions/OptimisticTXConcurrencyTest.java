@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
 
@@ -106,8 +106,8 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
         final int nmaps = 2;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (SMRMap<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<SMRMap<Integer, String>>() {}, "test stream" + i)
+            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<CorfuTable<Integer, String>>() {}, "test stream" + i)
             );
         final int key1 = 1, key2 = 2, key3 = 3;
         final String tst1 = "foo", tst2 = "bar";
@@ -154,7 +154,7 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
         assertThat(key1.hashCode()).isEqualTo(key2.hashCode());
 
         Map<UUID, String> mapTest = getRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<UUID, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<UUID, String>>() {})
                 .setStreamID(streamID)
                 .open();
         mapTest.clear();

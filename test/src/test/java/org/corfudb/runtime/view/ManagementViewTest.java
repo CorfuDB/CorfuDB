@@ -19,8 +19,8 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -549,11 +549,11 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
 
-    protected ISMRMap<Integer, String> getMap() {
-        ISMRMap<Integer, String> testMap;
+    protected ICorfuTable<Integer, String> getMap() {
+        ICorfuTable<Integer, String> testMap;
 
-        testMap = (ISMRMap<Integer, String>) instantiateCorfuObject(
-                new TypeToken<SMRMap<Integer, String>>() {
+        testMap = (ICorfuTable<Integer, String>) instantiateCorfuObject(
+                new TypeToken<CorfuTable<Integer, String>>() {
                 }, "test stream"
         );
 

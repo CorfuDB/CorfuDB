@@ -15,7 +15,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -37,10 +37,10 @@ public class CheckpointTest extends AbstractObjectTest {
         final byte serializerByte = (byte) 20;
         ISerializer serializer = new CPSerializer(serializerByte);
         Serializers.registerSerializer(serializer);
-        return (SMRMap<String, Long>)
+        return (CorfuTable<String, Long>)
                 instantiateCorfuObject(
                         rt,
-                        new TypeToken<SMRMap<String, Long>>() {
+                        new TypeToken<CorfuTable<String, Long>>() {
                         },
                         mapName,
                         serializer);
@@ -62,10 +62,10 @@ public class CheckpointTest extends AbstractObjectTest {
     /**
      * checkpoint the maps
      */
-    void mapCkpoint(CorfuRuntime rt, SMRMap... maps) throws Exception {
+    void mapCkpoint(CorfuRuntime rt, CorfuTable... maps) throws Exception {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-            for (SMRMap map : maps) {
+            for (CorfuTable map : maps) {
                 mcw1.addMap(map);
             }
 
@@ -78,14 +78,14 @@ public class CheckpointTest extends AbstractObjectTest {
     /**
      * checkpoint the maps, and then trim the log
      */
-    void mapCkpointAndTrim(CorfuRuntime rt, SMRMap... maps) throws Exception {
+    void mapCkpointAndTrim(CorfuRuntime rt, CorfuTable... maps) throws Exception {
         Token checkpointAddress = Token.UNINITIALIZED;
         Token lastCheckpointAddress = Token.UNINITIALIZED;
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             try {
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-                for (SMRMap map : maps) {
+                for (CorfuTable map : maps) {
                     mcw1.addMap(map);
                 }
 
@@ -200,7 +200,7 @@ public class CheckpointTest extends AbstractObjectTest {
         // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
         // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
         scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, (SMRMap) mapA, (SMRMap) mapB);
+            mapCkpoint(rt, (CorfuTable) mapA, (CorfuTable) mapB);
         });
 
         // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -240,7 +240,7 @@ public class CheckpointTest extends AbstractObjectTest {
         Map<String, Long> mapB = openMap(rt, streamNameB);
 
         scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, (SMRMap) mapA, (SMRMap) mapB);
+            mapCkpoint(rt, (CorfuTable) mapA, (CorfuTable) mapB);
         });
 
         // thread 2: repeat ITERATIONS_LOW times starting a fresh runtime, and instantiating the maps.
@@ -297,7 +297,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
         scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, (SMRMap) mapA, (SMRMap) mapB);
+            mapCkpoint(rt, (CorfuTable) mapA, (CorfuTable) mapB);
         });
 
         // repeated ITERATIONS_LOW times starting a fresh runtime, and instantiating the maps.
@@ -353,7 +353,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
             // and immediate prefix-trim of the log up to the checkpoint position
             scheduleConcurrently(1, ignored_task_num -> {
-                mapCkpointAndTrim(rt, (SMRMap) mapA, (SMRMap) mapB);
+                mapCkpointAndTrim(rt, (CorfuTable) mapA, (CorfuTable) mapB);
             });
 
             // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -408,7 +408,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
             // and immediate prefix-trim of the log up to the checkpoint position
             scheduleConcurrently(1, ignored_task_num -> {
-                mapCkpointAndTrim(rt, (SMRMap) mapA, (SMRMap) mapB);
+                mapCkpointAndTrim(rt, (CorfuTable) mapA, (CorfuTable) mapB);
             });
 
             // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -481,7 +481,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
                 // now, take a checkpoint and perform a prefix-trim
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-                mcw1.addMap((SMRMap) mapA);
+                mcw1.addMap((CorfuTable) mapA);
                 mcw1.appendCheckpoints(rt, author);
 
                 // Trim the log
@@ -569,13 +569,13 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void transactionalReadAfterCheckpoint() throws Exception {
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();
 
         Map<String, String> testMap2 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test2")
                 .open();
@@ -590,8 +590,8 @@ public class CheckpointTest extends AbstractObjectTest {
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) testMap);
-        mcw.addMap((SMRMap) testMap2);
+        mcw.addMap((CorfuTable) testMap);
+        mcw.addMap((CorfuTable) testMap2);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // TX1: Move object to 1
@@ -635,7 +635,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         try {
             StreamingMap<String, Long> testMap = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                     })
                     .setStreamName(streamName)
                     .open();

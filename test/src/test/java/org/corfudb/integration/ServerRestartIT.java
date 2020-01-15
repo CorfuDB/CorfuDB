@@ -171,7 +171,7 @@ public class ServerRestartIT extends AbstractIT {
                     try {
                         if (i != 0) {
                             for (int j = 0; j < MAPS; j++) {
-                                assertThat(smrMapList.get(j)).isEqualTo(expectedMapList.get(j));
+                                assertThat(expectedMapList.get(j)).isEqualTo(smrMapList.get(j));
                             }
                         }
                         break;
@@ -317,7 +317,7 @@ public class ServerRestartIT extends AbstractIT {
             for (int i = 0; i < expectedMapList.size(); i++) {
                 Map<String, Integer> expectedMap = expectedMapList.get(i);
                 Map<String, Integer> smrMap = smrMapList.get(i);
-                if (!smrMap.equals(expectedMap)) {
+                if (!expectedMap.equals(smrMap)) {
                     return false;
                 }
             }
@@ -378,7 +378,7 @@ public class ServerRestartIT extends AbstractIT {
                 success = true;
 
                 for (int i = 0; i < smrMapList.size(); i++) {
-                    assertThat(smrMapList.get(i)).isEqualTo(expectedMapList.get(i));
+                    assertThat(expectedMapList.get(i)).isEqualTo(smrMapList.get(i));
                 }
             } catch (Exception e) {
                 assertThat(e).isExactlyInstanceOf(TransactionAbortedException.class);
