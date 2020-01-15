@@ -244,7 +244,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     }
 
     @Override
-    public void execute(String command) {
+    public String execute(String command) {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 

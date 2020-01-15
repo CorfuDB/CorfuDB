@@ -158,8 +158,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     }
 
     @Override
-    public void execute(String command) {
-        executeCommand(command);
+    public String execute(String command) {
+        return executeCommand(command);
     }
 
     /**
@@ -197,7 +197,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     /**
      * Executes a certain Sudo command on the VM.
      */
-    private String  executeSudoCommand(String cmdLine) {
+    private String executeSudoCommand(String cmdLine) {
         return remoteOperationHelper.executeSudoCommand(cmdLine);
     }
 
