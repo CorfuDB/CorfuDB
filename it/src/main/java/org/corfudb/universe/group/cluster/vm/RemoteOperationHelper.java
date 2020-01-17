@@ -10,6 +10,7 @@ import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
 import org.corfudb.universe.util.IpAddress;
 
 import java.nio.file.Path;
+import java.util.UUID;
 
 
 /**
@@ -54,7 +55,9 @@ public class RemoteOperationHelper {
      *
      * @param command shell command
      */
-    public void executeCommand(String command) {
+    public String executeCommand(String command) {
+        String commandId = "universe-framework-command-" + UUID.randomUUID().toString();
+
         SSHExec sshExec = new SSHExec();
 
         sshExec.setUsername(credentials.getUsername());
@@ -63,8 +66,13 @@ public class RemoteOperationHelper {
         sshExec.setCommand(command);
         sshExec.setProject(PROJECT);
         sshExec.setTrust(true);
+
+        sshExec.setOutputproperty(commandId);
+
         log.info("Executing command: {}, on {}", command, ipAddress);
         sshExec.execute();
+
+        return PROJECT.getProperty(commandId);
     }
 
     /**
@@ -72,11 +80,11 @@ public class RemoteOperationHelper {
      *
      * @param command shell command
      */
-    public void executeSudoCommand(String command) {
+    public String executeSudoCommand(String command) {
         String cmdLine = String.format(
                 "echo %s | sudo -S -p '' %s",
                 credentials.getPassword(), command
         );
-        executeCommand(cmdLine);
+        return executeCommand(cmdLine);
     }
 }

@@ -1,0 +1,26 @@
+@startuml
+note left
+previousTimestamp
+instanceId
+driftCorrection
+resolutionCorrection
+end note
+
+start
+if (previousTimestamp == currentTimestamp) then (yes)
+    if (resolutionCorrection < 16) then (yes)
+    : resolutionCorrection++;
+    else (no)
+    : sleep(system time quantum)\nresolutionCorrection=0\nfetch currentTimestamp;
+    endif
+elseif (previousTimestamp > currentTimestamp) then (yes)
+    if (driftCorrection < 16) then (yes)
+    : driftCorrection++;
+    else (no)
+    : update instanceId\ndriftCorrection=0;
+    endif
+endif
+:previousTimestamp= currentTimestamp;
+: GUID=\n**currentTimestamp-MSB|driftCorrection|currentTimestamp-LSB|instanceId|resolutionCorrection**;
+stop
+@enduml

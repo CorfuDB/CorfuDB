@@ -223,7 +223,6 @@ public class Orchestrator {
             // runtime
             CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();
             params.setCacheDisabled(true);
-            params.setUseFastLoader(false);
             params.setLayoutServers(servers);
 
             rt = CorfuRuntime.fromParameters(params).connect();

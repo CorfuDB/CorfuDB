@@ -51,19 +51,16 @@ public class ClusterStateTest {
     public void testTransformation() {
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new NodeState.HeartbeatTimestamp(0, 0))
                 .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new NodeState.HeartbeatTimestamp(0, 0))
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .build();
 
         NodeState c = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new NodeState.HeartbeatTimestamp(Layout.INVALID_EPOCH, 0))
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .build();
 

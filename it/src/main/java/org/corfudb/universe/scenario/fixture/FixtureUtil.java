@@ -10,6 +10,7 @@ import org.corfudb.universe.node.server.CorfuServerParams.CorfuServerParamsBuild
 import org.corfudb.universe.node.server.ServerUtil;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmCorfuServerParamsBuilder;
+import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +36,7 @@ public class FixtureUtil {
      * @return list of docker corfu server params
      */
     ImmutableList<CorfuServerParams> buildServers(
-            CorfuClusterParams cluster, CorfuServerParamsBuilder serverBuilder) {
+            CorfuClusterParams<CorfuServerParams> cluster, CorfuServerParamsBuilder serverBuilder) {
 
         currPort = initialPort;
 
@@ -63,20 +64,25 @@ public class FixtureUtil {
      * @param serverParamsBuilder corfu server builder with predefined parameters
      * @return list of VM corfu server params
      */
-    ImmutableList<CorfuServerParams> buildVmServers(
-            CorfuClusterParams cluster, VmCorfuServerParamsBuilder serverParamsBuilder,
-            String vmNamePrefix) {
+    protected ImmutableList<VmCorfuServerParams> buildVmServers(
+            CorfuClusterParams<VmCorfuServerParams> cluster,
+            VmCorfuServerParamsBuilder serverParamsBuilder, String vmNamePrefix) {
 
         currPort = initialPort;
 
-        List<CorfuServerParams> serversParams = new ArrayList<>();
+        List<VmCorfuServerParams> serversParams = new ArrayList<>();
 
         for (int i = 0; i < cluster.getNumNodes(); i++) {
             int port = getPort();
 
+            VmName vmName = VmName.builder()
+                    .name(vmNamePrefix + (i + 1))
+                    .index(i)
+                    .build();
+
             VmCorfuServerParams serverParam = serverParamsBuilder
                     .clusterName(cluster.getName())
-                    .vmName(VmCorfuServerParams.VmName.builder().name(vmNamePrefix + (i + 1)).build() )
+                    .vmName(vmName)
                     .port(port)
                     .serverVersion(cluster.getServerVersion())
                     .build();

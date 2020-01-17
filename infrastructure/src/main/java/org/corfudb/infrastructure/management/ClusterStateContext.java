@@ -27,9 +27,6 @@ public class ClusterStateContext {
     @Getter
     @NonNull
     private final AtomicReference<ClusterState> clusterView;
-    @Getter
-    @NonNull
-    private final HeartbeatCounter counter;
 
     /**
      * Refreshes the cluster view based on the local endpoint and the snapshot epoch at which the
@@ -49,21 +46,5 @@ public class ClusterStateContext {
      */
     public ClusterState getClusterView(){
         return clusterView.get();
-    }
-
-    public static class HeartbeatCounter {
-        // Heartbeat counter to convey the freshness of the cluster state views.
-        private final AtomicLong counter = new AtomicLong();
-
-        /**
-         * Increment local heartbeat counter.
-         */
-        public long incrementHeartbeat() {
-            return counter.incrementAndGet();
-        }
-
-        public long get() {
-            return counter.get();
-        }
     }
 }

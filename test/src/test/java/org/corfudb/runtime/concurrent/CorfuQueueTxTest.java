@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuQueue;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -63,7 +63,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
     public void queueOrderedByTransaction(TransactionType txnType) throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_TWO;
-        Map<Long, Long> conflictMap = instantiateCorfuObject(SMRMap.class, "conflictMap");
+        Map<Long, Long> conflictMap = instantiateCorfuObject(CorfuTable.class, "conflictMap");
         CorfuQueue<String>
                 corfuQueue = new CorfuQueue<>(getRuntime(), "testQueue");
         class Record {

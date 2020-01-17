@@ -3,7 +3,7 @@ package org.corfudb.samples;
 import java.util.Map;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 
 /**
  * A write-only transaction is a normal transaction that has only object-mutator method invocations,
@@ -38,7 +38,7 @@ public class WriteOnlySimpleTransaction extends BaseCorfuAppUtils {
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object.
          */
         Map<String, Integer> map = instantiateCorfuObject(
-                new TypeToken<SMRMap<String, Integer>>() {}, "A");
+                new TypeToken<CorfuTable<String, Integer>>() {}, "A");
 
 
         // thread 1: update "a" and "b" atomically

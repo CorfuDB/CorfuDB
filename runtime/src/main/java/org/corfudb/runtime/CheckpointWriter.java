@@ -34,7 +34,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 
-/** Checkpoint writer for SMRMaps: take a snapshot of the
+/** Checkpoint writer for CorfuTables: take a snapshot of the
  *  object via TXBegin(), then dump the frozen object's
  *  state into CheckpointEntry records into the object's
  *  stream.

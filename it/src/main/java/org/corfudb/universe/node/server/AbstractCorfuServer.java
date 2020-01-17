@@ -50,6 +50,8 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
             cmd.append(" -s");
         }
 
+        cmd.append(" --log-size-quota-percentage=").append(params.getLogSizeQuotaPercentage()).append(" ");
+
         cmd.append(" -d ").append(params.getLogLevel().toString()).append(" ");
 
         cmd.append(params.getPort());

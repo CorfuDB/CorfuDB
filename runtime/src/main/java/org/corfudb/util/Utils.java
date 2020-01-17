@@ -1,46 +1,23 @@
 package org.corfudb.util;
 
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
-import io.netty.buffer.ByteBuf;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
+
 import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * Created by crossbach on 5/22/15.
  */
@@ -97,75 +74,6 @@ public class Utils {
                 (byte) ((in >> 16) & 0xFF),
                 (byte) ((in >> 8) & 0xFF),
                 (byte) (in & 0xFF)};
-    }
-
-    /**
-     * A fancy parser which parses suffixes.
-     *
-     * @param toParseObj
-     * @return
-     */
-    public static long parseLong(final Object toParseObj) {
-        if (toParseObj == null) {
-            return 0;
-        }
-        if (toParseObj instanceof Long) {
-            return (Long) toParseObj;
-        }
-        if (toParseObj instanceof Integer) {
-            return (Integer) toParseObj;
-        }
-        String toParse = (String) toParseObj;
-        if (toParse.matches("[0-9]*[A-Za-z]$")) {
-            long multiplier;
-            char suffix = toParse.toUpperCase().charAt(toParse.length() - 1);
-            switch (suffix) {
-                case 'E':
-                    multiplier = 1_000_000_000_000_000_000L;
-                    break;
-                case 'P':
-                    multiplier = 1_000_000_000_000_000L;
-                    break;
-                case 'T':
-                    multiplier = 1_000_000_000_000L;
-                    break;
-                case 'G':
-                    multiplier = 1_000_000_000L;
-                    break;
-                case 'M':
-                    multiplier = 1_000_000L;
-                    break;
-                case 'K':
-                    multiplier = 1_000L;
-                    break;
-                default:
-                    throw new NumberFormatException("Unknown suffix: '" + suffix + "'!");
-            }
-            return Long.parseLong(toParse.substring(0, toParse.length() - 2)) * multiplier;
-        } else {
-            return Long.parseLong(toParse);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public static <T> T getOption(Map<String, Object> optionsMap, String option, Class<T> type,
-                                  T defaultValue) {
-        T obj = (T) optionsMap.get(option);
-        if (type == Long.class) {
-            if (obj == null && defaultValue != null) {
-                return defaultValue;
-            }
-            return (T) (Long) parseLong(obj);
-        } else if (type == Integer.class) {
-            if (obj == null && defaultValue != null) {
-                return defaultValue;
-            }
-            return (T) (Integer) ((Long) parseLong(obj)).intValue();
-        }
-        if (obj == null) {
-            return defaultValue;
-        }
-        return obj;
     }
 
     /**

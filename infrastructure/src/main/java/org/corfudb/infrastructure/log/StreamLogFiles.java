@@ -17,7 +17,7 @@ import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.log.compression.Codec;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -106,8 +106,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
-    private final Codec.Type codecType;
-
     /**
      * Returns a file-based stream log object.
      *
@@ -129,9 +127,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     logSizeLimitPercentage);
             throw new LogUnitException(msg);
         }
-
-        String codec = (String) serverContext.getServerConfig().get("--compression-codec");
-        codecType = Codec.Type.valueOf(codec);
 
         long fileSystemCapacity = initStreamLogDirectory();
         logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
@@ -433,14 +428,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private LogData getLogData(LogEntry entry) {
         ByteBuffer entryData = ByteBuffer.wrap(entry.getData().toByteArray());
 
-        if (entry.hasCodecType() && entryData.hasRemaining()) {
-            Codec codec = Codec.getById(entry.getCodecType());
-            entryData = codec.decompress(entryData);
-        }
+        int ldCodecType = entry.hasCodecType() ? entry.getCodecType() : Codec.Type.NONE.getId();
 
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol
                 .DataType.typeMap.get((byte) entry.getDataType().getNumber()),
-                Unpooled.wrappedBuffer(entryData.array()));
+                Unpooled.wrappedBuffer(entryData.array()), ldCodecType);
+
+        if (logData.hasPayloadCodec()) {
+            // The server assumes that if a codec has been specified then
+            // the payload it received was already compressed
+            logData.setCompressedFlag();
+        }
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
@@ -832,13 +830,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private LogEntry getLogEntry(long address, LogData entry) {
         ByteBuffer data = ByteBuffer.wrap(entry.getData() == null ? new byte[0] : entry.getData());
 
-        if (data.hasRemaining()) {
-            data = codecType.getInstance().compress(ByteBuffer.wrap(entry.getData()));
-        }
-
         LogEntry.Builder logEntryBuilder = LogEntry.newBuilder()
                 .setDataType(Types.DataType.forNumber(entry.getType().ordinal()))
-                .setCodecType(codecType.getId())
+                .setCodecType(entry.getPayloadCodecType().getId())
                 .setData(ByteString.copyFrom(data))
                 .setGlobalAddress(address)
                 .addAllStreams(getStrUUID(entry.getStreams()))

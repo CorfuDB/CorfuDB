@@ -21,7 +21,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -53,8 +53,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
     @Test
     public void testEmptyMapCP() throws Exception {
-        SMRMap<String, String> map = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+        CorfuTable<String, String> map = r.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("Map1")
                 .open();
 
@@ -82,7 +82,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
     /** First smoke test, steps:
      *
-     * 1. Put a couple of keys into an SMRMap "m"
+     * 1. Put a couple of keys into an CorfuTable "m"
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
      *    the keys written by step #1.
@@ -149,7 +149,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
     /** Second smoke test, steps:
      *
-     * 1. Put a few keys into an SMRMap "m" with prefix keyPrefixFirst.
+     * 1. Put a few keys into an CorfuTable "m" with prefix keyPrefixFirst.
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
      *    the keys written by step #1.
@@ -157,7 +157,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *    with prefixes keyPrefixMiddle1 & keyPrefixMiddle2.
      *    As with the first smoke test, the checkpoint contains fake
      *    keys & values (key7 and key8).
-     * 3. Put a few keys into an SMRMap "m" with prefix keyPrefixLast
+     * 3. Put a few keys into an CorfuTable "m" with prefix keyPrefixLast
      * 4. Write an incomplete checkpoint (START and CONTINUATION but
      *    no END).
      *
@@ -259,7 +259,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Set up CP writer.  Add fudgeFactor to all CP data,
         // also used for assertion checks later.
-        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
         cpw.setSerializer(serializer);
         cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
         cpw.setBatchSize(smallBatchSize);
@@ -350,7 +350,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Set up CP writer, with interleaved writes for middle keys
         middleTracker = -1;
-        CheckpointWriter<SMRMap> cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        CheckpointWriter<CorfuTable> cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
         cpw.setSerializer(serializer);
         cpw.setBatchSize(1);
         cpw.setPostAppendFunc((cp, pos) -> {
@@ -460,7 +460,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {})
                 .setSerializer(serializer)
                 .open();
     }
@@ -555,8 +555,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mB.put("one more", 1L);
 
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        mcw1.addMap((SMRMap) mA);
-        mcw1.addMap((SMRMap) mB);
+        mcw1.addMap((CorfuTable) mA);
+        mcw1.addMap((CorfuTable) mB);
         long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author).getSequence();
         assertThat(firstGlobalAddress1).isGreaterThan(-1);
 
@@ -570,8 +570,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
-        mcw2.addMap((SMRMap) mA);
-        mcw2.addMap((SMRMap) mB);
+        mcw2.addMap((CorfuTable) mA);
+        mcw2.addMap((CorfuTable) mB);
         long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author).getSequence();
         assertThat(firstGlobalAddress2).isGreaterThanOrEqualTo(firstGlobalAddress1);
 
@@ -605,8 +605,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        mcw1.addMap((SMRMap) mA);
-        mcw1.addMap((SMRMap) mB);
+        mcw1.addMap((CorfuTable) mA);
+        mcw1.addMap((CorfuTable) mB);
         Token trimAddress = mcw1.appendCheckpoints(r, author);
 
         r.getAddressSpaceView().prefixTrim(trimAddress);
@@ -619,7 +619,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Map<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(serializer)
                 .open();
@@ -672,7 +672,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Map<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(serializer)
                 .open();

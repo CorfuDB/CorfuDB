@@ -3,7 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -27,7 +27,7 @@ public class CompileProxyTest extends AbstractViewTest {
         Map<String, String> map = getDefaultRuntime()
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
-                                    .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                                    .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
                                     .open();
 
         getDefaultRuntime().getObjectsView().TXBegin();
@@ -59,7 +59,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         Map<String, String> map = rt.getObjectsView().build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
                 .open();
         // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
         assertThatThrownBy(() -> {
@@ -297,7 +297,7 @@ public class CompileProxyTest extends AbstractViewTest {
         Map<String, String> map = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .open();
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;

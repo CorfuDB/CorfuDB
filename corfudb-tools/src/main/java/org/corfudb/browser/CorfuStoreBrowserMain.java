@@ -1,7 +1,9 @@
 package org.corfudb.browser;
 
 import java.util.Map;
+import java.util.Optional;
 
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,6 +21,13 @@ import org.docopt.Docopt;
  */
 @Slf4j
 public class CorfuStoreBrowserMain {
+    private enum OperationType {
+        listTables,
+        infoTable,
+        showTable,
+        dropTable
+    }
+
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
         "--port=<port> --namespace=<namespace> --tablename=<tablename> " +
         "--operation=<operation> "+
@@ -28,7 +37,7 @@ public class CorfuStoreBrowserMain {
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<showTables|listTables> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
@@ -53,7 +62,6 @@ public class CorfuStoreBrowserMain {
             String operation = opts.get("--operation").toString();
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
-                .useFastLoader(false)
                 .cacheDisabled(true)
                 .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
@@ -76,18 +84,25 @@ public class CorfuStoreBrowserMain {
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
             CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-            switch (operation) {
-                case "listTables":
-                    String namespace = opts.containsKey("--namespace") ?
-                        opts.get("--namespace").toString() : null;
+            String namespace = Optional.ofNullable(opts.get("--namespace"))
+                    .map(n -> n.toString())
+                    .orElse(null);
+            String tableName = Optional.ofNullable(opts.get("--tablename"))
+                    .map(t -> t.toString())
+                    .orElse(null);
+            switch (Enum.valueOf(OperationType.class, operation)) {
+                case listTables:
                     browser.listTables(namespace);
                     break;
-
-                default:
-                    CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                        browser.getTable(opts.get("--namespace").toString(),
-                        opts.get("--tablename").toString());
-                    browser.printTable(table);
+                case infoTable:
+                    browser.printTableInfo(namespace, tableName);
+                    break;
+                case dropTable:
+                    browser.dropTable(namespace, tableName);
+                    break;
+                case showTable:
+                    browser.printTable(namespace, tableName);
+                    break;
             }
         } catch (Throwable t) {
             log.error("Error in Browser Execution.", t);

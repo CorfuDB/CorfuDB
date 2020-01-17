@@ -34,7 +34,6 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -83,7 +82,6 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     Set<AbstractServer> getServersForTest() {
         String dirPath = PARAMETERS.TEST_TEMP_DIR;
         serverContext = new ServerContextBuilder()
-                .setInitialToken(0)
                 .setSingle(false)
                 .setNoVerify(false)
                 .setMemory(false)
@@ -196,7 +194,6 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
-                .setCompressionCodec(Codec.Type.None.toString())
                 .build();
         LogUnitServer server = new LogUnitServer(sc);
         serverRouter.addServer(server);
@@ -593,18 +590,17 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         Map<UUID, Long> backpointerMap = new HashMap<>();
         backpointerMap.put(streamId, Address.NON_EXIST);
         ldOne.setBackpointerMap(backpointerMap);
-        client.write(ldOne);
+        client.write(ldOne).join();
 
         // 2. Entry in address 1
         LogData ldTwo = getLogDataWithoutId(addressTwo);
         backpointerMap = new HashMap<>();
         backpointerMap.put(streamId, addressOne);
         ldTwo.setBackpointerMap(backpointerMap);
-        client.write(ldTwo);
+        client.write(ldTwo).join();
 
         // Get Stream's Address Space
-        CompletableFuture<StreamsAddressResponse> cf = client.getLogAddressSpace();
-        StreamAddressSpace addressSpace = cf.get().getAddressMap().get(streamId);
+        StreamAddressSpace addressSpace = client.getLogAddressSpace().join().getAddressMap().get(streamId);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
         assertThat(addressSpace.getAddressMap().contains(addressOne));
