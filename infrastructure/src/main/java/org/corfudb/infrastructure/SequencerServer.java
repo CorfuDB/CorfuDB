@@ -400,7 +400,6 @@ public class SequencerServer extends AbstractServer {
         // Note, this is correct, but conservative (may lead to false abort).
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
-            // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
             globalLogTail = msg.getPayload().getGlobalTail();
             cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1);
             // Clear the existing map as it could have been populated by an earlier reset.

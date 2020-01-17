@@ -202,11 +202,11 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         }
 
         for (ConflictTxStream entry : recordMap.keySet()) {
-            assertThat(cache.put(new ConflictTxStream(entry.getStreamId(),entry.getConflictParam(), entry.txVersion)) == false);
+            assertThat(cache.put(new ConflictTxStream(entry.getStreamId(), entry.getConflictParam(), entry.txVersion)) == false);
         }
 
         for (ConflictTxStream entry : recordMap.keySet()) {
-            assertThat(cache.put(new ConflictTxStream(entry.getStreamId(),entry.getConflictParam(), entry.txVersion - 1)) == false);
+            assertThat(cache.put(new ConflictTxStream(entry.getStreamId(), entry.getConflictParam(), entry.txVersion - 1)) == false);
         }
     }
 }
