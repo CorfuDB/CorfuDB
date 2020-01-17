@@ -184,9 +184,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
-        r.getAddressSpaceView().write(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), 0),
+        r.getAddressSpaceView().write(LogData.getLogData(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), 0),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
-                testPayload);
+                testPayload));
         ILogData x = r.getAddressSpaceView().read(0);
         assertNotNull(x.getRank());
         assertThat(r.getAddressSpaceView().read(0L).getPayload(r))
@@ -212,9 +212,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                r.getAddressSpaceView().write(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), i),
+                r.getAddressSpaceView().write(LogData.getLogData(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), i),
                                 Collections.singletonMap(CorfuRuntime.getStreamID("a"), Address.NO_BACKPOINTER)),
-                        Integer.toString(i).getBytes());
+                        Integer.toString(i).getBytes()));
             }
         });
         executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
@@ -245,9 +245,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), 0),
+        r.getAddressSpaceView().write(LogData.getLogData(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), 0),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
-                testPayload);
+                testPayload));
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
@@ -271,9 +271,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(1, 0),
+        r.getAddressSpaceView().write(LogData.getLogData(new TokenResponse(new Token(1, 0),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
-                testPayload);
+                testPayload));
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());

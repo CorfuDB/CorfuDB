@@ -167,9 +167,12 @@ public class StreamsView extends AbstractView {
                         TransactionalContext.getCurrentContext());
             }
 
+            ld.useToken(tokenResponse);
+            ld.setId(runtime.getParameters().getClientId());
+
             try {
                 // Attempt to write to the log.
-                runtime.getAddressSpaceView().write(tokenResponse, ld, cacheOption);
+                runtime.getAddressSpaceView().write(ld, cacheOption);
                 // If we're here, we succeeded, return the acquired token.
                 return tokenResponse.getSequence();
             } catch (OverwriteException oe) {

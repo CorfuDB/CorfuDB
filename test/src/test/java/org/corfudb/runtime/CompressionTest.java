@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.corfudb.common.compression.Codec;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
@@ -55,7 +56,7 @@ public class CompressionTest extends AbstractViewTest {
     private long writeDefaultPayload(CorfuRuntime rt) {
         // Write / append data to Log
         TokenResponse tokenResponse = rt.getSequencerView().next();
-        rt.getAddressSpaceView().write(tokenResponse, DEFAULT_PAYLOAD);
+        rt.getAddressSpaceView().write(LogData.getLogData(tokenResponse, DEFAULT_PAYLOAD));
 
         return tokenResponse.getSequence();
     }

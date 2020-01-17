@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.ICorfuTable;
@@ -105,7 +106,7 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
     @Test
     public void ensureUserTsIsInherited() {
         TokenResponse resp = getRuntime().getSequencerView().next();
-        getRuntime().getAddressSpaceView().write(resp, "data".getBytes());
+        getRuntime().getAddressSpaceView().write(LogData.getLogData(resp, "data".getBytes()));
 
         final Token parentTs = resp.getToken();
 

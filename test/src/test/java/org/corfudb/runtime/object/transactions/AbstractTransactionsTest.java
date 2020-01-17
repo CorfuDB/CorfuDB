@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.AbstractObjectTest;
@@ -55,7 +56,7 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
 
         if (getRuntime().getAddressSpaceView().peek(t2.getSequence()) == null) {
             byte[] data = "data".getBytes();
-            getRuntime().getAddressSpaceView().write(s2, data);
+            getRuntime().getAddressSpaceView().write(LogData.getLogData(s2, data));
         }
         
         getRuntime().getObjectsView().TXBuild()

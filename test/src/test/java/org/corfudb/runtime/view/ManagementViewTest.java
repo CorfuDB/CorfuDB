@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -771,8 +772,7 @@ public class ManagementViewTest extends AbstractViewTest {
         } else {
             assertThat(tokenResponse.getBackpointerMap()).containsEntry(streamID, expectedBackpointerValue);
         }
-        corfuRuntime.getAddressSpaceView().write(tokenResponse,
-                "test".getBytes());
+        corfuRuntime.getAddressSpaceView().write(LogData.getLogData(tokenResponse, "test".getBytes()));
     }
 
     /**

@@ -62,6 +62,12 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return logData;
     }
 
+    public static ILogData getLogData(IToken token, Object obj) {
+        LogData logData = new LogData(DataType.DATA, obj);
+        logData.useToken(token);
+        return logData;
+    }
+
     /**
      * Return the payload.
      */

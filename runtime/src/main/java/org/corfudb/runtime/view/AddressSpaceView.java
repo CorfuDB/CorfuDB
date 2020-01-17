@@ -155,18 +155,19 @@ public class AddressSpaceView extends AbstractView {
      *      know if the write went through or not. For sanity, we throw an OverwriteException
      *      and let the above layer retry.
      *
-     * @param address
+     * @param srcLogData entry to verify
+     *
      */
-    private void validateStateOfWrittenEntry(long address, @Nonnull ILogData ld) {
-        ILogData logData;
+    private void validateStateOfWrittenEntry(@Nonnull ILogData srcLogData) {
+        ILogData destLogData;
         try {
-            logData = read(address);
+            destLogData = read(srcLogData.getGlobalAddress());
         } catch (TrimmedException te) {
             // We cannot know if the write went through or not
             throw new UnrecoverableCorfuError("We cannot determine state of an update because of a trim.");
         }
 
-        if (!logData.equals(ld)){
+        if (!destLogData.equals(srcLogData)){
             throw new OverwriteException(OverwriteCause.DIFF_DATA);
         }
     }
@@ -178,46 +179,35 @@ public class AddressSpaceView extends AbstractView {
      * has been adopted, or a WrongEpochException if the
      * token epoch is invalid.
      *
-     * @param token        The token to use for the write.
-     * @param data         The data to write.
      * @param cacheOption  The caching behaviour for this write
      * @throws OverwriteException   If the globalAddress given
      *                              by the token has adopted
      *                              another value.
      * @throws WrongEpochException  If the token epoch is invalid.
      */
-    public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
-        ILogData ld;
-        if (data instanceof ILogData) {
-            ld = (ILogData) data;
-        } else {
-            ld = new LogData(DataType.DATA, data, runtime.getParameters().getCodecType());
-        }
+    public void write(@Nonnull ILogData logData, @Nonnull CacheOption cacheOption) {
 
         layoutHelper(e -> {
             Layout l = e.getLayout();
             // Check if the token issued is in the same
             // epoch as the layout we are about to write
             // to.
-            if (token.getEpoch() != l.getEpoch()) {
+            if (logData.getEpoch() != l.getEpoch()) {
                 throw new StaleTokenException(l.getEpoch());
             }
 
-            // Set the data to use the token
-            ld.useToken(token);
-            ld.setId(runtime.getParameters().getClientId());
 
             // Do the write
             try {
-                l.getReplicationMode(token.getSequence())
+                l.getReplicationMode(logData.getGlobalAddress())
                         .getReplicationProtocol(runtime)
-                        .write(e, ld);
+                        .write(e, logData);
             } catch (OverwriteException ex) {
                 if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA){
                     // If we have an overwrite exception with the SAME_DATA cause, it means that the
                     // server suspects our data has already been written, in this case we need to
                     // validate the state of the write.
-                    validateStateOfWrittenEntry(token.getSequence(), ld);
+                    validateStateOfWrittenEntry(logData);
                 } else {
                     // If we have an Overwrite exception with a different cause than SAME_DATA
                     // we do not need to validate the state of the write, as we know we have been
@@ -229,15 +219,15 @@ public class AddressSpaceView extends AbstractView {
                 log.warn("write: write failed", ie);
                 throw ie;
             } catch (RuntimeException re) {
-                log.error("write: Got exception during replication protocol write with token: {}", token, re);
-                validateStateOfWrittenEntry(token.getSequence(), ld);
+                log.error("write: Got exception during replication protocol write with token: {}", logData.getToken(), re);
+                validateStateOfWrittenEntry(logData);
             }
             return null;
         }, true);
 
         // Cache the successful write
         if (cacheOption == CacheOption.WRITE_THROUGH) {
-            readCache.put(token.getSequence(), ld);
+            readCache.put(logData.getGlobalAddress(), logData);
         }
     }
 
@@ -245,10 +235,10 @@ public class AddressSpaceView extends AbstractView {
      * Write the given log data and then add it to the address
      * space cache (i.e. WRITE_THROUGH option)
      *
-     * @see AddressSpaceView#write(IToken, Object, CacheOption)
+     * @see AddressSpaceView#write(ILogData, CacheOption)
      */
-    public void write(IToken token, Object data) throws OverwriteException {
-        write(token, data, CacheOption.WRITE_THROUGH);
+    public void write(ILogData logData) throws OverwriteException {
+        write(logData, CacheOption.WRITE_THROUGH);
     }
 
     /**
