@@ -26,6 +26,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
@@ -495,7 +496,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Should succeed. internally, it will refresh the token.
         CompletableFuture cf = CFUtils.within(CompletableFuture.supplyAsync(() -> {
-            runtime.getAddressSpaceView().write(mockTr, testPayload);
+            runtime.getAddressSpaceView().write(LogData.getLogData(mockTr, testPayload));
             return true;
         }), Duration.ofSeconds(timeToWaitInSeconds));
 

@@ -200,8 +200,11 @@ public abstract class AbstractQueuedStreamView extends
             // Now, we do the actual write. We could get an overwrite
             // exception here - any other exception we should pass up
             // to the client.
+
+            ld.useToken(tokenResponse);
+            ld.setId(runtime.getParameters().getClientId());
             try {
-                runtime.getAddressSpaceView().write(tokenResponse, ld);
+                runtime.getAddressSpaceView().write(ld);
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken().getSequence();

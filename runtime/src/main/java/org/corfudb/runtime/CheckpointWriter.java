@@ -185,7 +185,8 @@ public class CheckpointWriter<T extends StreamingMap> {
     private Token forceNoOpEntry() {
         TokenResponse writeToken = rt.getSequencerView().next(streamId);
         LogData logData = new LogData(DataType.HOLE);
-        rt.getAddressSpaceView().write(writeToken, logData, CacheOption.WRITE_AROUND);
+        logData.useToken(writeToken);
+        rt.getAddressSpaceView().write(logData, CacheOption.WRITE_AROUND);
         return writeToken.getToken();
     }
 
