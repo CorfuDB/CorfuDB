@@ -121,7 +121,7 @@ public class SequencerServer extends AbstractServer {
     private final CorfuMsgHandler handler = CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
-    private final SequencerServerCache cache;
+    private SequencerServerCache cache;
 
     @Getter
     @Setter
@@ -153,7 +153,8 @@ public class SequencerServer extends AbstractServer {
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
         globalLogTail = Address.getMinAddress();
-        this.cache = new SequencerServerCache(config.getCacheSize());
+        this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1);
+        setUpTimerNameCache();
     }
 
     @Override
@@ -358,7 +359,6 @@ public class SequencerServer extends AbstractServer {
     public void resetServer(CorfuPayloadMsg<SequencerRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
-        long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, StreamAddressSpace> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
 
@@ -401,9 +401,8 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
-            globalLogTail = initialToken;
-            cache.updateMaxConflictAddress(initialToken - 1);
-
+            globalLogTail = msg.getPayload().getGlobalTail();
+            cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1);
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap = new HashMap<>();
 
