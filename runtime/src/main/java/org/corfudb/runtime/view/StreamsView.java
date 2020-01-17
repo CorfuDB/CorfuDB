@@ -133,76 +133,82 @@ public class StreamsView extends AbstractView {
 
         final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
 
-        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
-
         TokenResponse tokenResponse = null;
-        for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
-            // Go to the sequencer, grab a token to write.
-            tokenResponse = conflictInfo == null
-                    ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info
-                    : runtime.getSequencerView().next(conflictInfo, streamIDs); // Token w/ conflict info
+        try (ILogData.SerializationHandle handle = ld.getSerializedForm()) {
+            ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
-            // Is our token a valid type?
-            AbortCause abortCause = null;
-            switch (tokenResponse.getRespType()) {
-                case TX_ABORT_CONFLICT:
-                    abortCause = AbortCause.CONFLICT;
-                    break;
-                case TX_ABORT_NEWSEQ:
-                    abortCause = AbortCause.NEW_SEQUENCER;
-                    break;
-                case TX_ABORT_SEQ_OVERFLOW:
-                    abortCause = AbortCause.SEQUENCER_OVERFLOW;
-                    break;
-                case TX_ABORT_SEQ_TRIM:
-                    abortCause = AbortCause.SEQUENCER_TRIM;
-                    break;
-            }
+            for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
+                // Go to the sequencer, grab a token to write.
+                tokenResponse = conflictInfo == null
+                        ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info
+                        : runtime.getSequencerView().next(conflictInfo, streamIDs); // Token w/ conflict info
 
-            if (abortCause != null) {
-                throw new TransactionAbortedException(
-                        conflictInfo,
-                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
-                        tokenResponse.getToken().getSequence(), abortCause,
-                        TransactionalContext.getCurrentContext());
-            }
-
-            ld.useToken(tokenResponse);
-            ld.setId(runtime.getParameters().getClientId());
-
-            try {
-                // Attempt to write to the log.
-                runtime.getAddressSpaceView().write(ld, cacheOption);
-                // If we're here, we succeeded, return the acquired token.
-                return tokenResponse.getSequence();
-            } catch (OverwriteException oe) {
-                // We were overwritten, get a new token and try again.
-                log.warn("append[{}]: Overwritten after {} retries, streams {}",
-                        tokenResponse.getSequence(), x,
-                        Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
-
-                if (conflictInfo != null) {
-                    // On retry, check for conflicts only from the previous attempt position,
-                    // otherwise the transaction will always conflict with itself.
-                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());
+                // Is our token a valid type?
+                AbortCause abortCause = null;
+                switch (tokenResponse.getRespType()) {
+                    case TX_ABORT_CONFLICT:
+                        abortCause = AbortCause.CONFLICT;
+                        break;
+                    case TX_ABORT_NEWSEQ:
+                        abortCause = AbortCause.NEW_SEQUENCER;
+                        break;
+                    case TX_ABORT_SEQ_OVERFLOW:
+                        abortCause = AbortCause.SEQUENCER_OVERFLOW;
+                        break;
+                    case TX_ABORT_SEQ_TRIM:
+                        abortCause = AbortCause.SEQUENCER_TRIM;
+                        break;
                 }
 
-            } catch (StaleTokenException se) {
-                // the epoch changed from when we grabbed the token from sequencer
-                log.warn("append[{}]: StaleToken, streams {}", tokenResponse.getSequence(),
-                        Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
 
-                throw new TransactionAbortedException(
-                        conflictInfo,
-                        tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
-                        tokenResponse.getToken().getSequence(),
-                        AbortCause.NEW_SEQUENCER, // in the future perhaps define a new AbortCause?
-                        TransactionalContext.getCurrentContext());
+                if (abortCause != null) {
+                    throw new TransactionAbortedException(
+                            conflictInfo,
+                            tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                            tokenResponse.getToken().getSequence(), abortCause,
+                            TransactionalContext.getCurrentContext());
+
+                }
+
+                // the token needs to be set before a serialization handle is generated
+                ld.useToken(tokenResponse);
+                    ld.setId(runtime.getParameters().getClientId());
+                ld.updateSerializedCacheMetadata();
+
+                try {
+                    // Attempt to write to the log.
+                    runtime.getAddressSpaceView().write(handle.getSerialized(), cacheOption);
+                    // If we're here, we succeeded, return the acquired token.
+                    return tokenResponse.getSequence();
+                } catch (OverwriteException oe) {
+                    // We were overwritten, get a new token and try again.
+                    log.warn("append[{}]: Overwritten after {} retries, streams {}",
+                            tokenResponse.getSequence(), x,
+                            Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
+
+                    if (conflictInfo != null) {
+                        // On retry, check for conflicts only from the previous attempt position,
+                        // otherwise the transaction will always conflict with itself.
+                        conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());
+                    }
+
+                } catch (StaleTokenException se) {
+                    // the epoch changed from when we grabbed the token from sequencer
+                    log.warn("append[{}]: StaleToken, streams {}", tokenResponse.getSequence(),
+                            Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
+
+                    throw new TransactionAbortedException(
+                            conflictInfo,
+                            tokenResponse.getConflictKey(), tokenResponse.getConflictStream(),
+                            tokenResponse.getToken().getSequence(),
+                            AbortCause.NEW_SEQUENCER, // in the future perhaps define a new AbortCause?
+                            TransactionalContext.getCurrentContext());
+                }
             }
         }
 
         log.error("append[{}]: failed after {} retries, streams {}, write size {} bytes",
-                tokenResponse == null ? -1 : tokenResponse.getSequence(),
+                tokenResponse,
                 runtime.getParameters().getWriteRetry(),
                 Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
                 ILogData.getSerializedSize(object, runtime.getParameters().getCodecType()));

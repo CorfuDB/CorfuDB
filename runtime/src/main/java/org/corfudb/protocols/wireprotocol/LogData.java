@@ -270,6 +270,24 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
     }
 
+    public void updateSerializedCacheMetadata() {
+        if (serializedCache == null) {
+            return;
+        }
+        serializedCache.resetReaderIndex();
+        ICorfuPayload.fromBuffer(serializedCache, DataType.class);
+        if (type == DataType.DATA) {
+            int len = serializedCache.readInt();
+            serializedCache.skipBytes(len);
+        }
+        serializedCache.writerIndex(serializedCache.readerIndex());
+        if (type.isMetadataAware()) {
+            ICorfuPayload.serialize(serializedCache, metadataMap);
+        }
+
+        serializedCache.readerIndex();
+    }
+
     void doSerializeInternal(ByteBuf buf) {
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA) {
