@@ -1,6 +1,7 @@
 package org.corfudb.browser;
 
 import java.util.Map;
+import java.util.Optional;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,21 +26,6 @@ public class CorfuStoreBrowserMain {
         infoTable,
         showTable,
         dropTable
-    }
-
-    private static void verifyNamespace(String namespace) {
-        if (namespace == null) {
-            throw new IllegalArgumentException("Please specify --namespace");
-        }
-    }
-
-    private static void verifyNamespaceAndTablename(String namespace, String tableName) {
-        if (namespace == null) {
-            throw new IllegalArgumentException("Please specify --namespace");
-        }
-        if (tableName == null) {
-            throw new IllegalArgumentException("Please specify --tablename");
-        }
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -98,28 +84,25 @@ public class CorfuStoreBrowserMain {
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
             CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table;
-            String namespace = opts.containsKey("--namespace") ?
-                    opts.get("--namespace").toString() : null;
-            String tableName = opts.containsKey("--tablename") ?
-                    opts.get("--tablename").toString() : null;
+            String namespace = Optional.ofNullable(opts.get("--namespace"))
+                    .map(n -> n.toString())
+                    .orElse(null);
+            String tableName = Optional.ofNullable(opts.get("--tablename"))
+                    .map(t -> t.toString())
+                    .orElse(null);
             switch (Enum.valueOf(OperationType.class, operation)) {
                 case listTables:
-                    verifyNamespace(namespace);
                     browser.listTables(namespace);
                     break;
                 case infoTable:
-                    verifyNamespaceAndTablename(namespace, tableName);
                     browser.printTableInfo(namespace, tableName);
+                    break;
                 case dropTable:
-                    verifyNamespaceAndTablename(namespace, tableName);
-                    table = browser.getTable(namespace, tableName);
-                    table.clear();
+                    browser.dropTable(namespace, tableName);
                     break;
                 case showTable:
-                    verifyNamespaceAndTablename(namespace, tableName);
-                    table = browser.getTable(namespace, tableName);
-                    browser.printTable(table);
+                    browser.printTable(namespace, tableName);
+                    break;
             }
         } catch (Throwable t) {
             log.error("Error in Browser Execution.", t);
