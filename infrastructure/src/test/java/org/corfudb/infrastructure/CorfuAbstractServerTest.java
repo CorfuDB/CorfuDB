@@ -21,28 +21,18 @@ public class CorfuAbstractServerTest {
      */
     @Test
     public void testShutdown() {
-        final CorfuMsgHandler handler = mock(CorfuMsgHandler.class);
+        final HandlerMethods handler = mock(HandlerMethods.class);
         final ExecutorService executor = mock(ExecutorService.class);
 
         AbstractServer server = new AbstractServer() {
             @Override
-            public CorfuMsgHandler getHandler() {
+            public HandlerMethods getHandler() {
                 return handler;
             }
 
             @Override
             public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
                 return getState() == ServerState.READY;
-            }
-
-            @Override
-            public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-                return executor;
-            }
-
-            @Override
-            public List<ExecutorService> getExecutors() {
-                return Collections.singletonList(executor);
             }
         };
 
