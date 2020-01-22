@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
@@ -148,6 +149,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
      * @param connectivity connectivity matrix
      * @return NodeConnectivity
      */
+    @VisibleForTesting
     public static NodeConnectivity connectivity(String endpoint, ImmutableMap<String, ConnectionStatus> connectivity) {
         return NodeConnectivity.builder()
                 .endpoint(endpoint)

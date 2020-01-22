@@ -122,9 +122,12 @@ public class ClusterStateCollector {
         });
 
         //Build local NodeState based on pings.
-        NodeConnectivity localConnectivity = NodeConnectivity.connectivity(
-                localEndpoint, ImmutableMap.copyOf(localNodeConnections)
-        );
+        NodeConnectivity localConnectivity = NodeConnectivity.builder()
+                .endpoint(localEndpoint)
+                .epoch(epoch)
+                .connectivity(ImmutableMap.copyOf(localNodeConnections))
+                .type(NodeConnectivity.NodeConnectivityType.CONNECTED)
+                .build();
 
         return NodeState.builder()
                 .connectivity(localConnectivity)
