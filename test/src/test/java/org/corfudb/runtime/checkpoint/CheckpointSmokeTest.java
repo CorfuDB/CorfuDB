@@ -272,9 +272,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Token snapshot = TransactionalContext
                 .getCurrentContext()
                 .getSnapshotTimestamp();
-        long streamTail = r.getSequencerView().query(streamId);
         try {
-            cpw.startCheckpoint(snapshot, streamTail);
+            cpw.startCheckpoint(snapshot);
             cpw.appendObjectState(m.entryStream());
             cpw.finishCheckpoint();
 
@@ -658,11 +657,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Checkpoint Writer 2 @15
         CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
-        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), (long) snapshotAddress2 - 1);
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
 
         // Checkpoint Writer 1 @10
         CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
-        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), (long) snapshotAddress1 - 1);
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
 
         // Trim @snapshotAddress=15
         r.getAddressSpaceView().prefixTrim(cp2Token);
