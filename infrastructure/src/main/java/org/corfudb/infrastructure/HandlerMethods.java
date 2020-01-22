@@ -25,7 +25,7 @@ import java.util.Set;
 
 /**
  * This class implements message handlers for {@link AbstractServer} implementations.
- * Servers define methods with signatures which follow the signature of the {@link Handler}
+ * Servers define methods with signatures which follow the signature of the {@link HandlerMethod}
  * functional interface, and generate a handler using the
  * {@link this#generateHandler(MethodHandles.Lookup, AbstractServer)} method.
  *
@@ -36,9 +36,12 @@ import java.util.Set;
  * <p>Created by mwei on 7/26/16.
  */
 @Slf4j
-public class CorfuMsgHandler {
+public class HandlerMethods {
 
     private final Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
+
+    /** The handler map. */
+    private final Map<CorfuMsgType, HandlerMethod> handlerMap;
 
     /**
      * A functional interface for server message handlers. Server message handlers should
@@ -47,14 +50,11 @@ public class CorfuMsgHandler {
      * on another thread.
      */
     @FunctionalInterface
-    interface Handler<T extends CorfuMsg> {
+    interface HandlerMethod<T extends CorfuMsg> {
         void handle(@Nonnull T corfuMsg,
                     @Nonnull ChannelHandlerContext ctx,
                     @Nonnull IServerRouter r);
     }
-
-    /** The handler map. */
-    private final Map<CorfuMsgType, Handler> handlerMap;
 
     /** Get the types this handler will handle.
      *
@@ -64,24 +64,11 @@ public class CorfuMsgHandler {
         return handlerMap.keySet();
     }
 
-    /** Construct a new instance of CorfuMsgHandler. */
-    public CorfuMsgHandler() {
+    /** Construct a new instance of HandlerMethods. */
+    public HandlerMethods() {
         handlerMap = new EnumMap<>(CorfuMsgType.class);
     }
 
-    /** Add a handler to this message handler.
-     *
-     * @param messageType       The type of CorfuMsg this handler will handle.
-     * @param handler           The handler itself.
-     * @param <T>               A CorfuMsg type.
-     * @return                  This handler, to support chaining.
-     */
-    @SuppressWarnings("unchecked")
-    public <T extends CorfuMsg> CorfuMsgHandler addHandler(CorfuMsgType messageType,
-                                                           Handler<T> handler) {
-        handlerMap.put(messageType, handler);
-        return this;
-    }
 
     /** Handle an incoming CorfuMsg.
      *
@@ -92,26 +79,16 @@ public class CorfuMsgHandler {
      *                  False otherwise.
      */
     @SuppressWarnings("unchecked")
-    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r) {
-        // Get the handler for the message type
-        final Handler<CorfuMsg> handler = handlerMap.get(message.getMsgType());
-        // If present...
-        if (handler != null) {
-            try {
-                handler.handle(message, ctx, r);
-            } catch (Exception ex) {
-                // Log the exception during handling
-                log.error("handle: Unhandled exception processing {} message",
-                        message.getMsgType(), ex);
-                r.sendResponse(ctx, message,
-                        CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
-            }
-            // Otherwise log the unexpected message.
-        } else {
-            log.error("handle: Unregistered message type {}", message.getMsgType());
+    public void handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r) {
+        final HandlerMethod<CorfuMsg> handler = handlerMap.get(message.getMsgType());
+        try {
+            handler.handle(message, ctx, r);
+        } catch (Exception ex) {
+            // Log the exception during handling
+            log.error("handle: Unhandled exception processing {} message",
+                    message.getMsgType(), ex);
+            r.sendResponse(ctx, message, CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
         }
-
-        return handler != null;
     }
 
     /** Generate handlers for a particular server.
@@ -120,9 +97,9 @@ public class CorfuMsgHandler {
      * @param server    The object that implements the server.
      * @return          New message handler for caller class
      */
-    public static CorfuMsgHandler generateHandler(@Nonnull final MethodHandles.Lookup caller,
-            @Nonnull final AbstractServer server) {
-        CorfuMsgHandler handler = new CorfuMsgHandler();
+    public static HandlerMethods generateHandler(@Nonnull final MethodHandles.Lookup caller,
+                                                 @Nonnull final AbstractServer server) {
+        HandlerMethods handler = new HandlerMethods();
         Arrays.stream(server.getClass().getDeclaredMethods())
             .filter(method -> method.isAnnotationPresent(ServerHandler.class))
             .forEach(method -> handler.registerMethod(caller, server, method));
@@ -151,17 +128,17 @@ public class CorfuMsgHandler {
                 + method.getParameterTypes()[0]);
         }
         if (handlerMap.containsKey(annotation.type())) {
-            throw new UnrecoverableCorfuError("Handler for " + annotation.type()
+            throw new UnrecoverableCorfuError("HandlerMethod for " + annotation.type()
                 + " already registered!");
         }
         // convert the method into a Java8 Lambda for maximum execution speed...
         try {
-            Handler<CorfuMsg> h;
+            HandlerMethod<CorfuMsg> h;
             if (Modifier.isStatic(method.getModifiers())) {
                 MethodHandle mh = caller.unreflect(method);
                 MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);
-                h = (Handler<CorfuMsg>) LambdaMetafactory.metafactory(caller,
-                    "handle", MethodType.methodType(Handler.class),
+                h = (HandlerMethod<CorfuMsg>) LambdaMetafactory.metafactory(caller,
+                    "handle", MethodType.methodType(HandlerMethod.class),
                     mt, mh, mh.type())
                     .getTarget().invokeExact();
 
@@ -171,16 +148,15 @@ public class CorfuMsgHandler {
                         method.getParameterTypes());
                 MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);
                 MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);
-                h = (Handler<CorfuMsg>) LambdaMetafactory.metafactory(caller,
+                h = (HandlerMethod<CorfuMsg>) LambdaMetafactory.metafactory(caller,
                     "handle",
-                    MethodType.methodType(Handler.class, server.getClass()),
+                    MethodType.methodType(HandlerMethod.class, server.getClass()),
                     mtGeneric.dropParameterTypes(0, 1), mh,
                     mh.type().dropParameterTypes(0, 1)).getTarget()
                     .bindTo(server).invoke();
             }
             // Install pre-conditions on handler
-            final Handler<CorfuMsg> handler =
-                    generateConditionalHandler(server, annotation.type(), h);
+            final HandlerMethod<CorfuMsg> handler = generateConditionalHandler(annotation.type(), h);
             // Install the handler in the map
             handlerMap.put(annotation.type(), handler);
         } catch (Throwable e) {
@@ -192,15 +168,13 @@ public class CorfuMsgHandler {
 
     /** Generate a conditional handler, which instruments the handler with metrics if configured
      * as enabled and checks whether the server is shutdown and ready.
-     * @param server        The {@link AbstractServer} the message is being handled for.
      * @param type          The {@link CorfuMsgType} the message is being handled for.
-     * @param handler       The {@link Handler} which handles the message.
-     * @return              A new {@link Handler} which conditionally executes the handler
+     * @param handler       The {@link HandlerMethod} which handles the message.
+     * @return              A new {@link HandlerMethod} which conditionally executes the handler
      *                      based on preconditions (whether the server is shutdown/ready).
      */
-    private Handler<CorfuMsg> generateConditionalHandler(@Nonnull final AbstractServer server,
-            @Nonnull final CorfuMsgType type,
-            @Nonnull final Handler<CorfuMsg> handler) {
+    private HandlerMethod<CorfuMsg> generateConditionalHandler(@Nonnull final CorfuMsgType type,
+                                                               @Nonnull final HandlerMethod<CorfuMsg> handler) {
         // Generate a timer based on the Corfu message type
         final Timer timer = getTimer(type);
 
