@@ -135,17 +135,15 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                         log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                     }
 
-                    handler.getExecutor(m.getMsgType()).submit(() -> {
-                        try {
-                            handler.handleMessage(m, ctx, this);
-                        } catch (Throwable t) {
-                            log.error("channelRead: Handling {} failed due to {}:{}",
-                                    m != null ? m.getMsgType() : "UNKNOWN",
-                                    t.getClass().getSimpleName(),
-                                    t.getMessage(),
-                                    t);
-                        }
-                    });
+                    try {
+                        handler.handleMessage(m, ctx, this);
+                    } catch (Throwable t) {
+                        log.error("channelRead: Handling {} failed due to {}:{}",
+                                m != null ? m.getMsgType() : "UNKNOWN",
+                                t.getClass().getSimpleName(),
+                                t.getMessage(),
+                                t);
+                    }
                 }
             }
         } catch (Exception e) {
