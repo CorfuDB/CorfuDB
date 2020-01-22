@@ -50,7 +50,7 @@ public class SequencerServerCache {
     private final PriorityQueue<ConflictTxStream> cacheEntries; //sorted according to address
 
     @Getter
-    private final int cacheSize; // the maxi number of entries
+    private final int cacheSize; // the max number of entries
 
     @Getter
     public long cacheEntriesBytes; // the memorySpace used.
@@ -70,6 +70,11 @@ public class SequencerServerCache {
      */
     @Getter
     private long maxConflictNewSequencer;
+
+    /* It is used to calculate the size of ServerCache.
+     * Each entry relates two pointers used by HashMap, one pointer in PriorityQueue.
+     */
+    static final int ENTRY_OVERHEAD = 24;
 
     /**
      * The cache limited by size.
@@ -111,6 +116,7 @@ public class SequencerServerCache {
 
     /**
      * Invalidate the records with the minAddress. It could be one or multiple records
+     * @return the number of entries has been invalidated and removed from the cache.
      */
     private int invalidateFirst() {
         ConflictTxStream firstEntry = cacheEntries.peek();
@@ -162,7 +168,7 @@ public class SequencerServerCache {
      * @return the memory space used in bytes:
      */
     public long byteSize() {
-        return cacheEntriesBytes + size()*24;
+        return cacheEntriesBytes + this.size()*ENTRY_OVERHEAD;
     }
 
     /*

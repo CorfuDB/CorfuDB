@@ -702,9 +702,7 @@ public class SequencerServer extends AbstractServer {
         private final int cacheSize = DEFAULT_CACHE_SIZE;
 
         public static Config parse(Map<String, Object> opts) {
-            int cacheSize = (int)(opts.containsKey("--sequencer-cache-size") ?
-                    Long.parseLong((String) opts.get("--sequencer-cache-size")) :
-                    DEFAULT_CACHE_SIZE);
+            int cacheSize = (int)opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE);
             return Config.builder()
                     .cacheSize(cacheSize)
                     .build();
