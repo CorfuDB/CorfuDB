@@ -490,8 +490,12 @@ public class AddressSpaceView extends AbstractView {
     }
 
     public Long getLogSize() {
-        return getLogSize(runtime.getAddressSpaceView().getTrimMark().getSequence(),
-                runtime.getAddressSpaceView().getLogTail());
+        long tail = runtime.getAddressSpaceView().getLogTail();
+        if (tail < 0) {
+            return new Long(0);
+        }
+
+        return getLogSize(runtime.getAddressSpaceView().getTrimMark().getSequence(), tail);
     }
 
     /**

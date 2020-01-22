@@ -207,11 +207,33 @@ public class Utils {
         return globalLogTail;
     }
 
+    /**
+     * Get log size.
+     *
+     * @param layout Latest layout to query log tail from Log Unit
+     * @param runtime Runtime
+     * @param startAddress startAddress of log for query, non-negative
+     * @param endAddress endAddress of log for query, non-negarive and should not be smaller than startAddress
+     * @return log size. It is the sum size of log files that has overlap with startAddress and endAddress
+     */
     public static long getLogSize(Layout layout, CorfuRuntime runtime, long startAddress, long endAddress) {
         long size = 0;
-        long segmentSize = 0;
         long currentEnd = 0;
+
+        if (endAddress < startAddress) {
+            log.error("endAdress {} should be not smaller than startAddress {}", endAddress, startAddress);
+            return new Long(0);
+        }
+
+        // It is the sum of segments' sizes. We only handle CHAIN_REPLICATION.
+        // As long as the segment has overlap address space with the start and end
+        // addresses, we will count that segment size.
         for (Layout.LayoutSegment segment : layout.getSegments()) {
+            if (segment.getReplicationMode() != Layout.ReplicationMode.CHAIN_REPLICATION) {
+                throw new UnsupportedOperationException();
+            }
+
+            //if segment.end = -1 , it means the end of the log. We should consider that too.
             if (segment.getEnd() > 0 && segment.getEnd() <= startAddress || endAddress <= segment.getStart())
                     continue;
 
@@ -219,11 +241,12 @@ public class Utils {
             if (segment.getEnd() > 0)
                 currentEnd = Long.min(endAddress, segment.getEnd() -1);
 
+            // It uses the first node in the layout to query the log size.
             Layout.LayoutStripe stripe = segment.getStripes().get(0);
-            size += CFUtils.getUninterruptibly (runtime.getLayoutView()
-                    .getRuntimeLayout (layout)
-                    .getLogUnitClient (stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                    .getSegmentSize(startAddress, endAddress));
+            size += CFUtils.getUninterruptibly(runtime.getLayoutView()
+                    .getRuntimeLayout(layout)
+                    .getLogUnitClient(stripe.getLogServers().get(0))
+                    .getSegmentSize(startAddress, currentEnd));
             startAddress = currentEnd + 1;
         }
 

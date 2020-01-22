@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -25,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Slf4j
 public class LogSizeQuotaIT extends AbstractIT {
 
     final int payloadSize = 1000;
@@ -103,7 +106,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         assertThat(txnAborted).isTrue();
 
         // bump up the sequencer counter to create multiple empty segments
-        final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE;
+        final int emptySlots = StreamLogFiles.getRECORDS_PER_LOG_FILE();
         for (int x = 0; x < emptySlots; x++) {
             rt.getSequencerView().next();
         }
@@ -226,5 +229,79 @@ public class LogSizeQuotaIT extends AbstractIT {
         runServerWithQuota(n2Port, maxLogSize, false);
         waitForLayoutChange(layout ->  layout.getSegments().size() == 1 &&
                 layout.getActiveLayoutServers().size() == clusterSizeN3, rt);
+    }
+
+
+    private long generateData(IStreamView sv, long numEntries) {
+        final byte[] payload = new byte[payloadSize];
+
+        long i = 0;
+        for (i = 0; i < numEntries; i++) {
+            try {
+                sv.append(payload);
+            } catch (QuotaExceededException eq) {
+                break;
+            }
+        }
+        return i;
+    }
+
+    @Test
+    /**
+     * Enforce segment splits due to layout change by adding a new server.
+     */
+    public void querySegmentLogSize() throws Exception {
+
+        long maxLogSize = FileUtils.ONE_MB / 2;
+        int n1Port = DEFAULT_PORT;
+        int n2Port = DEFAULT_PORT + 1;
+        int n3Port = DEFAULT_PORT + 2;
+
+
+        //start with 1 server
+        Process server_1 = runServerWithQuota(n1Port, maxLogSize, true);
+        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        IStreamView sv = rt.getStreamsView().get(UUID.randomUUID());
+        AddressSpaceView addressSV = rt.getAddressSpaceView();
+        final long numEntries = 1000;
+        generateData(sv, numEntries);
+
+        //remember current log size and log tail
+        long logSize0 = addressSV.getLogSize();
+        long tail0 = addressSV.getLogTail();
+
+        //enforce a segment split by adding a new node
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofMillis(50);
+        final int workflowNumRetry = 3;
+        Process server_2 = runServerWithQuota(n2Port, maxLogSize, true);
+        rt.getManagementView().addNode(DEFAULT_HOST + ":" + n2Port, workflowNumRetry,
+                timeout, pollPeriod);
+
+        //wait till layout change complete
+        final int clusterSizeN2 = 2;
+        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
+                && layout.getSegments().size() == 2, rt);
+
+        //generate more data that will be put in the new segment
+        generateData(sv, numEntries);
+
+        log.info("logsize0: " + logSize0 + " logsize: " + addressSV.getLogSize());
+        assertThat(logSize0 == addressSV.getLogSize(0, tail0));
+
+        //the log size of the second segment
+        long logSize1 = addressSV.getLogSize(tail0 + 1, addressSV.getLogTail());
+        assertThat((logSize0  + logSize1) == addressSV.getLogSize());
+
+        //tail0 and endCurrent tail will cover both segments.
+        assertThat(addressSV.getLogSize() == addressSV.getLogSize(tail0, addressSV.getLogTail()));
+
+        final int negative = -1;
+        final int small = 100;
+        final int big = 1000;
+        //Given endAddress as negative number, get size = 0;
+        assertThat(addressSV.getLogSize(negative, small)== 0);
+        assertThat(addressSV.getLogSize(small, negative) == 0);
+        assertThat(addressSV.getLogSize(big, small) == 0);
     }
 }

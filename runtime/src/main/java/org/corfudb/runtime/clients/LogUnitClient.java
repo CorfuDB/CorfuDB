@@ -232,7 +232,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture for the starting address
      */
     public CompletableFuture<Long> getQuotaUsed() {
-        return sendMessageWithFuture(CorfuMsgType.QUOTA_USED_REQUEST.msg());
+        return sendMessageWithFuture(CorfuMsgType.USED_QUOTA_REQUEST.msg());
     }
 
     /**

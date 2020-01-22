@@ -76,6 +76,9 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 @Slf4j
 public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpace {
 
+    @Getter
+    static final int RECORDS_PER_LOG_FILE = 10000;
+
     public static final int METADATA_SIZE = Metadata.newBuilder()
             .setLengthChecksum(-1)
             .setPayloadChecksum(-1)
@@ -278,7 +281,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public boolean quotaExceeded() {
+    public boolean isQuotaExceeded() {
         return !logSizeQuota.hasAvailable();
     }
 
@@ -286,6 +289,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public long quotaLimitInBytes() {
         return logSizeQuota.getLimit();
     }
+
+    @Override
+    public ResourceQuota getQuota() { return  logSizeQuota; }
 
     @Override
     public long getLogTail() {
@@ -1369,7 +1375,18 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try {
             size = getSegmentHandleForAddress(startAddress).getWriteChannel().size();
         } catch (IOException e) {
-            log.error("Could not get file size for address {} ", startAddress, e);
+            log.error("Could not get file size for startAddress {} ", startAddress, e);
+        }
+        return size;
+    }
+
+    public long getSegmentSize(long startAddress, long endAddress) {
+        long size = 0;
+        long address = startAddress;
+        while(address <= endAddress) {
+            size += getSegmentSize(address);
+            address += RECORDS_PER_LOG_FILE;
+            log.trace("start {} end {} size {} ", startAddress, endAddress, size);
         }
         return size;
     }

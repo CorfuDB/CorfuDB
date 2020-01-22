@@ -62,10 +62,9 @@ import org.junit.Test;
  * Created by mwei on 12/14/15.
  */
 public class LogUnitHandlerTest extends AbstractClientTest {
-
+    static final int number = 100;
     private LogUnitClient client;
     private ServerContext serverContext;
-
     private final UUID clientId1 = UUID.fromString("7903ba37-e3e7-407b-b9e9-f8eacaa94d5e");
     private final UUID clientId2 = UUID.fromString("a15bbffc-91cb-4a96-bb30-e1ecc5f522da");
 
@@ -119,6 +118,9 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
+    /**
+     *   Test the handlers: getTrimMark, getQuotaUsed, getSegmentSize
+     */
     public void canGetTrimMarkAndLogSize()
             throws Exception {
         byte[] testString = "hello world".getBytes();
@@ -126,7 +128,10 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat (client.getTrimMark().get()==0);
         assertThat(client.getQuotaUsed().get() > testString.length);
-        assertThat (client.getSegmentSize(client.getTrimMark().get(), client.getLogTail().getNumberOfDependents()).get() > testString.length);
+        long size0 = client.getSegmentSize(client.getTrimMark().get(), client.getLogTail().get().getLogTail()).get();
+        assertThat ( size0 > testString.length);
+        long size1 = client.getSegmentSize(client.getTrimMark().get(), client.getLogTail().get().getLogTail() + number).get();
+        assertThat(size0 == size1);
     }
 
     @Test
@@ -473,7 +478,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, null, testString, Collections.emptyMap()).get();
-        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, null,
+        client.write(StreamLogFiles.getRECORDS_PER_LOG_FILE() + 1, null,
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry

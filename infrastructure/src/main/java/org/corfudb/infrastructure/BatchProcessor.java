@@ -131,7 +131,7 @@ public class BatchProcessor implements AutoCloseable {
                     log.warn("Shutting down the write processor");
                     streamLog.sync(true);
                     break;
-                } else if (streamLog.quotaExceeded() && currOp.getMsg().getPriorityLevel() != PriorityLevel.HIGH) {
+                } else if (streamLog.isQuotaExceeded() && currOp.getMsg().getPriorityLevel() != PriorityLevel.HIGH) {
                     currOp.getFutureResult().completeExceptionally(
                             new QuotaExceededException("Quota of "
                                     + streamLog.quotaLimitInBytes() + " bytes"));

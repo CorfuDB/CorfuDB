@@ -41,7 +41,6 @@ import org.junit.Test;
  * Created by maithem on 11/2/16.
  */
 public class StreamLogFilesTest extends AbstractCorfuTest {
-
     private String getDirPath() {
         return PARAMETERS.TEST_TEMP_DIR;
     }
@@ -153,7 +152,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // A range write that spans two segments
         final int numSegments = 2;
-        final int numIter = StreamLogFiles.RECORDS_PER_LOG_FILE * numSegments;
+        final int numIter = StreamLogFiles.getRECORDS_PER_LOG_FILE() * numSegments;
         List<LogData> writeEntries = new ArrayList<>();
         for (int x = 0; x < numIter; x++) {
             writeEntries.add(getEntry(x));

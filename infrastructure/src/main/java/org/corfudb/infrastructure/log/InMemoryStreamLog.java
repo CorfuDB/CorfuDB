@@ -70,7 +70,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
-        logSizeQuota.consume(entry.getSizeEstimate ());
+        logSizeQuota.consume(entry.getSizeEstimate());
         logMetadata.update(entry, false);
     }
 
@@ -93,7 +93,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public synchronized TailsResponse getTails(List<UUID> streams) {
         Map<UUID, Long> tails = new HashMap<>(streams.size());
-        for(UUID stream: streams) {
+        for(UUID stream : streams) {
             tails.put(stream, logMetadata.getStreamTails().get(stream));
         }
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
@@ -164,7 +164,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public void sync(boolean force){
+    public void sync(boolean force) {
         //no-op
     }
 
@@ -180,8 +180,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         for (long address : logCache.keySet()) {
             if (address < startingAddress) {
                 LogData data = logCache.get(address);
-                if (data != null)
+                if (data != null) {
                     logSizeQuota.release(data.getSizeEstimate());
+                }
                 logCache.remove(address);
             }
         }
@@ -189,8 +190,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         // Sparse trim
         for (long address : trimmed) {
             LogData data = logCache.get(address);
-            if (data != null)
-                logSizeQuota.release(data.getSizeEstimate ());
+            if (data != null) {
+                logSizeQuota.release(data.getSizeEstimate());
+            }
             logCache.remove(address);
         }
 
@@ -213,7 +215,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public boolean quotaExceeded() {
+    public boolean isQuotaExceeded() {
         return !logSizeQuota.hasAvailable();
     }
 
@@ -222,17 +224,20 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         return logSizeQuota.getLimit();
     }
 
-    /**
-     * startAddress the startAddress of the segment file
-     */
     @Override
-    public long getSegmentSize(long startAddress) {
+    public ResourceQuota getQuota() {
+        return logSizeQuota;
+    }
+
+    public long getSegmentSize(long startAddress, long endAddress) {
         long size = 0;
-        for(long i = 0; i < RECORDS_PER_LOG_FILE; i++) {
-            LogData data = logCache.get(i + startAddress);
-            if (data != null)
+        for (long address = startAddress; address <= endAddress; address++) {
+            LogData data = logCache.get(address);
+            if (data != null) {
                 size += data.getSizeEstimate();
+            }
+            log.trace("start {} end {} size {} ", startAddress, endAddress, size);
         }
         return size;
-     }
+    }
 }

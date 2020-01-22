@@ -61,8 +61,8 @@ public enum CorfuMsgType {
     MULTIPLE_READ_REQUEST(35, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
 
-    QUOTA_USED_REQUEST(39, TypeToken.of(CorfuMsg.class)),
-    QUOTA_USED_RESPONSE(40, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    USED_QUOTA_REQUEST(39, TypeToken.of(CorfuMsg.class)),
+    USED_QUOTA_RESPONSE(40, new TypeToken<CorfuPayloadMsg<Long>>(){}),
 
     TAIL_REQUEST(41, new TypeToken<CorfuPayloadMsg<TailsRequest>>(){}),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),

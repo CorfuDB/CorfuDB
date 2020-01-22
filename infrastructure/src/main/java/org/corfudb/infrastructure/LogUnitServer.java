@@ -183,10 +183,10 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
-    @ServerHandler(type = CorfuMsgType.QUOTA_USED_REQUEST)
+    @ServerHandler(type = CorfuMsgType.USED_QUOTA_REQUEST)
     public void handleQuotaUsedRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleLogFileSizeRequest: received a request {}", msg);
-        r.sendResponse(ctx, msg, CorfuMsgType.QUOTA_USED_RESPONSE.payloadMsg(streamLog.getLogSizeQuota().getUsed()));
+        log.debug("handleUsedQuotaRequest: received a request {}", msg);
+        r.sendResponse(ctx, msg, CorfuMsgType.USED_QUOTA_RESPONSE.payloadMsg(streamLog.getQuota().getUsed()));
     }
 
     @ServerHandler(type = CorfuMsgType.SEGMENT_SIZE_REQUEST)

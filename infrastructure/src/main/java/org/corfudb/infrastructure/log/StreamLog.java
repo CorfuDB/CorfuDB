@@ -20,9 +20,6 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
  */
 
 public interface StreamLog {
-
-    int RECORDS_PER_LOG_FILE = 10000;
-
     /**
      * Append an entry to the stream log.
      * @param address  address of append entry
@@ -142,7 +139,7 @@ public interface StreamLog {
     /**
      * Query if the StreamLog has enough quota to accept writes
      */
-    boolean quotaExceeded();
+    boolean isQuotaExceeded();
 
     /**
      * Query the exact Quota value in bytes
@@ -151,32 +148,14 @@ public interface StreamLog {
     long quotaLimitInBytes();
 
     /**
-     * Query the space used in bytes
-     * @return the space used in bytes
+     * Query ResouceQuota
+     * @return ResourceQuota
      */
-    ResourceQuota getLogSizeQuota();
+    ResourceQuota getQuota();
 
     /**
-     *
-     * @param startAddress the startAddress of a segment file
-     * @return the size of the segment
+     * Query the log size given the startAddress and endAddress
+     * @return the space for the segment requested
      */
-    long getSegmentSize(long startAddress);
-
-    /**
-     * get the log size including startAddress and endAddress
-     * @param startAddress
-     * @param endAddress
-     * @return
-     */
-    default long getSegmentSize(long startAddress, long endAddress) {
-        long  size = 0;
-        startAddress = startAddress/RECORDS_PER_LOG_FILE*RECORDS_PER_LOG_FILE;
-        while(startAddress <= endAddress) {
-            size += getSegmentSize(startAddress);
-            startAddress += RECORDS_PER_LOG_FILE;
-        }
-        return size;
-    };
-
+    long getSegmentSize(long startAddress, long endAddress);
 }

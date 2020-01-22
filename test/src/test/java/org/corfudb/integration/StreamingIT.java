@@ -28,7 +28,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Simple test that inserts data into CorfuStore and tests Streaming.
  */
 public class StreamingIT extends AbstractIT {
-
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
     private static String singleNodeEndpoint;

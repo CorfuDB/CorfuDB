@@ -6,6 +6,7 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.Map;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -21,8 +22,12 @@ import org.corfudb.runtime.view.AddressSpaceView;
 import org.junit.Test;
 
 /**
+ * Test if the trim works properly and logSize api return correct value for log size.
+ * Generate a bunch of duplicate key-value pairs. The log size should
+ * become smaller after a trim operation.
  * Created by mwei on 5/25/17.
  */
+@Slf4j
 public class CheckpointTrimTest extends AbstractViewTest {
     final private static long NUM_ENTRIES = 10003;
     final private static long Round3 = 3;
@@ -37,7 +42,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         AddressSpaceView sv = getRuntime().getAddressSpaceView();
         long size0 = sv.getLogSize(sv.getTrimMark().getSequence(), sv.getLogTail());
-        System.out.println("init size:" + size0);
+        log.info("init size:" + size0);
 
         long numEntries = NUM_ENTRIES;
 
@@ -45,16 +50,18 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 testMap.put(String.valueOf(i), String.valueOf(i));
         }
 
+        //The log size after putting NUM_ENTRIES
         long size1 = sv.getLogSize();
-        System.out.println("put " + numEntries + " entries logsize:" + size1 + " trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
+        log.info("put " + numEntries + " entries logsize:" + size1 + " trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
         for (long i = 0; i < numEntries; i++) {
-            testMap.put (String.valueOf (i), String.valueOf (i));
+            testMap.put(String.valueOf(i), String.valueOf(i));
         }
 
+        //The log size with duplicate key-value
         long size2 = sv.getLogSize();
-        System.out.println("put another " + numEntries + " entries logsize : " + size2);
-        System.out.println("trimMark:" + sv.getTrimMark().getSequence() + " tail:" + sv.getLogTail());
+        log.info("put another " + numEntries + " entries logsize : " + size2);
+        log.info("trimMark:" + sv.getTrimMark().getSequence() + " tail:" + sv.getLogTail());
         assertThat(size2 / (size1 - size0) >= 2);
 
         // Insert a checkpoint
@@ -63,24 +70,26 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         long size3 = sv.getLogSize();
-        System.out.println("after writing checkpoint logsize: " + size3);
-        System.out.println("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
+        log.info("after writing checkpoint logsize: " + size3);
+        log.info("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
+        //With key-value pairs, the log has 3 replicas.
         assertThat(size3 / (size1 - size0) >= Round3);
 
         // Trim the log
         sv.prefixTrim(checkpointAddress);
 
+
         long size4 = sv.getLogSize();
-        System.out.println("after perfixTrim logsize " + size4);
+        log.info("after perfixTrim logsize " + size4);
 
         sv.gc();
         sv.invalidateServerCaches();
         sv.invalidateClientCache();
 
         long size5 = getRuntime ().getAddressSpaceView().getLogSize ();
-        System.out.println("after gc logsize " + size5);
-        System.out.println("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
+        log.info("after gc logsize " + size5);
+        log.info("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
         assertThat(size5 < size4);
 
