@@ -11,6 +11,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -69,6 +70,7 @@ public interface ICorfuPayload<T> {
                     })
                     .put(DataRank.class, x -> new DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))
                     .put(CheckpointEntryType.class, x -> CheckpointEntryType.typeMap.get(x.readByte()))
+                    .put(Codec.Type.class, x -> Codec.getCodecTypeById(x.readInt()))
                     .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                     .put(byte[].class, x -> {
                         int length = x.readInt();
@@ -366,6 +368,8 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntryType) payload).asByte());
+        } else if (payload instanceof Codec.Type) {
+            buffer.writeInt(((Codec.Type) payload).getId());
         } else if (payload instanceof PriorityLevel) {
             buffer.writeByte(((PriorityLevel) payload).asByte());
         } else if (payload instanceof StreamAddressSpace) {

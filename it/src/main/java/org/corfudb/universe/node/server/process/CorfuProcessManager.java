@@ -41,7 +41,7 @@ public class CorfuProcessManager {
     }
 
     public String createServerDirCommand() {
-        return "mkdir -p " + params.getName();
+        return "mkdir -p " + serverDir;
     }
 
     public String createStreamLogDirCommand() {
@@ -91,7 +91,6 @@ public class CorfuProcessManager {
 
     public String stopCommand() {
         log.info("Stop corfu server. Params: {}", params);
-
 
         return "ps -ef" +
                 " | " +

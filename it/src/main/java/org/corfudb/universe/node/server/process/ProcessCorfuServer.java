@@ -122,8 +122,8 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     }
 
     @Override
-    public void execute(String command) {
-        executeCommand(Optional.empty(), command);
+    public String execute(String command) {
+        return executeCommand(Optional.empty(), command);
     }
 
     /**
@@ -147,9 +147,9 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     /**
      * Executes a certain command on the local machine.
      */
-    private void executeCommand(Optional<Path> workDir, String cmdLine) {
+    private String executeCommand(Optional<Path> workDir, String cmdLine) {
         try {
-            commandHelper.executeCommand(workDir, cmdLine);
+            return commandHelper.executeCommand(workDir, cmdLine);
         } catch (IOException e) {
             throw new NodeException("Execution error. Cmd: " + cmdLine, e);
         }

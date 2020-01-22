@@ -115,10 +115,10 @@ public class SequencerServer extends AbstractServer {
     private final Map<Byte, String> timerNameCache = new HashMap<>();
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler = CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
     private final SequencerServerCache cache;
@@ -153,12 +153,23 @@ public class SequencerServer extends AbstractServer {
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
 
-        globalLogTail = config.getInitialToken();
+        globalLogTail = Address.getMinAddress();
 
         this.cache = new SequencerServerCache(config.getCacheSize());
 
 
         setUpTimerNameCache();
+    }
+
+    @Override
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
     }
 
     @Override
@@ -174,16 +185,6 @@ public class SequencerServer extends AbstractServer {
             return false;
         }
         return true;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
-
-    @Override
-    public List<ExecutorService> getExecutors() {
-        return Collections.singletonList(executor);
     }
 
     /**
@@ -693,11 +694,6 @@ public class SequencerServer extends AbstractServer {
         return requestedAddressSpaces;
     }
 
-    @Override
-    public void shutdown() {
-        super.shutdown();
-    }
-
     /**
      * Sequencer server configuration
      */
@@ -706,20 +702,14 @@ public class SequencerServer extends AbstractServer {
     public static class Config {
         private static final long DEFAULT_CACHE_SIZE = 250_000L;
 
-        private final long initialToken;
         @Default
         private final long cacheSize = DEFAULT_CACHE_SIZE;
 
         public static Config parse(Map<String, Object> opts) {
-            long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
-            long initialToken = Utils.parseLong(opts.get("--initial-token"));
-
-            if (Address.nonAddress(initialToken)) {
-                initialToken = Address.getMinAddress();
-            }
+            long cacheSize = opts.containsKey("--sequencer-cache-size") ?
+                    Long.parseLong((String) opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE;
 
             return Config.builder()
-                    .initialToken(initialToken)
                     .cacheSize(cacheSize)
                     .build();
         }

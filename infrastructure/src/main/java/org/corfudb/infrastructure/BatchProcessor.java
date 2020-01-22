@@ -221,23 +221,4 @@ public class BatchProcessor implements AutoCloseable {
             throw new UnrecoverableCorfuInterruptedError("BatchProcessor close interrupted.", e);
         }
     }
-
-    // The following methods (startProcessor/stopProcessor) are used by unit tests that make requests
-    // through the logunit to know when all pending requests have been completed.
-    @VisibleForTesting
-    void startProcessor() {
-        processorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setDaemon(false)
-                .setNameFormat("LogUnit-BatchProcessor-%d")
-                .build());
-        processorService.submit(this::processor);
-    }
-
-    @VisibleForTesting
-    void stopProcessor() throws Exception {
-        operationsQueue.add(BatchWriterOperation.SHUTDOWN);
-        processorService.shutdown();
-        processorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
 }

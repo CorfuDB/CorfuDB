@@ -1,10 +1,6 @@
 package org.corfudb.universe;
 
-import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.universe.UniverseManager.UniverseWorkflow;
-import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.scenario.fixture.Fixture;
 import org.corfudb.universe.universe.Universe.UniverseMode;
 import org.corfudb.universe.universe.UniverseParams;
@@ -12,8 +8,9 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestName;
 
-import java.io.FileReader;
-import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.function.Consumer;
 
 /**
@@ -47,7 +44,6 @@ public abstract class GenericIntegrationTest {
     }
 
     private static class AppUtil {
-        private static final String POM_FILE = "pom.xml";
 
         /**
          * Provides a current version of this project. It parses the version from pom.xml
@@ -60,17 +56,11 @@ public abstract class GenericIntegrationTest {
                 return version;
             }
 
-            return parseAppVersionInPom();
-        }
-
-        public String parseAppVersionInPom() {
-            MavenXpp3Reader reader = new MavenXpp3Reader();
-            Model model;
             try {
-                model = reader.read(new FileReader(POM_FILE));
-                return model.getParent().getVersion();
-            } catch (IOException | XmlPullParserException e) {
-                throw new NodeException("Can't parse application version", e);
+                Path path = Paths.get(ClassLoader.getSystemResource("corfu.version").toURI());
+                return new String(Files.readAllBytes(path));
+            } catch (Exception e) {
+                throw new IllegalStateException("Corfu version file not found");
             }
         }
     }

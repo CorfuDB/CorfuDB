@@ -66,7 +66,7 @@ public class ClusterStateAggregatorTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
                 NodeState.getUnavailableNodeState("b"),
-                NodeState.getNotReadyNodeState("c", epoch, counter)
+                NodeState.getNotReadyNodeState("c")
         );
 
         List<ClusterState> clusterStates = Arrays.asList(

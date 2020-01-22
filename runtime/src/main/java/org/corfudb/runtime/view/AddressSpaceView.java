@@ -191,7 +191,7 @@ public class AddressSpaceView extends AbstractView {
         if (data instanceof ILogData) {
             ld = (ILogData) data;
         } else {
-            ld = new LogData(DataType.DATA, data);
+            ld = new LogData(DataType.DATA, data, runtime.getParameters().getCodecType());
         }
 
         layoutHelper(e -> {

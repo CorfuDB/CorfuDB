@@ -2,7 +2,7 @@ package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -25,7 +25,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         getDefaultRuntime();
 
         Map<String, String> testMap = (Map<String, String>)
-                instantiateCorfuObject(new TypeToken<SMRMap<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<CorfuTable<String,String>>() {}, "test");
 
         testMap.clear();
         assertThat(testMap.put("a", "a"))
@@ -36,7 +36,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
                 .isEqualTo("b");
 
         Map<String, String> testMap2 = (Map<String, String>)
-                instantiateCorfuObject(new TypeToken<SMRMap<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<CorfuTable<String,String>>() {}, "test");
 
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");
@@ -106,7 +106,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
@@ -130,19 +130,19 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
 
         Map<String, String> test2 = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(Serializers.getDefaultSerializer())
                 .open();
 
         ObjectsView.ObjectID mapId = new ObjectsView.
-                ObjectID(CorfuRuntime.getStreamID("test"), SMRMap.class);
+                ObjectID(CorfuRuntime.getStreamID("test"), CorfuTable.class);
 
         CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
                 getObjectCache().

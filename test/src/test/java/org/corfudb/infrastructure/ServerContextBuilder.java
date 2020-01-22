@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
-import org.corfudb.infrastructure.log.compression.Codec;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**
@@ -14,9 +13,6 @@ import org.corfudb.test.concurrent.TestThreadGroups;
 // Disable magic number check to make defaults readable
 @SuppressWarnings("checkstyle:magicnumber")
 public class ServerContextBuilder {
-
-    long initialToken = 0L; // for testing, we want to reset the sequencer on each test
-
     boolean single = true;
     boolean memory = true;
     String logPath = null;
@@ -47,7 +43,6 @@ public class ServerContextBuilder {
     String handshakeTimeout = "10";
     String prefix = "";
     String retention = "1000";
-    String compressionCodec = Codec.Type.LZ4.toString();
 
     String clusterId = "auto";
     boolean isTest = true;
@@ -59,7 +54,6 @@ public class ServerContextBuilder {
     public ServerContext build() {
         ImmutableMap.Builder<String,Object> builder =
                 new ImmutableMap.Builder<String, Object>()
-                .put("--initial-token", initialToken)
                 .put("--single", single)
                 .put("--memory", memory)
                 .put("--Threads", numThreads)
@@ -67,8 +61,7 @@ public class ServerContextBuilder {
                 .put("--sequencer-cache-size", seqCache)
                 .put("--log-size-quota-percentage", logSizeLimitPercentage)
                 .put("--batch-size", batchSize)
-                .put("--metadata-retention", retention)
-                .put("--compression-codec", compressionCodec);
+                .put("--metadata-retention", retention);
         if (logPath != null) {
          builder.put("--log-path", logPath);
         }

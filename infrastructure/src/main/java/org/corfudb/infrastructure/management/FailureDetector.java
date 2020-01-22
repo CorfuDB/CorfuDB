@@ -10,7 +10,6 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.RemoteMonitoringService;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -56,9 +55,6 @@ public class FailureDetector implements IDetector {
     private int failureThreshold = 3;
 
     @NonNull
-    private final HeartbeatCounter heartbeatCounter;
-
-    @NonNull
     private final String localEndpoint;
 
     @NonNull
@@ -66,8 +62,7 @@ public class FailureDetector implements IDetector {
     @Setter
     private NetworkStretcher networkStretcher = NetworkStretcher.builder().build();
 
-    public FailureDetector(HeartbeatCounter heartbeatCounter, String localEndpoint) {
-        this.heartbeatCounter = heartbeatCounter;
+    public FailureDetector(String localEndpoint) {
         this.localEndpoint = localEndpoint;
     }
 
@@ -245,7 +240,6 @@ public class FailureDetector implements IDetector {
         ClusterStateCollector clusterCollector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
                 .clusterState(pollAsync(allServers, clientRouters, epoch))
-                .heartbeatCounter(heartbeatCounter)
                 .build();
 
         //Cluster state internal map.

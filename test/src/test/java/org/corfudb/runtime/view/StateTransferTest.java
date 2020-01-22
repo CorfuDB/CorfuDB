@@ -24,6 +24,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import org.corfudb.common.compression.Codec;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -39,6 +40,7 @@ import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -631,5 +633,132 @@ public class StateTransferTest extends AbstractViewTest {
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getSegments().size())
                 .isEqualTo(1);
+    }
+
+
+    /**
+     * Here we test the capability of state transfer mechanism to preserve codec info, regardless of the configuration
+     * that state transfer runtime has.
+     *
+     * This test first writes data with none default codecs (default being ZSTD), in the following way:
+     * 0-2 [inclusive] write data to Node0 with codec LZ4
+     * 3-5 [inclusive] write data to Node 0, Node1 with NO codec (NONE)
+     *
+     * We then add a third node, and let state transfer complete. Finally, we read all the data to confirm
+     * we are able to decompress all the data after state transfer.
+     **/
+    @Test
+    public void testStateTransferWithNoneDefaultCodec() {
+
+        final byte[] DEFAULT_PAYLOAD = "testPayload".getBytes();
+
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        final long writtenAddressesBatch1 = 3L;
+        final long writtenAddressesBatch2 = 6L;
+
+        // First Layout, with node0 and node1
+        Layout l1 = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(writtenAddressesBatch1)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(writtenAddressesBatch1)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l1);
+
+        // Instantiate 2 different codecs, one for each none default codec type (state transfer will run with the
+        // default runtime)
+        corfuRuntime = getNewRuntime(getDefaultNode()).connect();
+        corfuRuntime.getParameters().setCodecType(Codec.Type.LZ4.toString());
+
+        CorfuRuntime rtNoCodec = getNewRuntime(getDefaultNode()).connect();
+        rtNoCodec.getParameters().setCodecType(Codec.Type.NONE.toString());
+
+        // Confirm that both codecs are different (we want to test all combinations) to the default codec (ZSTD)
+        assertThat(corfuRuntime.getParameters().getCodecType())
+                .isNotEqualTo(rtNoCodec.getParameters().getCodecType())
+                .isNotEqualTo(CorfuRuntime.CorfuRuntimeParameters.builder().build().getCodecType());
+
+        // Generate stream views for each codec type
+        IStreamView testStream = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+        IStreamView testStreamNoCodec = rtNoCodec.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+
+        // Write to address spaces 0 to 2 (inclusive) to SERVER 0 only with codec LZ4
+        for (int i = 0; i < writtenAddressesBatch1; i++) {
+            testStream.append(DEFAULT_PAYLOAD);
+        }
+
+        // Write to address spaces 3 to 5 (inclusive) to SERVER 0 and SERVER 1 with no Codec (None)
+        for (int i = (int) writtenAddressesBatch1; i < writtenAddressesBatch2; i++) {
+            testStreamNoCodec.append(DEFAULT_PAYLOAD);
+        }
+
+        // Add new Server
+        addServer(SERVERS.PORT_2);
+        final int addNodeRetries = 3;
+        corfuRuntime.getManagementView()
+                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+        corfuRuntime.invalidateLayout();
+        final long epochAfterAdd = 5L;
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(epochAfterAdd)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        // Perform State Transfer
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() >= expectedLayout.getEpoch()) {
+                break;
+            }
+            corfuRuntime.invalidateLayout();
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+
+        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        
+        // Read Runtime (fresh runtime)
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
+
+        // First Invalidate Server & Client Caches
+        rt.getAddressSpaceView().invalidateServerCaches();
+        rt.getAddressSpaceView().invalidateClientCache();
+
+        // Read data to validate we are able to decompress correctly
+        for (int i=0; i < writtenAddressesBatch2; i++) {
+            assertThat(rt.getAddressSpaceView().read(i)
+                    .getPayload(rt)).isEqualTo(DEFAULT_PAYLOAD);
+        }
+
     }
 }

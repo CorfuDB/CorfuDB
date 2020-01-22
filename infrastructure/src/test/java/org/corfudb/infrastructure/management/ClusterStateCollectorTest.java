@@ -7,7 +7,6 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -66,7 +65,6 @@ public class ClusterStateCollectorTest {
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
-                .heartbeatCounter(new HeartbeatCounter())
                 .clusterState(clusterConnectivity)
                 .build();
 
@@ -110,7 +108,6 @@ public class ClusterStateCollectorTest {
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
-                .heartbeatCounter(new HeartbeatCounter())
                 .clusterState(clusterConnectivity)
                 .build();
 

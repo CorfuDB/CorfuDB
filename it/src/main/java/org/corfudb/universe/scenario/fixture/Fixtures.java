@@ -32,11 +32,13 @@ import org.slf4j.event.Level;
 
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * Fixture factory provides predefined fixtures
@@ -50,10 +52,6 @@ public interface Fixtures {
      */
     class TestFixtureConst {
 
-        private TestFixtureConst() {
-            // prevent instantiation of this class
-        }
-
         // Default name of the CorfuTable created by CorfuClient
         public static final String DEFAULT_STREAM_NAME = "stream";
 
@@ -64,7 +62,11 @@ public interface Fixtures {
         public static final int DEFAULT_WAIT_POLL_ITER = 300;
 
         // Default time to wait before next layout poll: 1 second
-        public static final int DEFAULT_WAIT_TIME = 1;
+        public static final Duration DEFAULT_WAIT_TIME = Duration.ofSeconds(1);
+
+        private TestFixtureConst() {
+            // prevent instantiation of this class
+        }
     }
 
     @Getter
@@ -72,7 +74,8 @@ public interface Fixtures {
 
         private final UniverseParamsBuilder universe = UniverseParams.universeBuilder();
 
-        private final CorfuClusterParamsBuilder cluster = CorfuClusterParams.builder();
+        private final CorfuClusterParamsBuilder<CorfuServerParams> cluster = CorfuClusterParams
+                .builder();
 
         private final CorfuServerParamsBuilder server = CorfuServerParams.serverParamsBuilder();
 
@@ -97,7 +100,7 @@ public interface Fixtures {
             }
 
             UniverseParams universeParams = universe.build();
-            CorfuClusterParams clusterParams = cluster.build();
+            CorfuClusterParams<CorfuServerParams> clusterParams = cluster.build();
 
             SupportClusterParams monitoringClusterParams = monitoringCluster.build();
             SupportServerParams monitoringServerParams = supportServer
@@ -129,7 +132,8 @@ public interface Fixtures {
 
         private final VmUniverseParamsBuilder universe;
 
-        private final CorfuClusterParamsBuilder cluster = CorfuClusterParams.builder();
+        private final CorfuClusterParamsBuilder<VmCorfuServerParams> cluster = CorfuClusterParams
+                .builder();
 
         private final VmCorfuServerParamsBuilder servers = VmCorfuServerParams.builder();
 
@@ -142,15 +146,14 @@ public interface Fixtures {
 
         private final FixtureUtilBuilder fixtureUtilBuilder = FixtureUtil.builder();
 
+        private final Properties vmProperties = VmConfigPropertiesLoader
+                .loadVmProperties()
+                .get();
+
         public VmUniverseFixture() {
             Properties credentials = VmConfigPropertiesLoader
                     .loadVmCredentialsProperties()
-                    //empty
                     .orElse(new Properties());
-
-            Properties vmProperties = VmConfigPropertiesLoader
-                    .loadVmProperties()
-                    .get();
 
             servers
                     .logLevel(Level.INFO)
@@ -158,7 +161,8 @@ public interface Fixtures {
                     .persistence(CorfuServer.Persistence.DISK)
                     .stopTimeout(Duration.ofSeconds(1))
                     .serverJarDirectory(Paths.get("target"))
-                    .dockerImage(CorfuServerParams.DOCKER_IMAGE_NAME);
+                    .dockerImage(CorfuServerParams.DOCKER_IMAGE_NAME)
+                    .logSizeQuotaPercentage(100);
 
             Credentials vSphereCred = Credentials.builder()
                     .username(credentials.getProperty("vsphere.username"))
@@ -175,10 +179,15 @@ public interface Fixtures {
                     .vmCredentials(vmCred)
                     .build();
 
+            List<String> vSphereHost = Arrays
+                    .stream(vmProperties.getProperty("vsphere.host").split(","))
+                    .collect(Collectors.toList());
+
             universe = VmUniverseParams.builder()
                     .vSphereUrl(vmProperties.getProperty("vsphere.url"))
+                    .vSphereHost(vSphereHost)
                     .networkName(vmProperties.getProperty("vm.network"))
-                    .templateVMName("debian-buster-thin-provisioned")
+                    .templateVMName(vmProperties.getProperty("vm.template", "debian-buster-thin-provisioned"))
                     .credentials(credentialParams)
                     .cleanUpEnabled(true);
         }
@@ -189,17 +198,23 @@ public interface Fixtures {
                 return data.get();
             }
 
-            CorfuClusterParams clusterParams = cluster.build();
+            vmPrefix = vmProperties.getProperty("vm.prefix", vmPrefix);
+
+            CorfuClusterParams<VmCorfuServerParams> clusterParams = cluster.build();
 
             FixtureUtil fixtureUtil = fixtureUtilBuilder.build();
-            ImmutableList<CorfuServerParams> serversParams = fixtureUtil.buildVmServers(
+            ImmutableList<VmCorfuServerParams> serversParams = fixtureUtil.buildVmServers(
                     clusterParams, servers, vmPrefix
             );
             serversParams.forEach(clusterParams::add);
 
             ConcurrentMap<VmName, IpAddress> vmIpAddresses = new ConcurrentHashMap<>();
             for (int i = 0; i < clusterParams.getNumNodes(); i++) {
-                vmIpAddresses.put(VmName.builder().name(vmPrefix + (i + 1)).build(), ANY_ADDRESS);
+                VmName vmName = VmName.builder()
+                        .name(vmPrefix + (i + 1))
+                        .index(i)
+                        .build();
+                vmIpAddresses.put(vmName, ANY_ADDRESS);
             }
 
             VmUniverseParams universeParams = universe
