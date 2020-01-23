@@ -81,7 +81,7 @@ public class ClusterStateAggregatorTest {
                 .unresponsiveNodes(ImmutableList.of())
                 .build();
 
-        aggregator.getAggregatedState();
+        assertThat(aggregator.getAggregatedState().isError()).isTrue();
     }
 
     @Test

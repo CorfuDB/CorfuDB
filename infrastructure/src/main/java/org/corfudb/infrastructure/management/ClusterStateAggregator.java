@@ -88,7 +88,7 @@ public class ClusterStateAggregator {
                     .values()
                     .stream()
                     .map(NodeState::getConnectivity)
-                    .map(conn -> "{ node: " + conn.getEndpoint() + ", epoch: " + conn.getEpoch() + "}")
+                    .map(conn -> "{node: " + conn.getEndpoint() + ", epoch: " + conn.getEpoch() + "}")
                     .collect(Collectors.toList());
             return Result.error(new IllegalStateException(errMsg));
         }
