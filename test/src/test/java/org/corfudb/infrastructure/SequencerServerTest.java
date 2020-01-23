@@ -226,7 +226,7 @@ public class SequencerServerTest extends AbstractServerTest {
         server.setSequencerEpoch(-1L);
         future = sendRequest(new CorfuPayloadMsg<>(CorfuMsgType.BOOTSTRAP_SEQUENCER,
                 new SequencerRecoveryMsg(globalTail + 2, tailMap, 0L, false)));
-
+        future.join();
         future = sendRequest(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singletonList(streamA))));
         assertThat(future.join().getStreamTail(streamA)).isEqualTo(newTailA);
