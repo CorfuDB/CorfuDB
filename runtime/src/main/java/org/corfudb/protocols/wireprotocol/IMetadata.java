@@ -234,20 +234,6 @@ public interface IMetadata {
         return getPayloadCodecType() != Codec.Type.NONE;
     }
 
-    // This field is required ad the server uses the same serialization/deserialization path as the runtime,
-    // we need a flag to let the server not re-encode an already encoded payload.
-    default boolean isCompressed() {
-        return (boolean) getMetadataMap().getOrDefault(LogUnitMetadataType.COMPRESSED, false);
-    }
-
-    /**
-     * Sets the compressed flag to true. This flag is used in order to avoid sthe server re-encoding an already
-     * encoded payload as the code path is shared by server and runtime.
-     */
-    default void setCompressedFlag() {
-        getMetadataMap().put(LogUnitMetadataType.COMPRESSED, true);
-    }
-
     @RequiredArgsConstructor
     enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
@@ -260,9 +246,7 @@ public interface IMetadata {
         CLIENT_ID(10, TypeToken.of(UUID.class)),
         THREAD_ID(11, TypeToken.of(Long.class)),
         EPOCH(12, TypeToken.of(Long.class)),
-        PAYLOAD_CODEC(13, TypeToken.of(Codec.Type.class)),
-        COMPRESSED(14, TypeToken.of(Boolean.class))
-        ;
+        PAYLOAD_CODEC(13, TypeToken.of(Codec.Type.class));
         final int type;
         @Getter
         final TypeToken<?> componentType;
