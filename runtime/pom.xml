@@ -13,8 +13,6 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-
-        <dropwizard.metrics.version>4.1.2</dropwizard.metrics.version>
     </properties>
 
     <build>
@@ -125,21 +123,6 @@
             <groupId>org.javassist</groupId>
             <artifactId>javassist</artifactId>
             <version>3.21.0-GA</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-            <version>${dropwizard.metrics.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-jvm</artifactId>
-            <version>${dropwizard.metrics.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-jmx</artifactId>
-            <version>${dropwizard.metrics.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>

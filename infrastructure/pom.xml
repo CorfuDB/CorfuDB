@@ -13,7 +13,6 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-        <dropwizard.metrics.version>4.1.2</dropwizard.metrics.version>
     </properties>
 
     <profiles>
@@ -156,16 +155,6 @@
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>2.4</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-            <version>${dropwizard.metrics.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-jvm</artifactId>
-            <version>${dropwizard.metrics.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
