@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.NonNull;
+import org.corfudb.common.result.Result;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
@@ -11,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Aggregates cluster state from a list of collected states.
@@ -22,7 +24,7 @@ public class ClusterStateAggregator {
     private final String localEndpoint;
 
     @NonNull
-    private final List<ClusterState> clusterStates;
+    private final List<Result<ClusterState, IllegalStateException>> clusterStates;
 
     @NonNull
     private final ImmutableList<String> unresponsiveNodes;
@@ -43,9 +45,9 @@ public class ClusterStateAggregator {
      *
      * @return aggregated cluster state
      */
-    public ClusterState getAggregatedState() {
+    public Result<ClusterState, IllegalStateException> getAggregatedState() {
         if (clusterStates.isEmpty()) {
-            throw new IllegalStateException("Insufficient cluster state");
+            return Result.error(new IllegalStateException("Insufficient cluster state"));
         }
 
         if (clusterStates.size() == 1) {
@@ -53,6 +55,8 @@ public class ClusterStateAggregator {
         }
 
         Map<String, NodeState> stateMap = clusterStates.stream()
+                .filter(Result::isValue)
+                .map(Result::get)
                 .map(ClusterState::getNodes)
                 .reduce((prevNodes, currNodes) -> {
                     Map<String, NodeState> actualState = new HashMap<>();
@@ -72,10 +76,23 @@ public class ClusterStateAggregator {
                     return ImmutableMap.copyOf(actualState);
                 }).orElse(ImmutableMap.of());
 
-        return ClusterState.builder()
+        ClusterState state = ClusterState.builder()
                 .localEndpoint(localEndpoint)
                 .unresponsiveNodes(unresponsiveNodes)
                 .nodes(stateMap)
                 .build();
+
+        if (!state.isConsistent()) {
+            String errMsg = "Cluster state is not consistent. Epochs: " + state
+                    .getNodes()
+                    .values()
+                    .stream()
+                    .map(NodeState::getConnectivity)
+                    .map(conn -> "{ node: " + conn.getEndpoint() + ", epoch: " + conn.getEpoch() + "}")
+                    .collect(Collectors.toList());
+            return Result.error(new IllegalStateException(errMsg));
+        }
+
+        return Result.ok(state);
     }
 }

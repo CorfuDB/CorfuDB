@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -161,11 +162,15 @@ public class FailureDetector implements IDetector {
 
         failedNodesAggregated.removeAll(connectedNodesAggregated);
 
-        Set<String> allConnectedNodes = Sets.union(connectedNodesAggregated, wrongEpochsAggregated.keySet());
+        Set<String> allConnectedNodes = Sets.union(
+                connectedNodesAggregated,
+                wrongEpochsAggregated.keySet()
+        );
 
         tunePollReportTimeouts(router, failedNodesAggregated, allConnectedNodes);
 
-        List<ClusterState> clusterStates = reports.stream()
+        List<Result<ClusterState, IllegalStateException>> clusterStates = reports
+                .stream()
                 .map(PollReport::getClusterState)
                 .collect(Collectors.toList());
 
@@ -179,13 +184,11 @@ public class FailureDetector implements IDetector {
                 .map(PollReport::getElapsedTime)
                 .reduce(Duration.ZERO, Duration::plus);
 
-        final ClusterState aggregatedClusterState = aggregator.getAggregatedState();
         return PollReport.builder()
                 .pollEpoch(epoch)
                 .elapsedTime(totalElapsedTime)
-                .pingResponsiveServers(aggregatedClusterState.getPingResponsiveNodes())
                 .wrongEpochs(ImmutableMap.copyOf(wrongEpochsAggregated))
-                .clusterState(aggregatedClusterState)
+                .clusterState(aggregator.getAggregatedState())
                 .build();
     }
 
@@ -251,9 +254,8 @@ public class FailureDetector implements IDetector {
 
         return PollReport.builder()
                 .pollEpoch(epoch)
-                .pingResponsiveServers(clusterState.getPingResponsiveNodes())
                 .wrongEpochs(clusterCollector.collectWrongEpochs())
-                .clusterState(clusterState)
+                .clusterState(Result.ok(clusterState))
                 .elapsedTime(elapsedTime)
                 .build();
     }

@@ -285,8 +285,15 @@ public class RemoteMonitoringService implements MonitoringService {
                         .thenCompose(metrics -> pollReport(ourLayout, metrics))
                         //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
                         .thenApply(pollReport -> {
-                            log.trace("Update cluster view: {}", pollReport.getClusterState());
-                            clusterContext.refreshClusterView(ourLayout, pollReport);
+                            pollReport.getClusterState().ifError(err -> {
+                                log.debug("Can't update cluster state in ManagementServer. " +
+                                 "The cluster state is not consistent", err);
+                            });
+
+                            pollReport.getClusterState().map(clusterState -> {
+                                clusterContext.refreshClusterView(ourLayout, clusterState);
+                                return null;
+                            });
                             return pollReport;
                         })
                         //Execute failure detector task using failureDetectorWorker executor
@@ -325,11 +332,6 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture<DetectorTask> runFailureDetectorTask(
             PollReport pollReport, Layout ourLayout) {
 
-        if (!pollReport.getClusterState().isReady()) {
-            log.info("Cluster state is not ready: {}", pollReport.getClusterState());
-            return DETECTOR_TASK_SKIPPED;
-        }
-
         return CompletableFuture.supplyAsync(() -> {
 
             // Corrects out of phase epoch issues if present in the report. This method
@@ -337,13 +339,22 @@ public class RemoteMonitoringService implements MonitoringService {
             // the current state.
             final Layout latestLayout = correctWrongEpochs(pollReport, ourLayout);
 
-            Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
+            // If layout was updated by correcting wrong epochs,
+            // we can't continue with failure detection,
+            // as the cluster state have changed.
+            if (!latestLayout.equals(ourLayout)) {
+                log.warn("Layout was updated by correcting wrong epochs. " +
+                        "Cancel current round of failure detection.");
+                return DetectorTask.COMPLETED;
+            }
+
+            Result<DetectorTask, IllegalStateException> failure = pollReport.getClusterState().map(clusterState -> {
 
                 // This is just an optimization in case we receive a WrongEpochException
                 // while one of the other management clients is trying to move to a new layout.
                 // This check is merely trying to minimize the scenario in which we end up
                 // filling the slot with an outdated layout.
-                if (!pollReport.areAllResponsiveServersSealed()) {
+                if (!clusterState.areAllResponsiveServersSealed(pollReport.getWrongEpochs())) {
                     log.debug("All responsive servers have not been sealed yet. Skipping.");
                     return DetectorTask.COMPLETED;
                 }
@@ -364,13 +375,9 @@ public class RemoteMonitoringService implements MonitoringService {
                     return DetectorTask.COMPLETED;
                 }
 
-                // If layout was updated by correcting wrong epochs,
-                // we can't continue with failure detection,
-                // as the cluster state have changed.
-                if (!latestLayout.equals(ourLayout)){
-                    log.warn("Layout was updated by correcting wrong epochs. " +
-                            "Cancel current round of failure detection.");
-                    return DetectorTask.COMPLETED;
+                if (!clusterState.isReady()) {
+                    log.info("Cluster state is not ready: {}", pollReport.getClusterState());
+                    return DetectorTask.SKIPPED;
                 }
 
                 return DetectorTask.NOT_COMPLETED;
@@ -450,7 +457,13 @@ public class RemoteMonitoringService implements MonitoringService {
     private DetectorTask detectHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing, layout: {}", layout);
 
-        Optional<NodeRank> healed = advisor.healedServer(pollReport.getClusterState());
+        if(pollReport.getClusterState().isError()) {
+            return DetectorTask.COMPLETED;
+        }
+
+        ClusterState clusterState = pollReport.getClusterState().get();
+
+        Optional<NodeRank> healed = advisor.healedServer(clusterState);
 
         //Transform Optional value to a Set
         Set<String> healedNodes = healed
@@ -466,7 +479,7 @@ public class RemoteMonitoringService implements MonitoringService {
         //save history
         FailureDetectorMetrics history = FailureDetectorMetrics.builder()
                 .localNode(serverContext.getLocalEndpoint())
-                .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
+                .graph(advisor.getGraph(clusterState).connectivityGraph())
                 .healed(healed.get())
                 .action(FailureDetectorAction.HEAL)
                 .unresponsiveNodes(layout.getUnresponsiveServers())
@@ -516,7 +529,11 @@ public class RemoteMonitoringService implements MonitoringService {
         log.trace("Handle failures for the report: {}", pollReport);
 
         try {
-            ClusterState clusterState = pollReport.getClusterState();
+            if(pollReport.getClusterState().isError()) {
+                return DetectorTask.COMPLETED;
+            }
+
+            ClusterState clusterState = pollReport.getClusterState().get();
 
             if (clusterState.size() != layout.getAllServers().size()) {
                 String err = String.format(
@@ -534,7 +551,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 //Collect failures history
                 FailureDetectorMetrics history = FailureDetectorMetrics.builder()
                         .localNode(serverContext.getLocalEndpoint())
-                        .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
+                        .graph(advisor.getGraph(clusterState).connectivityGraph())
                         .healed(failedNode)
                         .action(FailureDetectorAction.FAIL)
                         .unresponsiveNodes(layout.getUnresponsiveServers())
@@ -606,7 +623,11 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture<DetectorTask> detectFailure(
             Layout layout, Set<String> failedNodes, PollReport pollReport) {
 
-        ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());
+        if(pollReport.getClusterState().isError()) {
+            return CompletableFuture.completedFuture(DetectorTask.COMPLETED);
+        }
+
+        ClusterGraph graph = advisor.getGraph(pollReport.getClusterState().get());
 
         log.info("Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}",
                 failedNodes, pollReport.getLayoutSlotUnFilled(layout), graph.toJson()
@@ -700,7 +721,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * This function will attempt to seal the cluster with the epoch provided
      * by the layout parameter.
      *
-     * @param pollReport immutable poll report
+     * @param pollReport       immutable poll report
      * @param managementLayout mutable layout that will not be modified
      */
     private void sealWithLatestLayout(PollReport pollReport, Layout managementLayout) {

@@ -26,17 +26,18 @@ import org.junit.Test;
 import java.util.Optional;
 
 public class ClusterGraphTest {
+    private final long epoch = -1;
 
     @Test
     public void testTransformation() {
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
+                .connectivity(connectivity(A, epoch, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
+                .connectivity(connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
                 .build();
 
         NodeState c = unavailableNodeState(C);
@@ -55,8 +56,8 @@ public class ClusterGraphTest {
 
     @Test
     public void testToSymmetricForTwoNodes() {
-        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, FAILED));
-        NodeConnectivity b = connectivity(B, ImmutableMap.of(A, OK, B, OK));
+        NodeConnectivity a = connectivity(A, epoch,ImmutableMap.of(A, OK, B, FAILED));
+        NodeConnectivity b = connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b);
         ClusterGraph symmetric = graph.toSymmetric();
@@ -70,9 +71,9 @@ public class ClusterGraphTest {
 
     @Test
     public void testToSymmetricForThreeNodes() {
-        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, FAILED, C, FAILED));
-        NodeConnectivity b = connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK));
-        NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
+        NodeConnectivity a = connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, FAILED));
+        NodeConnectivity b = connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK, C, OK));
+        NodeConnectivity c = connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK));
 
         ClusterGraph symmetric = cluster(A, ImmutableList.of(), a, b, c).toSymmetric();
         assertEquals(FAILED, symmetric.getNodeConnectivity(B).getConnectionStatus(A));
@@ -89,9 +90,9 @@ public class ClusterGraphTest {
 
     @Test
     public void testToSymmetricForThreeNodesWithUnavailableNodeB() {
-        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, FAILED, C, FAILED));
+        NodeConnectivity a = connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, FAILED));
         NodeConnectivity b = unavailable(B);
-        NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, OK, C, OK));
+        NodeConnectivity c = connectivity(C, epoch, ImmutableMap.of(A, OK, B, OK, C, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
         ClusterGraph symmetric = graph.toSymmetric();
@@ -111,9 +112,9 @@ public class ClusterGraphTest {
 
     @Test
     public void testDecisionMaker() {
-        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK));
-        NodeConnectivity b = connectivity(B, ImmutableMap.of(A, FAILED, B, OK, C, OK));
-        NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
+        NodeConnectivity a = connectivity(A, epoch, ImmutableMap.of(A, OK, B, OK, C, OK));
+        NodeConnectivity b = connectivity(B, epoch, ImmutableMap.of(A, FAILED, B, OK, C, OK));
+        NodeConnectivity c = connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
         Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker();
@@ -127,9 +128,9 @@ public class ClusterGraphTest {
         ClusterGraph graph = cluster(
                 A,
                 ImmutableList.of(),
-                connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)),
-                connectivity(B, ImmutableMap.of(A, FAILED, B, OK, C, OK)),
-                connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK))
+                connectivity(A, epoch, ImmutableMap.of(A, OK, B, OK, C, OK)),
+                connectivity(B, epoch, ImmutableMap.of(A, FAILED, B, OK, C, OK)),
+                connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
 
         Optional<NodeRank> failedNode = graph.toSymmetric().findFailedNode();
@@ -139,9 +140,9 @@ public class ClusterGraphTest {
         graph = cluster(
                 A,
                 ImmutableList.of(B),
-                connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)),
-                connectivity(B, ImmutableMap.of(A, OK, B, OK, C, FAILED)),
-                connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK))
+                connectivity(A, epoch, ImmutableMap.of(A, OK, B, OK, C, OK)),
+                connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK, C, FAILED)),
+                connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
         failedNode = graph.toSymmetric().findFailedNode();
         assertFalse(failedNode.isPresent());
@@ -149,9 +150,9 @@ public class ClusterGraphTest {
         graph = cluster(
                 A,
                 ImmutableList.of(),
-                connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)),
-                connectivity(B, ImmutableMap.of(A, OK, B, OK, C, FAILED)),
-                connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK))
+                connectivity(A, epoch, ImmutableMap.of(A, OK, B, OK, C, OK)),
+                connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK, C, FAILED)),
+                connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
         failedNode = graph.toSymmetric().findFailedNode();
         assertTrue(failedNode.isPresent());
@@ -163,9 +164,9 @@ public class ClusterGraphTest {
         ClusterGraph graph = cluster(
                 A,
                 ImmutableList.of(B),
-                connectivity(A, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
+                connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
                 unavailable(B),
-                connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK))
+                connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
         graph = graph.toSymmetric();
 
@@ -176,9 +177,9 @@ public class ClusterGraphTest {
         graph = cluster(
                 A,
                 ImmutableList.of(C),
-                connectivity(A, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
+                connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
                 unavailable(B),
-                connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK))
+                connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
 
         responsiveNode = graph.toSymmetric().findFullyConnectedNode(C);
@@ -190,9 +191,9 @@ public class ClusterGraphTest {
         graph = cluster(
                 A,
                 ImmutableList.of(B),
-                connectivity(A, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
-                connectivity(B, ImmutableMap.of(A, FAILED, B, OK, C, FAILED)),
-                connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK))
+                connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
+                connectivity(B, epoch, ImmutableMap.of(A, FAILED, B, OK, C, FAILED)),
+                connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
         graph = graph.toSymmetric();
 

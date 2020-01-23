@@ -5,7 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.runtime.view.Layout;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +22,20 @@ public class ClusterStateTest {
     @Test
     public void isReady() {
         final String localEndpoint = "a";
+        final long epoch = 1;
+
+        ClusterState invalidClusterState = ClusterState.buildClusterState(
+                localEndpoint,
+                ImmutableList.of(),
+                nodeState("a", epoch, NodeConnectivityType.NOT_READY, OK),
+                nodeState("b", epoch, NodeConnectivityType.CONNECTED, OK)
+        );
+        assertThat(invalidClusterState.isReady()).isFalse();
+    }
+
+    @Test
+    public void isConsistent() {
+        final String localEndpoint = "a";
         final long epoch1 = 1;
         final long epoch2 = 2;
 
@@ -31,7 +45,7 @@ public class ClusterStateTest {
                 nodeState("a", epoch1, OK),
                 nodeState("b", epoch2, OK)
         );
-        assertThat(invalidClusterState.isReady()).isFalse();
+        assertThat(invalidClusterState.isConsistent()).isFalse();
 
         ClusterState validClusterState = ClusterState.buildClusterState(
                 localEndpoint,
@@ -39,7 +53,7 @@ public class ClusterStateTest {
                 nodeState("a", epoch1, OK),
                 nodeState("b", epoch1, OK)
         );
-        assertThat(validClusterState.isReady()).isTrue();
+        assertThat(validClusterState.isConsistent()).isTrue();
     }
 
     /**
@@ -49,19 +63,21 @@ public class ClusterStateTest {
      */
     @Test
     public void testTransformation() {
+        final long epoch = 1;
+
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)))
+                .connectivity(connectivity(A, epoch, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK)))
+                .connectivity(connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .build();
 
         NodeState c = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK)))
+                .connectivity(connectivity(B, epoch, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .build();
 
         ImmutableMap<String, NodeState> nodes = ImmutableMap.of(A, a, B, b, C, c);

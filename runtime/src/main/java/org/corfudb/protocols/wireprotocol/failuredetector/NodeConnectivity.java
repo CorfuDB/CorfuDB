@@ -149,10 +149,12 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
      * @param connectivity connectivity matrix
      * @return NodeConnectivity
      */
-    @VisibleForTesting
-    public static NodeConnectivity connectivity(String endpoint, ImmutableMap<String, ConnectionStatus> connectivity) {
+    public static NodeConnectivity connectivity(
+            String endpoint, long epoch, ImmutableMap<String, ConnectionStatus> connectivity) {
+
         return NodeConnectivity.builder()
                 .endpoint(endpoint)
+                .epoch(epoch)
                 .type(NodeConnectivityType.CONNECTED)
                 .connectivity(connectivity)
                 .build();

@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.management;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
@@ -10,6 +9,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.result.Result;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
@@ -43,13 +43,7 @@ public class PollReport {
      * Current cluster state, collected by a failure detector
      */
     @NonNull
-    private final ClusterState clusterState;
-
-    /**
-     * List of responsive servers that successfully responded to our ping
-     */
-    @NonNull
-    private final ImmutableList<String> pingResponsiveServers;
+    private final Result<ClusterState, IllegalStateException> clusterState;
 
     /**
      * Time spent on collecting this report
@@ -71,7 +65,13 @@ public class PollReport {
      * It doesn't contain nodes answered with WrongEpochException.
      */
     public Set<String> getReachableNodes() {
-        Set<String> connectedNodes =  clusterState.getLocalNodeConnectivity().getConnectedNodes();
+        if (clusterState.isError()) {
+            return ImmutableSet.of();
+        }
+
+        Set<String> connectedNodes = clusterState.get()
+                .getLocalNodeConnectivity()
+                .getConnectedNodes();
         return Sets.difference(connectedNodes, wrongEpochs.keySet());
     }
 
@@ -80,7 +80,13 @@ public class PollReport {
      * to failedNodes list.
      */
     public Set<String> getFailedNodes() {
-        Set<String> failedNodes = clusterState.getLocalNodeConnectivity().getFailedNodes();
+        if (clusterState.isError()) {
+            return ImmutableSet.of();
+        }
+
+        Set<String> failedNodes = clusterState.get()
+                .getLocalNodeConnectivity()
+                .getFailedNodes();
 
         return Sets.difference(failedNodes, wrongEpochs.keySet());
     }
@@ -105,15 +111,5 @@ public class PollReport {
         }
 
         return Optional.empty();
-    }
-
-
-    /**
-     * Check to see if all responsive servers from this {@link PollReport} have been sealed.
-     *
-     * @return true if all responsive servers have been sealed.
-     */
-    public boolean areAllResponsiveServersSealed() {
-        return wrongEpochs.isEmpty() || wrongEpochs.size() == pingResponsiveServers.size();
     }
 }

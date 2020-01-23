@@ -67,11 +67,6 @@ public class ClusterState {
             return false;
         }
 
-        if (!checkEpochs()) {
-            log.info("ClusterState is not consistent: {}", nodes);
-            return false;
-        }
-
         //if at least one node is not ready then entire cluster is not ready to provide correct information
         for (NodeState nodeState : nodes.values()) {
             if (nodeState.getConnectivity().getType() == NodeConnectivityType.NOT_READY) {
@@ -82,7 +77,7 @@ public class ClusterState {
         return true;
     }
 
-    private boolean checkEpochs() {
+    public boolean isConsistent() {
         long currentEpoch = -1;
 
         for (NodeState nodeState : nodes.values()) {
@@ -96,6 +91,7 @@ public class ClusterState {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -106,7 +102,21 @@ public class ClusterState {
         return nodeState.getConnectivity();
     }
 
-    public ImmutableList<String> getPingResponsiveNodes(){
+    /**
+     * Check to see if all responsive servers have been sealed.
+     *
+     * @return true if all responsive servers have been sealed.
+     */
+    public boolean areAllResponsiveServersSealed(Map<String, Long> wrongEpochs) {
+        return wrongEpochs.isEmpty() || wrongEpochs.size() == getPingResponsiveNodes().size();
+    }
+
+    /**
+     * List of responsive servers that successfully responded to our ping
+     *
+     * @return responsive servers
+     */
+    public ImmutableList<String> getPingResponsiveNodes() {
         return ImmutableList.copyOf(getLocalNodeConnectivity().getConnectedNodes());
     }
 

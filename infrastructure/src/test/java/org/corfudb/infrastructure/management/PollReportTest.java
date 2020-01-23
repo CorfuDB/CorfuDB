@@ -13,6 +13,7 @@ import com.google.common.collect.ImmutableMap;
 
 import java.time.Duration;
 
+import org.corfudb.common.result.Result;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.runtime.view.Layout;
@@ -31,11 +32,9 @@ public class PollReportTest {
         );
 
         final long epoch = 1;
-        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a"))
                 .wrongEpochs(ImmutableMap.of("a", epoch))
-                .clusterState(clusterState)
+                .clusterState(Result.ok(clusterState))
                 .elapsedTime(Duration.ZERO)
                 .build();
 
@@ -58,9 +57,8 @@ public class PollReportTest {
         final long epoch = 1;
         final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
-                .clusterState(clusterState)
+                .clusterState(Result.ok(clusterState))
                 .elapsedTime(Duration.ZERO)
                 .build();
 
@@ -86,11 +84,9 @@ public class PollReportTest {
         );
 
         final long epoch = 1;
-        final Duration duration = Duration.ofSeconds(1);
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("b", epoch))
-                .clusterState(clusterState)
+                .clusterState(Result.ok(clusterState))
                 .elapsedTime(Duration.ZERO)
                 .build();
 
@@ -113,9 +109,8 @@ public class PollReportTest {
 
         final long epoch = 1;
         PollReport pollReport = PollReport.builder()
-                .pingResponsiveServers(ImmutableList.of("a", "b", "c"))
                 .wrongEpochs(ImmutableMap.of("a", epoch, "b", epoch, "c", epoch))
-                .clusterState(clusterState)
+                .clusterState(Result.ok(clusterState))
                 .elapsedTime(Duration.ZERO)
                 .build();
 

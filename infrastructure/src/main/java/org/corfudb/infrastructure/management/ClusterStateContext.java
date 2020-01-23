@@ -34,10 +34,10 @@ public class ClusterStateContext {
      *
      * @param layout Snapshot layout.
      */
-    public void refreshClusterView(@NonNull Layout layout, @NonNull PollReport report) {
+    public void refreshClusterView(@NonNull Layout layout, @NonNull ClusterState clusterState) {
         log.trace("Refresh cluster view, layout: {}", layout);
 
-        clusterView.set(report.getClusterState());
+        clusterView.set(clusterState);
     }
 
     /**
