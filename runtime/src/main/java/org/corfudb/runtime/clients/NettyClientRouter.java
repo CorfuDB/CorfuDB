@@ -230,22 +230,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     /**
-     * Gets a client that matches a particular type.
-     *
-     * @param clientType The class of the client to match.
-     * @param <T>        The type of the client to match.
-     * @return The first client that matches that type.
-     * @throws NoSuchElementException If there are no clients matching that type.
-     */
-    public <T extends IClient> T getClient(Class<T> clientType) {
-        return clientList.stream()
-                .filter(clientType::isInstance)
-                .findFirst()
-                .map(client -> ClassUtils.cast(client, clientType))
-                .orElseThrow(() -> new IllegalStateException("Client not found by type: " + clientType));
-    }
-
-    /**
      * {@inheritDoc}.
      *
      * @deprecated The router automatically starts now, so this function call is no
