@@ -69,6 +69,12 @@ public class ManagementServer extends AbstractServer {
     private final Orchestrator orchestrator;
 
     /**
+     * HandlerMethod for this server.
+     */
+    @Getter
+    private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
      * System down handler to break out of live-locks if the runtime cannot reach the cluster for a
      * certain amount of time. This handler can be invoked at anytime if the Runtime is stuck and
      * cannot make progress on an RPC call after trying for more than
@@ -101,16 +107,28 @@ public class ManagementServer extends AbstractServer {
     }
 
     @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        if (corfuMsgType.equals(CorfuMsgType.NODE_STATE_REQUEST)) {
-            return heartbeatThread;
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (msg.getMsgType() == CorfuMsgType.NODE_STATE_REQUEST) {
+            heartbeatThread.submit(() -> getHandler().handle(msg, ctx, r));
+        } else {
+            executor.submit(() -> getHandler().handle(msg, ctx, r));
         }
-        return executor;
     }
 
+    /**
+     * Management Server shutdown:
+     * Shuts down the fault detector service.
+     */
     @Override
-    public List<ExecutorService> getExecutors() {
-        return Arrays.asList(executor, heartbeatThread);
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
+        heartbeatThread.shutdown();
+        orchestrator.shutdown();
+        managementAgent.shutdown();
+
+        // Shut down the Corfu Runtime.
+        corfuRuntime.cleanup(CorfuRuntime::shutdown);
     }
 
     /**
@@ -169,13 +187,6 @@ public class ManagementServer extends AbstractServer {
         params.setSystemDownHandler(runtimeSystemDownHandler);
         return runtime;
     }
-
-    /**
-     * Handler for this server.
-     */
-    @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
     private boolean isBootstrapped(CorfuMsg msg) {
         if (serverContext.getManagementLayout() == null) {
@@ -434,19 +445,5 @@ public class ManagementServer extends AbstractServer {
         }
         r.sendResponse(ctx, msg,
                 CorfuMsgType.LAYOUT_RESPONSE.payloadMsg(serverContext.getManagementLayout()));
-    }
-
-    /**
-     * Management Server shutdown:
-     * Shuts down the fault detector service.
-     */
-    @Override
-    public void shutdown() {
-        super.shutdown();
-        orchestrator.shutdown();
-        managementAgent.shutdown();
-
-        // Shut down the Corfu Runtime.
-        corfuRuntime.cleanup(CorfuRuntime::shutdown);
     }
 }
