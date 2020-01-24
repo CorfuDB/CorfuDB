@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogStatsResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -484,18 +485,14 @@ public class AddressSpaceView extends AbstractView {
                 e -> Utils.getAllTails(e.getLayout(), runtime));
     }
 
-    public Long getLogSize(long start, long end) {
+    public LogStatsResponse getLogStats(long startAddress, long endAddress) {
         return layoutHelper(
-                e -> Utils.getLogSize(e.getLayout(), runtime, start, end));
+                e -> Utils.getLogStats(e.getLayout(), runtime, startAddress, endAddress));
     }
 
-    public Long getLogSize() {
+    public LogStatsResponse getLogStats() {
         long tail = runtime.getAddressSpaceView().getLogTail();
-        if (tail < 0) {
-            return new Long(0);
-        }
-
-        return getLogSize(runtime.getAddressSpaceView().getTrimMark().getSequence(), tail);
+        return getLogStats(runtime.getAddressSpaceView().getTrimMark().getSequence(), tail);
     }
 
     /**

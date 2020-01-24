@@ -263,11 +263,17 @@ public class LogSizeQuotaIT extends AbstractIT {
         CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
         IStreamView sv = rt.getStreamsView().get(UUID.randomUUID());
         AddressSpaceView addressSV = rt.getAddressSpaceView();
+
+        //nothing written to the log yet,  log size and and quotaUsed should be zero
+        assertThat(addressSV.getLogStats().getUsedQuota() == 0);
+        assertThat(addressSV.getLogStats().getLogSize() == 0);
+
+
         final long numEntries = 1000;
         generateData(sv, numEntries);
 
         //remember current log size and log tail
-        long logSize0 = addressSV.getLogSize();
+        long logSize0 = addressSV.getLogStats().getLogSize();
         long tail0 = addressSV.getLogTail();
 
         //enforce a segment split by adding a new node
@@ -286,22 +292,26 @@ public class LogSizeQuotaIT extends AbstractIT {
         //generate more data that will be put in the new segment
         generateData(sv, numEntries);
 
-        log.info("logsize0: " + logSize0 + " logsize: " + addressSV.getLogSize());
-        assertThat(logSize0 == addressSV.getLogSize(0, tail0));
+        log.info("logsize0: " + logSize0 + " logsize: " + addressSV.getLogStats().getLogSize());
+        assertThat(logSize0 == addressSV.getLogStats(0, tail0).getLogSize());
 
         //the log size of the second segment
-        long logSize1 = addressSV.getLogSize(tail0 + 1, addressSV.getLogTail());
-        assertThat((logSize0  + logSize1) == addressSV.getLogSize());
+        long logSize1 = addressSV.getLogStats(tail0 + 1, addressSV.getLogTail()).getLogSize();
+        assertThat((logSize0  + logSize1) == addressSV.getLogStats().getLogSize());
 
         //tail0 and endCurrent tail will cover both segments.
-        assertThat(addressSV.getLogSize() == addressSV.getLogSize(tail0, addressSV.getLogTail()));
+        assertThat(addressSV.getLogStats().getLogSize() == addressSV.getLogStats(tail0, addressSV.getLogTail()).getLogSize());
 
         final int negative = -1;
         final int small = 100;
         final int big = 1000;
         //Given endAddress as negative number, get size = 0;
-        assertThat(addressSV.getLogSize(negative, small)== 0);
-        assertThat(addressSV.getLogSize(small, negative) == 0);
-        assertThat(addressSV.getLogSize(big, small) == 0);
+        assertThat(addressSV.getLogStats(negative, small).getLogSize() == 0);
+        assertThat(addressSV.getLogStats(small, negative).getLogSize() == 0);
+        assertThat(addressSV.getLogStats(big, small).getLogSize() == 0);
+        assertThat(addressSV.getLogStats().getLogSize() == addressSV.getLogStats().getUsedQuota());
+
+        //testing endAddress is beyond the log tail.
+        assertThat(addressSV.getLogStats().getLogSize() == addressSV.getLogStats(0, addressSV.getLogTail() + small).getLogSize());
     }
 }

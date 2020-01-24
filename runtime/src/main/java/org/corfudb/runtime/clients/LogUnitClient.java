@@ -20,6 +20,7 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.LogStatsResponse;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
@@ -30,7 +31,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.protocols.wireprotocol.SegmentSizeRequest;
+import org.corfudb.protocols.wireprotocol.LogStatsRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
@@ -227,23 +228,15 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Get a log server's quota used in bytes.
+     * Get log stats.
      *
-     * @return a CompletableFuture for the starting address
+     * @return a CompletableFuture for the address range
      */
-    public CompletableFuture<Long> getQuotaUsed() {
-        return sendMessageWithFuture(CorfuMsgType.USED_QUOTA_REQUEST.msg());
+    public CompletableFuture<LogStatsResponse> getLogStats(long startAddress, long endAddress) {
+        LogStatsRequest req = new LogStatsRequest(startAddress, endAddress);
+        return sendMessageWithFuture(CorfuMsgType.LOG_STATS_REQUEST.payloadMsg(req));
     }
 
-    /**
-     * Get the size of a segment in bytes.
-     *
-     * @return a CompletableFuture for the starting address
-     */
-    public CompletableFuture<Long> getSegmentSize(long startAddress, long endAddress) {
-        SegmentSizeRequest req = new SegmentSizeRequest(startAddress, endAddress);
-        return sendMessageWithFuture(CorfuMsgType.SEGMENT_SIZE_REQUEST.payloadMsg(req));
-    }
 
     /**
      * Request for known addresses in the specified range.

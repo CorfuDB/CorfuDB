@@ -217,25 +217,13 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     }
 
     /**
-     * Handle a LOG_SIZE_RESPONSE message
+     * Handle a LOG_STATS__RESPONSE message
      * @param msg   Incoming Message
      * @param ctx   Context
      * @param r     Router
      */
-    @ClientHandler(type=CorfuMsgType.USED_QUOTA_RESPONSE)
-    private static Object handleLogSizeResponse(CorfuPayloadMsg<Long> msg,
-                                                 ChannelHandlerContext ctx, IClientRouter r) {
-        return msg.getPayload();
-    }
-
-    /**
-     * Handle a SEGMENT_SIZE_RESPONSE message
-     * @param msg   Incoming Message
-     * @param ctx   Context
-     * @param r     Router
-     */
-    @ClientHandler(type=CorfuMsgType.SEGMENT_SIZE_RESPONSE)
-    private static Object handleSegmentSizeResponse(CorfuPayloadMsg<Long> msg,
+    @ClientHandler(type=CorfuMsgType.LOG_STATS_RESPONSE)
+    private static Object handleLogStatsResponse(CorfuPayloadMsg<Long> msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

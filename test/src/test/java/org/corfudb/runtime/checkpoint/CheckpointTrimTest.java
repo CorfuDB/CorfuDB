@@ -41,7 +41,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         AddressSpaceView sv = getRuntime().getAddressSpaceView();
-        long size0 = sv.getLogSize(sv.getTrimMark().getSequence(), sv.getLogTail());
+        long size0 = sv.getLogStats(sv.getTrimMark().getSequence(), sv.getLogTail()).getLogSize();
         log.info("init size:" + size0);
 
         long numEntries = NUM_ENTRIES;
@@ -51,7 +51,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         }
 
         //The log size after putting NUM_ENTRIES
-        long size1 = sv.getLogSize();
+        long size1 = sv.getLogStats().getLogSize();
         log.info("put " + numEntries + " entries logsize:" + size1 + " trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
         for (long i = 0; i < numEntries; i++) {
@@ -59,7 +59,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         }
 
         //The log size with duplicate key-value
-        long size2 = sv.getLogSize();
+        long size2 = sv.getLogStats().getLogSize();
         log.info("put another " + numEntries + " entries logsize : " + size2);
         log.info("trimMark:" + sv.getTrimMark().getSequence() + " tail:" + sv.getLogTail());
         assertThat(size2 / (size1 - size0) >= 2);
@@ -69,7 +69,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         mcw.addMap((CorfuTable) testMap);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
-        long size3 = sv.getLogSize();
+        long size3 = sv.getLogStats().getLogSize();
         log.info("after writing checkpoint logsize: " + size3);
         log.info("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
@@ -80,14 +80,14 @@ public class CheckpointTrimTest extends AbstractViewTest {
         sv.prefixTrim(checkpointAddress);
 
 
-        long size4 = sv.getLogSize();
+        long size4 = sv.getLogStats().getLogSize();
         log.info("after perfixTrim logsize " + size4);
 
         sv.gc();
         sv.invalidateServerCaches();
         sv.invalidateClientCache();
 
-        long size5 = getRuntime ().getAddressSpaceView().getLogSize ();
+        long size5 = getRuntime ().getAddressSpaceView().getLogStats().getLogSize ();
         log.info("after gc logsize " + size5);
         log.info("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 

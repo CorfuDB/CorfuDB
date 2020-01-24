@@ -125,10 +125,18 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.write(0, null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat (client.getTrimMark().get()==0);
-        assertThat(client.getQuotaUsed().get() > testString.length);
-        long size0 = client.getSegmentSize(client.getTrimMark().get(), client.getLogTail().get().getLogTail()).get();
+
+        long startAddress = 0;
+        long endAddress = client.getTrimMark().get();
+        assertThat(client.getLogStats(startAddress, endAddress).get().getUsedQuota() > testString.length);
+
+        startAddress = endAddress;
+        endAddress = client.getLogTail().get().getLogTail();
+        long size0 = client.getLogStats(startAddress, endAddress).get().getLogSize();
         assertThat ( size0 > testString.length);
-        long size1 = client.getSegmentSize(client.getTrimMark().get(), client.getLogTail().get().getLogTail() + number).get();
+
+        //endAddress is beyond the log tail
+        long size1 = client.getLogStats(startAddress, endAddress + number).get().getLogSize();
         assertThat(size0 == size1);
     }
 

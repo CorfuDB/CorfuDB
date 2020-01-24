@@ -5,10 +5,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import lombok.Getter;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.SegmentSizeRequest;
+import org.corfudb.protocols.wireprotocol.LogStatsResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -158,4 +157,11 @@ public interface StreamLog {
      * @return the space for the segment requested
      */
     long getSegmentSize(long startAddress, long endAddress);
+
+    default LogStatsResponse getLogStats(long startAddress, long endAddress) {
+        LogStatsResponse logStats = new LogStatsResponse(getQuota().getUsed(),
+                getQuota().getLimit(),
+                getSegmentSize(startAddress, endAddress));
+        return logStats;
+    }
 }

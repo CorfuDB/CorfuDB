@@ -26,7 +26,7 @@ import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.protocols.wireprotocol.SegmentSizeRequest;
+import org.corfudb.protocols.wireprotocol.LogStatsRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.LogUnitException;
@@ -178,17 +178,17 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
-    @ServerHandler(type = CorfuMsgType.USED_QUOTA_REQUEST)
+    /*@ServerHandler(type = CorfuMsgType.USED_QUOTA_REQUEST)
     public void handleQuotaUsedRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleUsedQuotaRequest: received a request {}", msg);
         r.sendResponse(ctx, msg, CorfuMsgType.USED_QUOTA_RESPONSE.payloadMsg(streamLog.getQuota().getUsed()));
-    }
+    }*/
 
-    @ServerHandler(type = CorfuMsgType.SEGMENT_SIZE_REQUEST)
-    public void handleSegmentSizeRequest(CorfuPayloadMsg<SegmentSizeRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.LOG_STATS_REQUEST)
+    public void handleSegmentSizeRequest(CorfuPayloadMsg<LogStatsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleSegmentSizeRequest: received a request {}", msg);
-        SegmentSizeRequest req = msg.getPayload();
-        r.sendResponse(ctx, msg, CorfuMsgType.SEGMENT_SIZE_RESPONSE.payloadMsg(streamLog.getSegmentSize(req.getStartAddress(), req.getEndAddress())));
+        LogStatsRequest req = msg.getPayload();
+        r.sendResponse(ctx, msg, CorfuMsgType.LOG_STATS_RESPONSE.payloadMsg(streamLog.getLogStats(req.getStartAddress(), req.getEndAddress())));
     }
 
     /**

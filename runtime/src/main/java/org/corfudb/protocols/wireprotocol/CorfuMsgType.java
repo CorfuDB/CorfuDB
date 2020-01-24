@@ -61,9 +61,6 @@ public enum CorfuMsgType {
     MULTIPLE_READ_REQUEST(35, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
 
-    USED_QUOTA_REQUEST(39, TypeToken.of(CorfuMsg.class)),
-    USED_QUOTA_RESPONSE(40, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-
     TAIL_REQUEST(41, new TypeToken<CorfuPayloadMsg<TailsRequest>>(){}),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
     COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
@@ -114,8 +111,8 @@ public enum CorfuMsgType {
 
     KNOWN_ADDRESS_RESPONSE(87, new TypeToken<CorfuPayloadMsg<KnownAddressResponse>>() {}),
 
-    SEGMENT_SIZE_REQUEST(90, new TypeToken<CorfuPayloadMsg<SegmentSizeRequest>>() {}),
-    SEGMENT_SIZE_RESPONSE(91, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    LOG_STATS_REQUEST(90, new TypeToken<CorfuPayloadMsg<LogStatsRequest>>() {}),
+    LOG_STATS_RESPONSE(91, new TypeToken<CorfuPayloadMsg<LogStatsResponse>>(){}),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
     ;

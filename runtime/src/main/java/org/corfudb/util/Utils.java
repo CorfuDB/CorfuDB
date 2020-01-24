@@ -4,6 +4,7 @@ import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogStatsResponse;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -17,6 +18,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+
+import static org.corfudb.runtime.view.Address.MAX;
 
 /**
  * Created by crossbach on 5/22/15.
@@ -147,14 +151,12 @@ public class Utils {
      * @param endAddress endAddress of log for query, non-negarive and should not be smaller than startAddress
      * @return log size. It is the sum size of log files that has overlap with startAddress and endAddress
      */
-    public static long getLogSize(Layout layout, CorfuRuntime runtime, long startAddress, long endAddress) {
+    public static LogStatsResponse getLogStats(Layout layout, CorfuRuntime runtime, long startAddress, long endAddress) {
         long size = 0;
-        long currentEnd = 0;
+        long usedQuota = 0;
+        long limit = 0;
 
-        if (endAddress < startAddress) {
-            log.error("endAdress {} should be not smaller than startAddress {}", endAddress, startAddress);
-            return new Long(0);
-        }
+        LogStatsResponse logStats = null;
 
         // It is the sum of segments' sizes. We only handle CHAIN_REPLICATION.
         // As long as the segment has overlap address space with the start and end
@@ -164,24 +166,48 @@ public class Utils {
                 throw new UnsupportedOperationException();
             }
 
-            //if segment.end = -1 , it means the end of the log. We should consider that too.
-            if (segment.getEnd() > 0 && segment.getEnd() <= startAddress || endAddress <= segment.getStart())
+            // if segment.end -1 , it means the segment holds all logs from segment.start.
+            // Enforce a query even there are no logs to get the quota information.
+            if (logStats != null && (segment.getEnd() > 0 && segment.getEnd() <= startAddress || endAddress <= segment.getStart()))
                     continue;
-
-            currentEnd = endAddress;
-            if (segment.getEnd() > 0)
-                currentEnd = Long.min(endAddress, segment.getEnd() -1);
 
             // It uses the first node in the layout to query the log size.
             Layout.LayoutStripe stripe = segment.getStripes().get(0);
-            size += CFUtils.getUninterruptibly(runtime.getLayoutView()
+            logStats = CFUtils.getUninterruptibly(runtime.getLayoutView()
                     .getRuntimeLayout(layout)
                     .getLogUnitClient(stripe.getLogServers().get(0))
-                    .getSegmentSize(startAddress, currentEnd));
-            startAddress = currentEnd + 1;
+                    .getLogStats(Math.max(startAddress, segment.getStart()),
+                            segment.getEnd() > 0 ? Math.min(segment.getEnd(), endAddress) : endAddress));
+            size +=  logStats.getLogSize();
+
+            //update the quota information with the server with the max usedQuota
+            if (usedQuota < logStats.getUsedQuota()) {
+                limit = logStats.getLimit();
+                usedQuota = Math.max(logStats.getUsedQuota(), usedQuota);
+            }
         }
 
-        return size;
+        logStats = new LogStatsResponse(usedQuota, limit, size);
+        return logStats;
+    }
+
+    /**
+     * Get log size.
+     *
+     * @param layout Latest layout to query log tail from Log Unit
+     * @param runtime Runtime
+     * @param startAddress startAddress of log for query, non-negative
+     * @param endAddress endAddress of log for query, non-negarive and should not be smaller than startAddress
+     * @return log size. It is the sum size of log files that has overlap with startAddress and endAddress
+     */
+    public static long getLogSize(Layout layout, CorfuRuntime runtime, long startAddress, long endAddress) {
+        LogStatsResponse  logStats = getLogStats(layout, runtime, startAddress, endAddress);
+        if (logStats == null) {
+            log.error("could not get logStats");
+            return 0;
+        }
+
+        return logStats.getLogSize();
     }
 
     /**
