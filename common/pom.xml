@@ -13,13 +13,29 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
+        <dropwizard.metrics.version>4.1.2</dropwizard.metrics.version>
     </properties>
 
     <dependencies>
         <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
+            <version>${dropwizard.metrics.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-jvm</artifactId>
+            <version>${dropwizard.metrics.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-jmx</artifactId>
+            <version>${dropwizard.metrics.version}</version>
+        </dependency>
+        <dependency>
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient_dropwizard</artifactId>
-            <version>0.5.0</version>
+            <version>0.8.0</version>
         </dependency>
         <dependency>
             <groupId>io.prometheus</groupId>
