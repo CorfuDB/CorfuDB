@@ -172,7 +172,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         }
 
         verifyData(recordMap, cache);
-        log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.getCacheEntriesBytes());
+        log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
         long entrySize = cache.byteSize() / cache.size();
 
         cache.invalidateUpTo(address - numRemains);
@@ -180,7 +180,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
         // this assume that the all conflickstreams has the same size of the parameters.
         assertThat(entrySize == cache.byteSize() / cache.size());
-        log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.getCacheEntriesBytes());
+        log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
         cache.invalidateUpTo(address);
         assertThat(cache.size() == 0);
     }

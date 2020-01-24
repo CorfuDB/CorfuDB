@@ -50,10 +50,7 @@ public class SequencerServerCache {
     private final PriorityQueue<ConflictTxStream> cacheEntries; //sorted according to address
 
     @Getter
-    private final int cacheSize; // the max number of entries
-
-    @Getter
-    public long cacheEntriesBytes; // the memorySpace used.
+    private final int cacheSize; // the max number of entries in SequencerServerCache
 
     /**
      * A "wildcard" representing the maximal update timestamp of
@@ -74,7 +71,10 @@ public class SequencerServerCache {
     /* It is used to calculate the size of ServerCache.
      * Each entry relates two pointers used by HashMap, one pointer in PriorityQueue.
      */
-    static final int ENTRY_OVERHEAD = 24;
+    static final int Entry_Overhead = 24;
+
+    //As calculating object size is expensive, used the value calculated by deepSize
+    static final int ConflictTxStream_Obj_Size = 80; //by calculated by deepSize
 
     /**
      * The cache limited by size.
@@ -87,8 +87,7 @@ public class SequencerServerCache {
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
         cacheConflictKeys = new HashMap<> ();
-        cacheEntries = new PriorityQueue<> (cacheSize, Comparator.comparingLong((ConflictTxStream a) -> a.txVersion));
-        cacheEntriesBytes = 0;
+        cacheEntries = new PriorityQueue<> (cacheSize, Comparator.comparingLong(a -> a.txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
     }
@@ -124,17 +123,16 @@ public class SequencerServerCache {
             return 0;
         }
 
-        int i = 0;
-        while (!cacheEntries.isEmpty() && cacheEntries.peek().txVersion == firstEntry.txVersion) {
+        int numEntries = 0;
+        while (firstAddress() == firstEntry.txVersion) {
             ConflictTxStream entry = cacheEntries.poll();
             cacheConflictKeys.remove(entry);
-            cacheEntriesBytes -= entry.size();
-            i++;
+            numEntries ++;
         }
 
-        log.trace("Evict {} entries", i);
+        log.trace("Evict {} entries", numEntries);
         maxConflictWildcard = Math.max(maxConflictWildcard, firstEntry.txVersion);
-        return i;
+        return numEntries;
     }
 
     /**
@@ -146,8 +144,8 @@ public class SequencerServerCache {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
         int entries = 0;
         int pqEntries = 0;
-        while(Address.isAddress(firstAddress()) && firstAddress() < trimMark) {
-            pqEntries +=invalidateFirst();
+        while (Address.isAddress(firstAddress()) && firstAddress() < trimMark) {
+            pqEntries += invalidateFirst();
             entries++;
         }
         log.info("Invalidated entries {} addresses {}", pqEntries, entries);
@@ -164,11 +162,14 @@ public class SequencerServerCache {
 
     /**
      * The memory space used by the entries and also the space used by
-     * priorityque, hashmap to store the pointers
+     * priority queue and hashmap to store the pointers
      * @return the memory space used in bytes:
      */
     public long byteSize() {
-        return cacheEntriesBytes + this.size()*ENTRY_OVERHEAD;
+        log.debug("the cache has {} entries,  the object size used {}, calculated by beepSize {}",
+                size(), ConflictTxStream_Obj_Size,
+                cacheEntries.isEmpty() ? 0 : MetricsUtils.sizeOf.deepSizeOf(cacheEntries.peek()));
+        return size()*(Entry_Overhead + ConflictTxStream_Obj_Size);
     }
 
     /*
@@ -179,9 +180,10 @@ public class SequencerServerCache {
     public boolean put(ConflictTxStream conflictStream) {
 
         Long val = cacheConflictKeys.get(conflictStream);
-        if (val != null && val >= conflictStream.txVersion) {
-            log.error("For key {}, the value {} is not smaller  than the expected value {} or maxWildCard",
-                    conflictStream, cacheConflictKeys.get(conflictStream), conflictStream.txVersion, maxConflictWildcard);
+        if (val != null && val > conflictStream.txVersion) {
+            log.error("For key {} the new entry address {} is smaller than the entry " +
+                            "address {} in cache. There is a sequencer regression.",
+                    conflictStream, conflictStream.txVersion, cacheConflictKeys.get(conflictStream));
             return false;
         }
 
@@ -191,7 +193,6 @@ public class SequencerServerCache {
 
         cacheEntries.add(conflictStream);
         cacheConflictKeys.put(conflictStream, conflictStream.txVersion);
-        cacheEntriesBytes += conflictStream.size();
         return true;
     }
 
@@ -218,10 +219,6 @@ public class SequencerServerCache {
         @Override
         public String toString() {
             return streamId.toString() + conflictParam;
-        }
-
-        public long size() {
-            return MetricsUtils.sizeOf.deepSizeOf(this);
         }
     }
 }

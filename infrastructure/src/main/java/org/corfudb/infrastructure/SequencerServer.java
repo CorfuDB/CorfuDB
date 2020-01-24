@@ -256,7 +256,8 @@ public class SequencerServer extends AbstractServer {
             // for each key pair, check for conflict; if not present, check against the wildcard
             for (byte[] conflictParam : conflictParamSet) {
 
-                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(), conflictParam, Address.NON_ADDRESS));
+                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(),
+                        conflictParam, Address.NON_ADDRESS));
 
                 log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
 
@@ -703,7 +704,7 @@ public class SequencerServer extends AbstractServer {
 
         public static Config parse(Map<String, Object> opts) {
             int cacheSize = (int)(opts.containsKey("--sequencer-cache-size") ?
-            Long.parseLong((String)opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
+            Integer.parseInt((String)opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
             return Config.builder()
                     .cacheSize(cacheSize)
                     .build();
