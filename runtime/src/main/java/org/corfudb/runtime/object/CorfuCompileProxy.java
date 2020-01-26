@@ -193,8 +193,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                         o -> o.syncObjectUnsafe(timestamp),
                         o -> accessMethod.access(o));
             } catch (TrimmedException te) {
-                log.warn("accessInner: Encountered a trim exception while accessing version {} on attempt {}",
-                        timestamp, x);
+                log.info("accessInner: Encountered trimmed address space " +
+                                "while accessing version {} on attempt {}", timestamp, x);
                 // We encountered a TRIM during sync, reset the object
                 underlyingObject.update(o -> {
                     o.resetUnsafe();
@@ -296,8 +296,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                             + " and we don't have a copy");
                 });
             } catch (TrimmedException ex) {
-                log.warn("getUpcallResultInner: Encountered a trim exception while accessing version {} on attempt {}",
-                        timestamp, x);
+                log.info("getUpcallResultInner: Encountered trimmed address space " +
+                        "while accessing version {} on attempt {}", timestamp, x);
                 // We encountered a TRIM during sync, reset the object
                 underlyingObject.update(o -> {
                     o.resetUnsafe();
