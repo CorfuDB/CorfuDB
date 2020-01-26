@@ -172,7 +172,7 @@ public class VmManager {
                         ManagedEntityType.VIRTUAL_MACHINE.typeName, name
                 );
                 return Optional.ofNullable(vm);
-            } catch (RemoteException e) {
+            } catch (Exception e) {
                 throw new UniverseException("Can't find a vm: " + vmName, e);
             }
         });

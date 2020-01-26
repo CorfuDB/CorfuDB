@@ -79,7 +79,7 @@ public class CorfuServerParams implements NodeParams {
     private final String dockerImage = DOCKER_IMAGE_NAME;
 
     @Default
-    private final int logSizeQuotaPercentage = 100;
+    private final double logSizeQuotaPercentage = 100;
 
     @Override
     public String getName() {
