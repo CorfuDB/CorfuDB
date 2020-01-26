@@ -492,6 +492,8 @@ public class CorfuTable<K ,V> implements
 
     /**
      * Present the content of a {@link CorfuTable} via the {@link Stream} interface.
+     * Because the stream can point to other resources managed off-heap, its necessary
+     * to explicitly close it after consumption.
      *
      * @return stream of entries
      */
