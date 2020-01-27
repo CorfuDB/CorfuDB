@@ -14,6 +14,7 @@ import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Property;
 import net.jqwik.api.Provide;
+import net.jqwik.api.ShrinkingMode;
 import net.jqwik.api.constraints.AlphaChars;
 import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
@@ -21,6 +22,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.RandomStringUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.PersistedStreamingMap.RocksDbIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -32,7 +34,10 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.jupiter.api.Assertions;
 import org.rocksdb.Env;
 import org.rocksdb.Options;
+import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 import org.rocksdb.SstFileManager;
 
 import java.io.InvalidObjectException;
@@ -42,6 +47,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -119,6 +125,14 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         public final String payload;
     }
 
+    private PersistedStreamingMap<String, String> setupMap() {
+        final Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap");
+        final Options options = new Options().setCreateIfMissing(true);
+        return new PersistedStreamingMap<>(
+                persistedCacheLocation, options,
+                new PojoSerializer(String.class), getRuntime());
+    }
+
     private CorfuTable<String, String> setupTable() {
         final Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap");
         final Options options = new Options().setCreateIfMissing(true);
@@ -152,7 +166,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
      *
      * @throws RocksDBException should not be thrown
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void fileSystemLimit() throws Exception {
         resetTests();
 
@@ -194,7 +208,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Ensure disk-backed table serialization and deserialization works as expected.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void customSerializer() {
         resetTests();
         final Options options =
@@ -229,7 +243,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Non-transactional property based test that does puts followed by scan and filter.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void nonTxPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -248,7 +262,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Transactional property based test that does puts followed by scan and filter.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void txPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -264,7 +278,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Non-transactional property based test that does puts followed by gets and removes.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void nonTxPutGetRemove(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -281,7 +295,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Transactional property based test that does puts followed by gets and removes.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void txPutGetRemove(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -302,7 +316,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Non-transactional property based test that does inserts followed by removes.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void nonTxInsertRemove(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -320,7 +334,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Transactional property based test that does inserts followed by removes.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void txInsertRemove(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -338,7 +352,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Non-transactional property based test that does inserts followed by clear.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void nonTxInsertClear(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -355,7 +369,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     /**
      * Transactional property based test that does inserts followed by clear.
      */
-    @Property(tries = NUM_OF_TRIES)
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
     void txInsertClear(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
@@ -410,6 +424,32 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                         .setName("event_" + idx)
                         .setEventTime(idx)
                         .build());
+    }
+
+    /**
+     * Ensure that iterators behaves correctly once we consume all the data.
+     */
+    @Property(tries = NUM_OF_TRIES, shrinking = ShrinkingMode.OFF)
+    void iteratorEndSemantics(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+
+        try (final PersistedStreamingMap<String, String> persistedStreamingMap = setupMap()) {
+            executeTx(() -> intended.forEach(value -> persistedStreamingMap.put(value, value)));
+
+            final PersistedStreamingMap<String, String>.RocksDbIterator rocksDbIterator =
+                    persistedStreamingMap.newRocksDbIterator();
+            final Set<String> values = Streams.stream(rocksDbIterator).map(Map.Entry::getValue).collect(Collectors.toSet());
+            Assertions.assertEquals(values, intended);
+            while (rocksDbIterator.hasNext()) {
+                rocksDbIterator.next();
+            }
+
+            // Make sure that hasNext() is idempotent.
+            Assertions.assertFalse(rocksDbIterator.hasNext());
+
+            // Make sure that the correct exception is thrown.
+            Assertions.assertThrows(NoSuchElementException.class, rocksDbIterator::next);
+        }
     }
 
     /**

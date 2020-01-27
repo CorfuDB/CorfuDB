@@ -109,9 +109,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
                         serializer.deserialize(Unpooled.wrappedBuffer(iterator.value()), corfuRuntime));
                 // Advance the underlying iterator.
                 iterator.next();
-            } else {
-                // If there is no more elements to consume, we should release the resources.
-                iterator.close();
             }
 
             return next != null;
@@ -309,10 +306,11 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     }
 
     /**
-     * {@inheritDoc}
+     * Return a new iterator that iterates over a data snapshot.
+     *
+     * @return snapshot iterator
      */
-    @Override
-    public Stream<Entry<K, V>> entryStream() {
+    protected RocksDbIterator newRocksDbIterator() {
         final ReadOptions readOptions = new ReadOptions();
         // If ReadOptions.snapshot is given, the iterator will return data as of the snapshot.
         // If it is nullptr, the iterator will read from an implicit snapshot as of the time the
@@ -320,7 +318,15 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         readOptions.setSnapshot(null);
         final RocksIterator rocksIterator = rocksDb.newIterator(readOptions);
         rocksIterator.seekToFirst();
-        return Streams.stream(new RocksDbIterator(rocksIterator));
+        return new RocksDbIterator(rocksIterator);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Stream<Entry<K, V>> entryStream() {
+        return Streams.stream(newRocksDbIterator());
     }
 
     /**
