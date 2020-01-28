@@ -106,8 +106,9 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
     void verifyData(HashMap<ConflictTxStream, Long> recordMap, SequencerServerCache cache) {
         for (ConflictTxStream oldKey : recordMap.keySet()) {
             long oldAddress = oldKey.txVersion;
-            if (oldAddress < cache.firstAddress())
+            if (oldAddress < cache.firstAddress()) {
                 continue;
+            }
             ConflictTxStream key = new ConflictTxStream(oldKey.getStreamId(), oldKey.getConflictParam(), 0);
             log.debug("address " + cache.getIfPresent(key) + " expected " + oldAddress);
             assertThat(cache.getIfPresent(key) == oldAddress);
@@ -141,9 +142,9 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
         verifyData(recordMap, cache);
 
-        cache.invalidateUpTo(address - 1);
+        cache.invalidateSmallestTxVersion(address - 1);
         assertThat(cache.size() == 1);
-        cache.invalidateUpTo(address);
+        cache.invalidateSmallestTxVersion(address);
         assertThat(cache.size() == 0);
     }
 
@@ -175,13 +176,13 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
         long entrySize = cache.byteSize() / cache.size();
 
-        cache.invalidateUpTo(address - numRemains);
+        cache.invalidateSmallestTxVersion(address - numRemains);
         assertThat(cache.size() == numRemains);
 
         // this assume that the all conflickstreams has the same size of the parameters.
         assertThat(entrySize == cache.byteSize() / cache.size());
         log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
-        cache.invalidateUpTo(address);
+        cache.invalidateSmallestTxVersion(address);
         assertThat(cache.size() == 0);
     }
 

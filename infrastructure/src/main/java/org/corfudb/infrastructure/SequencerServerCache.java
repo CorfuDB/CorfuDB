@@ -15,11 +15,6 @@ import java.util.UUID;
 /**
  * Sequencer server cache.
  * Contains transaction conflict-resolution data structures.
- * The SequencerServer use its own thread/s. To guarantee correct tx conflict-resolution,
- * the {@link SequencerServerCache#cacheConflictKeys} must be updated
- * along with {@link SequencerServerCache#maxConflictWildcard} at the same time (atomically) to prevent race condition
- * when the conflict stream is already evicted from the cache but `maxConflictWildcard` is not updated yet,
- * which can cause situation when sequencer let the transaction go but the tx has to be cancelled.
  *
  * The cache map maps conflict keys (stream id + key) to versions (long), illustrated below:
  * Conflict Key | ck1 | ck2 | ck3 | ck4
@@ -27,7 +22,7 @@ import java.util.UUID;
  * Consider the case where we need to insert a new conflict key (ck), but the cache is full,
  * we need to evict the oldest conflict keys. In the example above, we can't just evict ck1,
  * we need to evict all keys that map to v1, so we need to evict ck1 and ck2,
- * this eviction policy is FIFO on the version number. The simple FIFO opproach in Caffein etc doesn't work here,
+ * this eviction policy is FIFO on the version number. The simple FIFO approach in Caffein etc doesn't work here,
  * as it may evict ck1, but not ck2. Notice that we also can't evict ck3 before the keys for v1,
  * that's because it will create holes in the resolution window and can lead to incorrect resolutions.
  *
@@ -71,10 +66,10 @@ public class SequencerServerCache {
     /* It is used to calculate the size of ServerCache.
      * Each entry relates two pointers used by HashMap, one pointer in PriorityQueue.
      */
-    static final int Entry_Overhead = 24;
+    static final private int ENTRY_OVERHEAD = 24;
 
     //As calculating object size is expensive, used the value calculated by deepSize
-    static final int ConflictTxStream_Obj_Size = 80; //by calculated by deepSize
+    static final private int CONFLICTTXSTREAM_OBJ_SIZE = 80; //by calculated by deepSize
 
     /**
      * The cache limited by size.
@@ -119,7 +114,7 @@ public class SequencerServerCache {
      */
     private int invalidateFirst() {
         ConflictTxStream firstEntry = cacheEntries.peek();
-        if (firstEntry == null) {
+        if (cacheEntries.size() == 0) {
             return 0;
         }
 
@@ -127,7 +122,7 @@ public class SequencerServerCache {
         while (firstAddress() == firstEntry.txVersion) {
             ConflictTxStream entry = cacheEntries.poll();
             cacheConflictKeys.remove(entry);
-            numEntries ++;
+            numEntries++;
         }
 
         log.trace("Evict {} entries", numEntries);
@@ -140,7 +135,7 @@ public class SequencerServerCache {
      *
      * @param trimMark trim mark
      */
-    public void invalidateUpTo(long trimMark) {
+    public void invalidateSmallestTxVersion(long trimMark) {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
         int entries = 0;
         int pqEntries = 0;
@@ -167,9 +162,9 @@ public class SequencerServerCache {
      */
     public long byteSize() {
         log.debug("the cache has {} entries,  the object size used {}, calculated by beepSize {}",
-                size(), ConflictTxStream_Obj_Size,
+                size(), CONFLICTTXSTREAM_OBJ_SIZE,
                 cacheEntries.isEmpty() ? 0 : MetricsUtils.sizeOf.deepSizeOf(cacheEntries.peek()));
-        return size()*(Entry_Overhead + ConflictTxStream_Obj_Size);
+        return size()*(ENTRY_OVERHEAD + CONFLICTTXSTREAM_OBJ_SIZE);
     }
 
     /*
