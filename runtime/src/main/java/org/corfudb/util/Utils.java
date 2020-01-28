@@ -156,38 +156,20 @@ public class Utils {
         long usedQuota = 0;
         long limit = 0;
 
-        LogStatsResponse logStats = null;
-
         // It is the sum of segments' sizes. We only handle CHAIN_REPLICATION.
-        // As long as the segment has overlap address space with the start and end
-        // addresses, we will count that segment size.
         for (Layout.LayoutSegment segment : layout.getSegments()) {
             if (segment.getReplicationMode() != Layout.ReplicationMode.CHAIN_REPLICATION) {
                 throw new UnsupportedOperationException();
             }
-
-            // if segment.end -1 , it means the segment holds all logs from segment.start.
-            // Enforce a query even there are no logs to get the quota information.
-            if (logStats != null && (segment.getEnd() > 0 && segment.getEnd() <= startAddress || endAddress <= segment.getStart()))
-                    continue;
-
-            // It uses the first node in the layout to query the log size.
-            Layout.LayoutStripe stripe = segment.getStripes().get(0);
-            logStats = CFUtils.getUninterruptibly(runtime.getLayoutView()
-                    .getRuntimeLayout(layout)
-                    .getLogUnitClient(stripe.getLogServers().get(0))
-                    .getLogStats(Math.max(startAddress, segment.getStart()),
-                            segment.getEnd() > 0 ? Math.min(segment.getEnd(), endAddress) : endAddress));
-            size +=  logStats.getLogSize();
-
-            //update the quota information with the server with the max usedQuota
-            if (usedQuota < logStats.getUsedQuota()) {
-                limit = logStats.getLimit();
-                usedQuota = Math.max(logStats.getUsedQuota(), usedQuota);
-            }
         }
 
-        logStats = new LogStatsResponse(usedQuota, limit, size);
+        // Get the primary log server that is the first segments' the first log server. This server should have the complete log.
+        Layout.LayoutStripe stripe = layout.getSegments().get(0).getStripes().get(0);
+        LogStatsResponse logStats = CFUtils.getUninterruptibly(runtime.getLayoutView()
+                .getRuntimeLayout(layout)
+                .getLogUnitClient(stripe.getLogServers().get(0))
+                .getLogStats(startAddress, endAddress));
+
         return logStats;
     }
 
