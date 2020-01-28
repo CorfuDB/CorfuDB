@@ -172,26 +172,7 @@ public class Utils {
 
         return logStats;
     }
-
-    /**
-     * Get log size.
-     *
-     * @param layout Latest layout to query log tail from Log Unit
-     * @param runtime Runtime
-     * @param startAddress startAddress of log for query, non-negative
-     * @param endAddress endAddress of log for query, non-negarive and should not be smaller than startAddress
-     * @return log size. It is the sum size of log files that has overlap with startAddress and endAddress
-     */
-    public static long getLogSize(Layout layout, CorfuRuntime runtime, long startAddress, long endAddress) {
-        LogStatsResponse  logStats = getLogStats(layout, runtime, startAddress, endAddress);
-        if (logStats == null) {
-            log.error("could not get logStats");
-            return 0;
-        }
-
-        return logStats.getLogSize();
-    }
-
+    
     /**
      * Fetches the max global log tail and all stream tails from the log unit cluster. This depends on the mode of
      * replication being used.
