@@ -41,7 +41,7 @@ public class SequencerServerCache {
      */
 
     // As the sequencer cache is used by a single thread, it is safe to use hashmap.
-    private final HashMap<ConflictTxStream, Long> cacheConflictKeys;
+    private final HashMap<ConflictTxStream, Long> conflictKeys;
     private final PriorityQueue<ConflictTxStream> cacheEntries; //sorted according to address
 
     @Getter
@@ -82,7 +82,7 @@ public class SequencerServerCache {
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
-        cacheConflictKeys = new HashMap();
+        conflictKeys = new HashMap();
         cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
                 (a -> ((ConflictTxStream)a).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
@@ -97,7 +97,7 @@ public class SequencerServerCache {
      * @return global address
      */
     public Long getIfPresent(ConflictTxStream conflictKey) {
-        return cacheConflictKeys.get(conflictKey);
+        return conflictKeys.get(conflictKey);
     }
 
     /**
@@ -123,7 +123,7 @@ public class SequencerServerCache {
         int numEntries = 0;
         while (firstAddress() == firstEntry.txVersion) {
             ConflictTxStream entry = cacheEntries.poll();
-            cacheConflictKeys.remove(entry);
+            conflictKeys.remove(entry);
             numEntries++;
         }
 
@@ -154,7 +154,7 @@ public class SequencerServerCache {
      * @return cache size
      */
     public int size() {
-        return cacheConflictKeys.size();
+        return conflictKeys.size();
     }
 
     /**
@@ -176,20 +176,20 @@ public class SequencerServerCache {
      */
     public boolean put(ConflictTxStream conflictStream) {
 
-        Long val = cacheConflictKeys.get(conflictStream);
+        Long val = conflictKeys.get(conflictStream);
         if (val != null && val > conflictStream.txVersion) {
             log.error("For key {} the new entry address {} is smaller than the entry " +
                             "address {} in cache. There is a sequencer regression.",
-                    conflictStream, conflictStream.txVersion, cacheConflictKeys.get(conflictStream));
+                    conflictStream, conflictStream.txVersion, conflictKeys.get(conflictStream));
             return false;
         }
 
-        if (cacheConflictKeys.size() == cacheSize) {
+        if (conflictKeys.size() == cacheSize) {
             invalidateFirst();
         }
 
         cacheEntries.add(conflictStream);
-        cacheConflictKeys.put(conflictStream, conflictStream.txVersion);
+        conflictKeys.put(conflictStream, conflictStream.txVersion);
         return true;
     }
 
