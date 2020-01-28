@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import javax.annotation.concurrent.NotThreadSafe;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 
@@ -11,6 +10,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.PriorityQueue;
 import java.util.UUID;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Sequencer server cache.
@@ -63,8 +63,9 @@ public class SequencerServerCache {
     @Getter
     private long maxConflictNewSequencer;
 
-    /* It is used to calculate the size of ServerCache.
-     * Each entry relates two pointers used by HashMap, one pointer in PriorityQueue.
+    /**
+     * It is used to calculate the size of ServerCache. Each entry relates two pointers
+     * used by HashMap, one pointer in PriorityQueue.
      */
     static final private int ENTRY_OVERHEAD = 24;
 
@@ -81,8 +82,9 @@ public class SequencerServerCache {
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
-        cacheConflictKeys = new HashMap<> ();
-        cacheEntries = new PriorityQueue<> (cacheSize, Comparator.comparingLong(a -> a.txVersion));
+        cacheConflictKeys = new HashMap();
+        cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
+                (a -> ((ConflictTxStream)a).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
     }
