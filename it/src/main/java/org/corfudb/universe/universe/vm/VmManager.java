@@ -1,9 +1,5 @@
 package org.corfudb.universe.universe.vm;
 
-import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.DATA_STORE;
-import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.HOST_SYSTEM;
-import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.RESOURCE_TYPE;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.vmware.vim25.GuestInfo;
@@ -34,7 +30,10 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
+
+import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.DATA_STORE;
+import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.HOST_SYSTEM;
+import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.RESOURCE_TYPE;
 
 /**
  * Virtual machine manager
@@ -55,6 +54,8 @@ public class VmManager {
 
     @NonNull
     private final VmUniverseParams universeParams;
+
+    private Result<Optional<VirtualMachine>, UniverseException> cachedVm;
 
     /**
      * Clone a vm (if needed) and setup it
@@ -154,8 +155,13 @@ public class VmManager {
     }
 
     private Result<VirtualMachine, UniverseException> getVm(String name) {
-        return findVm(name)
-                .map(maybeVm -> maybeVm.orElseThrow(vmNotFoundError()));
+        return findVm(name).flatMap(maybeVm -> {
+            if (maybeVm.isPresent()) {
+                return Result.ok(maybeVm.get());
+            } else {
+                return Result.error(vmNotFoundError());
+            }
+        });
     }
 
     /**
@@ -166,16 +172,20 @@ public class VmManager {
     private Result<Optional<VirtualMachine>, UniverseException> findVm(String name) {
         log.debug("Find vm: {}", name);
 
-        return Result.of(() -> {
-            try {
-                VirtualMachine vm = (VirtualMachine) navigator.searchManagedEntity(
-                        ManagedEntityType.VIRTUAL_MACHINE.typeName, name
-                );
-                return Optional.ofNullable(vm);
-            } catch (Exception e) {
-                throw new UniverseException("Can't find a vm: " + vmName, e);
-            }
-        });
+        if (cachedVm == null) {
+            cachedVm = Result.of(() -> {
+                try {
+                    VirtualMachine vm = (VirtualMachine) navigator.searchManagedEntity(
+                            ManagedEntityType.VIRTUAL_MACHINE.typeName, name
+                    );
+                    return Optional.ofNullable(vm);
+                } catch (Exception e) {
+                    throw new UniverseException("Can't find a vm: " + vmName, e);
+                }
+            });
+        }
+
+        return cachedVm;
     }
 
     private Result<TaskInfo, UniverseException> executeTask(VmSupplier<Task> action) {
@@ -292,8 +302,8 @@ public class VmManager {
         }
     }
 
-    private Supplier<UniverseException> vmNotFoundError() {
-        return () -> new UniverseException("A vm not found: " + vmName);
+    private UniverseException vmNotFoundError() {
+        return new UniverseException("A vm not found: " + vmName);
     }
 
     @FunctionalInterface
