@@ -225,3 +225,5 @@ target
 /benchmarks/src/jmh/resources/vm.credentials.properties
 
 test/.jqwik-database
+.flattened-pom.xml
+/*/.flattened-pom.xml
