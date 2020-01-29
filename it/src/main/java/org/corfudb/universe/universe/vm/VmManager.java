@@ -218,7 +218,9 @@ public class VmManager {
 
         // Find the template machine in the inventory and clone/create the vm from vmTemplate
         return getVm(universeParams.getTemplateVMName()).flatMap(vmTemplate -> {
-            log.info("Cloning the VM {} via vSphere {}", vmName, universeParams.getVSphereUrl());
+            log.info("Cloning the VM: {} via vSphere: {}, template: {}",
+                    vmName, universeParams.getVSphereUrl(), universeParams.getTemplateVMName()
+            );
 
             Properties vmPropsResult = VmConfigPropertiesLoader
                     .loadVmProperties()
