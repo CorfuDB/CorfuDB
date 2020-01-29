@@ -50,8 +50,8 @@ public class PollReportTest {
                 localEndpoint,
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
-                NodeState.getUnavailableNodeState("b"),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("b", epoch),
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         final long epoch = 1;
@@ -80,7 +80,7 @@ public class PollReportTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         final long epoch = 1;
@@ -104,7 +104,7 @@ public class PollReportTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         final long epoch = 1;

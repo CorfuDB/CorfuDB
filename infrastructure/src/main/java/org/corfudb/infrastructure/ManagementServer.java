@@ -426,7 +426,7 @@ public class ManagementServer extends AbstractServer {
         //Node state is connected by default.
         //We believe two servers are connected if another servers is able to send command NODE_STATE_REQUEST
         // and get a response. If we are able to provide NodeState we believe that the state is CONNECTED.
-        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint());
+        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint(), epoch);
     }
 
     /**

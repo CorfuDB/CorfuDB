@@ -45,7 +45,7 @@ public class ClusterStateCollector {
         Map<String, NodeState> nodeStates = new HashMap<>();
 
         nodeStates.put(localEndpoint, collectLocalNodeState(epoch, sequencerMetrics));
-        nodeStates.putAll(collectRemoteStates());
+        nodeStates.putAll(collectRemoteStates(epoch));
 
         return ClusterState.builder()
                 .localEndpoint(localEndpoint)
@@ -77,7 +77,7 @@ public class ClusterStateCollector {
         return  ImmutableMap.copyOf(wrongEpochs);
     }
 
-    private Map<String, NodeState> collectRemoteStates() {
+    private Map<String, NodeState> collectRemoteStates(long epoch) {
         Map<String, NodeState> nodeStates = new HashMap<>();
         //Collect information about cluster (exclude local node):
         clusterState.forEach((server, state) -> {
@@ -93,7 +93,7 @@ public class ClusterStateCollector {
                 nodeStates.put(server, nodeState);
             } catch (Exception e) {
                 //Add unavailable NodeState in the list if an exception happened. Ignore for localhost
-                nodeStates.put(server, NodeState.getUnavailableNodeState(server));
+                nodeStates.put(server, NodeState.getUnavailableNodeState(server, epoch));
             }
         });
 

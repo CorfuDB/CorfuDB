@@ -42,7 +42,7 @@ public class ClusterStateCollectorTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         Map<String, CompletableFuture<NodeState>> clusterConnectivity = new HashMap<>();

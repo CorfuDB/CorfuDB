@@ -91,7 +91,7 @@ public class ClusterGraphTest {
     @Test
     public void testToSymmetricForThreeNodesWithUnavailableNodeB() {
         NodeConnectivity a = connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, FAILED));
-        NodeConnectivity b = unavailable(B);
+        NodeConnectivity b = unavailable(B, epoch);
         NodeConnectivity c = connectivity(C, epoch, ImmutableMap.of(A, OK, B, OK, C, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
@@ -165,7 +165,7 @@ public class ClusterGraphTest {
                 A,
                 ImmutableList.of(B),
                 connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
-                unavailable(B),
+                unavailable(B, epoch),
                 connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
         graph = graph.toSymmetric();
@@ -178,7 +178,7 @@ public class ClusterGraphTest {
                 A,
                 ImmutableList.of(C),
                 connectivity(A, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK)),
-                unavailable(B),
+                unavailable(B, epoch),
                 connectivity(C, epoch, ImmutableMap.of(A, OK, B, FAILED, C, OK))
         );
 
@@ -205,7 +205,7 @@ public class ClusterGraphTest {
 
     private NodeState unavailableNodeState(String endpoint) {
         return new NodeState(
-                unavailable(endpoint),
+                unavailable(endpoint, epoch),
                 SequencerMetrics.UNKNOWN
         );
     }

@@ -55,7 +55,7 @@ public class CompleteGraphAdvisorTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
@@ -93,9 +93,9 @@ public class CompleteGraphAdvisorTest {
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
-                NodeState.getUnavailableNodeState("a"),
+                NodeState.getUnavailableNodeState("a", epoch),
                 nodeState("b", epoch, OK, OK, OK),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         Optional<NodeRank> failedServer = advisor.failedServer(clusterState);
@@ -128,13 +128,13 @@ public class CompleteGraphAdvisorTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, OK),
                 nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
         ClusterState nodeCClusterState = buildClusterState(
                 "c",
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, OK),
-                NodeState.getUnavailableNodeState("b"),
+                NodeState.getUnavailableNodeState("b", epoch),
                 nodeState("c", epoch, OK, FAILED, OK)
         );
 

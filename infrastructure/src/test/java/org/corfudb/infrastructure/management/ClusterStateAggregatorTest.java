@@ -51,8 +51,8 @@ public class ClusterStateAggregatorTest {
                 localEndpoint,
                 ImmutableList.of(),
                 nodeState("a", epoch1, OK, FAILED, FAILED),
-                NodeState.getUnavailableNodeState("b"),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("b", epoch1),
+                NodeState.getUnavailableNodeState("c", epoch1)
         );
 
         ClusterState clusterState2 = ClusterState.buildClusterState(
@@ -60,15 +60,15 @@ public class ClusterStateAggregatorTest {
                 ImmutableList.of(),
                 nodeState("a", epoch1, OK, OK, FAILED),
                 nodeState("b", epoch1, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch1)
         );
 
         ClusterState clusterState3 = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
                 nodeState("a", epoch2, OK, FAILED, FAILED),
-                NodeState.getUnavailableNodeState("b"),
-                NodeState.getNotReadyNodeState("c")
+                NodeState.getUnavailableNodeState("b", epoch2),
+                NodeState.getNotReadyNodeState("c", epoch2)
         );
 
         List<Result<ClusterState, IllegalStateException>> clusterStates = Arrays.asList(
@@ -93,8 +93,8 @@ public class ClusterStateAggregatorTest {
                 localEndpoint,
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
-                NodeState.getUnavailableNodeState("b"),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("b", epoch),
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         ClusterState clusterState2 = ClusterState.buildClusterState(
@@ -102,15 +102,15 @@ public class ClusterStateAggregatorTest {
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, OK, FAILED),
                 nodeState("b", epoch, OK, OK, FAILED),
-                NodeState.getUnavailableNodeState("c")
+                NodeState.getUnavailableNodeState("c", epoch)
         );
 
         ClusterState clusterState3 = ClusterState.buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
                 nodeState("a", epoch, OK, FAILED, FAILED),
-                NodeState.getUnavailableNodeState("b"),
-                NodeState.getNotReadyNodeState("c")
+                NodeState.getUnavailableNodeState("b", epoch),
+                NodeState.getNotReadyNodeState("c", epoch)
         );
 
         List<Result<ClusterState, IllegalStateException>> clusterStates = Arrays.asList(

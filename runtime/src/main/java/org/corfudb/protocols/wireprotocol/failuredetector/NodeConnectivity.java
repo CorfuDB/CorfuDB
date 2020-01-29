@@ -146,6 +146,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     /**
      * Factory method to build a node connectivity
      * @param endpoint node name
+     * @param epoch node epoch
      * @param connectivity connectivity matrix
      * @return NodeConnectivity
      */
@@ -163,11 +164,13 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     /**
      * Builds a new connectivity with unavailable state
      * @param endpoint node name
+     * @param epoch node epoch
      * @return NodeConnectivity
      */
-    public static NodeConnectivity unavailable(String endpoint) {
+    public static NodeConnectivity unavailable(String endpoint, long epoch) {
         return NodeConnectivity.builder()
                 .endpoint(endpoint)
+                .epoch(epoch)
                 .type(NodeConnectivityType.UNAVAILABLE)
                 .connectivity(ImmutableMap.of())
                 .build();
@@ -176,11 +179,13 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     /**
      * Builds a new connectivity with NOT_READY state
      * @param endpoint node name
+     * @param epoch node epoch
      * @return NodeConnectivity
      */
-    public static NodeConnectivity notReady(String endpoint) {
+    public static NodeConnectivity notReady(String endpoint, long epoch) {
         return NodeConnectivity.builder()
                 .endpoint(endpoint)
+                .epoch(epoch)
                 .type(NodeConnectivityType.NOT_READY)
                 .connectivity(ImmutableMap.of())
                 .build();

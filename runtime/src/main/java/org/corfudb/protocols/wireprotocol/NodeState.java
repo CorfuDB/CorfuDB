@@ -47,16 +47,16 @@ public class NodeState implements ICorfuPayload<NodeState> {
         ICorfuPayload.serialize(buf, sequencerMetrics);
     }
 
-    public static NodeState getUnavailableNodeState(String endpoint){
+    public static NodeState getUnavailableNodeState(String endpoint, long epoch){
         return new NodeState(
-                NodeConnectivity.unavailable(endpoint),
+                NodeConnectivity.unavailable(endpoint, epoch),
                 SequencerMetrics.UNKNOWN
         );
     }
 
-    public static NodeState getNotReadyNodeState(String endpoint){
+    public static NodeState getNotReadyNodeState(String endpoint, long epoch){
         return new NodeState(
-                NodeConnectivity.notReady(endpoint),
+                NodeConnectivity.notReady(endpoint, epoch),
                 SequencerMetrics.UNKNOWN
         );
     }
