@@ -86,7 +86,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         trim(checkpointAddress);
 
         long size4 = getRuntime ().getAddressSpaceView().getLogStats().getLogSize ();
-        log.info("after gc logsize " + size5);
+        log.info("after gc logsize " + size4);
         log.info("trimMark:" + sv.getTrimMark().getSequence () + " tail:" + sv.getLogTail());
 
         assertThat(size4 < size3);
