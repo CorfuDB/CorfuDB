@@ -114,7 +114,7 @@ public class SequencerServerCache {
      * Invalidate the records with the minAddress. It could be one or multiple records
      * @return the number of entries has been invalidated and removed from the cache.
      */
-    private int invalidateFirst() {
+    private int invalidateSmallestTxVersion() {
         ConflictTxStream firstEntry = cacheEntries.peek();
         if (cacheEntries.size() == 0) {
             return 0;
@@ -137,12 +137,12 @@ public class SequencerServerCache {
      *
      * @param trimMark trim mark
      */
-    public void invalidateSmallestTxVersion(long trimMark) {
+    public void invalidateUpTo(long trimMark) {
         log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
         int entries = 0;
         int pqEntries = 0;
         while (Address.isAddress(firstAddress()) && firstAddress() < trimMark) {
-            pqEntries += invalidateFirst();
+            pqEntries += invalidateSmallestTxVersion();
             entries++;
         }
         log.info("Invalidated entries {} addresses {}", pqEntries, entries);
@@ -185,7 +185,7 @@ public class SequencerServerCache {
         }
 
         if (conflictKeys.size() == cacheSize) {
-            invalidateFirst();
+            invalidateSmallestTxVersion();
         }
 
         cacheEntries.add(conflictStream);

@@ -340,7 +340,7 @@ public class SequencerServer extends AbstractServer {
         if (trimMark < msg.getPayload()) {
             // Advance the trim mark, if the new trim request has a higher trim mark.
             trimMark = msg.getPayload();
-            cache.invalidateSmallestTxVersion(trimMark);
+            cache.invalidateUpTo(trimMark);
 
             // Remove trimmed addresses from each address map and set new trim mark
             for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {

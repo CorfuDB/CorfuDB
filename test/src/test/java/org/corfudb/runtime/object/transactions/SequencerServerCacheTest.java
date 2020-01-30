@@ -72,8 +72,6 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         final ConflictTxStream secondKey = new ConflictTxStream(UUID.randomUUID(), new byte[]{}, secondValue);
 
         for (int i = 0; i < iterations; i++) {
-            criticalVariable.set(false);
-
             cache.put(firstKey);
             cache.put(secondKey);
 
@@ -142,9 +140,9 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
         verifyData(recordMap, cache);
 
-        cache.invalidateSmallestTxVersion(address - 1);
+        cache.invalidateUpTo(address - 1);
         assertThat(cache.size() == 1);
-        cache.invalidateSmallestTxVersion(address);
+        cache.invalidateUpTo(address);
         assertThat(cache.size() == 0);
     }
 
@@ -176,13 +174,13 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
         long entrySize = cache.byteSize() / cache.size();
 
-        cache.invalidateSmallestTxVersion(address - numRemains);
+        cache.invalidateUpTo(address - numRemains);
         assertThat(cache.size() == numRemains);
 
         // this assume that the all conflickstreams has the same size of the parameters.
         assertThat(entrySize == cache.byteSize() / cache.size());
         log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
-        cache.invalidateSmallestTxVersion(address);
+        cache.invalidateUpTo(address);
         assertThat(cache.size() == 0);
     }
 
