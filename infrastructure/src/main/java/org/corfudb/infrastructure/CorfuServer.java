@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -47,6 +48,7 @@ public class CorfuServer {
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsNA] [-a <address>|-q <interface-name>] "
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
+                    + "[--plugin=<plugin-config-file-path>]"
                     + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
                     + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
@@ -55,11 +57,12 @@ public class CorfuServer {
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics] [--metrics-port <metrics_port>]"
+                    + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
-                    + "              Set the path to the storage file for the log unit.\n"
+                    + "              Set the path to the storage file for the log unit.\n        "
                     + " -s, --single                                                             "
                     + "              Deploy a single-node configuration.\n"
                     + " -I <cluster-id>, --cluster-id=<cluster-id>"
@@ -83,7 +86,6 @@ public class CorfuServer {
                     + "[default: nio].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
-                    + "                                                                          "
                     + "              Data will be lost when the server exits!\n"
                     + " -c <ratio>, --cache-heap-ratio=<ratio>                                   "
                     + "              The ratio of jvm max heap size we will use for the the "
@@ -172,6 +174,10 @@ public class CorfuServer {
                     + "              Enable metrics provider.\n                                  "
                     + " --metrics-port=<metrics_port>                                            "
                     + "              Metrics provider server port [default: 9999].\n             "
+                    + " --snapshot-batch=<batch-size>                                            "
+                    + "              Snapshot (Full) Sync batch size (number of entries)\n       "
+                    + " --lock-lease=<lease-duration>                                            "
+                    + "              Lock lease duration in seconds\n                            "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -194,18 +200,31 @@ public class CorfuServer {
      */
     public static void main(String[] args) {
         try {
-            startServer(args);
+            // Parse the options given, using docopt.
+            Map<String, Object> opts = new Docopt(USAGE)
+                    .withVersion(GitRepositoryState.getRepositoryState().describe)
+                    .parse(args);
+
+            // Note: this is a temporal solution for license reuse.
+
+            // We currently identify the Log Replication Server by the use of a specific
+            // flag used for the specification of the LR plugin configuration.
+            // In the future, log replication will not run as a separate process
+            // but it will be an aggregated functionality of Corfu's Server so this will
+            // be removed.
+            if (opts.containsKey("--plugin") && opts.get("--plugin") != null) {
+                CorfuInterClusterReplicationServer.main(args);
+            } else {
+                startServer(opts);
+            }
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
             throw err;
         }
     }
 
-    private static void startServer(String[] args) {
-        // Parse the options given, using docopt.
-        Map<String, Object> opts = new Docopt(USAGE)
-                .withVersion(GitRepositoryState.getRepositoryState().describe)
-                .parse(args);
+    private static void startServer(Map<String, Object> opts) {
+
         // Print a nice welcome message.
         printStartupMsg(opts);
         configureLogger(opts);

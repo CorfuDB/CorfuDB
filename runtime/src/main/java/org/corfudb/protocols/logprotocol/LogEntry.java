@@ -48,6 +48,10 @@ public class LogEntry implements ICorfuSerializable {
     @Setter
     long globalAddress = Address.NON_ADDRESS;
 
+    @Getter
+    @Setter
+    boolean opaque = false;
+
     /**
      * Constructor for generating LogEntries.
      *
@@ -65,12 +69,17 @@ public class LogEntry implements ICorfuSerializable {
      * @return A LogEntry.
      */
     public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt) {
+        return deserialize(b, rt, false);
+    }
+
+    public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt, boolean opaque) {
         try {
             byte type = b.readByte();
             LogEntryType let = typeMap.get(type);
             LogEntry l = let.entryType.newInstance();
             l.type = let;
             l.runtime = rt;
+            l.opaque = opaque;
             l.deserializeBuffer(b, rt);
             return l;
         } catch (InstantiationException | IllegalAccessException ie) {

@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -158,4 +157,17 @@ public interface IServerRouter {
         }
         return true;
     }
+
+    /**
+     * Send Response through a generic transport layer (not Netty-specific)
+     *
+     * Currently, this is used for the Log Replication Server which supports any
+     * custom defined transport layer, a default implementation is available to
+     * avoid empty implementations on CorfuServer.
+     *
+     * @param inMsg
+     * @param outMsg
+     */
+    default void sendResponse(CorfuMsg inMsg, CorfuMsg outMsg) {}
+
 }

@@ -20,7 +20,7 @@
             <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
-                <version>3.7.0.1</version>
+                <version>3.11.1</version>
                 <executions>
                     <execution>
                         <phase>generate-sources</phase>
@@ -30,10 +30,6 @@
                         <configuration>
                             <protocVersion>3.6.1</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
-                            <addProtoSources>inputs</addProtoSources>
-                            <includeDirectories>
-                                <includeDirectory>proto</includeDirectory>
-                            </includeDirectories>
                             <inputDirectories>
                                 <include>proto</include>
                             </inputDirectories>
@@ -139,10 +135,33 @@
             <artifactId>RoaringBitmap</artifactId>
             <version>0.8.13</version>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
             <version>3.6.1</version>
+        </dependency>
+        <!--grpc dependencies-->
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+            <version>1.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+            <version>1.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+            <version>1.29.0</version>
+        </dependency>
+        <dependency> <!-- necessary for Java 9+ -->
+            <groupId>org.apache.tomcat</groupId>
+            <artifactId>annotations-api</artifactId>
+            <version>6.0.53</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 

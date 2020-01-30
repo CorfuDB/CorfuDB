@@ -24,6 +24,7 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
+import org.corfudb.utils.lock.Lock;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -42,6 +43,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
@@ -83,8 +86,13 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
 
+    // Corfu Replication Server
+    public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
+
+
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
+
 
     private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
 
@@ -113,7 +121,6 @@ public class ServerContext implements AutoCloseable {
      * various duration constants.
      */
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
-
 
     @Getter
     private final Map<String, Object> serverConfig;
@@ -207,6 +214,41 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 4 : threadCount;
     }
 
+    public String getPluginConfigFilePath() {
+        String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
+        return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
+    }
+
+    /**
+     * Get the max number of messages can be sent over per batch.
+     * @return
+     */
+    public int getLogReplicationMaxNumMsgPerBatch() {
+        String val = getServerConfig(String.class, "--snapshot-batch");
+        return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
+    }
+
+    public int getLockLeaseDuration() {
+        Integer lockLeaseDuration;
+        try {
+            lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
+        } catch (ClassCastException e) {
+            // In the testing framework we only support Strings
+            lockLeaseDuration = Integer.valueOf(getServerConfig(String.class, "--lock-lease"));
+        }
+        return lockLeaseDuration == null ? Lock.leaseDuration : lockLeaseDuration;
+    }
+
+    /**
+     * Get the max size of the log replication data message used by both snapshot data message and
+     * log entry sync data message.
+     * @return
+     */
+    public int getLogReplicationMaxDataMessageSize() {
+        String val = getServerConfig(String.class, "--max-data-message-size");
+        return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
+    }
+
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined
@@ -255,7 +297,7 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The server channel type.
      */
-    ChannelImplementation getChannelImplementation() {
+    public ChannelImplementation getChannelImplementation() {
         final String type = getServerConfig(String.class, "--implementation");
         return ChannelImplementation.valueOf(type.toUpperCase());
     }
