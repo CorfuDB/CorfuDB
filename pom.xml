@@ -1,6 +1,5 @@
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.corfudb</groupId>
@@ -23,7 +22,8 @@
         <module>it</module>
         <module>benchmarks</module>
         <module>coverage</module>
-    </modules>
+    <module>log-replication</module>
+  </modules>
 
 
     <packaging>pom</packaging>
@@ -141,7 +141,13 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.14.0</version>
+            <version>3.8.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.marschall</groupId>
+            <artifactId>junit-lambda</artifactId>
+            <version>0.2.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -152,7 +158,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.30</version>
+            <version>1.7.25</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -414,7 +420,7 @@
                         <format>html</format>
                         <format>xml</format>
                     </formats>
-                    <check />
+                    <check/>
                 </configuration>
             </plugin>
             <!-- Add a license to all files using mvn license:format -->
