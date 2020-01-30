@@ -283,13 +283,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 buf.writeInt(size);
                 buf.writerIndex(lengthIndex + size + 4);
             } else {
-                // Since the server uses the same serialization/deserialization path
-                // we need a flag (isCompressed) to let the server not re-encode an already encoded payload
-                if (hasPayloadCodec() && !isCompressed()) {
-                    doCompressInternal(Unpooled.wrappedBuffer(data), buf);
-                } else {
-                    ICorfuPayload.serialize(buf, data);
-                }
+                ICorfuPayload.serialize(buf, data);
             }
         }
 
@@ -302,7 +296,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         ByteBuffer wrappedByteBuf = ByteBuffer.wrap(bufData.array(), 0, bufData.readableBytes());
         ByteBuffer compressedBuf = getPayloadCodecType().getInstance().compress(wrappedByteBuf);
         ICorfuPayload.serialize(buf, Unpooled.wrappedBuffer(compressedBuf));
-        setCompressedFlag();
     }
 
     /**

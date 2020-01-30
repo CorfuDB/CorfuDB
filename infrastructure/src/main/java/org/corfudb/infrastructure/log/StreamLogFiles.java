@@ -441,12 +441,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .DataType.typeMap.get((byte) entry.getDataType().getNumber()),
                 Unpooled.wrappedBuffer(entryData.array()), ldCodecType);
 
-        if (logData.hasPayloadCodec()) {
-            // The server assumes that if a codec has been specified then
-            // the payload it received was already compressed
-            logData.setCompressedFlag();
-        }
-
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));

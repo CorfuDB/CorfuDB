@@ -11,7 +11,7 @@ import org.junit.Test;
 
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.RejectedExecutionException;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -84,6 +84,7 @@ public class ManagementServerTest extends AbstractServerTest {
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         CompletableFuture<Boolean> future = sendRequest(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
+
         assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(NoBootstrapException.class);
 
         future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
@@ -91,5 +92,6 @@ public class ManagementServerTest extends AbstractServerTest {
         future = sendRequest(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
         assertThat(future.join()).isEqualTo(true);
+
     }
 }

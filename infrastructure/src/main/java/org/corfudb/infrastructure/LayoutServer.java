@@ -2,6 +2,10 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
+import java.lang.invoke.MethodHandles;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +23,7 @@ import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
 import org.corfudb.runtime.view.Layout;
 
-import javax.annotation.Nonnull;
-import java.lang.invoke.MethodHandles;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The layout server serves layouts, which are used by clients to find the

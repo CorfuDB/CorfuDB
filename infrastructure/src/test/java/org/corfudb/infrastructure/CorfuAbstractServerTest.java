@@ -10,8 +10,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.junit.Test;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 public class CorfuAbstractServerTest {
