@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package org.corfudb.logreplication.proto;
+option java_package = "org.corfudb.logreplication.proto";
+
+// Site configuration metadata
+message SiteConfigurationMsg {
+  uint64 siteConfigID = 1;
+  uint64 version = 2;
+  repeated SiteMsg site = 3;
+}
+
+enum SiteStatus {
+  INVALID = 0;
+  ACTIVE = 1;
+  STANDBY = 2;
+  NONE = 3;
+}
+
+// Site configuration metadata
+message SiteMsg {
+  string name = 1;
+  SiteStatus status = 2;
+  string id = 3;
+  repeated NodeInfoMsg node_info = 4;
+}
+
+// Site configuration metadata
+message NodeInfoMsg {
+  string uuid = 1;
+  string address = 2;
+  int32 port = 3;
+  string node_id = 4;
+  int32 corfu_port = 5;
+}
+
+service LogReplicationSiteManagerService {
+
+}

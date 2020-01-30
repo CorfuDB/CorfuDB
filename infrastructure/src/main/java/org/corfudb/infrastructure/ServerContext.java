@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -207,6 +208,11 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 4 : threadCount;
     }
 
+    public LogReplicationTransportType getTransportType() {
+        return getServerConfig().get("--custom-transport") != null ? LogReplicationTransportType.CUSTOM :
+                LogReplicationTransportType.NETTY;
+    }
+
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined
@@ -255,7 +261,7 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The server channel type.
      */
-    ChannelImplementation getChannelImplementation() {
+    public ChannelImplementation getChannelImplementation() {
         final String type = getServerConfig(String.class, "--implementation");
         return ChannelImplementation.valueOf(type.toUpperCase());
     }

@@ -65,7 +65,7 @@ public class TestRule {
             if (dropEven && matchNumber % 2 == 0) return false;
             if (transformer != null) transformer.accept(message);
             if (injectBefore != null && router instanceof IClientRouter)
-                ((IClientRouter)router).sendMessage(null, injectBefore.apply(message));
+                ((IClientRouter)router).sendMessage(injectBefore.apply(message));
             if (injectBefore != null && router instanceof IServerRouter)
                 ((IServerRouter)router).sendResponse(null, injectBefore.apply(message), injectBefore.apply(message));
         }

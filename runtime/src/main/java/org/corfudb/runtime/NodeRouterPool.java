@@ -10,6 +10,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.util.InterClusterConnectionDescriptor;
 import org.corfudb.util.NodeLocator;
 
 /**
@@ -32,8 +33,25 @@ public class NodeRouterPool {
     @Setter
     private Function<String, IClientRouter> createRouterFunction;
 
-    NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
+    /**
+     * A function to handle getting routers. Used by test framework to inject
+     * a test router. Can also be used to provide alternative logic for obtaining
+     * a router.
+     */
+    @Getter
+    @Setter
+    private Function<InterClusterConnectionDescriptor, IClientRouter> createLogReplicationRouterFunction;
+
+    private boolean logReplication;
+
+    public NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
         this.createRouterFunction = createRouterFunction;
+    }
+
+    public NodeRouterPool(Function<InterClusterConnectionDescriptor, IClientRouter> createLogReplicationRouterFunction,
+                          boolean logReplication) {
+        this.createLogReplicationRouterFunction = createLogReplicationRouterFunction;
+        this.logReplication = logReplication;
     }
 
     /**
@@ -46,6 +64,21 @@ public class NodeRouterPool {
     public IClientRouter getRouter(NodeLocator endpoint) {
         return nodeRouters.computeIfAbsent(endpoint,
                 s -> createRouterFunction.apply(s.toEndpointUrl()));
+    }
+
+    /**
+     * Fetches a router from the pool if already present. Else creates a new router using the
+     * provided function and adds it to the pool.
+     *
+     * @return IClientRouter.
+     */
+    public IClientRouter getRouter(InterClusterConnectionDescriptor siteInfo) {
+        if (!logReplication && createLogReplicationRouterFunction == null) {
+            log.warn("Cannot fetch a router for log replication server.");
+            return null;
+        }
+        return nodeRouters.computeIfAbsent(siteInfo.getRemoteNodeLocator(),
+                s -> createLogReplicationRouterFunction.apply(siteInfo));
     }
 
     /**

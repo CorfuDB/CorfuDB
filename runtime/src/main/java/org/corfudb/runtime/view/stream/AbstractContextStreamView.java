@@ -134,14 +134,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         if (entry != null) {
             // Update the pointer.
             updatePointer(entry);
-
-            // Process the next entry, checking if the context has changed.
-            // If the context has changed, we read again, since this entry
-            // does not contain any data, and we need to follow the new
-            // context.
-            if (processEntryForContext(entry)) {
-                return nextUpTo(maxGlobal);
-            }
         }
 
         // Return the entry.
@@ -176,9 +168,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Check if the last entry updates the context.
         if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
 
             // Remove the entry which updates the context
             entries.remove(entries.size() - 1);
@@ -291,25 +280,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // of the pointer.
             getCurrentContext().setGlobalPointer(data.getGlobalAddress());
         }
-    }
-
-    /** Check if the given entry adds a new context, and update
-     * the global pointer.
-     *
-     * <p>If it does, add it to the context stack. Otherwise,
-     * pop the context.
-     *
-     * <p>It is important that this method be called in order, since
-     * it updates the global pointer and can change the global pointer.
-     *
-     * @param data  The entry to process.
-     * @return      True, if this entry adds a context.
-     */
-    protected boolean processEntryForContext(final ILogData data) {
-        if (data != null) {
-            final Object payload = data.getPayload(runtime);
-        }
-        return false;
     }
 
     /** Get the current context.
