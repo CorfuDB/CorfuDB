@@ -138,7 +138,14 @@ public class ClusterBenchmark {
             workflow = universeManager.workflow(wf -> {
                 wf.setupProcess(fixture -> {
                     fixture.getCluster().numNodes(numServers);
+                    fixture.getServer().serverJarDirectory(Paths.get("benchmarks", "target"));
 
+                    //disable automatic shutdown
+                    fixture.getUniverse().cleanUpEnabled(false);
+                });
+
+                wf.setupDocker(fixture -> {
+                    fixture.getCluster().numNodes(numServers);
                     fixture.getServer().serverJarDirectory(Paths.get("benchmarks", "target"));
 
                     //disable automatic shutdown
