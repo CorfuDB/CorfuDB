@@ -73,7 +73,7 @@ public class CompressionTest extends AbstractViewTest {
     private List<String> getReadersCodec(String codec) {
         return Stream.of(Codec.Type.values())
                 .map(Codec.Type::name)
-                .filter(type -> type != codec)
+                .filter(type -> !type.equals(codec))
                 .collect(Collectors.toList());
     }
 
