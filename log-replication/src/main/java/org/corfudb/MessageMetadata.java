@@ -1,5 +1,8 @@
 package org.corfudb;
 
+import lombok.Getter;
+import lombok.Setter;
+
 public class MessageMetadata {
 
     /*
@@ -7,7 +10,9 @@ public class MessageMetadata {
      * - snapshot type for reading/writing the snapshot timestamp,
      * - log entry type for reading/writing the entry and previous entry timestamps,
      */
-    private MessageType messageMetadataType;
+    @Getter
+    @Setter
+    public MessageType type;
 
     /*
      * From Tx -> Rx: timestamp of the entry enqueued for shipping
@@ -26,6 +31,12 @@ public class MessageMetadata {
      */
     private long snapshotTimestamp;
 
+    void init(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp) {
+        this.type = type;
+        this.entryTimeStamp = entryTimeStamp;
+        this.previousEntryTimestamp = previousEntryTimestamp;
+        this.snapshotTimestamp = snapshotTimestamp;
+    }
 }
 
 

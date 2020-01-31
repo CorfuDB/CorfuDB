@@ -5,4 +5,7 @@ public class TxMessage {
     private MessageMetadata metadata;
 
     private byte[] data;
+
+    TxMessage() {
+    }
 }
