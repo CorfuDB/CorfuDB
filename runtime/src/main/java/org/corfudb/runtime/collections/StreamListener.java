@@ -32,7 +32,7 @@ public interface StreamListener {
      * Return a unique integer representing this StreamListener
      * This is to allow CorfuStore may have to put these callback objects into a Set or Map.
      */
-    int hashcode();
+    int hashCode();
 
     /**
      * Return a human readable string representing this StreamListener.
