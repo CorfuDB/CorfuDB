@@ -22,7 +22,7 @@
     <dependency>
       <groupId>org.corfudb</groupId>
       <artifactId>runtime</artifactId>
-      <version>${project.version}</version>
+      <version>${revision}</version>
     </dependency>
   </dependencies>
 </project>
