@@ -1,5 +1,5 @@
-package org.corfudb;
-
+package org.corfudb.logreplication.transmitter;
+import org.corfudb.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.StreamViewSMRAdapter;
