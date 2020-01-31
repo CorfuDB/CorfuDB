@@ -446,16 +446,14 @@ public class CorfuTable<K ,V> implements
     @Override
     @Accessor
     public @Nonnull Set<K> keySet() {
-        return mainMap.entryStream().map(Entry::getKey)
-                .collect(ImmutableSet.toImmutableSet());
+        return mainMap.keySet().stream().collect(ImmutableSet.toImmutableSet());
     }
 
     /** {@inheritDoc} */
     @Override
     @Accessor
     public @Nonnull Collection<V> values() {
-        return mainMap.entryStream().map(Entry::getValue)
-                .collect(ImmutableSet.toImmutableSet());
+        return mainMap.values().stream().collect(ImmutableSet.toImmutableSet());
     }
 
     /**
