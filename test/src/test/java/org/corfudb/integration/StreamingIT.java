@@ -89,7 +89,7 @@ public class StreamingIT extends AbstractIT {
         }
 
         @Override
-        public int hashcode() {
+        public int hashCode() {
             return name.hashCode();
         }
 
