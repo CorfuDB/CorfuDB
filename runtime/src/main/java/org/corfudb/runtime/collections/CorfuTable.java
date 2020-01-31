@@ -116,8 +116,12 @@ public class CorfuTable<K ,V> implements
             indexSpec.add(index);
         });
 
-        log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
-                secondaryIndexes.keySet());
+        if (!secondaryIndexes.isEmpty()) {
+            log.info(
+                "CorfuTable: creating CorfuTable with the following indexes: {}",
+                secondaryIndexes.keySet()
+            );
+        }
     }
 
     /**
