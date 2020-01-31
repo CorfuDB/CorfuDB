@@ -42,8 +42,8 @@ public class GarbageSizeFirstPolicy extends AbstractCompactionPolicy {
         return compactibleSegments
                 .stream()
                 .sorted(Comparator.comparing(CompactionMetadata::getTotalGarbageSizeMB).reversed())
-                .filter(metaData -> metaData.getTotalGarbageSizeMB() >= params.segmentGarbageSizeThresholdMB
-                        || metaData.getGarbageRatio() >= params.segmentGarbageRatioThreshold)
+                .filter(metaData -> metaData.getTotalGarbageSizeMB() > params.segmentGarbageSizeThresholdMB
+                        || metaData.getGarbageRatio() > params.segmentGarbageRatioThreshold)
                 .limit(params.maxSegmentsForCompaction)
                 .map(CompactionMetadata::getOrdinal)
                 .collect(Collectors.toList());

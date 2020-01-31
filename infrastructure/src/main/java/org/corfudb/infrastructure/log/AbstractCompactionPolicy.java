@@ -76,6 +76,7 @@ public abstract class AbstractCompactionPolicy implements CompactionPolicy {
     List<Long> getSegmentsToForceCompact(List<CompactionMetadata> compactibleSegments) {
         return compactibleSegments
                 .stream()
+                .filter(meta -> meta.getTotalGarbageSizeMB() > 0)
                 .sorted(Comparator.comparing(CompactionMetadata::getTotalGarbageSizeMB).reversed())
                 .limit(params.maxSegmentsForCompaction)
                 .map(CompactionMetadata::getOrdinal)

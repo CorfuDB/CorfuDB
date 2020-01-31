@@ -71,8 +71,8 @@ public class SnapshotLengthFirstPolicy extends AbstractCompactionPolicy {
         List<Long> segmentsToCompact = compactibleSegments
                 .stream()
                 .sorted(Comparator.comparing(CompactionMetadata::getBoundedGarbageSizeMB).reversed())
-                .filter(metaData -> metaData.getBoundedGarbageSizeMB() >= params.segmentGarbageSizeThresholdMB
-                        || metaData.getBoundedGarbageRatio() >= params.segmentGarbageRatioThreshold)
+                .filter(metaData -> metaData.getBoundedGarbageSizeMB() > params.segmentGarbageSizeThresholdMB
+                        || metaData.getBoundedGarbageRatio() > params.segmentGarbageRatioThreshold)
                 .limit(params.maxSegmentsForCompaction)
                 .map(CompactionMetadata::getOrdinal)
                 .collect(Collectors.toList());

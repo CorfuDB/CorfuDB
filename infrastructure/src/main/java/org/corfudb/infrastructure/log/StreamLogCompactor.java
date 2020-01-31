@@ -42,7 +42,6 @@ public class StreamLogCompactor {
     // Flush the file to disk after writing this number of batch
     // to the compaction output file to avoid large IO bursts and
     // making space in page cache for normal reads/writes.
-    // TODO: Do we need to expose this as a configurable parameter?
     private static final int COMPACTION_FLUSH_BATCH_SIZE = 10;
 
     // When compacting the stream log segment, control the size
@@ -332,7 +331,7 @@ public class StreamLogCompactor {
                                              AbstractLogSegment compactionOutput) {
         if (batch.size() >= batchSize) {
             compactionOutput.appendCompacted(batch);
-            flushBatchCount += batch.size();
+            flushBatchCount++;
             batch.clear();
 
             // Flush the compaction output file after a batch to avoid IO burst.
