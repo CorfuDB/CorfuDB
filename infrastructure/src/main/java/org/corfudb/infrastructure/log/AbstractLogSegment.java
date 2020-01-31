@@ -149,11 +149,7 @@ public abstract class AbstractLogSegment implements
      */
     public void release() {
         int refCount = referenceCount.decrementAndGet();
-        if (refCount < 0) {
-            log.warn("release: Segment {} reference count: {} < 0, " +
-                    "might be a bug.", filePath, refCount);
-        }
-        if (closing && refCount == 0) {
+        if (closing && refCount <= 0) {
             close();
         }
     }
