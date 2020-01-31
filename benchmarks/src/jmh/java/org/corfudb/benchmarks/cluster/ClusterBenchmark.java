@@ -1,16 +1,10 @@
 package org.corfudb.benchmarks.cluster;
 
-import static org.corfudb.benchmarks.util.DataUnit.KB;
-import static org.corfudb.benchmarks.util.DataUnit.MB;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.benchmarks.util.DataGenerator;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.universe.UniverseAppUtil;
 import org.corfudb.universe.UniverseManager;
 import org.corfudb.universe.UniverseManager.UniverseWorkflow;
 import org.corfudb.universe.group.cluster.CorfuCluster;
@@ -30,8 +24,6 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 import org.openjdk.jmh.runner.options.TimeValue;
 
-import java.io.FileReader;
-import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +31,10 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+
+import static org.corfudb.benchmarks.util.DataUnit.KB;
+import static org.corfudb.benchmarks.util.DataUnit.MB;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 
 /**
  * The benchmark measures corfu's table performance (put operation).
@@ -138,7 +134,14 @@ public class ClusterBenchmark {
             workflow = universeManager.workflow(wf -> {
                 wf.setupProcess(fixture -> {
                     fixture.getCluster().numNodes(numServers);
+                    fixture.getServer().serverJarDirectory(Paths.get("benchmarks", "target"));
 
+                    //disable automatic shutdown
+                    fixture.getUniverse().cleanUpEnabled(false);
+                });
+
+                wf.setupDocker(fixture -> {
+                    fixture.getCluster().numNodes(numServers);
                     fixture.getServer().serverJarDirectory(Paths.get("benchmarks", "target"));
 
                     //disable automatic shutdown
@@ -192,18 +195,7 @@ public class ClusterBenchmark {
          * @return maven/project version
          */
         private String getAppVersion() {
-            return parseAppVersionInPom();
-        }
-
-        private String parseAppVersionInPom() {
-            MavenXpp3Reader reader = new MavenXpp3Reader();
-            Model model;
-            try {
-                model = reader.read(new FileReader("pom.xml"));
-                return model.getVersion();
-            } catch (IOException | XmlPullParserException e) {
-                throw new IllegalStateException("Can't parse application version", e);
-            }
+            return new UniverseAppUtil().getAppVersion();
         }
     }
 
