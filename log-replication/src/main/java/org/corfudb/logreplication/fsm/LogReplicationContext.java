@@ -38,9 +38,4 @@ public class LogReplicationContext {
      * Executor service for blocking operations.
      */
     private ScheduledExecutorService blockingOpsScheduler;
-
-    /**
-     * Executor service for non-blocking operations.
-     */
-    private ScheduledExecutorService nonBlockingOpsScheduler;
 }

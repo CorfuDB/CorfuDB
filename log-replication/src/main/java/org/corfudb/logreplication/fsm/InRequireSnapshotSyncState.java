@@ -6,11 +6,11 @@ package org.corfudb.logreplication.fsm;
  * In this state we are waiting for a signal to start snapshot sync, as it was determined as required by
  * the source site.
  */
-public class InRequireSnaphotSyncState implements LogReplicationState {
+public class InRequireSnapshotSyncState implements LogReplicationState {
 
     LogReplicationContext context;
 
-    public InRequireSnaphotSyncState(LogReplicationContext context) {
+    public InRequireSnapshotSyncState(LogReplicationContext context) {
         this.context = context;
     }
 
