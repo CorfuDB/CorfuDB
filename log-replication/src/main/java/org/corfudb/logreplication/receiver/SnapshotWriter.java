@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.receiver;
 
+import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;

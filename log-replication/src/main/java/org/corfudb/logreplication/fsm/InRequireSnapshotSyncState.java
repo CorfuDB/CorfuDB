@@ -1,16 +1,19 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * A class that represents the 'In Require Snapshot Sync' state of the Log Replication FSM.
  *
  * In this state we are waiting for a signal to start snapshot sync, as it was determined as required by
  * the source site.
  */
-public class InRequireSnaphotSyncState implements LogReplicationState {
+@Slf4j
+public class InRequireSnapshotSyncState implements LogReplicationState {
 
     LogReplicationContext context;
 
-    public InRequireSnaphotSyncState(LogReplicationContext context) {
+    public InRequireSnapshotSyncState(LogReplicationContext context) {
         this.context = context;
     }
 
@@ -19,10 +22,10 @@ public class InRequireSnaphotSyncState implements LogReplicationState {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 return new InSnapshotSyncState(context);
-            case LOG_REPLICATION_STOP:
-                return new StoppedState(context);
+            case REPLICATION_STOP:
+                return new InitializedState(context);
             default: {
-                // Log unexpected LogReplicationEvent when in initialized state
+                log.warn("Unexpected log replication event {} when in require snapshot sync state.", event.getType());
             }
         }
         return this;

@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.transmitter;
 
+import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.ObjectsView;
@@ -15,6 +16,11 @@ public class LogEntryReader {
     private long lastReadAddr;
     private CorfuRuntime rt;
     private final int MAX_BATCH_SIZE = 1000;
+    private LogReplicationContext context;
+
+    public LogEntryReader(LogReplicationContext context) {
+        this.context = context;
+    }
 
     void initStream() {
         StreamOptions options = StreamOptions.builder()
@@ -52,5 +58,9 @@ public class LogEntryReader {
         }
 
         return msgList;
+    }
+
+    public void sync() {
+
     }
 }
