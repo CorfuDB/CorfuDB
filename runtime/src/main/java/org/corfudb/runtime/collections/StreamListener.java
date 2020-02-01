@@ -5,7 +5,7 @@ package org.corfudb.runtime.collections;
  *
  * Created by hisundar on 2019-10-18
  */
-public interface StreamListener {
+public interface StreamListener{
     /**
      * A corfu update can/may have multiple updates belonging to different streams.
      * This callback will return those updates as a list grouped by their Stream UUIDs.
@@ -21,22 +21,4 @@ public interface StreamListener {
      * @param throwable
      */
     void onError(Throwable throwable);
-
-    /**
-     * Return if two streamer objects are equal.
-     * This is to allow CorfuStore may have to put these callback objects into a Set or Map.
-     */
-    boolean equals(StreamListener o);
-
-    /**
-     * Return a unique integer representing this StreamListener
-     * This is to allow CorfuStore may have to put these callback objects into a Set or Map.
-     */
-    int hashCode();
-
-    /**
-     * Return a human readable string representing this StreamListener.
-     * Log messages within CorfuStore will use this to identify different StreamListeners.
-     */
-    String toString();
 }
