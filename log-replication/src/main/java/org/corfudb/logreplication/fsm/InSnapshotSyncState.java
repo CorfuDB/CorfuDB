@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 
 /**
@@ -7,6 +8,7 @@ import org.corfudb.logreplication.transmitter.SnapshotReader;
  *
  * In this state full logs are being synced to the remote site, based on a snapshot timestamp.
  */
+@Slf4j
 public class InSnapshotSyncState implements LogReplicationState {
 
     LogReplicationContext context;
@@ -22,22 +24,19 @@ public class InSnapshotSyncState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) {
         switch (event.getType()) {
             // Case where another snapshot (full) sync is requested.
-            case SNAPHOT_SYNC_REQUEST:
+            case SNAPSHOT_SYNC_REQUEST:
                 // Add logic to cancel previous snapshot sync
                 return new InSnapshotSyncState(context);
             case SNAPSHOT_SYNC_CANCEL:
-                return new InRequireSnaphotSyncState(context);
+                return new InRequireSnapshotSyncState(context);
             case  TRIMMED_EXCEPTION:
-                return new InRequireSnaphotSyncState(context);
-            case LEADERSHIP_LOST:
-                return new InitializedState(context);
-            case START_LOG_ENTRY_SYNC:
-                // This event indicates that
+                return new InRequireSnapshotSyncState(context);
+            case SNAPSHOT_SYNC_COMPLETE:
                 return new InLogEntrySyncState(context);
-            case LOG_REPLICATION_STOP:
-                return new StoppedState(context);
+            case REPLICATION_STOP:
+                return new InitializedState(context);
             default: {
-                // Log unexpected LogReplicationEvent when in InSnapshotSyncState
+                log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
         }
         return this;
