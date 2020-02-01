@@ -57,7 +57,7 @@ public class SnapshotWriter {
     }
 
     //If the message is out of order, buffer it?
-    void processTxMessage(TxMessage msg) {
+   void processTxMessage(TxMessage msg) {
 
-    }
+   }
 }
