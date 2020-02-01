@@ -43,6 +43,8 @@ public class LogReplicationFSM {
         this.context = context;
         this.state = new InitializedState(context);
         this.transition = new LogReplicationTransitionImpl(context);
+        // Single Threaded no periodic (TODO ANNY)
+        // own fixed thread pool size 1, no schedule
         context.getNonBlockingOpsScheduler()
                 .scheduleWithFixedDelay(this::consume, 0,
                         LOG_REPLICATION_FSM_PERIOD,
@@ -58,6 +60,7 @@ public class LogReplicationFSM {
      */
     public void input(LogReplicationEvent event) {
         try {
+            // if in stop state do not accept events todo anny
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             // Log Error Message
@@ -71,7 +74,11 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
-            while (eventQueue.size() > 0) {
+            while (true) {
+                // Stopped State
+                if(state.getType() == LogReplicationStateType.STOPPED)
+                    break;
+
                 // Block until an event shows up in the queue.
                 LogReplicationEvent event = eventQueue.take();
 

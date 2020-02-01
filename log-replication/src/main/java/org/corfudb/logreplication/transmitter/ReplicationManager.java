@@ -27,8 +27,20 @@ public class ReplicationManager {
         this.logReplicationFSM = new LogReplicationFSM(context);
     }
 
-    public void startSnapshotSync() {
+    public void startSnapshotSync(SnapshotSyncContext context) {
         // Add SNAPSHOT_SYNC_REQUEST event to logReplicationFSM queue
         // logReplicationFSM.input(LogReplicationEvent.LogReplicationEventType.SNAPHOT_SYNC_REQUEST);
+    }
+
+    public void startReplication() {
+
+    }
+
+    public void stopReplication() {
+
+    }
+
+    public void cancelSnapshotSync(SnapshotSyncContext context) {
+
     }
 }

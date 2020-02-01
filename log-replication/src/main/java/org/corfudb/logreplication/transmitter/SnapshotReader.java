@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.transmitter;
 
 import org.corfudb.logreplication.MessageType;
+import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.StreamViewSMRAdapter;
@@ -22,13 +23,19 @@ public class SnapshotReader {
     private Set<UUID> streams;
     private LinkedList<UUID> streamsToSend;
     private CorfuRuntime rt;
+    private LogReplicationContext replicationContext;
 
     /**
-     * Set runtime and gobalSnapshot
+     * Set runtime and globalSnapshot
      * @param runtime
      */
-    SnapshotReader(CorfuRuntime runtime) {
+    public SnapshotReader(CorfuRuntime runtime) {
         rt = runtime;
+    }
+
+    public SnapshotReader(LogReplicationContext context) {
+        replicationContext = context;
+        rt = replicationContext.getCorfuRuntime();
     }
 
     void init() {
@@ -68,7 +75,7 @@ public class SnapshotReader {
     /**
      * while sync finish put an event to the queue
      */
-    void sync() {
+    public void sync() {
         init();
         try {
             while (!streamsToSend.isEmpty()) {

@@ -22,10 +22,10 @@ public class InitializedState implements LogReplicationState {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 return new InSnapshotSyncState(context);
-            case START_LOG_ENTRY_SYNC:
+            case REPLICATION_START:
                 return new InLogEntrySyncState(context);
-            case LOG_REPLICATION_STOP:
-                return new StoppedState(context);
+            case REPLICATION_STOP:
+                return this;
             default: {
                 // Log unexpected LogReplicationEvent when in initialized state
             }
