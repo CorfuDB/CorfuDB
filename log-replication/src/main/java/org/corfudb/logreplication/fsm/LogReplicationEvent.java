@@ -11,12 +11,13 @@ public interface LogReplicationEvent {
      * Enum listing the various type of LeaseEvents.
      */
     enum LogReplicationEventType {
-        SNAPSHOT_SYNC_REQUEST,       // Signal to start a snapshot sync (full-sync)
-        TRIMMED_EXCEPTION,          // Log has been trimmed on access
-        SNAPSHOT_SYNC_CANCEL,       // Request to cancel snapshot sync
-        LEADERSHIP_LOST,            // Leadership has been lost by current node
-        START_LOG_ENTRY_SYNC,       // Request incremental sync (delta-sync)
-        LOG_REPLICATION_STOP        // Request to stop the FSM and go to StoppedState
+        SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot sync (full-sync)
+        TRIMMED_EXCEPTION,          // Internal event indicating that log has been trimmed on access
+        SNAPSHOT_SYNC_CANCEL,       // External event requesting to cancel snapshot sync (full-sync)
+        REPLICATION_START,          // External event which signals start of log replication process
+        REPLICATION_STOP,            // External event which signals stop of log replication process
+        SNAPSHOT_SYNC_COMPLETE      // Internal event which signals a snapshot sync has been completed
+        // REPLICATION_SHUTDOWN?
     }
 
     /**
