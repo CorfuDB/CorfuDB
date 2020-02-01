@@ -33,7 +33,7 @@ public class ProtobufSerializer implements ISerializer {
 
     private final byte type;
 
-    static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
+    public static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
 
     private final Map<String, Class<? extends Message>> classMap;
 

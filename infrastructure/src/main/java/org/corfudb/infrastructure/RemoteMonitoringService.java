@@ -57,10 +57,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class RemoteMonitoringService implements MonitoringService {
-
-    private static final CompletableFuture<DetectorTask> DETECTOR_TASK_COMPLETED
-            = CompletableFuture.completedFuture(DetectorTask.COMPLETED);
-
     private static final CompletableFuture<DetectorTask> DETECTOR_TASK_NOT_COMPLETED
             = CompletableFuture.completedFuture(DetectorTask.NOT_COMPLETED);
 
@@ -752,7 +748,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 //Add all layouts to the set
                 .forEach(optionalLayout -> optionalLayout.ifPresent(layouts::add));
 
-        return Optional.ofNullable(layouts.first());
+        return Optional.ofNullable(layouts.isEmpty() ? null : layouts.first());
     }
 
     /**

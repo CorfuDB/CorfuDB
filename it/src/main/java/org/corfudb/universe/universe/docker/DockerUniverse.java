@@ -124,7 +124,6 @@ public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams>
                 return DockerSupportCluster.builder()
                         .universeParams(universeParams)
                         .supportParams(ClassUtils.cast(groupParams))
-                        .loggingParams(loggingParams)
                         .docker(docker)
                         .build();
             default:

@@ -76,10 +76,10 @@ public class CorfuDynamicMessage {
         // The getAllFields returns a {@link com.google.protobuf.SmallSortedMap}. This map ensures ordering.
         // This is created internally in protobuf from 2 parts an entry list  which is an ArrayList and an overflowMap
         // which is a TreeMap. Both of these guarantee ordering and hence ordering is guaranteed in the iteration.
-        Iterator<Map.Entry<FieldDescriptor, Object>> thisMessage = new ArrayList<>(payload.getAllFields().entrySet())
-                .iterator();
-        Iterator<Map.Entry<FieldDescriptor, Object>> otherMessage = new ArrayList<>(payload.getAllFields().entrySet())
-                .iterator();
+        Iterator<Map.Entry<FieldDescriptor, Object>> thisMessage
+                = new ArrayList<>(payload.getAllFields().entrySet()).iterator();
+        Iterator<Map.Entry<FieldDescriptor, Object>> otherMessage
+                = new ArrayList<>(other.payload.getAllFields().entrySet()).iterator();
 
         while (thisMessage.hasNext()) {
             if (!otherMessage.hasNext()) {

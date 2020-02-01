@@ -118,11 +118,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     private volatile Channel channel = null;
 
-    /** Whether to shutdown the {@code eventLoopGroup} or not. Only applies when
-     *  a deprecated constructor (which generates its own {@link EventLoopGroup} is used.
-     */
-    private boolean shutdownEventLoop = false;
-
     /**
      * Whether or not this router is shutdown.
      */
@@ -404,7 +399,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
         @NonNull CorfuMsg message) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
 
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
@@ -428,7 +422,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 .timer(timerNameCache.get(message.getMsgType()));
 
         final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(isEnabled, roundTripMsgTimer);
+                .getConditionalContext(roundTripMsgTimer);
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -682,7 +676,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     .setDaemon(true)
                     .setNameFormat(parameters.getNettyEventLoopThreadFormat())
                     .build()), parameters);
-        shutdownEventLoop = true;
     }
 
     @Deprecated

@@ -1,11 +1,11 @@
 package org.corfudb.universe.node.server;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.Test;
 import org.slf4j.event.Level;
 
 import java.time.Duration;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 
 public class CorfuServerParamsTest {

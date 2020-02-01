@@ -3,7 +3,7 @@ package org.corfudb.util;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
@@ -265,11 +265,7 @@ public class MetricsUtils {
     }
 
     public static Timer.Context getConditionalContext(@NonNull Timer t) {
-        return getConditionalContext(metricsCollectionEnabled, t);
-    }
-
-    public static Timer.Context getConditionalContext(boolean enabled, @NonNull Timer t) {
-        return enabled ? t.time() : null;
+        return metricsCollectionEnabled ? t.time() : null;
     }
 
     public static void stopConditionalContext(Timer.Context context) {
@@ -278,8 +274,8 @@ public class MetricsUtils {
         }
     }
 
-    public static void incConditionalCounter(boolean enabled, @NonNull Counter counter, long amount) {
-        if (enabled) {
+    public static void incConditionalCounter(@NonNull Counter counter, long amount) {
+        if (metricsCollectionEnabled) {
             counter.inc(amount);
         }
     }
@@ -288,24 +284,14 @@ public class MetricsUtils {
      * return a gauge on direct memory used by netty's PooledByteBufAllocator
      */
     private static Gauge<Long> getNettyPooledDirectMemGauge() {
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory();
-            }
-        };
+        return () -> PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory();
     }
 
     /**
      * return a gauge on heap memory used by netty's PooledByteBufAllocator
      */
     private static Gauge<Long> getNettyPooledHeapMemGauge() {
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory();
-            }
-        };
+        return () -> PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory();
     }
 
     /**
@@ -347,14 +333,11 @@ public class MetricsUtils {
     private static Gauge<Long> getSizeGauge(Object object) {
         WeakReference<Object> toBeMeasuredObject = new WeakReference<>(object);
 
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                final Object objectOfInterest = toBeMeasuredObject.get();
-                return (objectOfInterest != null) ?
-                        sizeOf.deepSizeOf(objectOfInterest) :
-                        0L;
-            }
+        return () -> {
+            final Object objectOfInterest = toBeMeasuredObject.get();
+            return (objectOfInterest != null) ?
+                    sizeOf.deepSizeOf(objectOfInterest) :
+                    0L;
         };
     }
 

@@ -3,9 +3,15 @@ package org.corfudb.universe.node.server.process;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.Copy;
+import org.apache.tools.ant.taskdefs.Exec;
 import org.apache.tools.ant.taskdefs.Execute;
+import org.apache.tools.ant.taskdefs.PumpStreamHandler;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -29,7 +35,7 @@ public class ExecutionHelper {
     /**
      * The utility copies the contents of the source_file to the target_file.
      *
-     * @param srcFile   source file
+     * @param srcFile    source file
      * @param targetFile target directory
      */
     public void copyFile(Path srcFile, Path targetFile) {
@@ -47,13 +53,17 @@ public class ExecutionHelper {
      *
      * @param command shell command
      */
-    public void executeCommand(Optional<Path> workDir, String command) throws IOException {
+    public String executeCommand(Optional<Path> workDir, String command) throws IOException {
         Execute exec = new Execute();
 
         exec.setCommandline(new String[]{"sh", "-c", command});
         exec.setAntRun(PROJECT);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        exec.setStreamHandler(new PumpStreamHandler(out, out));
         workDir.ifPresent(wd -> exec.setWorkingDirectory(wd.toFile()));
         log.info("Executing command: {}, workDir: {}", command, workDir);
         exec.execute();
+
+        return out.toString(StandardCharsets.UTF_8.name());
     }
 }

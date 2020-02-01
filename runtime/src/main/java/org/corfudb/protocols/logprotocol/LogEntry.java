@@ -66,7 +66,8 @@ public class LogEntry implements ICorfuSerializable {
      */
     public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt) {
         try {
-            LogEntryType let = typeMap.get(b.readByte());
+            byte type = b.readByte();
+            LogEntryType let = typeMap.get(type);
             LogEntry l = let.entryType.newInstance();
             l.type = let;
             l.runtime = rt;
@@ -95,17 +96,6 @@ public class LogEntry implements ICorfuSerializable {
     @Override
     public void serialize(ByteBuf b) {
         b.writeByte(type.asByte());
-    }
-
-    /**
-     * Returns whether the entry changes the contents of the stream.
-     * For example, an aborted transaction does not change the content of the stream.
-     *
-     * @return True, if the entry changes the contents of the stream,
-     *         False otherwise.
-     */
-    public boolean isMutation(UUID stream) {
-        return true;
     }
 
     @RequiredArgsConstructor

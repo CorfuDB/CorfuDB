@@ -8,6 +8,8 @@ import org.corfudb.benchmarks.runtime.collections.helper.CorfuTableBenchmarkHelp
 import org.corfudb.benchmarks.runtime.collections.helper.ValueGenerator.StaticValueGenerator;
 import org.corfudb.benchmarks.util.SizeUnit;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamingMapDecorator;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.ehcache.PersistentCacheManager;
 import org.ehcache.config.ResourcePools;
 import org.ehcache.config.builders.CacheManagerBuilder;
@@ -47,7 +49,9 @@ public abstract class EhCacheState {
         EhCacheMap<Integer, String> underlyingMap = getEhCacheMap();
 
         StaticValueGenerator valueGenerator = new StaticValueGenerator(dataSize);
-        CorfuTable<Integer, String> table = new CorfuTable<>(underlyingMap);
+        CorfuTable<Integer, String> table = new CorfuTable<>(
+                () -> new StreamingMapDecorator<>(underlyingMap),
+                ICorfuVersionPolicy.DEFAULT);
 
         helper = CorfuTableBenchmarkHelper.builder()
                 .underlyingMap(underlyingMap)

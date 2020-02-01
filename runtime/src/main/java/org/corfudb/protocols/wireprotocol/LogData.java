@@ -3,12 +3,15 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -20,8 +23,6 @@ import org.corfudb.util.serializer.Serializers;
  */
 @Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
-
-    public final static LogData EMPTY = new LogData(DataType.EMPTY);
 
     public static final int NOT_KNOWN = -1;
 
@@ -73,18 +74,38 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                     if (data == null) {
                         this.payload.set(null);
                     } else {
-                        ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
-                        final Object actualValue =
-                                Serializers.CORFU.deserialize(copyBuf, runtime);
-                        if (actualValue instanceof LogEntry) {
-                            ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
-                            ((LogEntry) actualValue).setRuntime(runtime);
+                        ByteBuf serializedBuf = Unpooled.wrappedBuffer(data);
+                        if (hasPayloadCodec()) {
+                            // if the payload has a codec we need to decode it before deserialization
+                            ByteBuf compressedBuf = ICorfuPayload.fromBuffer(data, ByteBuf.class);
+                            byte[] compressedArrayBuf= new byte[compressedBuf.readableBytes()];
+                            compressedBuf.readBytes(compressedArrayBuf);
+                            serializedBuf = Unpooled.wrappedBuffer(getPayloadCodecType()
+                                    .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
                         }
-                        value = actualValue == null ? this.payload : actualValue;
-                        this.payload.set(value);
-                        copyBuf.release();
-                        lastKnownSize = data.length;
-                        data = null;
+
+                        final Object actualValue;
+                        try {
+                            actualValue =
+                                    Serializers.CORFU.deserialize(serializedBuf, runtime);
+
+                            if (actualValue instanceof LogEntry) {
+                                ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
+                                ((LogEntry) actualValue).setRuntime(runtime);
+                            }
+                            value = actualValue == null ? this.payload : actualValue;
+                            this.payload.set(value);
+                            lastKnownSize = data.length;
+                        } catch (Throwable throwable) {
+                            log.error("Exception caught at address {}, {}, {}",
+                                    getGlobalAddress(), getStreams(), getType());
+                            log.error("Raw data buffer {}",
+                                    serializedBuf.resetReaderIndex().toString(Charset.defaultCharset()));
+                            throw throwable;
+                        } finally {
+                            serializedBuf.release();
+                            data = null;
+                        }
                     }
                 }
             }
@@ -140,6 +161,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         } else {
             data = null;
         }
+
         if (type.isMetadataAware()) {
             metadataMap = ICorfuPayload.enumMapFromBuffer(buf, IMetadata.LogUnitMetadataType.class);
         } else {
@@ -156,6 +178,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         this.type = type;
         this.data = null;
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+    }
+
+    public LogData(DataType type, final Object object, final int codecId) {
+        this(type, object, Codec.getCodecTypeById(codecId).toString());
     }
 
     /**
@@ -184,6 +210,18 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                                 .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)));
             }
         }
+    }
+
+    /**
+     * Constructor for generating LogData.
+     *
+     * @param type The type of log data to instantiate.
+     * @param object The actual data/value
+     * @param codecType The encoder/decoder type
+     */
+    public LogData(DataType type, final Object object, final String codecType) {
+        this(type, object);
+        setPayloadCodecType(Codec.Type.valueOf(codecType));
     }
 
     /**
@@ -232,7 +270,14 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             if (data == null) {
                 int lengthIndex = buf.writerIndex();
                 buf.writeInt(0);
-                Serializers.CORFU.serialize(payload.get(), buf);
+                if (hasPayloadCodec()) {
+                    // if the payload has a codec we need to also compress the payload
+                    ByteBuf serializeBuf = Unpooled.buffer();
+                    Serializers.CORFU.serialize(payload.get(), serializeBuf);
+                    doCompressInternal(serializeBuf, buf);
+                } else {
+                    Serializers.CORFU.serialize(payload.get(), buf);
+                }
                 int size = buf.writerIndex() - (lengthIndex + 4);
                 buf.writerIndex(lengthIndex);
                 buf.writeInt(size);
@@ -241,9 +286,16 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 ICorfuPayload.serialize(buf, data);
             }
         }
+
         if (type.isMetadataAware()) {
             ICorfuPayload.serialize(buf, metadataMap);
         }
+    }
+
+    private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
+        ByteBuffer wrappedByteBuf = ByteBuffer.wrap(bufData.array(), 0, bufData.readableBytes());
+        ByteBuffer compressedBuf = getPayloadCodecType().getInstance().compress(wrappedByteBuf);
+        ICorfuPayload.serialize(buf, Unpooled.wrappedBuffer(compressedBuf));
     }
 
     /**

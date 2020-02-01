@@ -25,7 +25,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -53,7 +53,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.clear();
@@ -75,7 +75,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .build()
                 .setStreamName("test")
                 .setSerializer(Serializers.PRIMITIVE)
-                .setTypeToken(new TypeToken<SMRMap<Long, Double>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<Long, Double>>() {})
                 .open();
 
         final double PRIMITIVE_1 = 2.4;
@@ -98,7 +98,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         corfuInstancesMap.clear();
@@ -114,7 +114,7 @@ public class SMRMapTest extends AbstractViewTest {
         // ScanAndFilterByEntry
         Predicate<Map.Entry<String, String>> valuePredicate =
                 p -> p.getValue().equals("CorfuServer");
-        Collection<Map.Entry<String, String>> filteredMap = ((SMRMap)corfuInstancesMap)
+        Collection<Map.Entry<String, String>> filteredMap = ((CorfuTable)corfuInstancesMap)
                 .scanAndFilterByEntry(valuePredicate);
 
         assertThat(filteredMap.size()).isEqualTo(2);
@@ -124,7 +124,7 @@ public class SMRMapTest extends AbstractViewTest {
         }
 
         // ScanAndFilter (Deprecated Method)
-        List<String> corfuServerList = ((SMRMap)corfuInstancesMap)
+        List<String> corfuServerList = ((CorfuTable)corfuInstancesMap)
                 .scanAndFilter(p -> p.equals("CorfuServer"));
 
         assertThat(corfuServerList.size()).isEqualTo(2);
@@ -142,7 +142,7 @@ public class SMRMapTest extends AbstractViewTest {
         ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView()
                 .build()
                 .setStreamID(id)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         assertThat(id)
@@ -156,7 +156,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.clear();
@@ -177,14 +177,14 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
         testMap.clear();
         testMap.put("z", "e");
         Map<String, Map<String, String>> testMap2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 2")
-                .setTypeToken(new TypeToken<SMRMap<String, Map<String, String>>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Map<String, String>>>() {})
                 .open();
         testMap2.put("a", testMap);
 
@@ -199,7 +199,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap3 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         assertThat(testMap3.get("y"))
@@ -214,7 +214,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("a")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.clear();
@@ -225,7 +225,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("a")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         assertThat(testMap2.get("z"))
@@ -238,7 +238,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(UUID.randomUUID())
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         final int num_threads = PARAMETERS.CONCURRENCY_SOME;
@@ -288,9 +288,9 @@ public class SMRMapTest extends AbstractViewTest {
                     return getRuntime().getObjectsView()
                             .build()
                             .setStreamID(UUID.randomUUID())
-                            .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                             })
-                            .addOption(ObjectOpenOptions.NO_CACHE)
+                            .option(ObjectOpenOption.NO_CACHE)
                             .open();
                 })
                 .toArray(Map[]::new);
@@ -327,7 +327,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.put("a", "b");
@@ -349,13 +349,13 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test1")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         Map<String, String> testMap2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test2")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.put("a", "b");
@@ -391,7 +391,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         getRuntime().getObjectsView().TXBegin();
@@ -414,7 +414,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
@@ -448,7 +448,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
@@ -475,7 +475,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.clear();
@@ -514,7 +514,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         getRuntime().getObjectsView().TXBegin();
@@ -537,7 +537,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.clear();
@@ -566,7 +566,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         assertThat(testMap.put("a", "z"));
@@ -581,9 +581,9 @@ public class SMRMapTest extends AbstractViewTest {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("A")
-                    .setSerializer(Serializers.JSON)
-                    .addOption(ObjectOpenOptions.NO_CACHE)
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                    .setSerializer(Serializers.getDefaultSerializer())
+                    .option(ObjectOpenOption.NO_CACHE)
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                     .open();
 
             getRuntime().getObjectsView().TXBegin();
@@ -602,7 +602,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, TestObject> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<SMRMap<String, TestObject>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, TestObject>>() {})
                 .open();
 
         testMap.put("A", new TestObject("A", 2, ImmutableMap.of("A", "B")));
@@ -619,7 +619,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, TestObject> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<SMRMap<String, TestObject>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, TestObject>>() {})
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW)
@@ -653,7 +653,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.put("a", "z");
@@ -670,9 +670,9 @@ public class SMRMapTest extends AbstractViewTest {
                             return getRuntime().getObjectsView()
                                     .build()
                                     .setStreamID(mapStream)
-                                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                                     })
-                                    .addOption(ObjectOpenOptions.NO_CACHE)
+                                    .option(ObjectOpenOption.NO_CACHE)
                                     .open();
                         })
                         .toArray(Map[]::new);
@@ -754,7 +754,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamID(stream)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testMap.clear();
@@ -768,9 +768,9 @@ public class SMRMapTest extends AbstractViewTest {
 
         long startTime = System.nanoTime();
         Map<String, String> testMap2 = getRuntime().getObjectsView().build()
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamID(stream)
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
         // Do a get to prompt the sync
         assertThat(testMap2.get(Integer.toString(0)))

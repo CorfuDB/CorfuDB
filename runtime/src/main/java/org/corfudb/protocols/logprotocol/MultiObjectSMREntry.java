@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -92,8 +91,14 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
         for (int i = 0; i < numStreams; i++) {
             UUID streamId = new UUID(b.readLong(), b.readLong());
 
-            int updateLength = b.readInt();
-            byte[] streamUpdates = new byte[updateLength];
+            // The MultiObjectSMREntry payload is structure as follows:
+            // LogEntry Type | number of MultiSMREntry entries | MultiSMREntry id | serialized MultiSMREntry | ...
+            // Therefore we need to unpack the MultiSMREntry entries one-by-one
+            int start = b.readerIndex();
+            MultiSMREntry.seekToEnd(b);
+            int multiSMRLen = b.readerIndex() - start;
+            b.readerIndex(start);
+            byte[] streamUpdates = new byte[multiSMRLen];
             b.readBytes(streamUpdates);
             streamBuffers.put(streamId, streamUpdates);
         }
@@ -105,19 +110,9 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
         b.writeInt(streamUpdates.size());
         streamUpdates.entrySet().stream()
                 .forEach(x -> {
-                    // Stream payload structure
-                    // | stream id | payload size | SMR Update 1 | ... | SMR Update N|
                     b.writeLong(x.getKey().getMostSignificantBits());
                     b.writeLong(x.getKey().getLeastSignificantBits());
-                    int payloadSizeIndex = b.writerIndex();
-                    b.writeInt(0);
-                    int payloadIndex = b.writerIndex();
-                    b.writeInt(x.getValue().getUpdates().size());
-                    x.getValue().getUpdates().stream().forEach(smrEntry -> Serializers.CORFU.serialize(smrEntry, b));
-                    int length = b.writerIndex() - payloadIndex;
-                    b.writerIndex(payloadSizeIndex);
-                    b.writeInt(length);
-                    b.writerIndex(payloadIndex + length);
+                    Serializers.CORFU.serialize(x.getValue(), b);
                 });
     }
 
@@ -141,13 +136,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
             // The stream exists and it needs to be deserialized
             byte[] streamUpdatesBuf = streamBuffers.get(id);
             ByteBuf buf = Unpooled.wrappedBuffer(streamUpdatesBuf);
-            int numUpdates = buf.readInt();
-            List<SMREntry> smrEntries = new ArrayList<>(numUpdates);
-            for (int update = 0; update < numUpdates; update++) {
-                smrEntries.add((SMREntry) Serializers.CORFU.deserialize(buf, null));
-            }
-
-            MultiSMREntry multiSMREntry = new MultiSMREntry(smrEntries);
+            MultiSMREntry multiSMREntry = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
             multiSMREntry.setGlobalAddress(getGlobalAddress());
             streamBuffers.remove(id);
             return multiSMREntry;

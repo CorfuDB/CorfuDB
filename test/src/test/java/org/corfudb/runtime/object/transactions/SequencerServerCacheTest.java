@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.SequencerServerCache;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.junit.Test;
 
@@ -34,7 +34,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         Map<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
                 })
                 .setStreamName("test")
                 .open();
@@ -51,6 +51,12 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         SequencerServerCache cache = sequencerServer.getCache();
         assertThat(cache.size()).isEqualTo(numTxn);
         getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);
+        // Since the addressSpace only sends a hint to the sequencer, its possible
+        // that the method returns before the sequencer receives the trim request,
+        // therefore it must be directly invoked to wait for the future.
+        getDefaultRuntime().getLayoutView().getRuntimeLayout()
+                .getPrimarySequencerClient()
+                .trimCache(trimAddress.getSequence()).join();
         assertThat(cache.size()).isEqualTo((int) trimAddress.getSequence());
     }
 

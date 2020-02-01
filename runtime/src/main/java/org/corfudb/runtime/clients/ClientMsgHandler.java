@@ -77,8 +77,8 @@ public class ClientMsgHandler {
                 if (ret != null) {
                     client.getRouter().completeRequest(message.getRequestID(), ret);
                 }
-            } catch (Exception ex) {
-                client.getRouter().completeExceptionally(message.getRequestID(), ex);
+            } catch (Throwable e) {
+                client.getRouter().completeExceptionally(message.getRequestID(), e);
             }
             return true;
         }

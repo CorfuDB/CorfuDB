@@ -8,11 +8,11 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.corfudb.common.util.ClassUtils;
 
 import java.time.Duration;
 import java.util.List;
@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 @Builder
 @EqualsAndHashCode
 @ToString
-public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
+public class CorfuClusterParams<T extends CorfuServerParams> implements GroupParams<T> {
 
     @Getter
     @Default
@@ -44,16 +44,15 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
 
     @Default
     @NonNull
-    private final SortedSet<CorfuServerParams> nodes = new TreeSet<>();
+    private final SortedSet<T> nodes = new TreeSet<>();
 
     @Getter
     @Default
     @NonNull
-    private NodeType nodeType = NodeType.CORFU_SERVER;
+    private final NodeType nodeType = NodeType.CORFU_SERVER;
 
     @Default
     @Getter
-    @NonNull
     private final int bootStrapRetries = 20;
 
     @Default
@@ -67,12 +66,12 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
     }
 
     @Override
-    public ImmutableSortedSet<CorfuServerParams> getNodesParams() {
+    public ImmutableSortedSet<T> getNodesParams() {
         return ImmutableSortedSet.copyOf(nodes);
     }
 
-    public synchronized CorfuServerParams getNode(String serverName) {
-        Map<String, CorfuServerParams> nodesMap = nodes
+    public synchronized T getNode(String serverName) {
+        Map<String, T> nodesMap = nodes
                 .stream()
                 .collect(Collectors.toMap(CorfuServerParams::getName, n -> n));
 
@@ -80,7 +79,7 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
     }
 
     @Override
-    public synchronized CorfuClusterParams add(CorfuServerParams nodeParams) {
+    public synchronized CorfuClusterParams<T> add(T nodeParams) {
         nodes.add(ClassUtils.cast(nodeParams));
         return this;
     }
@@ -89,7 +88,7 @@ public class CorfuClusterParams implements GroupParams<CorfuServerParams> {
         return name + "-corfu-" + nodeName;
     }
 
-    public int size(){
+    public int size() {
         return getNodesParams().size();
     }
 

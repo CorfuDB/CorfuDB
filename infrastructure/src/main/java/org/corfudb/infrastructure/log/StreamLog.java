@@ -140,4 +140,12 @@ public interface StreamLog {
     default boolean quotaExceeded() {
         return false;
     }
+
+    /**
+     * Query the exact Quota value in bytes
+     * @return the quota set in bytes
+     */
+    default long quotaLimitInBytes() {
+        return Long.MAX_VALUE;
+    }
 }

@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -39,7 +40,7 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
 
         Map<String, String> map = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName(this.getClass().getSimpleName())
                 .open();
         final String key = "key";

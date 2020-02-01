@@ -53,7 +53,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             .setMemory(false)
             .build();
     }
-
+    
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry

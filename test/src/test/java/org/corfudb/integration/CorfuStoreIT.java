@@ -3,6 +3,8 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.DynamicMessage;
 
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -11,8 +13,10 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -21,8 +25,10 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Simple test that inserts data into CorfuStore via a separate server process
@@ -128,12 +134,11 @@ public class CorfuStoreIT extends AbstractIT {
                 tableName,
                 Uuid.class,
                 Uuid.class,
-                Uuid.class,
+                ManagedResources.class,
                 TableOptions.builder().build());
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
-        final long metadataUuid = 5L;
         final long newMetadataUuid = 99L;
 
         Uuid uuidKey = Uuid.newBuilder()
@@ -144,9 +149,8 @@ public class CorfuStoreIT extends AbstractIT {
                 .setMsb(valueUuid)
                 .setLsb(valueUuid)
                 .build();
-        Uuid metadata = Uuid.newBuilder()
-                .setMsb(metadataUuid)
-                .setLsb(metadataUuid)
+        ManagedResources metadata = ManagedResources.newBuilder()
+                .setCreateTimestamp(keyUuid)
                 .build();
         TxBuilder tx = store.tx(namespace);
         tx.create(tableName, uuidKey, uuidVal, metadata)
@@ -176,7 +180,7 @@ public class CorfuStoreIT extends AbstractIT {
 
             DynamicMessage.Builder newMetaBuilder = metaMsg.toBuilder();
             metaMsg.getAllFields().forEach((fieldDescriptor, o) -> {
-                if (fieldDescriptor.getName().equals("lsb")) {
+                if (fieldDescriptor.getName().equals("create_timestamp")) {
                     newMetaBuilder.setField(fieldDescriptor, newMetadataUuid);
                 }
             });
@@ -188,15 +192,43 @@ public class CorfuStoreIT extends AbstractIT {
                     newMetaBuilder.build()));
         }
         assertThat(corfuTable.size()).isEqualTo(1);
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME))
+                .setSerializer(dynamicProtobufSerializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+
+        mcw.addMap(corfuTable);
+        mcw.addMap(tableRegistry);
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+        runtime.getAddressSpaceView().gc();
         runtime.shutdown();
 
         // PHASE 3
         // Read using protobuf serializer.
         runtime = createRuntime(singleNodeEndpoint);
-        store = new CorfuStore(runtime);
-        store.openTable(namespace, tableName, Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
-        CorfuRecord<Uuid, Uuid> record = store.query(namespace).getRecord(tableName, uuidKey);
-        assertThat(record.getMetadata().getLsb()).isEqualTo(newMetadataUuid);
+        final CorfuStore store3 = new CorfuStore(runtime);
+
+        // Attempting to open an unopened table with the short form should throw the IllegalArgumentException
+        assertThatThrownBy(() -> store3.openTable(namespace, tableName)).
+        isExactlyInstanceOf(IllegalArgumentException.class);
+
+        // Attempting to open a non-existent table should throw NoSuchElementException
+        assertThatThrownBy(() -> store3.openTable(namespace, "NonExistingTableName")).
+                isExactlyInstanceOf(NoSuchElementException.class);
+
+        store3.openTable(namespace, tableName, Uuid.class, Uuid.class, ManagedResources.class,
+                TableOptions.builder().build());
+        CorfuRecord<Uuid, ManagedResources> record = store3.query(namespace).getRecord(tableName, uuidKey);
+        assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
+
+        store3.tx(namespace).update(tableName, uuidKey, uuidVal, metadata).commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }

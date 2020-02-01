@@ -9,7 +9,6 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -61,6 +60,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
+    private final int basePort = 9000;
+    private final int retries = 10;
 
     @Before
     public void loadProperties() {
@@ -85,8 +86,6 @@ public class ClusterReconfigIT extends AbstractIT {
         testStatus += "SEED=" + Long.toHexString(SEED);
         return new Random(SEED);
     }
-
-    final int basePort = 9000;
 
     private Layout getLayout(int numNodes) {
         List<String> servers = new ArrayList<>();
@@ -201,9 +200,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = createDefaultRuntime();
 
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
 
@@ -368,7 +367,6 @@ public class ClusterReconfigIT extends AbstractIT {
     public void rebootUtilTest() throws Exception {
         final int PORT_0 = 9000;
         final String SERVER_0 = "localhost:" + PORT_0;
-        final int retries = 3;
 
         // Start testing restart utility
         Process corfuServer = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
@@ -409,15 +407,14 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
         final Layout layout = getLayout(3);
-        final int retries = 3;
         TimeUnit.SECONDS.sleep(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
         runtime = createDefaultRuntime();
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         final String data = createStringOfSize(1_000);
@@ -509,7 +506,6 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final Layout layout = getLayout(3);
 
-        final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         runtime = createDefaultRuntime();
@@ -521,7 +517,6 @@ public class ClusterReconfigIT extends AbstractIT {
     }
 
     private void retryBootstrapOperation(Runnable bootstrapOperation) throws InterruptedException {
-        final int retries = 5;
         int retry = retries;
         while (retry-- > 0) {
             try {
@@ -546,7 +541,6 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         final Layout layout = getLayout(1);
-        final int retries = 5;
 
         IClientRouter router = new NettyClientRouter(NodeLocator
                 .parseString(corfuSingleNodeHost + ":" + PORT_0),
@@ -577,7 +571,6 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         final Layout layout = getLayout(1);
-        final int retries = 3;
 
         IClientRouter router = new NettyClientRouter(NodeLocator
                 .parseString(corfuSingleNodeHost + ":" + PORT_0),
@@ -607,7 +600,6 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         final Layout layout = getLayout(1);
-        final int retries = 3;
 
         IClientRouter router = new NettyClientRouter(NodeLocator
                 .parseString(corfuSingleNodeHost + ":" + PORT_0),
@@ -653,14 +645,13 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final Layout layout = getLayout(3);
-        final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
         runtime = createDefaultRuntime();
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         final String data = createStringOfSize(1_000);
@@ -748,9 +739,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
 
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
         final String data = createStringOfSize(1_000);
@@ -803,7 +794,6 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final Layout layout = getLayout(3);
 
-        final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         runtime = createDefaultRuntime();
@@ -873,7 +863,6 @@ public class ClusterReconfigIT extends AbstractIT {
         final int nodesCount = 3;
         final Layout layout = getLayout(3);
 
-        final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         runtime = createDefaultRuntime();
@@ -951,7 +940,6 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final Layout layout = getLayout(3);
 
-        final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         final int systemDownHandlerLimit = 10;
@@ -1045,7 +1033,6 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
         final Layout layout = getLayout(3);
-        final int retries = 3;
         TimeUnit.SECONDS.sleep(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 

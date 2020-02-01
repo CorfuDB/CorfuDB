@@ -3,11 +3,9 @@ package org.corfudb.infrastructure;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.ToString;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
 
 import java.util.UUID;
 

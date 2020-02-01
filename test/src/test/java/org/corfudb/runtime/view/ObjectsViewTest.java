@@ -14,7 +14,7 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
@@ -24,13 +24,6 @@ import org.junit.Test;
  * Created by mwei on 2/18/16.
  */
 public class ObjectsViewTest extends AbstractViewTest {
-
-    public static boolean referenceTX(Map<String, String> smrMap) {
-        smrMap.put("a", "b");
-        assertThat(smrMap)
-                .containsEntry("a", "b");
-        return true;
-    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -50,18 +43,18 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime()
                 .setTransactionLogging(true);
 
-        SMRMap<String, String> map = getDefaultRuntime().getObjectsView()
+        CorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName(mapA)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         // TODO: fix so this does not require mapCopy.
-        SMRMap<String, String> mapCopy = getDefaultRuntime().getObjectsView()
+        CorfuTable<String, String> mapCopy = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName(mapA)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .addOption(ObjectOpenOptions.NO_CACHE)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
 
@@ -127,10 +120,10 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuRuntime r2 = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .nettyEventLoop(NETTY_EVENT_LOOP)
                 .build());
-        SMRMap<String, String> map = getDefaultRuntime().getObjectsView()
+        CorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName("mapa")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         r1.getObjectsView().TXBegin();
@@ -149,7 +142,7 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         Map<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
@@ -177,12 +170,12 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         Map<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         Map<String, String> smrMapB = r.getObjectsView().build()
                 .setStreamName("map b")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         smrMap.put("a", "b");

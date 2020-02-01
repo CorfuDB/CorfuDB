@@ -14,6 +14,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
@@ -29,7 +30,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -176,9 +176,9 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The return value of the access function.
      */
-    public abstract <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
-                                    ICorfuSMRAccess<R, T> accessFunction,
-                                    Object[] conflictObject);
+    public abstract <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
+                                                         ICorfuSMRAccess<R, T> accessFunction,
+                                                         Object[] conflictObject);
 
     /**
      * Get the result of an upcall.
@@ -189,14 +189,14 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The result of the upcall.
      */
-    public abstract <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                               long timestamp,
-                                               Object[] conflictObject);
+    public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
+                                                                     long timestamp,
+                                                                     Object[] conflictObject);
 
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
                                     Token snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
-                                    @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
+                                    @Nullable Runnable optimisticStreamSetter) {
         for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
             try {
                 if (optimisticStreamSetter != null) {
@@ -205,7 +205,7 @@ public abstract class AbstractTransactionalContext implements
                     // currently optimistic updates on the object, we
                     // roll them back.  Then, we set this context as  the
                     // object's new optimistic context.
-                    optimisticStreamSetter.accept(vlo);
+                    optimisticStreamSetter.run();
                 }
                 vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
                 break;
@@ -236,8 +236,9 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
-                                       Object[] conflictObject);
+    public abstract <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+                                                             SMREntry updateEntry,
+                                                             Object[] conflictObject);
 
     /**
      * Add a given transaction to this transactional context, merging
@@ -333,16 +334,6 @@ public abstract class AbstractTransactionalContext implements
     long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
-    }
-
-    /**
-     * collect all the conflict-params from the write-set for this transaction
-     * into a set.
-     *
-     * @return A set of longs representing all the conflict params
-     */
-    Map<UUID, Set<byte[]>> collectWriteConflictParams() {
-        return getWriteSetInfo().getHashedConflictSet();
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

@@ -35,9 +35,11 @@ public class CorfuStoreSample {
     private static CorfuRuntime getRuntimeAndConnect(String configurationString) {
 
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .build())
-                .parseConfigurationString(configurationString)
-                .connect();
+            .cacheDisabled(true)
+            .tlsEnabled(false)
+            .build())
+            .parseConfigurationString(configurationString)
+            .connect();
     }
 
     @SuppressWarnings("checkstyle:printLine") // Sample code
@@ -72,6 +74,10 @@ public class CorfuStoreSample {
                         Name.newBuilder().setFirstName("a").setLastName("x").build(),
                         Car.newBuilder().setColor("red").build(),
                         null)
+                .create(tableName,
+                    Name.newBuilder().setFirstName("b").setLastName("y").build(),
+                    Car.newBuilder().setColor("blue").build(),
+                    null)
                 // Transaction is begun and ended here.
                 .commit();
 

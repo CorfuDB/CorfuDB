@@ -1,17 +1,19 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Message;
-
 import java.lang.reflect.InvocationTargetException;
-import java.util.*;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,12 +21,19 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.rocksdb.CompactionOptionsUniversal;
+import org.rocksdb.CompressionType;
+import org.rocksdb.Options;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -253,7 +262,7 @@ public class TableRegistry {
                              @Nonnull final Class<K> kClass,
                              @Nonnull final Class<V> vClass,
                              @Nullable final Class<M> mClass,
-                             @Nonnull final TableOptions tableOptions)
+                             @Nonnull final TableOptions<K, V> tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         // Register the schemas to schema table.
@@ -270,6 +279,15 @@ public class TableRegistry {
         }
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
+        Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
+        if (tableOptions.getPersistentDataPath().isPresent()) {
+            versionPolicy = ICorfuVersionPolicy.MONOTONIC;
+            mapSupplier = () -> new PersistedStreamingMap<>(
+                    tableOptions.getPersistentDataPath().get(),
+                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
+                    protobufSerializer, this.runtime);
+        }
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
@@ -278,7 +296,8 @@ public class TableRegistry {
                 defaultValueMessage,
                 defaultMetadataMessage,
                 this.runtime,
-                this.protobufSerializer);
+                this.protobufSerializer,
+                mapSupplier, versionPolicy);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass);
@@ -300,8 +319,24 @@ public class TableRegistry {
     Table<K, V, M> getTable(String namespace, String tableName) {
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
         if (!tableMap.containsKey(fullyQualifiedTableName)) {
-            throw new NoSuchElementException(
-                    String.format("No such table found: namespace: %s, tableName: %s", namespace, tableName));
+            // Table has not been opened, but let's first find out if this table even exists
+            // To do so, consult the TableRegistry for an entry which indicates the table exists.
+            if (registryTable.containsKey(
+                    TableName.newBuilder()
+                    .setNamespace(namespace)
+                    .setTableName(tableName)
+                    .build())
+            ) {
+                // If table does exist then the caller must use the long form of the openTable()
+                // since there are too few arguments to open a table not seen by this runtime.
+                throw new IllegalArgumentException("Please provide Key, Value & Metadata schemas to re-open"
+                + " this existing table " + tableName + " in namespace " + namespace);
+            } else {
+                // If the table is completely unheard of return NoSuchElementException
+                throw new NoSuchElementException(
+                        String.format("No such table found: namespace: %s, tableName: %s",
+                        namespace, tableName));
+            }
         }
         return (Table<K, V, M>) tableMap.get(fullyQualifiedTableName);
     }

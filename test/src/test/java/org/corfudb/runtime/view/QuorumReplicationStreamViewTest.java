@@ -57,13 +57,6 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
     }
 
     @Test
-    public void canFindInStream()
-            throws Exception
-    {
-        super.canFindInStream();
-    }
-
-    @Test
     public void canDoPreviousOnStream()
             throws Exception
     {

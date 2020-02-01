@@ -39,7 +39,6 @@ public class ManagementHandlerTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         ServerContext serverContext = new ServerContextBuilder()
-                .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
@@ -95,19 +94,6 @@ public class ManagementHandlerTest extends AbstractClientTest {
         // verify that non-active workflows return false when queried.
         QueryResponse resp = client.queryRequest(UUID.randomUUID());
         assertThat(resp.isActive()).isFalse();
-    }
-
-    /**
-     * Tests the msg handler for failure detection.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void handleFailure()
-            throws Exception {
-        // Since the servers are started as single nodes thus already bootstrapped.
-        assertThat(client.handleFailure(0L, Collections.emptySet()).get())
-                .isEqualTo(true);
     }
 
     /**

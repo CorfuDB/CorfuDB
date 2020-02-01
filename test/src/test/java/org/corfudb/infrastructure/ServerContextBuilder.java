@@ -14,9 +14,6 @@ import org.corfudb.test.concurrent.TestThreadGroups;
 // Disable magic number check to make defaults readable
 @SuppressWarnings("checkstyle:magicnumber")
 public class ServerContextBuilder {
-
-    long initialToken = 0L; // for testing, we want to reset the sequencer on each test
-
     boolean single = true;
     boolean memory = true;
     String logPath = null;
@@ -58,7 +55,6 @@ public class ServerContextBuilder {
     public ServerContext build() {
         ImmutableMap.Builder<String,Object> builder =
                 new ImmutableMap.Builder<String, Object>()
-                .put("--initial-token", initialToken)
                 .put("--single", single)
                 .put(DataStoreConfig.MEMORY_PARAM, memory)
                 .put("--Threads", numThreads)
@@ -132,9 +128,4 @@ public class ServerContextBuilder {
             .build();
         return sc;
     }
-
-    public static ServerContext emptyContext() {
-        return new ServerContextBuilder().build();
-    }
-
 }

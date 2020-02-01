@@ -12,8 +12,8 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -38,7 +38,7 @@ public class StreamTest extends AbstractTransactionsTest {
     /**
      * This workload operates over three distinct maps
      */
-    ISMRMap<String, Integer> map1, map2, map3;
+    ICorfuTable<String, Integer> map1, map2, map3;
 
     private final int NUM_BATCHES = 3;
     private final int BATCH_SZ = 1_0;
@@ -81,7 +81,7 @@ public class StreamTest extends AbstractTransactionsTest {
 
     @Test
     public void testTxnOverwriteRetry() throws Exception {
-        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
         final Token trimMark = getTrimMark(getRuntime(), getRuntime().getParameters().getWriteRetry() - 1);
         final String key = "key";
         final String val = "val";
@@ -98,7 +98,7 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void sequencerTrimTest() {
 
-        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
         final int numEntries = 10;
         TXBegin();
         map.get("a");
@@ -132,7 +132,7 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void sequencerOverflowTest() {
 
-        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
         final int numEntries = 2000;
         boolean abortException = false;
 
@@ -163,9 +163,9 @@ public class StreamTest extends AbstractTransactionsTest {
         /**
          * Instantiate three streams with three SMRmap objects
          */
-        map1 = instantiateCorfuObject(SMRMap.class, "A"); map1.clear();
-        map2 = instantiateCorfuObject(SMRMap.class, "B"); map2.clear();
-        map3 = instantiateCorfuObject(SMRMap.class, "foo"); map3.clear();
+        map1 = instantiateCorfuObject(CorfuTable.class, "A"); map1.clear();
+        map2 = instantiateCorfuObject(CorfuTable.class, "B"); map2.clear();
+        map3 = instantiateCorfuObject(CorfuTable.class, "foo"); map3.clear();
 
 
         // generate multi-stream entries
@@ -209,9 +209,9 @@ public class StreamTest extends AbstractTransactionsTest {
         /**
          * Instantiate three streams with three SMRmap objects
          */
-        map1 = instantiateCorfuObject(SMRMap.class, "A");
-        map2 = instantiateCorfuObject(SMRMap.class, "B");
-        map3 = instantiateCorfuObject(SMRMap.class, "foo");
+        map1 = instantiateCorfuObject(CorfuTable.class, "A");
+        map2 = instantiateCorfuObject(CorfuTable.class, "B");
+        map3 = instantiateCorfuObject(CorfuTable.class, "foo");
 
         // populate maps
         for (int i = 0; i < NUM_BATCHES; i++) {

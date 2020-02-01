@@ -87,7 +87,7 @@ public class Orchestrator {
                         + threadNumber.getAndIncrement();
                 thread.setName(threadName);
                 thread.setUncaughtExceptionHandler(this::handleUncaughtException);
-                return new Thread(r);
+                return thread;
             }
 
             void handleUncaughtException(Thread t, @Nonnull Throwable e) {
@@ -223,7 +223,6 @@ public class Orchestrator {
             // runtime
             CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();
             params.setCacheDisabled(true);
-            params.setUseFastLoader(false);
             params.setLayoutServers(servers);
 
             rt = CorfuRuntime.fromParameters(params).connect();
