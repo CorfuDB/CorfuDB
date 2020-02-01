@@ -26,9 +26,9 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // Add logic to cancel previous snapshot sync
                 return new InSnapshotSyncState(context);
             case SNAPSHOT_SYNC_CANCEL:
-                return new InRequireSnaphotSyncState(context);
+                return new InRequireSnapshotSyncState(context);
             case  TRIMMED_EXCEPTION:
-                return new InRequireSnaphotSyncState(context);
+                return new InRequireSnapshotSyncState(context);
             case SNAPSHOT_SYNC_COMPLETE:
                 return new InLogEntrySyncState(context);
             case REPLICATION_STOP:

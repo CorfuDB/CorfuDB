@@ -1,18 +1,16 @@
 package org.corfudb.logreplication.fsm;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadFactory;
 
 
 /**
  * This class represents the Log Replication Finite State Machine.
  */
 public class LogReplicationFSM {
-
-    /**
-     * LogReplicationFSM consumer scheduled period in milliseconds.
-     */
-    private final int LOG_REPLICATION_FSM_PERIOD = 1000;
 
     /**
      * Log Replication Context, contains elements shared across different states in log replication.
@@ -43,12 +41,10 @@ public class LogReplicationFSM {
         this.context = context;
         this.state = new InitializedState(context);
         this.transition = new LogReplicationTransitionImpl(context);
-        // Single Threaded no periodic (TODO ANNY)
-        // own fixed thread pool size 1, no schedule
-        context.getNonBlockingOpsScheduler()
-                .scheduleWithFixedDelay(this::consume, 0,
-                        LOG_REPLICATION_FSM_PERIOD,
-                        TimeUnit.MILLISECONDS);
+        // Consumer thread will run on a dedicated single thread (poll queue for incoming events)
+        ThreadFactory consumerThreadFactory =
+                new ThreadFactoryBuilder().setNameFormat("log-replication-consumer-%d").build();
+        Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
     }
 
     /**
@@ -60,7 +56,10 @@ public class LogReplicationFSM {
      */
     public void input(LogReplicationEvent event) {
         try {
-            // if in stop state do not accept events todo anny
+            if (state.getType().equals(LogReplicationStateType.STOPPED)) {
+                // Log: not accepting events, in stopped state
+                return;
+            }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             // Log Error Message
@@ -75,14 +74,14 @@ public class LogReplicationFSM {
     private void consume() {
         try {
             while (true) {
-                // Stopped State
-                if(state.getType() == LogReplicationStateType.STOPPED)
+
+                // Finish consumer thread if in STOP state
+                if(state.getType() == LogReplicationStateType.STOPPED) {
                     break;
+                }
 
                 // Block until an event shows up in the queue.
                 LogReplicationEvent event = eventQueue.take();
-
-                // Add any logic that given an event requires to update context data
 
                 // Process the event
                 LogReplicationState newState = state.processEvent(event);
