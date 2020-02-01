@@ -7,4 +7,8 @@ import java.util.List;
  */
 public class LogReplicationConfig {
     private List<String> streamsToReplicate;
+
+    public LogReplicationConfig(List<String> streamsToReplicate) {
+        this.streamsToReplicate = streamsToReplicate;
+    }
 }
