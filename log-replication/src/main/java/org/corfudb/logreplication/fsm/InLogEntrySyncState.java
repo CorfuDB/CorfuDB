@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
+import org.corfudb.logreplication.transmitter.LogEntryReader;
+
 /**
  * A class that represents the 'In Log Entry Sync' state of the Log Replication FSM.
  *
@@ -9,8 +11,11 @@ public class InLogEntrySyncState implements LogReplicationState {
 
     LogReplicationContext context;
 
+    LogEntryReader logEntryReader;
+
     public InLogEntrySyncState(LogReplicationContext context) {
         this.context = context;
+        logEntryReader = new LogEntryReader(context);
     }
 
     @Override
@@ -19,7 +24,7 @@ public class InLogEntrySyncState implements LogReplicationState {
             case SNAPSHOT_SYNC_REQUEST:
                 return new InSnapshotSyncState(context);
             case TRIMMED_EXCEPTION:
-                return new InRequireSnaphotSyncState(context);
+                return new InRequireSnapshotSyncState(context);
             case REPLICATION_STOP:
                 return new InitializedState(context);
             default: {
@@ -31,7 +36,12 @@ public class InLogEntrySyncState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-
+        // Execute snapshot transaction for every table to be replicated
+        try {
+            context.getBlockingOpsScheduler().submit(logEntryReader::sync);
+        } catch (Throwable t) {
+            // Log Error
+        }
     }
 
     @Override

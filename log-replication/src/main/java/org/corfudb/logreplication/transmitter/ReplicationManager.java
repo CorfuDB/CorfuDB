@@ -3,6 +3,7 @@ package org.corfudb.logreplication.transmitter;
 import lombok.Data;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationContext;
+import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -28,19 +29,22 @@ public class ReplicationManager {
     }
 
     public void startSnapshotSync(SnapshotSyncContext context) {
-        // Add SNAPSHOT_SYNC_REQUEST event to logReplicationFSM queue
-        // logReplicationFSM.input(LogReplicationEvent.LogReplicationEventType.SNAPHOT_SYNC_REQUEST);
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
     }
 
     public void startReplication() {
-
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START));
     }
 
     public void stopReplication() {
-
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP));
     }
 
     public void cancelSnapshotSync(SnapshotSyncContext context) {
-
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CANCEL));
     }
 }
