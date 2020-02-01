@@ -22,20 +22,17 @@ public class InSnapshotSyncState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) {
         switch (event.getType()) {
             // Case where another snapshot (full) sync is requested.
-            case SNAPHOT_SYNC_REQUEST:
+            case SNAPSHOT_SYNC_REQUEST:
                 // Add logic to cancel previous snapshot sync
                 return new InSnapshotSyncState(context);
             case SNAPSHOT_SYNC_CANCEL:
                 return new InRequireSnaphotSyncState(context);
             case  TRIMMED_EXCEPTION:
                 return new InRequireSnaphotSyncState(context);
-            case LEADERSHIP_LOST:
-                return new InitializedState(context);
-            case START_LOG_ENTRY_SYNC:
-                // This event indicates that
+            case SNAPSHOT_SYNC_COMPLETE:
                 return new InLogEntrySyncState(context);
-            case LOG_REPLICATION_STOP:
-                return new StoppedState(context);
+            case REPLICATION_STOP:
+                return new InitializedState(context);
             default: {
                 // Log unexpected LogReplicationEvent when in InSnapshotSyncState
             }

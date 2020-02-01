@@ -20,8 +20,8 @@ public class InLogEntrySyncState implements LogReplicationState {
                 return new InSnapshotSyncState(context);
             case TRIMMED_EXCEPTION:
                 return new InRequireSnaphotSyncState(context);
-            case LOG_REPLICATION_STOP:
-                return new StoppedState(context);
+            case REPLICATION_STOP:
+                return new InitializedState(context);
             default: {
                 // Log unexpected LogReplicationEvent when in initialized state
             }
