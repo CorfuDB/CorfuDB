@@ -1,14 +1,21 @@
 package org.corfudb.logreplication.transmitter;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.concurrent.Executors;
+
 @Data
+@Slf4j
 public class ReplicationManager {
+
+    // Thread priority for operation scheduler.
+    private static final int SCHEDULER_THREAD_PRIORITY = 7;
 
     private LogReplicationContext context;
 
@@ -23,6 +30,12 @@ public class ReplicationManager {
                 .snapshotListener(snapshotListener)
                 .corfuRuntime(runtime)
                 .replicationManager(this)
+                .blockingOpsScheduler(Executors.newScheduledThreadPool(6, (r) -> {
+                    Thread t = Executors.defaultThreadFactory().newThread(r);
+                    t.setDaemon(true);
+                    t.setPriority(SCHEDULER_THREAD_PRIORITY);
+                    return t;
+                }))
                 .config(config)
                 .build();
         this.logReplicationFSM = new LogReplicationFSM(context);
