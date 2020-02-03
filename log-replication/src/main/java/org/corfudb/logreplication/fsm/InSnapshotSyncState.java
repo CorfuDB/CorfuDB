@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 
 /**
@@ -7,6 +8,7 @@ import org.corfudb.logreplication.transmitter.SnapshotReader;
  *
  * In this state full logs are being synced to the remote site, based on a snapshot timestamp.
  */
+@Slf4j
 public class InSnapshotSyncState implements LogReplicationState {
 
     LogReplicationContext context;
@@ -34,7 +36,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             case REPLICATION_STOP:
                 return new InitializedState(context);
             default: {
-                // Log unexpected LogReplicationEvent when in InSnapshotSyncState
+                log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
         }
         return this;
