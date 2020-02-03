@@ -15,6 +15,7 @@ import java.util.PriorityQueue;
 import java.util.UUID;
 
 /**
+ * The AR will pass in FullSyncQue and DeltaQue and API for fullSyncDone()
  * Open streams interested and append all entries
  */
 
@@ -106,5 +107,13 @@ public class SnapshotWriter {
     void reset(long snapshot) {
        srcGlobalSnapshot = snapshot;
        msgQ.clear();
+    }
+
+    /**
+     * The fullSyncQue guarantee the ordering of the messages.
+     */
+    void processFullSyncQue() {
+        //reset();
+        //get message, call processTxMessage()
     }
 }
