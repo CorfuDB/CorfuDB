@@ -1,8 +1,11 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * A class that represents the init state of the Log Replication FSM.
  */
+@Slf4j
 public class InitializedState implements LogReplicationState {
 
     LogReplicationContext context;
@@ -27,7 +30,7 @@ public class InitializedState implements LogReplicationState {
             case REPLICATION_STOP:
                 return this;
             default: {
-                // Log unexpected LogReplicationEvent when in initialized state
+                log.warn("Unexpected log replication event {} when in initialized state.", event.getType());
             }
         }
         return this;
