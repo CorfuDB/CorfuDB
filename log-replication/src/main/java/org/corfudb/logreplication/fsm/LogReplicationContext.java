@@ -3,6 +3,7 @@ package org.corfudb.logreplication.fsm;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NonNull;
+import lombok.Getter;
 import org.corfudb.logreplication.transmitter.LogListener;
 import org.corfudb.logreplication.transmitter.DataTransmitter;
 import org.corfudb.runtime.CorfuRuntime;
