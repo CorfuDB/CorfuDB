@@ -3,6 +3,8 @@ package org.corfudb.logreplication.fsm;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 
+import java.util.concurrent.Future;
+
 /**
  * A class that represents the in snapshot sync state of the Log Replication FSM.
  *
@@ -15,6 +17,8 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     SnapshotReader snapshotReader;
 
+    Future<?> syncFuture;
+
     public InSnapshotSyncState(LogReplicationContext context) {
         this.context = context;
         this.snapshotReader = new SnapshotReader(context);
@@ -25,16 +29,30 @@ public class InSnapshotSyncState implements LogReplicationState {
         switch (event.getType()) {
             // Case where another snapshot (full) sync is requested.
             case SNAPSHOT_SYNC_REQUEST:
-                // Add logic to cancel previous snapshot sync
-                return new InSnapshotSyncState(context);
+                /*
+                  Cancel snapshot sync if still in progress, if sync cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelSnapshotSync("another snapshot sync request.") ?
+                        new InSnapshotSyncState(context) : this;
             case SNAPSHOT_SYNC_CANCEL:
-                return new InRequireSnapshotSyncState(context);
-            case  TRIMMED_EXCEPTION:
+                 /*
+                  Cancel snapshot sync if still in progress, if sync cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelSnapshotSync("a explicit cancel by app.") ?
+                        new InRequireSnapshotSyncState(context) : this;
+            case TRIMMED_EXCEPTION:
                 return new InRequireSnapshotSyncState(context);
             case SNAPSHOT_SYNC_COMPLETE:
                 return new InLogEntrySyncState(context);
             case REPLICATION_STOP:
-                return new InitializedState(context);
+                /*
+                  Cancel snapshot sync if still in progress, if sync cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelSnapshotSync("request to stop replication.") ?
+                        new InitializedState(context) : this;
             default: {
                 log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
@@ -42,19 +60,32 @@ public class InSnapshotSyncState implements LogReplicationState {
         return this;
     }
 
+    private boolean cancelSnapshotSync(String cancelCause) {
+        // Cancel snapshot sync if still in progress
+        if (syncFuture != null && !syncFuture.isDone()) {
+            boolean cancel = syncFuture.cancel(true);
+            // Verify if task could not be canceled due to normal completion.
+            if (!cancel && !syncFuture.isDone()) {
+                log.error("Snapshot sync in progress could not be canceled.");
+                return false;
+            }
+        }
+        log.info("Snapshot sync has been canceled due to {}", cancelCause);
+        return true;
+    }
+
     @Override
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            context.getBlockingOpsScheduler().submit(snapshotReader::sync);
+            syncFuture = context.getBlockingOpsScheduler().submit(snapshotReader::sync);
         } catch (Throwable t) {
-            // Log Error
+            log.error("Error on entry of InSnapshotSyncState.", t);
         }
     }
 
     @Override
     public void onExit(LogReplicationState to) {
-
     }
 
     @Override
