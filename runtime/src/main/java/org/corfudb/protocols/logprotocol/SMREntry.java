@@ -114,7 +114,12 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = serializerType.deserialize(objBuf, rt);
+            if (opaque) {
+                byte[] argBytes = new byte[len];
+                arguments[arg] = argBytes;
+            } else {
+                arguments[arg] = serializerType.deserialize(objBuf, rt);
+            }
             b.skipBytes(len);
         }
         SMRArguments = arguments;
@@ -155,7 +160,11 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
                 .forEach(x -> {
                     int lengthIndex = b.writerIndex();
                     b.writeInt(0);
-                    serializerType.serialize(x, b);
+                    if (opaque) {
+                        b.writeBytes((byte[]) x);
+                    } else {
+                        serializerType.serialize(x, b);
+                    }
                     int length = b.writerIndex() - lengthIndex - 4;
                     b.writerIndex(lengthIndex);
                     b.writeInt(length);
