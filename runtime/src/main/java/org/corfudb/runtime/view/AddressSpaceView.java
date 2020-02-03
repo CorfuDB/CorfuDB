@@ -95,7 +95,7 @@ public class AddressSpaceView extends AbstractView {
             cacheBuilder.weigher((k, v) -> (int) (CACHE_KEY_SIZE + MetricsUtils.sizeOf.deepSizeOf(v)));
         }
 
-        if (cacheDisabled) {
+        if (true) {
             cacheBuilder.maximumSize(0); // Do not allocate memory when cache is disabled.
         } else if (maxCacheEntries != 0) {
             cacheBuilder.maximumSize(maxCacheEntries);

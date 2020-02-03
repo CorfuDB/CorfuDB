@@ -1,0 +1,66 @@
+package org.corfudb.runtime.view.stream;
+
+import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.junit.Test;
+
+import java.util.UUID;
+import java.util.stream.Stream;
+
+public class OpaqueStreamTest extends AbstractViewTest {
+
+    @Test
+    public void testBasicStreaming() {
+        CorfuRuntime rt = getDefaultRuntime();
+        rt.setCacheDisabled(true);
+
+        UUID streamId = CorfuRuntime.getStreamID("stream1");
+
+        CorfuTable<Integer, Integer> map = rt.getObjectsView()
+                .build()
+                .setStreamID(streamId)
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .open() ;
+
+
+        final int key1 = 1;
+        final int key2 = 2;
+        final int key3 = 3;
+        map.put(key1, key1);
+        map.put(key2, key2);
+        map.put(key3, key3);
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(map);
+        Token token = mcw.appendCheckpoints(rt, "baah");
+
+        rt.getAddressSpaceView().prefixTrim(token);
+
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView sv = rt2.getStreamsView().get(streamId);
+        OpaqueStream opaqueStream = new OpaqueStream(rt2, sv);
+        final long snapshot = 100;
+        Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
+
+        stream.forEach(entry -> {
+            //System.out.println(entry.getVersion() + " " + entry.getEntries());
+        });
+
+        CorfuRuntime rt3 = getNewRuntime(getDefaultNode()).connect();
+
+        CorfuTable<Integer, Integer> map2 = rt3.getObjectsView()
+                .build()
+                .setStreamID(streamId)
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .open() ;
+
+        System.out.println(map2.size());
+    }
+
+}
