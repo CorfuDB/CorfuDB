@@ -9,12 +9,14 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers;
 
 
 /**
@@ -97,9 +99,9 @@ public class CheckpointEntry extends LogEntry {
      *  May be present in any CheckpointEntryType, but typically
      *  used by CONTINUATION entries.
      */
-    @Getter
-    @Setter
-    MultiSMREntry smrEntries;
+    private MultiSMREntry smrEntries;
+
+    private byte[] updateBuffer;
 
     /** Byte count of smrEntries in serialized form, zero
      *  if smrEntries.size() is zero or if value is unknown.
@@ -116,6 +118,15 @@ public class CheckpointEntry extends LogEntry {
         this.checkpointAuthorId = authorId;
         this.dict = dict;
         this.smrEntries = smrEntries;
+    }
+
+    public synchronized MultiSMREntry getSmrEntries() {
+        if (updateBuffer == null) {
+            return smrEntries;
+        }
+        ByteBuf buf = Unpooled.wrappedBuffer(updateBuffer);
+        smrEntries = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+        return smrEntries;
     }
 
     /**
@@ -143,9 +154,16 @@ public class CheckpointEntry extends LogEntry {
         smrEntries = null;
         byte hasSmrEntries = b.readByte();
         if (hasSmrEntries > 0) {
-            smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime);
+            int start = b.readerIndex();
+            MultiSMREntry.seekToEnd(b);
+            int multiSMRLen = b.readerIndex() - start;
+            b.readerIndex(start);
+            updateBuffer = new byte[multiSMRLen];
+            b.readBytes(updateBuffer);
         }
-        smrEntriesBytes = b.readInt();
+        // skip smrEntriesBytes = b.readInt();
+        b.readInt();
+        smrEntriesBytes = updateBuffer == null ? 0 : updateBuffer.length;
     }
 
     /**
@@ -182,7 +200,8 @@ public class CheckpointEntry extends LogEntry {
         if (smrEntries != null) {
             b.writeByte(1);
             int byteStart = b.readableBytes();
-            smrEntries.serialize(b);
+            // This might break migration
+            Serializers.CORFU.serialize(smrEntries, b);
             smrEntriesBytes = b.readableBytes() - byteStart;
         } else {
             b.writeShort(0);
