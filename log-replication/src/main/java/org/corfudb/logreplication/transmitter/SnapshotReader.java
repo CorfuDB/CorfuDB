@@ -21,6 +21,7 @@ import java.util.UUID;
 
 @Slf4j
 /**
+ * The AR will call sync API and pass in the api for fullSyncDone(), handlerMsg()
  * Read streams one by one, get all the entries.
  */
 public class SnapshotReader {
