@@ -61,6 +61,8 @@ public class LogEntryReader {
     }
 
     public void sync() {
-
+        initStream();
+        nextMsgs();
+        // call callback to process message
     }
 }
