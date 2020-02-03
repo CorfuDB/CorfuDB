@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -10,6 +11,7 @@ import java.util.concurrent.ThreadFactory;
 /**
  * This class represents the Log Replication Finite State Machine.
  */
+@Slf4j
 public class LogReplicationFSM {
 
     /**
@@ -62,7 +64,7 @@ public class LogReplicationFSM {
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
-            // Log Error Message
+            log.error("Log Replication interrupted Exception: ", ex);
         }
     }
 
@@ -91,7 +93,7 @@ public class LogReplicationFSM {
                 state = newState;
             }
         } catch (Throwable t) {
-            // Log Error
+            log.error("Error on event consumer: ", t);
         }
     }
 }

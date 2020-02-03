@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.LogEntryReader;
 
 /**
@@ -7,6 +8,7 @@ import org.corfudb.logreplication.transmitter.LogEntryReader;
  *
  * In this state incremental (delta) updates are being synced to the remote site.
  */
+@Slf4j
 public class InLogEntrySyncState implements LogReplicationState {
 
     LogReplicationContext context;
@@ -28,7 +30,7 @@ public class InLogEntrySyncState implements LogReplicationState {
             case REPLICATION_STOP:
                 return new InitializedState(context);
             default: {
-                // Log unexpected LogReplicationEvent when in initialized state
+                log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
             }
         }
         return this;
