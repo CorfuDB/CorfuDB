@@ -3,7 +3,7 @@ package org.corfudb.logreplication.fsm;
 import lombok.Builder;
 import lombok.Data;
 import org.corfudb.logreplication.transmitter.LogListener;
-import org.corfudb.logreplication.transmitter.ReplicationManager;
+import org.corfudb.logreplication.transmitter.DataTransmitter;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
@@ -29,7 +29,7 @@ public class LogReplicationContext {
 
     private CorfuRuntime corfuRuntime;
 
-    private ReplicationManager replicationManager;
+    private DataTransmitter replicationManager;
 
     // Expect LogReplicationMetadataMap (contains PersistedReplicationMetadata)
     private Map<String, Long> logReplicationMetadataMap;
