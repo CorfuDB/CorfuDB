@@ -12,7 +12,7 @@ import java.util.concurrent.Executors;
 
 @Data
 @Slf4j
-public class ReplicationManager {
+public class DataTransmitter {
 
     // Thread priority for operation scheduler.
     private static final int SCHEDULER_THREAD_PRIORITY = 7;
@@ -21,10 +21,10 @@ public class ReplicationManager {
 
     private final LogReplicationFSM logReplicationFSM;
 
-    public ReplicationManager(CorfuRuntime runtime,
-                              LogListener snapshotListener,
-                              LogListener logEntryListener,
-                              LogReplicationConfig config) {
+    public DataTransmitter(CorfuRuntime runtime,
+                           LogListener snapshotListener,
+                           LogListener logEntryListener,
+                           LogReplicationConfig config) {
         this.context = LogReplicationContext.builder()
                 .logEntryListener(logEntryListener)
                 .snapshotListener(snapshotListener)
