@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
@@ -8,6 +10,7 @@ import java.util.List;
 public class LogReplicationConfig {
 
     // List of all streams to be replicated
+    @Getter
     private List<String> streamsToReplicate;
 
     public LogReplicationConfig(List<String> streamsToReplicate) {
