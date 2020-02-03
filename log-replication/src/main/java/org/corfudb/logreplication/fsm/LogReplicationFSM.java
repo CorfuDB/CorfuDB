@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.Executors;
@@ -22,7 +23,8 @@ public class LogReplicationFSM {
     /**
      * Current state of the FSM.
      */
-    private LogReplicationState state;
+    @Getter
+    private volatile LogReplicationState state;
 
     /**
      * Log Replication transition.
@@ -33,6 +35,9 @@ public class LogReplicationFSM {
      * A queue of events.
      */
     private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
+
+    @Getter
+    private volatile int numTransitions = 0;
 
     /**
      * Constructor.
@@ -45,9 +50,9 @@ public class LogReplicationFSM {
         this.transition = new LogReplicationTransitionImpl(context);
         // Consumer thread will run on a dedicated single thread (poll queue for incoming events)
         ThreadFactory consumerThreadFactory =
-                new ThreadFactoryBuilder().setNameFormat("log-replication-consumer-%d").build();
+            new ThreadFactoryBuilder().setNameFormat("log-replication-consumer-%d").build();
         Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
-    }
+}
 
     /**
      * Input function of the FSM.
@@ -76,7 +81,6 @@ public class LogReplicationFSM {
     private void consume() {
         try {
             while (true) {
-
                 // Finish consumer thread if in STOP state
                 if(state.getType() == LogReplicationStateType.STOPPED) {
                     break;
@@ -89,6 +93,8 @@ public class LogReplicationFSM {
                 LogReplicationState newState = state.processEvent(event);
 
                 transition.onTransition(state, newState);
+
+                numTransitions++;
 
                 state = newState;
             }

@@ -2,6 +2,7 @@ package org.corfudb.logreplication.fsm;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NonNull;
 import org.corfudb.logreplication.transmitter.LogListener;
 import org.corfudb.logreplication.transmitter.DataTransmitter;
 import org.corfudb.runtime.CorfuRuntime;
@@ -27,9 +28,13 @@ public class LogReplicationContext {
 
     private List<UUID> registeredTablesIDs;
 
+    /*
+     Required parameter. Provide compile time enforcement.
+     */
+    @NonNull
     private CorfuRuntime corfuRuntime;
 
-    private DataTransmitter replicationManager;
+    private DataTransmitter dataTransmitter;
 
     // Expect LogReplicationMetadataMap (contains PersistedReplicationMetadata)
     private Map<String, Long> logReplicationMetadataMap;
