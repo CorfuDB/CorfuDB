@@ -3,6 +3,8 @@ package org.corfudb.universe.group.cluster;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.client.LocalCorfuClient;
@@ -70,15 +72,16 @@ public abstract class AbstractCorfuCluster<P extends CorfuServerParams, U extend
     public LocalCorfuClient getLocalCorfuClient() {
         return LocalCorfuClient.builder()
                 .serverEndpoints(getClusterLayoutServers())
-                .prometheusMetricsPort(Optional.empty())
+                .corfuRuntimeParams(CorfuRuntime.CorfuRuntimeParameters.builder())
                 .build()
                 .deploy();
     }
 
     @Override
-    public LocalCorfuClient getLocalCorfuClient(int metricsPort) {
+    public LocalCorfuClient getLocalCorfuClient(
+            CorfuRuntimeParametersBuilder runtimeParametersBuilder) {
         return LocalCorfuClient.builder()
-                .prometheusMetricsPort(Optional.of(metricsPort))
+                .corfuRuntimeParams(runtimeParametersBuilder)
                 .serverEndpoints(getClusterLayoutServers())
                 .build()
                 .deploy();
