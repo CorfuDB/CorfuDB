@@ -29,21 +29,49 @@ public class InSnapshotSyncState implements LogReplicationState {
         switch (event.getType()) {
             // Case where another snapshot (full) sync is requested.
             case SNAPSHOT_SYNC_REQUEST:
-                // Add logic to cancel previous snapshot sync
-                return new InSnapshotSyncState(context);
+                /*
+                  Cancel snapshot sync if still in progress, if sync cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelSnapshotSync("another snapshot sync request.") ?
+                        new InSnapshotSyncState(context) : this;
             case SNAPSHOT_SYNC_CANCEL:
-                return new InRequireSnapshotSyncState(context);
+                 /*
+                  Cancel snapshot sync if still in progress, if sync cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelSnapshotSync("a explicit cancel by app.") ?
+                        new InRequireSnapshotSyncState(context) : this;
             case TRIMMED_EXCEPTION:
                 return new InRequireSnapshotSyncState(context);
             case SNAPSHOT_SYNC_COMPLETE:
                 return new InLogEntrySyncState(context);
             case REPLICATION_STOP:
-                return new InitializedState(context);
+                /*
+                  Cancel snapshot sync if still in progress, if sync cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelSnapshotSync("request to stop replication.") ?
+                        new InitializedState(context) : this;
             default: {
                 log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
         }
         return this;
+    }
+
+    private boolean cancelSnapshotSync(String cancelCause) {
+        // Cancel snapshot sync if still in progress
+        if (syncFuture != null && !syncFuture.isDone()) {
+            boolean cancel = syncFuture.cancel(true);
+            // Verify if task could not be canceled due to normal completion.
+            if (!cancel && !syncFuture.isDone()) {
+                log.error("Snapshot sync in progress could not be canceled.");
+                return false;
+            }
+        }
+        log.info("Snapshot sync has been canceled due to {}", cancelCause);
+        return true;
     }
 
     @Override
@@ -58,26 +86,6 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-        switch (to.getType()) {
-            case INITIALIZED:
-                // Cancel snapshot sync if still in progress
-                if (syncFuture != null && !syncFuture.isDone()) {
-                    syncFuture.cancel(true);
-                    log.info("Snapshot sync has been canceled due to request to stop replication.");
-                }
-            case IN_REQUIRE_SNAPSHOT_SYNC:
-                // Cancel snapshot sync if still in progress
-                if (syncFuture != null && !syncFuture.isDone()) {
-                    syncFuture.cancel(true);
-                    log.info("Snapshot sync has been canceled due to a explicit cancel by app.");
-                }
-            case IN_SNAPSHOT_SYNC:
-                // Cancel snapshot sync if still in progress
-                if (syncFuture != null && !syncFuture.isDone()) {
-                    syncFuture.cancel(true);
-                    log.info("Snapshot sync has been canceled due to another snapshot sync request.");
-                }
-        }
     }
 
     @Override
