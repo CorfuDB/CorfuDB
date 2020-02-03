@@ -9,12 +9,14 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.CorfuSerializer;
 
 
 /**
@@ -97,9 +99,9 @@ public class CheckpointEntry extends LogEntry {
      *  May be present in any CheckpointEntryType, but typically
      *  used by CONTINUATION entries.
      */
-    @Getter
-    @Setter
-    MultiSMREntry smrEntries;
+    private MultiSMREntry smrEntries;
+
+    private byte[] streamUpdates;
 
     /** Byte count of smrEntries in serialized form, zero
      *  if smrEntries.size() is zero or if value is unknown.
@@ -142,10 +144,45 @@ public class CheckpointEntry extends LogEntry {
         }
         smrEntries = null;
         byte hasSmrEntries = b.readByte();
+
         if (hasSmrEntries > 0) {
-            smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime);
+            ByteBuf newBuf = Unpooled.buffer();
+            newBuf.writeByte(CorfuSerializer.corfuPayloadMagic);
+            newBuf.writeBytes(b);
+
+            // converted to ICorfuSerialization serializer
+
+            int start = newBuf.readerIndex();
+            MultiSMREntry.seekToEnd(newBuf);
+            int multiSMRLen = newBuf.readerIndex() - start;
+            newBuf.readerIndex(start);
+            streamUpdates = new byte[multiSMRLen];
+            newBuf.readBytes(streamUpdates);
+
+            //smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime, true);
+            smrEntriesBytes = newBuf.readInt();
+        } else {
+            smrEntriesBytes = b.readInt();
         }
-        smrEntriesBytes = b.readInt();
+    }
+
+    public MultiSMREntry getSmrEntries() {
+        return getSmrEntries(false);
+    }
+
+    public synchronized MultiSMREntry getSmrEntries(boolean opaque) {
+        if (streamUpdates != null) {
+            ByteBuf b = Unpooled.wrappedBuffer(streamUpdates);
+            b.readByte(); // remove magic
+            if (opaque) {
+                smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime, true);
+            } else {
+                smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime, false);
+            }
+            streamUpdates = null;
+        }
+
+        return smrEntries;
     }
 
     /**
