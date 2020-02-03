@@ -26,7 +26,7 @@ public class SnapshotReader {
     private LogReplicationContext replicationContext;
 
     /**
-     * Set runtime and globalSnapshot
+     * Set runtime and callback function to pass message to network
      * @param runtime
      */
     public SnapshotReader(CorfuRuntime runtime) {
