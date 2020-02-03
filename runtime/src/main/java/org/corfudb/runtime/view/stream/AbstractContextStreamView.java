@@ -182,9 +182,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Check if the last entry updates the context.
         if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
 
             // Remove the entry which updates the context
             entries.remove(entries.size() - 1);
