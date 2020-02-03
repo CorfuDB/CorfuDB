@@ -71,7 +71,5 @@ public interface ISMRStream {
      * @return The UUID for this stream.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    default UUID getID() {
-        return new UUID(0L, 0L);
-    }
+    UUID getID();
 }
