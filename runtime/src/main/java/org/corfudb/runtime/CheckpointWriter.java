@@ -54,12 +54,6 @@ public class CheckpointWriter<T extends StreamingMap> {
     private long numEntries = 0;
     private long numBytes = 0;
 
-    // Registry and Timer used for measuring append checkpoint
-    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-    private static final String CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
-            "append-checkpoint";
-    private final Timer appendCheckpointTimer = metricRegistry.timer(CHECKPOINT_TIMER_NAME);
-
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
@@ -135,11 +129,7 @@ public class CheckpointWriter<T extends StreamingMap> {
         // log unit address maps reflect the latest update to the stream preventing tail regression in the
         // event of sequencer failover (if for instance the last update to the stream was a hole).
         Token snapshot = forceNoOpEntry();
-
-        // The checkpoint start log address is given by the stream's tail at snapshot time
-        Long streamTail = snapshot.getSequence();
-
-        return appendCheckpoint(snapshot, streamTail);
+        return appendCheckpoint(snapshot);
     }
 
     /**
@@ -148,10 +138,9 @@ public class CheckpointWriter<T extends StreamingMap> {
      * This API should not be directly invoked.
      *
      *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
-     *  @param streamTail tail of the stream to checkpoint at snapshot time.
-     */
+     *  */
     @VisibleForTesting
-    public Token appendCheckpoint(Token snapshotTimestamp, Long streamTail) {
+    public Token appendCheckpoint(Token snapshotTimestamp) {
         long start = System.currentTimeMillis();
 
         rt.getObjectsView().TXBuild()
@@ -159,16 +148,17 @@ public class CheckpointWriter<T extends StreamingMap> {
                 .snapshot(snapshotTimestamp)
                 .build()
                 .begin();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointTimer)) {
+
+        log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
+        
+        try (Stream<Map.Entry> entries = this.map.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
-            log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
-            Stream<Map.Entry> entries = this.map.entryStream();
             // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
             // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
-            startCheckpoint(snapshotTimestamp, streamTail);
+            startCheckpoint(snapshotTimestamp);
             int entryCount = appendObjectState(entries);
             finishCheckpoint();
             long cpDuration = System.currentTimeMillis() - start;
@@ -196,7 +186,8 @@ public class CheckpointWriter<T extends StreamingMap> {
      *
      * @return Global log address of the START record.
      */
-    public void startCheckpoint(Token txnSnapshot, long vloVersion) {
+    public void startCheckpoint(Token txnSnapshot) {
+        long vloVersion = txnSnapshot.getSequence();
         startTime = LocalDateTime.now();
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // VLO version at time of snapshot

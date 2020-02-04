@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -61,6 +63,20 @@ import org.corfudb.runtime.object.ICorfuVersionPolicy;
 public class CorfuTable<K ,V> implements
         ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
 
+    // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
+    // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
+    // to break the dependency, parallel stream operations have to execute on a separate pool that applications
+    // cant use. For example, if there are 4 accessor threads all using the common forkjoin pool, one of the threads
+    // can acquire the VLO lock and cause the other 3 threads to wait, but after acquiring the VLO lock, the thread
+    // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
+    // look, which creates a circular dependency. In other words, a deadlock.
+    private final static ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors() - 1,
+            pool -> {
+                final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                worker.setName("CorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
+                return worker;
+            }, null, true);
+
     // The "main" map which contains the primary key-value mappings.
     private final ContextAwareMap<K,V> mainMap;
     private final Set<Index.Spec<K, V, ? extends Comparable>> indexSpec;
@@ -100,8 +116,12 @@ public class CorfuTable<K ,V> implements
             indexSpec.add(index);
         });
 
-        log.info("CorfuTable: creating CorfuTable with the following indexes: {}",
-                secondaryIndexes.keySet());
+        if (!secondaryIndexes.isEmpty()) {
+            log.info(
+                "CorfuTable: creating CorfuTable with the following indexes: {}",
+                secondaryIndexes.keySet()
+            );
+        }
     }
 
     /**
@@ -358,9 +378,9 @@ public class CorfuTable<K ,V> implements
      */
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        return mainMap.entryStream()
+        return pool.submit(() -> mainMap.entryStream()
                 .map(Entry::getValue).filter(valuePredicate)
-                .collect(Collectors.toCollection(ArrayList::new));
+                .collect(Collectors.toCollection(ArrayList::new))).join();
     }
 
     /** {@inheritDoc} */
@@ -368,9 +388,9 @@ public class CorfuTable<K ,V> implements
     @Accessor
     public Collection<Map.Entry<K, V>> scanAndFilterByEntry(
             Predicate<? super Map.Entry<K, V>> entryPredicate) {
-        return mainMap.entryStream()
+        return pool.submit(() -> mainMap.entryStream()
                 .filter(entryPredicate)
-                .collect(Collectors.toCollection(ArrayList::new));
+                .collect(Collectors.toCollection(ArrayList::new))).join();
     }
 
     /** {@inheritDoc} */
@@ -446,7 +466,8 @@ public class CorfuTable<K ,V> implements
     @Override
     @Accessor
     public @Nonnull Set<K> keySet() {
-        return mainMap.entryStream().map(Entry::getKey)
+        return mainMap.keySet()
+                .stream()
                 .collect(ImmutableSet.toImmutableSet());
     }
 
@@ -454,7 +475,8 @@ public class CorfuTable<K ,V> implements
     @Override
     @Accessor
     public @Nonnull Collection<V> values() {
-        return mainMap.entryStream().map(Entry::getValue)
+        return mainMap.values()
+                .stream()
                 .collect(ImmutableSet.toImmutableSet());
     }
 
@@ -470,6 +492,8 @@ public class CorfuTable<K ,V> implements
 
     /**
      * Present the content of a {@link CorfuTable} via the {@link Stream} interface.
+     * Because the stream can point to other resources managed off-heap, its necessary
+     * to explicitly close it after consumption.
      *
      * @return stream of entries
      */

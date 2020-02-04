@@ -30,7 +30,7 @@ public class VmCorfuServerParams extends CorfuServerParams {
     public VmCorfuServerParams(
             VmName vmName, int port, Mode mode, Persistence persistence,
             Level logLevel, String clusterName, Duration stopTimeout, String serverVersion,
-            Path serverJarDirectory, String dockerImage, int logSizeQuotaPercentage) {
+            Path serverJarDirectory, String dockerImage, double logSizeQuotaPercentage) {
 
         super(
                 port, mode, persistence, logLevel, clusterName, stopTimeout,

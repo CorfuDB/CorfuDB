@@ -4,18 +4,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.reflect.TypeToken;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
+import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 /**
@@ -42,10 +49,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
+        trim(checkpointAddress);
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
@@ -147,10 +151,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Trim the log in between the checkpoints
         Token token = new Token(checkpointAddress.getEpoch(), checkpointAddress.getSequence() - ckpointGap - 1);
-        getRuntime().getAddressSpaceView().prefixTrim(token);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
+        trim(token);
 
         // Ok, get a new view of the map
         Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
@@ -172,6 +173,68 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Reading an entry from scratch should be ok
         assertThat(newTestMap.get("a"))
                 .isEqualTo("a" + (nCheckpoints - 1));
+    }
+
+    /**
+     * Verify that the streaming interface can be consumed directly and that
+     * {@link TrimmedException} is being thrown when linearizable history is lost.
+     */
+    @Test
+    public void rawStreamConsumer() {
+        final int BATCH_SIZE = 10;
+        final int CHECKPOINT_SIZE = 3;
+        final String CHECKPOINT_AUTHOR = "Author";
+        final String tableName = "test";
+        final CorfuTable<Integer, Integer> map = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .setStreamName(tableName)
+                .open();
+
+        final MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter();
+        mcw.addMap(map);
+
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+
+        // Insert a checkpoint
+        Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
+
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+
+        // Trim the log in between the checkpoints
+        trim(checkpointAddress);
+
+        CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
+        Map<Integer, Integer> newMap = newRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
+                })
+                .setStreamName(tableName)
+                .open();
+
+        IStreamView s = newRuntime.getStreamsView().get(CorfuRuntime.getStreamID(tableName));
+        s.seek(BATCH_SIZE + CHECKPOINT_SIZE);
+        // Seek beyond the last trimmed address.
+        // The first call to remainingUpTo() will load the checkpoint, and the
+        // second one will fetch the actual data.
+        Assertions.assertThat(Stream.of(s.remainingUpTo(Long.MAX_VALUE), s.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(BATCH_SIZE);
+
+        trim(mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> newMap.put(idx, idx));
+        Assertions.assertThatThrownBy(() -> s.remainingUpTo(Long.MAX_VALUE))
+                .isInstanceOf(TrimmedException.class);
+    }
+
+    /**
+     * Given the token, trim the address-space at {@link Token#getSequence()}.
+     *
+     * @param token point at which to trim the address space.
+     */
+    private void trim(Token token) {
+        getRuntime().getAddressSpaceView().prefixTrim(token);
+        getRuntime().getAddressSpaceView().gc();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+        getRuntime().getAddressSpaceView().invalidateClientCache();
     }
 
 
@@ -216,10 +279,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
+        trim(checkpointAddress);
 
 
         // Sync should encounter trim exception, reset, and use checkpoint

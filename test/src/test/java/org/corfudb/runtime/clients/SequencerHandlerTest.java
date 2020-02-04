@@ -39,12 +39,14 @@ public class SequencerHandlerTest extends AbstractClientTest {
         client = new SequencerClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(sequencerHandler)
+                .add(new BaseHandler())
                 .build();
     }
 
     @Before
     public void bootstrapSequencer() {
-        client.bootstrap(0L, Collections.emptyMap(), 0L, false);
+        client.bootstrap(0L, Collections.emptyMap(), 0L,
+                false).join();
     }
 
     @Test
