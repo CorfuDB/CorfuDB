@@ -1,13 +1,13 @@
 package org.corfudb.logreplication.receiver;
 
-import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.runtime.CorfuRuntime;
 
-public class DataReceiver {
-    private LogReplicationContext context;
+import java.util.List;
+
+public class ReplicationRxManager {
     private CorfuRuntime runtime;
 
-    public DataReceiver(CorfuRuntime rt) {
+    public ReplicationRxManager(CorfuRuntime rt) {
         runtime = rt;
     }
 
@@ -15,5 +15,7 @@ public class DataReceiver {
         // Buffer data (out of order) and apply
     }
 
-
+    public void apply(List<RxMessage> message) {
+        // Buffer data (out of order) and apply
+    }
 }
