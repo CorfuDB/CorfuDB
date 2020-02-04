@@ -85,7 +85,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            syncFuture = context.getBlockingOpsScheduler().submit(snapshotReader::sync);
+            syncFuture = context.getStateMachineWorker().submit(snapshotReader::sync);
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }
