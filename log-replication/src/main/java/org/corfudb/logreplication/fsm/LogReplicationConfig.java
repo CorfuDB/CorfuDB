@@ -2,18 +2,18 @@ package org.corfudb.logreplication.fsm;
 
 import lombok.Getter;
 
-import java.util.List;
+import java.util.Set;
 
 /**
  * A class that contains Log Replication Configuration parameters.
  */
 public class LogReplicationConfig {
 
-    // List of all streams to be replicated
+    // Set of all streams to be replicated
     @Getter
-    private List<String> streamsToReplicate;
+    private Set<String> streamsToReplicate;
 
-    public LogReplicationConfig(List<String> streamsToReplicate) {
+    public LogReplicationConfig(Set<String> streamsToReplicate) {
         this.streamsToReplicate = streamsToReplicate;
     }
 }
