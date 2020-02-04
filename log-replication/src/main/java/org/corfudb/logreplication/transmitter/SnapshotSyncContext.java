@@ -8,7 +8,6 @@ public class SnapshotSyncContext {
     // Event Identifier
     private String identifier;
 
-
     public SnapshotSyncContext(String identifier) {
         this.identifier = identifier;
     }

@@ -77,8 +77,6 @@ public class LogReplicationFSM {
                 // Block until an event shows up in the queue.
                 LogReplicationEvent event = eventQueue.take();
 
-                System.out.println("Processing event: " + event.getType());
-
                 // Process the event
                 LogReplicationState newState = state.processEvent(event);
 

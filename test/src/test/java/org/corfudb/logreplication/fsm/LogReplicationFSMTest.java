@@ -5,6 +5,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.concurrent.Executors;
@@ -21,7 +22,9 @@ public class LogReplicationFSMTest implements Observer {
 
     private void initLogReplicationFSM() {
         CorfuRuntime rt = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
-        LogReplicationContext context = LogReplicationContext.builder().corfuRuntime(rt)
+        LogReplicationContext context = LogReplicationContext.builder()
+                .corfuRuntime(rt)
+                .config(new LogReplicationConfig(Collections.emptySet()))
                 .stateMachineWorker(Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                         .setNameFormat("state-machine-worker-%d").build())).build();
         fsm = new LogReplicationFSM(context);
@@ -67,7 +70,6 @@ public class LogReplicationFSMTest implements Observer {
      */
     private void transition(LogReplicationEventType eventType,
                             LogReplicationStateType expectedState) throws InterruptedException {
-
         // Enforce eventType into the FSM queue
         fsm.input(new LogReplicationEvent(eventType));
 
@@ -76,12 +78,18 @@ public class LogReplicationFSMTest implements Observer {
         assertThat(fsm.getState().getType()).isEqualTo(expectedState);
     }
 
+    /**
+     * Observer callback.
+     *
+     * @param obs
+     * @param arg
+     */
     @Override
     public void update(Observable obs, Object arg) {
         if (obs == transitionObservable)
         {
             transitionAvailable.release();
-            System.out.println("Num transitions ::  "  + transitionObservable.getValue());
+            System.out.println("Num transitions :: "  + transitionObservable.getValue());
         }
     }
 }

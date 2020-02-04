@@ -57,7 +57,7 @@ public class InLogEntrySyncState implements LogReplicationState {
             boolean cancel = logEntrySyncFuture.cancel(true);
             // Verify if task could not be canceled due to normal completion.
             if (!cancel && !logEntrySyncFuture.isDone()) {
-                log.error("Snapshot sync in progress could not be canceled.");
+                log.error("Log Entry sync in progress could not be canceled.");
                 return false;
             }
         }
