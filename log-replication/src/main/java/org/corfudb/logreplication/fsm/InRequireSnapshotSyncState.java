@@ -5,27 +5,29 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * A class that represents the 'In Require Snapshot Sync' state of the Log Replication FSM.
  *
- * In this state we are waiting for a signal to start snapshot sync, as it was determined as required by
+ * In this state we are waiting for a signal to start snapshot transmit, as it was determined as required by
  * the source site.
  */
 @Slf4j
 public class InRequireSnapshotSyncState implements LogReplicationState {
 
-    LogReplicationContext context;
+    LogReplicationFSM logReplicationFSM;
 
-    public InRequireSnapshotSyncState(LogReplicationContext context) {
-        this.context = context;
+    public InRequireSnapshotSyncState(LogReplicationFSM logReplicationFSM) {
+        this.logReplicationFSM = logReplicationFSM;
     }
 
     @Override
     public LogReplicationState processEvent(LogReplicationEvent event) {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                return new InSnapshotSyncState(context);
+                return logReplicationFSM.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
             case REPLICATION_STOP:
-                return new InitializedState(context);
+                return logReplicationFSM.getStates().get(LogReplicationStateType.INITIALIZED);
+            case REPLICATION_TERMINATED:
+                return logReplicationFSM.getStates().get(LogReplicationStateType.STOPPED);
             default: {
-                log.warn("Unexpected log replication event {} when in require snapshot sync state.", event.getType());
+                log.warn("Unexpected log replication event {} when in require snapshot transmit state.", event.getType());
             }
         }
         return this;
