@@ -3,19 +3,15 @@ package org.corfudb.logreplication.transmitter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.SerializationUtils;
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.view.Address;
 
-import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -33,11 +29,11 @@ public class SnapshotReader {
     private final MessageType MSG_TYPE = MessageType.SNAPSHOT_MESSAGE;
     private long fullSyncUUID;
     private long globalSnapshot;
-    private List<String> streams;
+    private Set<String> streams;
     private CorfuRuntime rt;
     private LogReplicationContext replicationContext;
-    private long preMsgTs;
-    private long currentMsgTs;
+    private long preMsgTs; //this timestamp is not used by receiver, for debugging usage for now
+    private long currentMsgTs; //this timestamp is not used by receiver, for debugging usage for now
 
     /**
      * Set runtime and callback function to pass message to network
@@ -47,6 +43,7 @@ public class SnapshotReader {
         replicationContext = context;
         rt = replicationContext.getCorfuRuntime();
         streams = replicationContext.getConfig().getStreamsToReplicate();
+        //should pass in fullSyncUUID here?
     }
 
     /**
@@ -54,7 +51,7 @@ public class SnapshotReader {
      * @param rt
      * @param streams
      */
-    public SnapshotReader(CorfuRuntime rt, List<String> streams) {
+    public SnapshotReader(CorfuRuntime rt, Set<String> streams) {
         this.rt = rt;
         this.streams = streams;
     }
@@ -99,7 +96,7 @@ public class SnapshotReader {
      * to pass the message to the other site.
      * @param streamName
      */
-    void next(String streamName) {
+    void sync(String streamName) {
         UUID streamID = CorfuRuntime.getStreamID(streamName);
         ArrayList<SMREntry> entries = new ArrayList<>(readStream(streamID));
         preMsgTs = Address.NON_ADDRESS;
@@ -123,7 +120,7 @@ public class SnapshotReader {
         setup(fullSyncUUID);
         try {
             for (String streamName : streams) {
-                next(streamName);
+                sync(streamName);
             }
         } catch (Exception e) {
             //handle exception

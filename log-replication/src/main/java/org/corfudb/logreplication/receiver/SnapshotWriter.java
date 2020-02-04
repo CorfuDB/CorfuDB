@@ -1,6 +1,9 @@
 package org.corfudb.logreplication.receiver;
 
 import org.corfudb.logreplication.MessageMetadata;
+import org.corfudb.logreplication.MessageType;
+import org.corfudb.logreplication.fsm.LogReplicationContext;
+import org.corfudb.logreplication.transmitter.DataTransmitter;
 import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -8,10 +11,12 @@ import org.corfudb.runtime.collections.CorfuTable;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.view.stream.IStreamView;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,29 +25,31 @@ import java.util.UUID;
  */
 
 public class SnapshotWriter {
-    private List<UUID> streamUUIDs;
-    HashMap<UUID, IStreamView> streamViewMap;
+    private LogReplicationContext replicationContext;
+    private Set<String> streams;
     CorfuRuntime rt;
     long proccessedMsgTs;
-    final private int QUEUE_SIZE = 20;
-    private PriorityQueue<TxMessage> msgQ;
+    HashMap<UUID, IStreamView> streamViewMap;
     private long srcGlobalSnapshot;
+    private final MessageType MSG_TYPE = MessageType.SNAPSHOT_MESSAGE;
 
-    SnapshotWriter() {
-        //init rt, streamUUIDs, srcGlobalSnapshot
-        msgQ = new PriorityQueue(QUEUE_SIZE, Comparator.comparingLong(a ->(((TxMessage)a).metadata.entryTimeStamp)));
+    SnapshotWriter(LogReplicationContext context) {
+        replicationContext = context;
+        rt = replicationContext.getCorfuRuntime();
+        //streamUUIDs = streamUUIDs(replicationContext.getConfig().getStreamsToReplicate());
+        // setup fullsyncUUID?
     }
 
     /**
      * clear all tables interested
      */
     void clearTables() {
-        for (UUID stream : streamUUIDs) {
+        for (String stream : streams) {
             CorfuTable<String, String> corfuTable = rt.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
-                    .setStreamID(stream)
+                    .setStreamName(stream)
                     .open();
             corfuTable.clear();
             corfuTable.close();
@@ -53,7 +60,8 @@ public class SnapshotWriter {
      * open all streams interested
      */
     void openStreams() {
-        for (UUID streamID : streamUUIDs) {
+        for (String stream : streams) {
+            UUID streamID = CorfuRuntime.getStreamID(stream);
             IStreamView sv = rt.getStreamsView().getUnsafe(streamID);
             streamViewMap.put(streamID, sv);
         }
@@ -82,7 +90,6 @@ public class SnapshotWriter {
         verifyMetadata(metadata);
         TxMessage currentMsg = null;
 
-        //UUID streamID = streamUUIDs.get(0);
         //List<SMREntry> entries; //get the entries from the msg
         //processSMREntries(streamID, entries);
     }
@@ -90,16 +97,16 @@ public class SnapshotWriter {
     /**
      *
      */
-    void reset(long snapshot) {
+    void setup(long snapshot) {
        srcGlobalSnapshot = snapshot;
-       msgQ.clear();
     }
 
     /**
      * The fullSyncQue guarantee the ordering of the messages.
      */
-    void processFullSyncQue() {
-        //reset();
+    void processFullSyncQue(long srcGlobalSnapshot) {
+        clearTables();
+        setup(srcGlobalSnapshot);
         //get message, call processTxMessage()
     }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.receiver;
 
 import org.corfudb.logreplication.MessageMetadata;
+import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -24,9 +25,7 @@ public class LogEntryWriter {
     private long lastSrcAddressProcessed;
     private PriorityQueue<TxMessage> msgQ;
 
-    LogEntryWriter() {
-        msgQ = new PriorityQueue(QUEUE_SIZE, Comparator.comparingLong(
-                a ->(((TxMessage)a).metadata.entryTimeStamp)));
+    LogEntryWriter(LogReplicationContext context) {
     }
 
     void verifyMetadata(MessageMetadata metadata) {
