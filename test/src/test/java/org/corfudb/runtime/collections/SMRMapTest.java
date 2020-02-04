@@ -772,13 +772,13 @@ public class SMRMapTest extends AbstractViewTest {
                 .setStreamID(stream)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
-        // Do a get to prompt the sync
+        // Do a get to prompt the transmit
         assertThat(testMap2.get(Integer.toString(0)))
                 .isEqualTo(Integer.toString(0));
         long endTime = System.nanoTime();
 
         final int MILLISECONDS_TO_MICROSECONDS = 1000;
-        testStatus += "Time to sync whole stream=" + String.format("%d us",
+        testStatus += "Time to transmit whole stream=" + String.format("%d us",
                 (endTime - startTime) / MILLISECONDS_TO_MICROSECONDS);
     }
 
