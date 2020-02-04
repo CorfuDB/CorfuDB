@@ -10,5 +10,14 @@ public interface LogReplicationTransition {
      * @param from from LogReplicationState.
      * @param to to LogReplicationState.
      */
-    void onTransition(LogReplicationState from, LogReplicationState to);
+    default void onTransition(LogReplicationState from, LogReplicationState to) {
+        if (from == to) {
+            // Do nothing if transition is to the same state.
+            return;
+        }
+
+        from.onExit(to);
+
+        to.onEntry(from);
+    }
 }
