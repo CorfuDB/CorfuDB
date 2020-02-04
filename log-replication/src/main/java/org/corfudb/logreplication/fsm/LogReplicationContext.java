@@ -3,15 +3,16 @@ package org.corfudb.logreplication.fsm;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NonNull;
-import lombok.Getter;
-import org.corfudb.logreplication.transmitter.LogListener;
+
+import org.corfudb.logreplication.transmitter.LogEntryListener;
 import org.corfudb.logreplication.transmitter.DataTransmitter;
+import org.corfudb.logreplication.transmitter.SnapshotListener;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ExecutorService;
 
 /**
  * A context class that contains elements that are shared across the
@@ -21,9 +22,9 @@ import java.util.concurrent.ScheduledExecutorService;
 @Data
 public class LogReplicationContext {
 
-    private LogListener snapshotListener;
+    private SnapshotListener snapshotListener;
 
-    private LogListener logEntryListener;
+    private LogEntryListener logEntryListener;
 
     private LogReplicationConfig config;
 
@@ -43,5 +44,5 @@ public class LogReplicationContext {
     /**
      * Executor service for blocking operations.
      */
-    private ScheduledExecutorService blockingOpsScheduler;
+    private ExecutorService stateMachineWorker;
 }

@@ -69,7 +69,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            logEntrySyncFuture = context.getBlockingOpsScheduler().submit(logEntryReader::sync);
+            logEntrySyncFuture = context.getStateMachineWorker().submit(logEntryReader::sync);
         } catch (Throwable t) {
             // Log Error
         }
