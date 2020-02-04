@@ -7,6 +7,7 @@ import lombok.NonNull;
 import org.corfudb.logreplication.transmitter.LogEntryListener;
 import org.corfudb.logreplication.transmitter.DataTransmitter;
 import org.corfudb.logreplication.transmitter.SnapshotListener;
+import org.corfudb.logreplication.transmitter.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
@@ -22,9 +23,9 @@ import java.util.concurrent.ExecutorService;
 @Data
 public class LogReplicationContext {
 
-    private SnapshotListener snapshotListener;
-
     private LogEntryListener logEntryListener;
+
+    private SnapshotReader snapshotReader;
 
     private LogReplicationConfig config;
 
@@ -36,7 +37,7 @@ public class LogReplicationContext {
     @NonNull
     private CorfuRuntime corfuRuntime;
 
-    private DataTransmitter dataTransmitter;
+    private LogReplicationFSM logReplicationFSM;
 
     // Expect LogReplicationMetadataMap (contains PersistedReplicationMetadata)
     private Map<String, Long> logReplicationMetadataMap;
