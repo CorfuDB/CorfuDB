@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.SerializationUtils;
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationContext;
+import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -19,6 +20,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE;
+
 @Slf4j
 /**
  * The AR will call sync API and pass in the api for fullSyncDone(), handlerMsg()
@@ -28,6 +31,7 @@ public class SnapshotReader {
     //Todo: will change the max_batch_size while Maithem finish the new API
     private final int MAX_BATCH_SIZE = 1;
     private final MessageType MSG_TYPE = MessageType.SNAPSHOT_MESSAGE;
+    private long fullSyncUUID;
     private long globalSnapshot;
     private List<String> streams;
     private CorfuRuntime rt;
@@ -58,7 +62,8 @@ public class SnapshotReader {
     /**
      * setup globalSnapshot
      */
-    void setup() {
+    void setup(long fullSyncUUID) {
+        this.fullSyncUUID = fullSyncUUID;
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
         globalSnapshot = rt.getAddressSpaceView().getLogTail();
@@ -102,10 +107,7 @@ public class SnapshotReader {
         for (int i = 0; i < entries.size(); i += MAX_BATCH_SIZE) {
             List<SMREntry> msg_entries = entries.subList(i, i + MAX_BATCH_SIZE);
             TxMessage txMsg = generateMessage(msg_entries);
-
-            //todo: callback pass msg to AR
-
-            //update preMsgTs only after process a msg successfully
+            replicationContext.getSnapshotListener().onNext(txMsg);
             preMsgTs = currentMsgTs;
             log.debug("Succesfully pass a TxMsg {}", txMsg.getMetadata());
         }
@@ -117,8 +119,8 @@ public class SnapshotReader {
     /**
      * while sync finish put an event to the queue
      */
-    public void sync() {
-        setup();
+    public void sync(long fullSyncUUID) {
+        setup(fullSyncUUID);
         try {
             for (String streamName : streams) {
                 next(streamName);
@@ -129,7 +131,9 @@ public class SnapshotReader {
             throw e;
         }
 
-        //todo: update metadata to record a Snapshot Reader done
-        log.info("Succesfully do a sync read for globalSnapshot {}", globalSnapshot);
+        // todo: update metadata to record a Snapshot Reader done
+        //replicationContext.getSnapshotListener().complete();
+        replicationContext.getDataTransmitter().getLogReplicationFSM().input(new LogReplicationEvent(SNAPSHOT_SYNC_COMPLETE ));
+        log.info("Snapshot reader has complete full sync {} for globalSnapshot {}", fullSyncUUID, globalSnapshot);
     }
 }
