@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.transmitter.LogEntryReader;
+import org.corfudb.logreplication.transmitter.LogEntryTransmitter;
 
 import java.util.concurrent.Future;
 
@@ -13,15 +13,15 @@ import java.util.concurrent.Future;
 @Slf4j
 public class InLogEntrySyncState implements LogReplicationState {
 
-    private LogReplicationContext context;
+    private LogReplicationFSM logReplicationFSM;
 
-    private LogEntryReader logEntryReader;
+    private LogEntryTransmitter logEntryTransmitter;
 
     private Future<?> logEntrySyncFuture;
 
-    public InLogEntrySyncState(LogReplicationContext context) {
-        this.context = context;
-        logEntryReader = new LogEntryReader(context);
+    public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntryTransmitter logEntryTransmitter) {
+        this.logReplicationFSM = logReplicationFSM;
+        this.logEntryTransmitter = logEntryTransmitter;
     }
 
     @Override
@@ -29,39 +29,57 @@ public class InLogEntrySyncState implements LogReplicationState {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 /*
-                  Cancel log entry sync if still in progress, if sync cannot be canceled
+                  Cancel log entry transmit if still in progress, if transmit cannot be canceled
                   we cannot transition to the new state, as there is no guarantee that upper layers
-                  can distinguish between a log entry sync and a snapshot sync.
+                  can distinguish between a log entry transmit and a snapshot transmit.
                  */
-                return cancelLogEntrySync("snapshot sync request.") ?
-                        new InSnapshotSyncState(context) : this;
+                return cancelLogEntrySync(event.getType(), "snapshot transmit request.") ?
+                        logReplicationFSM.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC) : this;
             case TRIMMED_EXCEPTION:
-                return new InRequireSnapshotSyncState(context);
-            case REPLICATION_STOP:
                 /*
-                  Cancel log entry sync if still in progress, if sync cannot be canceled
+                  Cancel log entry transmit if still in progress, if transmit cannot be canceled
                   we cannot transition to the new state.
                  */
-                return cancelLogEntrySync("replication being stopped.") ?
-                        new InitializedState(context) : this;
+                return cancelLogEntrySync(event.getType(), "trimmed exception.") ?
+                        logReplicationFSM.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC) : this;
+            case REPLICATION_STOP:
+                /*
+                  Cancel log entry transmit if still in progress, if transmit cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelLogEntrySync(event.getType(), "replication being stopped.") ?
+                        logReplicationFSM.getStates().get(LogReplicationStateType.INITIALIZED) : this;
+            case REPLICATION_TERMINATED:
+                /*
+                  Cancel log entry transmit if still in progress, if transmit cannot be canceled
+                  we cannot transition to the new state.
+                 */
+                return cancelLogEntrySync(event.getType(), "replication terminated.") ?
+                        logReplicationFSM.getStates().get(LogReplicationStateType.STOPPED) : this;
             default: {
-                log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
+                log.warn("Unexpected log replication event {} when in log entry transmit state.", event.getType());
             }
         }
         return this;
     }
 
-    private boolean cancelLogEntrySync(String cancelCause) {
-        // Cancel log entry sync if still in progress
+    /**
+     * Cancel log entry transmit task.
+     *
+     * @param cancelCause cancel cause specific to the caller for debug.
+     * @return True, if task was canceled. False, otherwise.
+     */
+    private boolean cancelLogEntrySync(LogReplicationEvent.LogReplicationEventType type, String cancelCause) {
+        // Cancel log entry transmit if still in progress
         if (logEntrySyncFuture != null && !logEntrySyncFuture.isDone()) {
             boolean cancel = logEntrySyncFuture.cancel(true);
             // Verify if task could not be canceled due to normal completion.
             if (!cancel && !logEntrySyncFuture.isDone()) {
-                log.error("Snapshot sync in progress could not be canceled.");
+                log.error("Log Entry transmit in progress could not be canceled. Cannot process event {}", type);
                 return false;
             }
         }
-        log.info("Log Entry sync has been canceled due to {}", cancelCause);
+        log.info("Log Entry transmit has been canceled due to {}", cancelCause);
         return true;
     }
 
@@ -69,15 +87,15 @@ public class InLogEntrySyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            logEntrySyncFuture = context.getStateMachineWorker().submit(logEntryReader::sync);
+            logEntrySyncFuture = logReplicationFSM.getStateMachineWorker().submit(logEntryTransmitter::transmit);
         } catch (Throwable t) {
-            // Log Error
+            log.error("Error on entry of InLogEntrySyncState", t);
         }
     }
 
     @Override
     public void onExit(LogReplicationState to) {
-
+        log.debug("Exiting InLogEntrySyncState");
     }
 
     @Override
