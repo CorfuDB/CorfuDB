@@ -24,7 +24,7 @@ public class LogReplicationEvent {
         SNAPSHOT_SYNC_CANCEL,       // External event requesting to cancel snapshot sync (full-sync)
         REPLICATION_START,          // External event which signals start of log replication process
         REPLICATION_STOP,           // External event which signals stop of log replication process
-        SNAPSHOT_SYNC_COMPLETE      // Internal event which signals a snapshot sync has been completed
+        SNAPSHOT_SYNC_COMPLETE      // Internal event which signals snapshot sync has been completed by snapshot reader
         // REPLICATION_SHUTDOWN?
     }
 

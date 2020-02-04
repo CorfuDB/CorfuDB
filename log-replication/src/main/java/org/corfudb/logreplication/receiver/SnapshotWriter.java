@@ -82,23 +82,9 @@ public class SnapshotWriter {
         verifyMetadata(metadata);
         TxMessage currentMsg = null;
 
-        //decide to queue message or not according the snapshot value
-        if (metadata.getPreviousEntryTimestamp() > proccessedMsgTs) {
-            msgQ.add(msg);
-            TxMessage first = msgQ.peek();
-            if (first.getMetadata().getPreviousEntryTimestamp() == proccessedMsgTs) {
-                currentMsg = msgQ.poll();
-            }
-        } else if (metadata.getPreviousEntryTimestamp() == proccessedMsgTs){
-            currentMsg = msg;
-        }
-
-        if (currentMsg != null) {
-            // process the message
-            //UUID streamID = streamUUIDs.get(0);
-            //List<SMREntry> entries; //get the entries from the msg
-            //processSMREntries(streamID, entries);
-        }
+        //UUID streamID = streamUUIDs.get(0);
+        //List<SMREntry> entries; //get the entries from the msg
+        //processSMREntries(streamID, entries);
     }
 
     /**

@@ -2,9 +2,13 @@ package org.corfudb.logreplication.receiver;
 
 import org.corfudb.logreplication.MessageMetadata;
 import org.corfudb.logreplication.transmitter.TxMessage;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.PriorityQueue;
@@ -16,33 +20,61 @@ public class LogEntryWriter {
     CorfuRuntime rt;
     long proccessedMsgTs;
     final private int QUEUE_SIZE = 20;
-    private PriorityQueue<TxMessage> msgQ;
     private long srcGlobalSnapshot;
     private long lastSrcAddressProcessed;
+    private PriorityQueue<TxMessage> msgQ;
 
-    // As the DeltaQueue doesn't guarantee the ordering, need buffering.
-    void processTxMessage(TxMessage msg) throws Exception {
+    LogEntryWriter() {
+        msgQ = new PriorityQueue(QUEUE_SIZE, Comparator.comparingLong(
+                a ->(((TxMessage)a).metadata.entryTimeStamp)));
+    }
+
+    void verifyMetadata(MessageMetadata metadata) {
+
+    }
+
+    void processTxMessage(TxMessage msg) {
         MessageMetadata metadata = msg.getMetadata();
-        //verifyMetadata(metadata);
+        verifyMetadata(metadata);
         TxMessage currentMsg = null;
 
-        //decide to queue message or not according the snapshot value
-        if (metadata.getPreviousEntryTimestamp() > proccessedMsgTs) {
-            msgQ.add(msg);
-            TxMessage first = msgQ.peek();
-            if (first.getMetadata().getPreviousEntryTimestamp() == proccessedMsgTs) {
-                currentMsg = msgQ.poll();
+        assert(metadata.getPreviousEntryTimestamp() == proccessedMsgTs);
+        for (UUID streamID : streamUUIDs) {
+            ILogData logData = null;
+            MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry)logData.getPayload(rt);
+            for (SMREntry entry : multiObjSMREntry.getSMRUpdates(streamID)) {
+                streamViewMap.get(streamID).append(entry);
             }
-        } else if (metadata.getPreviousEntryTimestamp() == proccessedMsgTs){
-            currentMsg = msg;
         }
+    }
 
-        if (currentMsg != null) {
-            // process the message
-            //UUID streamID = streamUUIDs.get(0);
-            //List<SMREntry> entries; //get the entries from the msg
-            //processSMREntries(streamID, entries);
-            //update proccessedMsgTs and also last srcAddressProcessed
+    /**
+     * find the msg whose
+     * @param preAddress
+     * @return
+     */
+    TxMessage findMsg(long preAddress) {
+        //delete all message whose address < preAddress
+        //return the msg whose preAddress == preAddress
+        return new TxMessage();
+    }
+
+    void setContext(long snapshot) {
+        srcGlobalSnapshot = snapshot;
+        lastSrcAddressProcessed = snapshot;
+    }
+
+    //Question? what the size of the deltaQue? Is it a in memory que or persistent que?
+    void processDeltaQue() {
+        while (true) {
+            TxMessage msg = findMsg(lastSrcAddressProcessed);
+            if (msg == null) {
+                return;
+            }
+
+            processTxMessage(msg);
+            lastSrcAddressProcessed = msg.getMetadata().getEntryTimeStamp();
+            //remove msg from deltaQue
         }
     }
 }
