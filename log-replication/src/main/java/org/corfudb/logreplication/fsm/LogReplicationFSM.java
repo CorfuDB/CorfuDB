@@ -16,20 +16,10 @@ import java.util.concurrent.ThreadFactory;
 public class LogReplicationFSM {
 
     /**
-     * Log Replication Context, contains elements shared across different states in log replication.
-     */
-    private final LogReplicationContext context;
-
-    /**
      * Current state of the FSM.
      */
     @Getter
-    private volatile LogReplicationState state;
-
-    /**
-     * Log Replication transition.
-     */
-    private final LogReplicationTransition transition;
+    private LogReplicationState state;
 
     /**
      * A queue of events.
@@ -37,7 +27,7 @@ public class LogReplicationFSM {
     private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
 
     @Getter
-    private volatile int numTransitions = 0;
+    private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
      * Constructor.
@@ -45,14 +35,12 @@ public class LogReplicationFSM {
      * @param context LogReplicationContext.
      */
     public LogReplicationFSM(LogReplicationContext context) {
-        this.context = context;
         this.state = new InitializedState(context);
-        this.transition = new LogReplicationTransitionImpl(context);
         // Consumer thread will run on a dedicated single thread (poll queue for incoming events)
         ThreadFactory consumerThreadFactory =
-            new ThreadFactoryBuilder().setNameFormat("log-replication-consumer-%d").build();
+                new ThreadFactoryBuilder().setNameFormat("log-replication-consumer-%d").build();
         Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
-}
+    }
 
     /**
      * Input function of the FSM.
@@ -89,17 +77,27 @@ public class LogReplicationFSM {
                 // Block until an event shows up in the queue.
                 LogReplicationEvent event = eventQueue.take();
 
+                System.out.println("Processing event: " + event.getType());
+
                 // Process the event
                 LogReplicationState newState = state.processEvent(event);
 
-                transition.onTransition(state, newState);
-
-                numTransitions++;
+                transition(state, newState);
 
                 state = newState;
+
+                numTransitions.setValue(numTransitions.getValue() + 1);
             }
         } catch (Throwable t) {
             log.error("Error on event consumer: ", t);
+        }
+    }
+
+    void transition(LogReplicationState from, LogReplicationState to) {
+        if (from != to) {
+            from.onExit(to);
+
+            to.onEntry(from);
         }
     }
 }
