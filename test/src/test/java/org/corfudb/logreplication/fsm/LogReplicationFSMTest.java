@@ -1,10 +1,15 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.corfudb.logreplication.transmitter.LogEntryListener;
+import org.corfudb.logreplication.transmitter.SnapshotListener;
+import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.concurrent.Executors;
@@ -21,10 +26,49 @@ public class LogReplicationFSMTest implements Observer {
 
     private void initLogReplicationFSM() {
         CorfuRuntime rt = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
-        LogReplicationContext context = LogReplicationContext.builder().corfuRuntime(rt)
-                .stateMachineWorker(Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                        .setNameFormat("state-machine-worker-%d").build())).build();
-        fsm = new LogReplicationFSM(context);
+        LogReplicationConfig config =  LogReplicationConfig.builder().streamsToReplicate(Collections.EMPTY_SET).build();
+
+        SnapshotListener snapshotListener = new SnapshotListener() {
+            @Override
+            public boolean onNext(TxMessage message) {
+                return false;
+            }
+
+            @Override
+            public boolean onNext(List<TxMessage> messages) {
+                return false;
+            }
+
+            @Override
+            public void complete() {
+
+            }
+
+            @Override
+            public void onError() {
+            }
+        };
+
+        LogEntryListener logEntryListener = new LogEntryListener() {
+            @Override
+            public boolean onNext(TxMessage message) {
+                return false;
+            }
+
+            @Override
+            public boolean onNext(List<TxMessage> messages) {
+                return false;
+            }
+
+            @Override
+            public void onError() {
+
+            }
+        };
+
+        fsm = new LogReplicationFSM(rt, config, snapshotListener, logEntryListener,
+                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+                .setNameFormat("state-machine-worker-%d").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
     }
@@ -67,7 +111,6 @@ public class LogReplicationFSMTest implements Observer {
      */
     private void transition(LogReplicationEventType eventType,
                             LogReplicationStateType expectedState) throws InterruptedException {
-
         // Enforce eventType into the FSM queue
         fsm.input(new LogReplicationEvent(eventType));
 
@@ -76,12 +119,18 @@ public class LogReplicationFSMTest implements Observer {
         assertThat(fsm.getState().getType()).isEqualTo(expectedState);
     }
 
+    /**
+     * Observer callback.
+     *
+     * @param obs
+     * @param arg
+     */
     @Override
     public void update(Observable obs, Object arg) {
         if (obs == transitionObservable)
         {
             transitionAvailable.release();
-            System.out.println("Num transitions ::  "  + transitionObservable.getValue());
+            System.out.println("Num transitions :: "  + transitionObservable.getValue());
         }
     }
 }
