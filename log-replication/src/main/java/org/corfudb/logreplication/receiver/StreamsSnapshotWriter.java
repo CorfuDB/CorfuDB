@@ -1,47 +1,48 @@
 package org.corfudb.logreplication.receiver;
 
 import org.corfudb.logreplication.MessageMetadata;
-import org.corfudb.logreplication.MessageType;
-import org.corfudb.logreplication.fsm.LogReplicationContext;
-import org.corfudb.logreplication.transmitter.DataTransmitter;
 import org.corfudb.logreplication.transmitter.TxMessage;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
+import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.view.stream.IStreamView;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.UUID;
 
-public interface SnapshotWriter {
+/**
+ * The AR will pass in FullSyncQue and DeltaQue and API for fullSyncDone()
+ * Open streams interested and append all entries
+ */
 
-public class SnapshotWriter {
-    private LogReplicationContext replicationContext;
-    private Set<String> streams;
+public class StreamsSnapshotWriter implements SnapshotWriter {
+    private List<UUID> streamUUIDs;
+    HashMap<UUID, IStreamView> streamViewMap;
     CorfuRuntime rt;
     long proccessedMsgTs;
-    HashMap<UUID, IStreamView> streamViewMap;
+    final private int QUEUE_SIZE = 20;
+    private PriorityQueue<TxMessage> msgQ;
     private long srcGlobalSnapshot;
-    private final MessageType MSG_TYPE = MessageType.SNAPSHOT_MESSAGE;
 
-    SnapshotWriter(LogReplicationContext context) {
-        replicationContext = context;
-        rt = replicationContext.getCorfuRuntime();
-        //streamUUIDs = streamUUIDs(replicationContext.getConfig().getStreamsToReplicate());
-        // setup fullsyncUUID?
+    StreamsSnapshotWriter() {
+        //init rt, streamUUIDs, srcGlobalSnapshot
+        msgQ = new PriorityQueue(QUEUE_SIZE, Comparator.comparingLong(a ->(((TxMessage)a).metadata.entryTimeStamp)));
     }
 
     /**
      * clear all tables interested
      */
     void clearTables() {
-        for (String stream : streams) {
+        for (UUID stream : streamUUIDs) {
             CorfuTable<String, String> corfuTable = rt.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
-                    .setStreamName(stream)
+                    .setStreamID(stream)
                     .open();
             corfuTable.clear();
             corfuTable.close();
@@ -52,8 +53,7 @@ public class SnapshotWriter {
      * open all streams interested
      */
     void openStreams() {
-        for (String stream : streams) {
-            UUID streamID = CorfuRuntime.getStreamID(stream);
+        for (UUID streamID : streamUUIDs) {
             IStreamView sv = rt.getStreamsView().getUnsafe(streamID);
             streamViewMap.put(streamID, sv);
         }
@@ -82,23 +82,48 @@ public class SnapshotWriter {
         verifyMetadata(metadata);
         TxMessage currentMsg = null;
 
-        //List<SMREntry> entries; //get the entries from the msg
-        //processSMREntries(streamID, entries);
+        //decide to queue message or not according the snapshot value
+        if (metadata.getPreviousEntryTimestamp() > proccessedMsgTs) {
+            msgQ.add(msg);
+            TxMessage first = msgQ.peek();
+            if (first.getMetadata().getPreviousEntryTimestamp() == proccessedMsgTs) {
+                currentMsg = msgQ.poll();
+            }
+        } else if (metadata.getPreviousEntryTimestamp() == proccessedMsgTs){
+            currentMsg = msg;
+        }
+
+        if (currentMsg != null) {
+            // process the message
+            //UUID streamID = streamUUIDs.get(0);
+            //List<SMREntry> entries; //get the entries from the msg
+            //processSMREntries(streamID, entries);
+        }
     }
 
     /**
      *
      */
-    void setup(long snapshot) {
+    void reset(long snapshot) {
        srcGlobalSnapshot = snapshot;
+       msgQ.clear();
     }
 
     /**
      * The fullSyncQue guarantee the ordering of the messages.
      */
-    void processFullSyncQue(long srcGlobalSnapshot) {
-        clearTables();
-        setup(srcGlobalSnapshot);
+    void processFullSyncQue() {
+        //reset();
         //get message, call processTxMessage()
+    }
+
+    @Override
+    public void apply(TxMessage message) {
+
+    }
+
+    @Override
+    public void apply(List<TxMessage> messages) {
+
     }
 }

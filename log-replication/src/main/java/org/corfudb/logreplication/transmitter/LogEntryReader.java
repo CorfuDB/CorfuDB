@@ -30,7 +30,7 @@ public class LogEntryReader {
     }
 
     public LogEntryReader(LogReplicationContext context) {
-        initStream();
+        //initStream();
         this.context = context;
     }
 
