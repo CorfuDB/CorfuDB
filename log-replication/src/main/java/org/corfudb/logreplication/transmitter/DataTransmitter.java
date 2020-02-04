@@ -10,39 +10,42 @@ import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
 @Data
 @Slf4j
+/**
+ * Add Comment [Anny todo]
+ */
 public class DataTransmitter {
 
-    private LogReplicationContext context;
+    // ANNY TODO COMMENT
+    // private LogReplicationContext context;
 
+    // ANNY TODO COMMENT
     private final LogReplicationFSM logReplicationFSM;
 
+    // ANNY TODO COMMENT
     public DataTransmitter(CorfuRuntime runtime,
-                           LogListener snapshotListener,
-                           LogListener logEntryListener,
+                           SnapshotListener snapshotListener,
+                           LogEntryListener logEntryListener,
                            LogReplicationConfig config) {
-        this.context = LogReplicationContext.builder()
+        LogReplicationContext context = LogReplicationContext.builder()
                 .logEntryListener(logEntryListener)
                 .snapshotListener(snapshotListener)
                 .corfuRuntime(runtime)
                 .dataTransmitter(this)
-                .blockingOpsScheduler(Executors.newScheduledThreadPool(6, (r) -> {
-                    ThreadFactory threadFactory =
-                            new ThreadFactoryBuilder().setNameFormat("replication-fsm-%d").build();
-                    Thread t = threadFactory.newThread(r);
-                    t.setDaemon(true);
-                    return t;
-                }))
+                .stateMachineWorker(Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build()))
                 .config(config)
                 .build();
         this.logReplicationFSM = new LogReplicationFSM(context);
     }
 
     public void startSnapshotSync(SnapshotSyncContext context) {
+        // Verify if we really need this context, and if we need to pass to the fsm
+
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
     }
