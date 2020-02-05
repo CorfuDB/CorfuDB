@@ -9,7 +9,7 @@ public interface SnapshotListener {
     boolean onNext(List<TxMessage> messages);
 
     /**
-     * Call to the application on sync complete.
+     * Call to the application on transmit complete.
      */
     void complete();
 

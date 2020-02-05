@@ -29,9 +29,12 @@ public interface LogReplicationState {
     /**
      * On Exit
      *
-     * @param to  LogReplicationState transitioning from.
+     * @param to  LogReplicationState transitioning to.
      */
     void onExit(LogReplicationState to);
+
+
+    default void clear() {}
 }
 
 
