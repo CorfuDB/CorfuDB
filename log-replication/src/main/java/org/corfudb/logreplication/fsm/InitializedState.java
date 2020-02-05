@@ -8,10 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InitializedState implements LogReplicationState {
 
-    LogReplicationContext context;
+    LogReplicationFSM logReplicationFSM;
 
-    public InitializedState(LogReplicationContext context) {
-        this.context = context;
+    public InitializedState(LogReplicationFSM logReplicationFSM) {
+        this.logReplicationFSM = logReplicationFSM;
     }
 
     /**
@@ -24,11 +24,13 @@ public class InitializedState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                return new InSnapshotSyncState(context);
+                return logReplicationFSM.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
             case REPLICATION_START:
-                return new InLogEntrySyncState(context);
+                return logReplicationFSM.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
             case REPLICATION_STOP:
                 return this;
+            case REPLICATION_TERMINATED:
+                return logReplicationFSM.getStates().get(LogReplicationStateType.STOPPED);
             default: {
                 log.warn("Unexpected log replication event {} when in initialized state.", event.getType());
             }
@@ -38,11 +40,6 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-        // Validating that same replication tables are on both site is business logic, right?
-
-        // create/open Log Replication metadata map and update (reset?) PersistedReplicationMetadata
-        // lastSentBaseSnapshotTimestamp =
-        // lastAckedTimestamp =
     }
 
     @Override

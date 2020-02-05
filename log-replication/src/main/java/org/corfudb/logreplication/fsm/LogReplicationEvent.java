@@ -10,6 +10,11 @@ import java.util.UUID;
 @Data
 public class LogReplicationEvent {
 
+    /**
+     * Constructor
+     *
+     * @param type log replication event type
+     */
     public LogReplicationEvent(LogReplicationEventType type) {
         this.eventID = UUID.randomUUID();
         this.type = type;
@@ -19,13 +24,13 @@ public class LogReplicationEvent {
      * Enum listing the various type of LogReplicationEvent.
      */
     public enum LogReplicationEventType {
-        SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot sync (full-sync)
+        SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot transmit (full-transmit)
         TRIMMED_EXCEPTION,          // Internal event indicating that log has been trimmed on access
-        SNAPSHOT_SYNC_CANCEL,       // External event requesting to cancel snapshot sync (full-sync)
+        SNAPSHOT_SYNC_CANCEL,       // External event requesting to cancel snapshot transmit (full-transmit)
         REPLICATION_START,          // External event which signals start of log replication process
         REPLICATION_STOP,           // External event which signals stop of log replication process
-        SNAPSHOT_SYNC_COMPLETE      // Internal event which signals snapshot sync has been completed by snapshot reader
-        // REPLICATION_SHUTDOWN?
+        SNAPSHOT_SYNC_COMPLETE,     // Internal event which signals snapshot transmit has been completed by snapshot reader
+        REPLICATION_TERMINATED        // External/Internal event which signals log replication to be stopped
     }
 
     /**

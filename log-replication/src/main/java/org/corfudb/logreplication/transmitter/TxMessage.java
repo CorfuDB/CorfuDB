@@ -15,7 +15,9 @@ public class TxMessage {
     @Setter
     private byte[] data;
 
-    TxMessage(MessageType type, long entryTS, long preTS, long snapshot) {
+    public TxMessage() {}
+
+    public TxMessage(MessageType type, long entryTS, long preTS, long snapshot) {
         metadata = new MessageMetadata(type, entryTS, preTS, snapshot);
     }
 }

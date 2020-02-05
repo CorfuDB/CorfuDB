@@ -1,15 +1,13 @@
 package org.corfudb.logreplication.receiver;
 
-import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
 
-public class DataReceiver {
-    private LogReplicationContext context;
+public class ReplicationRxManager {
     private CorfuRuntime runtime;
 
-    public DataReceiver(CorfuRuntime rt) {
+    public ReplicationRxManager(CorfuRuntime rt) {
         runtime = rt;
     }
 
