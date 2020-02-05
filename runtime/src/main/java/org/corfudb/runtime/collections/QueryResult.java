@@ -2,8 +2,6 @@ package org.corfudb.runtime.collections;
 
 import java.util.Collection;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 

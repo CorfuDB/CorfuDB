@@ -1,9 +1,12 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.runtime.object.ICorfuExecutionContext;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
@@ -27,7 +30,7 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
 
         PutIfAbsentMap<String, String> stringMap = getRuntime().getObjectsView().build()
                 .setStreamName("stringMap")
-                .setType(PutIfAbsentMap.class)
+                .setTypeToken(new TypeToken<PutIfAbsentMap<String, String>>() {})
                 .open();
 
         stringMap.put("a", "b");
@@ -49,7 +52,7 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
 
         PutIfAbsentMap<String, String> stringMap = getRuntime().getObjectsView().build()
                 .setStreamName("stringMap")
-                .setType(PutIfAbsentMap.class)
+                .setTypeToken(new TypeToken<PutIfAbsentMap<String, String>>() {})
                 .open();
 
         ConcurrentLinkedQueue<Boolean> resultList = new ConcurrentLinkedQueue<>();
@@ -67,7 +70,8 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
     }
 
     @CorfuObject
-    public static class PutIfAbsentMap<K, V> {
+    public static class PutIfAbsentMap<K, V>
+            implements ICorfuSMR<PutIfAbsentMap<K, V>> {
 
         HashMap<K, V> map = new HashMap<>();
 
@@ -90,5 +94,12 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
             return false;
         }
 
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public PutIfAbsentMap getContext(ICorfuExecutionContext.Context context) {
+            return this;
+        }
     }
 }

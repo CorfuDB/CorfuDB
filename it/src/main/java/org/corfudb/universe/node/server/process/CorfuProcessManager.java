@@ -28,14 +28,10 @@ public class CorfuProcessManager {
     private final Path serverJar;
     private final Path serverJarRelativePath;
 
-    private final String networkInterface;
-
-    public CorfuProcessManager(
-            Path corfuDir, @NonNull CorfuServerParams params, String networkInterface) {
+    public CorfuProcessManager(Path corfuDir, @NonNull CorfuServerParams params) {
 
         this.corfuDir = corfuDir;
         this.params = params;
-        this.networkInterface = networkInterface;
 
         serverDir = corfuDir.resolve(params.getName());
         dbDir = corfuDir.resolve(params.getStreamLogDir());
@@ -45,7 +41,7 @@ public class CorfuProcessManager {
     }
 
     public String createServerDirCommand() {
-        return "mkdir -p " + params.getName();
+        return "mkdir -p " + serverDir;
     }
 
     public String createStreamLogDirCommand() {
@@ -95,7 +91,6 @@ public class CorfuProcessManager {
 
     public String stopCommand() {
         log.info("Stop corfu server. Params: {}", params);
-
 
         return "ps -ef" +
                 " | " +

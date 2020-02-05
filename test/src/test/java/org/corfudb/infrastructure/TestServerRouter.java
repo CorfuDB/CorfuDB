@@ -111,37 +111,15 @@ public class TestServerRouter implements IServerRouter {
     }
 
     public void sendServerMessage(CorfuMsg msg) {
-        AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (validateEpoch(msg, null)) {
-            if (as != null) {
-                try {
-                    as.getExecutor(msg.getMsgType()).submit(() -> as.handleMessage(msg, null, this)).get();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
-                } catch (ExecutionException ee) {
-                    throw (RuntimeException) ee.getCause();
-                }
-            } else {
-                log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
-            }
-        } else {
-            log.trace("Message with wrong epoch {}, expected {}", msg.getEpoch(), serverEpoch);
-        }
+        sendServerMessage(msg, null);
     }
 
     public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, ctx)) {
             if (as != null) {
-                try {
-                    as.getExecutor(msg.getMsgType()).submit(() -> as.handleMessage(msg, ctx, this)).get();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
-                } catch (ExecutionException ee) {
-                    throw (RuntimeException) ee.getCause();
-                }
+                // refactor and move threading to handler
+                as.handleMessage(msg, ctx, this);
             }
             else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
@@ -149,28 +127,6 @@ public class TestServerRouter implements IServerRouter {
         } else {
             log.trace("Message with wrong epoch {}, expected {}", msg.getEpoch(), serverEpoch);
         }
-    }
-
-    /**
-     * This simulates the serialization and deserialization that happens in the Netty pipeline for all messages
-     * from server to client.
-     *
-     * @param message
-     * @return
-     */
-
-    public CorfuMsg simulateSerialization(CorfuMsg message) {
-        /* simulate serialization/deserialization */
-        ByteBuf oBuf = Unpooled.buffer();
-        //Class<? extends CorfuMsg> type = message.getMsgType().messageType;
-        //extra assert needed to simulate real Netty behavior
-        //assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());
-        //type.cast(message).serialize(oBuf);
-        message.serialize(oBuf);
-        oBuf.resetReaderIndex();
-        CorfuMsg msgOut = CorfuMsg.deserialize(oBuf);
-        oBuf.release();
-        return msgOut;
     }
 
     public void setServerEpoch(long serverEpoch) {

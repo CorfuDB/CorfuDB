@@ -5,8 +5,10 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseParams;
+import org.corfudb.universe.util.IpAddress;
 
 import java.time.Duration;
 import java.util.List;
@@ -20,17 +22,26 @@ import java.util.concurrent.ConcurrentMap;
 @ToString(callSuper = true)
 public class VmUniverseParams extends UniverseParams {
 
+    /**
+     * Default https://10.173.65.98/sdk
+     */
     @NonNull
     private final String vSphereUrl;
+
+    /**
+     * Default "10.172.208.208"
+     */
     @NonNull
     private final List<String> vSphereHost;
 
+    @NonNull
     private final VmCredentialsParams credentials;
 
     @NonNull
     private final String templateVMName;
+
     @NonNull
-    private final ConcurrentMap<String, String> vmIpAddresses;
+    private final ConcurrentMap<VmName, IpAddress> vmIpAddresses;
     @NonNull
     @Default
     private final String domainName = "eng.vmware.com";
@@ -56,7 +67,7 @@ public class VmUniverseParams extends UniverseParams {
     @Builder
     public VmUniverseParams(
             VmCredentialsParams credentials, String vSphereUrl, List<String> vSphereHost,
-            String templateVMName, ConcurrentMap<String, String> vmIpAddresses, String networkName,
+            String templateVMName, ConcurrentMap<VmName, IpAddress> vmIpAddresses, String networkName,
             boolean cleanUpEnabled) {
         super(networkName, new ConcurrentHashMap<>(), cleanUpEnabled);
         this.vSphereUrl = vSphereUrl;
@@ -67,7 +78,7 @@ public class VmUniverseParams extends UniverseParams {
     }
 
 
-    public VmUniverseParams updateIpAddress(String vmName, String ipAddress) {
+    public VmUniverseParams updateIpAddress(VmName vmName, IpAddress ipAddress) {
         vmIpAddresses.put(vmName, ipAddress);
         return this;
     }

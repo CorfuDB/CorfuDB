@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -293,29 +294,23 @@ public class LayoutView extends AbstractView {
                 })
                 .toArray(CompletableFuture[]::new);
 
-        int timeouts = 0;
+
         int responses = 0;
-        while (responses < commitList.length) {
-            // wait for someone to complete.
+        for (CompletableFuture cf : commitList) {
             try {
-                CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
-                        WrongEpochException.class, TimeoutException.class, NetworkException.class);
+                CFUtils.getUninterruptibly(cf, WrongEpochException.class,
+                        TimeoutException.class, NetworkException.class, NoBootstrapException.class);
+                responses++;
             } catch (WrongEpochException e) {
                 if (!force) {
                     throw  e;
                 }
-                log.warn("committed: Error while force committing", e);
-            } catch (TimeoutException | NetworkException e) {
-                log.warn("committed: Error while committing", e);
-                timeouts++;
+                log.warn("committed: encountered exception", e);
+            } catch (NoBootstrapException |  TimeoutException | NetworkException e) {
+                log.warn("committed: encountered exception", e);
             }
-            responses++;
-            commitList = Arrays.stream(commitList)
-                    .filter(x -> !x.isCompletedExceptionally())
-                    .toArray(CompletableFuture[]::new);
-
-            log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
         }
+        log.debug("committed: Successful requests={}, responses={}", commitList.length, responses);
     }
 
     /**

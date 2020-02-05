@@ -8,6 +8,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
@@ -47,8 +48,7 @@ import java.util.function.Supplier;
  * <p>Created by mwei on 11/13/16.
  */
 @Slf4j
-public class VersionLockedObject<T> {
-
+public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /**
      * The actual underlying object.
      */
@@ -121,31 +121,24 @@ public class VersionLockedObject<T> {
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
-
     /**
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
      *
      * @param newObjectFn       A function passed to instantiate a new instance of this object.
      * @param smrStream         Stream View backing this object.
-     * @param upcallTargets     UpCall map for this object.
-     * @param undoRecordTargets Undo record function map for this object.
-     * @param undoTargets       Undo functions map.
-     * @param resetSet          Reset set for this object.
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
-                               Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
-                               Map<String, IUndoRecordFunction<T>> undoRecordTargets,
-                               Map<String, IUndoFunction<T>> undoTargets,
-                               Set<String> resetSet) {
+                               ICorfuSMR<T> wrapperObject) {
         this.smrStream = smrStream;
 
-        this.upcallTargetMap = upcallTargets;
-        this.undoRecordFunctionMap = undoRecordTargets;
-        this.undoFunctionMap = undoTargets;
-        this.resetSet = resetSet;
+        this.upcallTargetMap = wrapperObject.getCorfuSMRUpcallMap();
+        this.undoRecordFunctionMap = wrapperObject.getCorfuUndoRecordMap();
+        this.undoFunctionMap = wrapperObject.getCorfuUndoMap();
+        this.resetSet = wrapperObject.getCorfuResetSet();
 
+        wrapperObject.closeWrapper();
         this.newObjectFn = newObjectFn;
         this.object = newObjectFn.get();
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
@@ -169,6 +162,13 @@ public class VersionLockedObject<T> {
         } finally {
             lock.unlock(ts);
         }
+    }
+
+    /**
+     * Execute a method on the version locked object without synchronization
+     */
+    public <R> R passThrough(Function<T, R> method) {
+        return method.apply(object);
     }
 
     /**
@@ -209,7 +209,7 @@ public class VersionLockedObject<T> {
                 if (directAccessCheckFunction.apply(this)) {
                     log.trace("Access [{}] Direct (optimistic-read) access at {}",
                             this, getVersionUnsafe());
-                    R ret = accessFunction.apply(object);
+                    R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
 
                     long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
@@ -243,7 +243,7 @@ public class VersionLockedObject<T> {
             // Check if direct access is possible (unlikely).
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
-                R ret = accessFunction.apply(object);
+                R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
 
                 long versionForCorrectness = getVersionUnsafe();
                 if (lock.validate(ts)) {
@@ -255,7 +255,7 @@ public class VersionLockedObject<T> {
             updateFunction.accept(this);
             correctnessLogger.trace("Version, {}", getVersionUnsafe());
             log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
-            return accessFunction.apply(object);
+            return accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
             // And perform the access
         } finally {
             lock.unlock(ts);
@@ -288,14 +288,27 @@ public class VersionLockedObject<T> {
      *
      * <p>Unsafe, requires that the caller has acquired a write lock.
      *
-     * @param rollbackVersion The version to rollback to.
+     * @param timestamp The version to rollback to.
      * @throws NoRollbackException If the object cannot be rolled back to
      *                             the supplied version.
      */
-    public void rollbackObjectUnsafe(long rollbackVersion) {
-        log.trace("Rollback[{}] to {}", this, rollbackVersion);
-        rollbackStreamUnsafe(smrStream, rollbackVersion);
-        log.trace("Rollback[{}] completed", this);
+    public void rollbackObjectUnsafe(long timestamp) {
+        if (object.getVersionPolicy() == ICorfuVersionPolicy.MONOTONIC) {
+            return; // We are not allowed to go back in time.
+        }
+
+        if (getVersionUnsafe() <= timestamp) {
+            return; // We are already behind the timestamp.
+        }
+
+        try {
+            log.trace("Rollback[{}] to {}", this, timestamp);
+            rollbackStreamUnsafe(smrStream, timestamp);
+            log.trace("Rollback[{}] completed", this);
+        } catch (NoRollbackException nre) {
+            log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
+            resetUnsafe();
+        }
     }
 
     /**
@@ -332,16 +345,11 @@ public class VersionLockedObject<T> {
             if (optimisticStream.pos() == Address.NEVER_READ) {
                 final WriteSetSMRStream currentOptimisticStream = optimisticStream;
                 // If we are too far ahead, roll back to the past
-                if (getVersionUnsafe() > timestamp) {
-                    try {
-                        rollbackObjectUnsafe(timestamp);
-                    } catch (NoRollbackException nre) {
-                        log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
-                        resetUnsafe();
-                    }
-                }
+                rollbackObjectUnsafe(timestamp);
+
                 // Now sync the regular log
                 syncStreamUnsafe(smrStream, timestamp);
+
                 // It's possible that due to reset,
                 // the optimistic stream is no longer
                 // present. Restore it.
@@ -352,24 +360,33 @@ public class VersionLockedObject<T> {
             // If there is an optimistic stream for another
             // transaction, remove it by rolling it back first
             if (this.optimisticStream != null) {
-                optimisticRollbackUnsafe();
+                rollbackUncommittedChangesUnsafe();
                 this.optimisticStream = null;
             }
             // If we are too far ahead, roll back to the past
-            if (getVersionUnsafe() > timestamp) {
-                try {
-                    rollbackObjectUnsafe(timestamp);
-                    // Rollback successfully got us to the right
-                    // version, we're done.
-                    if (getVersionUnsafe() == timestamp) {
-                        return;
-                    }
-                } catch (NoRollbackException nre) {
-                    log.warn("Rollback[{}] to {} failed {}", this, timestamp, nre);
-                    resetUnsafe();
-                }
-            }
+            rollbackObjectUnsafe(timestamp);
             syncStreamUnsafe(smrStream, timestamp);
+        }
+    }
+
+    /** Set the correct optimistic stream for this transaction (if not already).
+     *
+     * If the Optimistic stream doesn't reflect the current transaction context,
+     * we create the correct WriteSetSMRStream and pick the latest context as the
+     * current context.
+     */
+    public void setUncommittedChanges() {
+        WriteSetSMRStream stream = getOptimisticStreamUnsafe();
+        if (stream == null
+                || !stream.isStreamCurrentContextThreadCurrentContext()) {
+
+            // We are setting the current context to the root context of nested transactions.
+            // Upon sync forward
+            // the stream will replay every entries from all parent transactional context.
+            WriteSetSMRStream newSmrStream =
+                    new WriteSetSMRStream(TransactionalContext.getTransactionStackAsList(), getID());
+
+            setUncommittedChanges(newSmrStream);
         }
     }
 
@@ -420,9 +437,9 @@ public class VersionLockedObject<T> {
      *
      * @param optimisticStream The new optimistic stream to install.
      */
-    public void setOptimisticStreamUnsafe(WriteSetSMRStream optimisticStream) {
+    public void setUncommittedChanges(WriteSetSMRStream optimisticStream) {
         if (this.optimisticStream != null) {
-            optimisticRollbackUnsafe();
+            rollbackUncommittedChangesUnsafe();
         }
         this.optimisticStream = optimisticStream;
     }
@@ -449,6 +466,7 @@ public class VersionLockedObject<T> {
      */
     public void resetUnsafe() {
         log.debug("Reset[{}]", this);
+        object.close();
         object = newObjectFn.get();
         smrStream.reset();
         optimisticStream = null;
@@ -484,18 +502,37 @@ public class VersionLockedObject<T> {
 
 
     /**
+     * Given a stream, return the context under which the underlying
+     * object should be updated.
+     *
+     * @param stream stream on which we are currently operating
+     * @return an appropriate context
+     */
+    private ICorfuExecutionContext.Context getContext(ISMRStream stream) {
+        if (stream == optimisticStream) {
+            return ICorfuExecutionContext.OPTIMISTIC;
+        }
+
+        return ICorfuExecutionContext.DEFAULT;
+    }
+
+    /**
      * Given a SMR entry with an undo entry, undo the update.
      *
      * @param entry The entry to undo.
      */
-    private void applyUndoRecordUnsafe(SMREntry entry) {
+    private void applyUndoRecordUnsafe(SMREntry entry, ISMRStream stream) {
         log.trace("Undo[{}] of {}@{} ({})", this, entry.getSMRMethod(),
                 Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
                 entry.getUndoRecord());
         IUndoFunction<T> undoFunction = undoFunctionMap.get(entry.getSMRMethod());
+        ICorfuExecutionContext.Context context = getContext(stream);
+
         // If the undo function exists, apply it.
         if (undoFunction != null) {
-            undoFunction.doUndo(object, entry.getUndoRecord(), entry.getSMRArguments());
+            undoFunction.doUndo(
+                    object.getContext(context),
+                    entry.getUndoRecord(), entry.getSMRArguments());
             return;
         } else if (resetSet.contains(entry.getSMRMethod())) {
             // If this is a reset, undo by restoring the
@@ -513,13 +550,27 @@ public class VersionLockedObject<T> {
         throw new RuntimeException("Unknown undo record in undo log");
     }
 
+    /**
+     * Given a timestamp, return the context under which the underlying
+     * object should be updated.
+     *
+     * @param timestamp timestamp on which we are currently operating
+     * @return an appropriate context
+     */
+    private ICorfuExecutionContext.Context getContext(long timestamp) {
+        if (timestamp == Address.OPTIMISTIC) {
+            return ICorfuExecutionContext.OPTIMISTIC;
+        }
+
+        return ICorfuExecutionContext.DEFAULT;
+    }
 
     /**
      * Apply an SMR update to the object, possibly optimistically.
      *
      * @param entry The entry to apply.
      */
-    private Object applyUpdateUnsafe(SMREntry entry) {
+    private Object applyUpdateUnsafe(SMREntry entry, long timestamp) {
         log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
                 Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
                 entry.getSMRArguments());
@@ -528,6 +579,8 @@ public class VersionLockedObject<T> {
         if (target == null) {
             throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
         }
+
+        ICorfuExecutionContext.Context context = getContext(timestamp);
 
         // Calculate an undo record if no undo record is present -OR- there
         // is an optimistic entry, (which has no valid global address).
@@ -542,20 +595,21 @@ public class VersionLockedObject<T> {
             if (undoRecordTarget != null) {
                 // Calculate the undo record.
                 entry.setUndoRecord(undoRecordTarget
-                        .getUndoRecord(object, entry.getSMRArguments()));
+                        .getUndoRecord(object.getContext(context), entry.getSMRArguments()));
                 log.trace("Apply[{}] Undo->{}", this, entry.getUndoRecord());
             } else if (resetSet.contains(entry.getSMRMethod())) {
                 // This entry actually resets the object. So here
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
                 entry.setUndoRecord(object);
+                object.close();
                 object = newObjectFn.get();
                 log.trace("Apply[{}] Undo->RESET", this);
             }
         }
 
         // Now invoke the upcall
-        return target.upcall(object, entry.getSMRArguments());
+        return target.upcall(object.getContext(context), entry.getSMRArguments());
     }
 
     /**
@@ -582,7 +636,7 @@ public class VersionLockedObject<T> {
                 // start from the end, process one at a time
                 ListIterator<SMREntry> it = entries.listIterator(entries.size());
                 while (it.hasPrevious()) {
-                    applyUndoRecordUnsafe(it.previous());
+                    applyUndoRecordUnsafe(it.previous(), stream);
                 }
             } else {
                 Optional<SMREntry> entry = entries.stream().findFirst();
@@ -627,7 +681,7 @@ public class VersionLockedObject<T> {
         stream.streamUpTo(syncTo)
                 .forEachOrdered(entry -> {
                     try {
-                        Object res = applyUpdateUnsafe(entry);
+                        Object res = applyUpdateUnsafe(entry, timestamp);
                         if (timestamp == Address.OPTIMISTIC) {
                             entry.setUpcallResult(res);
                         } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
@@ -649,7 +703,7 @@ public class VersionLockedObject<T> {
      * Roll back the optimistic stream, resetting the object if it can not
      * be restored.
      */
-    protected void optimisticRollbackUnsafe() {
+    protected void rollbackUncommittedChangesUnsafe() {
         try {
             log.trace("OptimisticRollback[{}] started", this);
             rollbackStreamUnsafe(this.optimisticStream,
@@ -667,7 +721,7 @@ public class VersionLockedObject<T> {
      * @param entry smr entry
      */
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
-        applyUpdateUnsafe(entry);
+        applyUpdateUnsafe(entry, globalAddress);
         seek(globalAddress + 1);
     }
 

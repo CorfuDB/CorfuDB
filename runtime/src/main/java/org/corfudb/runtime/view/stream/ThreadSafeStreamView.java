@@ -61,11 +61,6 @@ public class ThreadSafeStreamView implements IStreamView {
     }
 
     @Override
-    public synchronized long find(long globalAddress, SearchDirection direction) {
-        return stream.find(globalAddress, direction);
-    }
-
-    @Override
     public synchronized long append(Object object,
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback) {

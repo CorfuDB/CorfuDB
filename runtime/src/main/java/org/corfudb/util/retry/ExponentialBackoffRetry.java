@@ -2,7 +2,6 @@ package org.corfudb.util.retry;
 
 import java.time.Duration;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 import lombok.Getter;
 import lombok.Setter;

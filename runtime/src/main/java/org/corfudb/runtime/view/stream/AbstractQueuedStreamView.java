@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -78,8 +79,7 @@ public abstract class AbstractQueuedStreamView extends
      * @param globalAddress     The resolved global address.
      */
     protected void addToResolvedQueue(QueuedStreamContext context,
-                                      long globalAddress,
-                                      ILogData ld) {
+                                      long globalAddress) {
         context.resolvedQueue.add(globalAddress);
 
         if (context.maxResolution < globalAddress) {
@@ -174,7 +174,8 @@ public abstract class AbstractQueuedStreamView extends
     public long append(Object object,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
-        final LogData ld = new LogData(DataType.DATA, object);
+        final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
+
         // Validate if the  size of the log data is under max write size.
         ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
@@ -233,7 +234,7 @@ public abstract class AbstractQueuedStreamView extends
         log.error("append[{}]: failed after {} retries, write size {} bytes",
                 tokenResponse.getSequence(),
                 runtime.getParameters().getWriteRetry(),
-                ILogData.getSerializedSize(object));
+                ILogData.getSerializedSize(object, runtime.getParameters().getCodecType()));
         throw new AppendException();
     }
 
@@ -363,7 +364,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // Transfer the addresses of the read entries to the resolved queue
         readFrom.stream()
-                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress(), x));
+                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress()));
 
         // Update the global pointer
         if (readFrom.size() > 0) {
@@ -401,17 +402,17 @@ public abstract class AbstractQueuedStreamView extends
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult
         // a checkpoint first.
-        if (context.getGlobalPointer() == Address.NEVER_READ &&
-                context.checkpoint.id == null) {
+        if (context.getCheckpoint() == StreamCheckpoint.UNINITIALIZED) {
+            context.checkpoint = StreamCheckpoint.INITIALIZED;
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
                     .getCheckpointStreamIdFromId(context.id);
             // Find the checkpoint, if present
             try {
                 if (discoverAddressSpace(checkpointId, context.readCpQueue,
-                        runtime.getSequencerView()
-                                .query(checkpointId),
-                        Address.NEVER_READ, d -> scanCheckpointStream(context, d, maxGlobal),
+                        runtime.getSequencerView().query(checkpointId),
+                        Address.NEVER_READ,
+                        data -> scanCheckpointStream(context, data, maxGlobal),
                         true, maxGlobal)) {
                     log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
                             this, context.readCpQueue.size());
@@ -601,39 +602,7 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Override
     public void close() {}
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public synchronized long find(long globalAddress, SearchDirection direction) {
-        final QueuedStreamContext context = getCurrentContext();
-        // First, check if we have resolved up to the given address
-        if (context.maxResolution < globalAddress) {
-            // If not we need to read to that position
-            // to resolve all the addresses.
-            remainingUpTo(globalAddress + 1);
-        }
-
-        // Now we can do the search.
-        // First, check for inclusive searches.
-        if (direction.isInclusive()
-                && context.resolvedQueue.contains(globalAddress)) {
-            return globalAddress;
-        }
-        // Next, check all elements excluding
-        // in the correct direction.
-        Long result;
-        if (direction.isForward()) {
-            result = context.resolvedQueue.higher(globalAddress);
-        }  else {
-            result = context.resolvedQueue.lower(globalAddress);
-        }
-
-        // Convert the address to never read if there was no result.
-        return result == null ? Address.NOT_FOUND : result;
-    }
-
+    
     // Keeps the latest valid checkpoint (based on the snapshot it covers)
     private StreamCheckpoint latestValidCheckpoint = new StreamCheckpoint();
 
@@ -885,7 +854,9 @@ public abstract class AbstractQueuedStreamView extends
         /** Info on checkpoint we used for initial stream replay,
          *  other checkpoint-related info & stats.
          */
-        StreamCheckpoint checkpoint = new StreamCheckpoint();
+        @Getter
+        @Setter
+        private StreamCheckpoint checkpoint = StreamCheckpoint.UNINITIALIZED;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -907,8 +878,7 @@ public abstract class AbstractQueuedStreamView extends
             resolvedQueue.clear();
             minResolution = Address.NON_ADDRESS;
             maxResolution = Address.NON_ADDRESS;
-
-            checkpoint.reset();
+            setCheckpoint(StreamCheckpoint.UNINITIALIZED);
         }
 
         /**
@@ -944,6 +914,8 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Data
     static class StreamCheckpoint {
+        public final static StreamCheckpoint UNINITIALIZED = new StreamCheckpoint();
+        public final static StreamCheckpoint INITIALIZED = new StreamCheckpoint();
 
         UUID id = null;
         // Represents the VLO version at the time of checkpoint, i.e., last update observed

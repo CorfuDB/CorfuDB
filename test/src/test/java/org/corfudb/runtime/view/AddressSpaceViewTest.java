@@ -4,6 +4,7 @@ import com.google.common.cache.Cache;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.*;
@@ -98,6 +99,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     public void ensureStripingWorks() throws Exception {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
+        rt.getParameters().setCodecType(Codec.Type.NONE.toString());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();

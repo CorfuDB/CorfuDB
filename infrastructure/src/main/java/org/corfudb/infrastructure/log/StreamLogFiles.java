@@ -7,7 +7,6 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -18,6 +17,7 @@ import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -168,10 +168,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             String corfuDir = logDir.getParent().toString();
             FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
 
-            if (corfuDirBackend.isReadOnly()) {
-                throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
-            }
-
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
@@ -274,6 +270,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public boolean quotaExceeded() {
         return !logSizeQuota.hasAvailable();
+    }
+
+    @Override
+    public long quotaLimitInBytes() {
+        return logSizeQuota.getLimit();
     }
 
     @Override
@@ -421,9 +422,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     private LogData getLogData(LogEntry entry) {
-        ByteBuf data = Unpooled.wrappedBuffer(entry.getData().toByteArray());
+        ByteBuffer entryData = ByteBuffer.wrap(entry.getData().toByteArray());
+
+        int ldCodecType = entry.hasCodecType() ? entry.getCodecType() : Codec.Type.NONE.getId();
+
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol
-                .DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
+                .DataType.typeMap.get((byte) entry.getDataType().getNumber()),
+                Unpooled.wrappedBuffer(entryData.array()), ldCodecType);
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
@@ -810,15 +815,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return strUUIds;
     }
 
-    private LogEntry getLogEntry(long address, LogData entry) {
-        byte[] data = new byte[0];
 
-        if (entry.getData() != null) {
-            data = entry.getData();
-        }
+
+    private LogEntry getLogEntry(long address, LogData entry) {
+        ByteBuffer data = ByteBuffer.wrap(entry.getData() == null ? new byte[0] : entry.getData());
 
         LogEntry.Builder logEntryBuilder = LogEntry.newBuilder()
                 .setDataType(Types.DataType.forNumber(entry.getType().ordinal()))
+                .setCodecType(entry.getPayloadCodecType().getId())
                 .setData(ByteString.copyFrom(data))
                 .setGlobalAddress(address)
                 .addAllStreams(getStrUUID(entry.getStreams()))

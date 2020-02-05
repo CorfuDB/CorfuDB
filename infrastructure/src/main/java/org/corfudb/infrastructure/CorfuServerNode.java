@@ -158,23 +158,6 @@ public class CorfuServerNode implements AutoCloseable {
     }
 
     /**
-     * Get the requested Corfu server.
-     *
-     * @param serverClass Server class.
-     * @param <T>         Type of server.
-     * @return T Server Object.
-     */
-    @SuppressWarnings("unchecked")
-    public @Nonnull
-    <T extends AbstractServer> T getServer(@Nonnull Class<T> serverClass) {
-        T server = (T) serverMap.get(serverClass);
-        if (server == null) {
-            throw new UnrecoverableCorfuError("Server does not exist");
-        }
-        return server;
-    }
-
-    /**
      * A functional interface for receiving and configuring a {@link ServerBootstrap}.
      */
     @FunctionalInterface
@@ -256,7 +239,7 @@ public class CorfuServerNode implements AutoCloseable {
      *
      * @param context The {@link ServerContext} to use.
      * @param router  The {@link NettyServerRouter} to initialize the channel with.
-     * @return A {@link ChannelInitializer} to intialize the channel.
+     * @return A {@link ChannelInitializer} to initialize the channel.
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
                                                                   @Nonnull NettyServerRouter router) {

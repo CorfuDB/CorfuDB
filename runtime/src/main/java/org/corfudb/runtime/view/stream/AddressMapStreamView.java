@@ -89,7 +89,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
                     if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
-                        addToResolvedQueue(getCurrentContext(), currentRead, ld);
+                        addToResolvedQueue(getCurrentContext(), currentRead);
                         readNext = false;
                     } else {
                         log.trace("getNextEntry[{}]: the data for address {} does not belong to this stream. Skip.",
@@ -185,11 +185,13 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                         log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
                                 this, streamAddressSpace.getTrimMark());
                     } else {
-                        String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                        "trimmed at address %s and this space is not covered by the " +
-                                        "loaded checkpoint with start address %s, while accessing the " +
-                                        "stream at version %s. Looking for a new checkpoint.",this,
-                                trimMark, getCurrentContext().checkpoint.startAddress, maxGlobal);
+                        String message = String.format("getStreamAddressMap[{%s}] [%d, %d] " +
+                                        "stream has been trimmed at address %s and this space is " +
+                                        "not covered by the loaded checkpoint with start " +
+                                        "address %s, while accessing the stream at version " +
+                                        "%s. Looking for a new checkpoint.",
+                                this, stopAddress, startAddress, trimMark,
+                                getCurrentContext().getCheckpoint().startAddress, maxGlobal);
                         throw new TrimmedException(message);
                     }
                 }
@@ -344,13 +346,13 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     }
 
     private boolean isTrimResolvedLocally(long trimMark) {
-        return getCurrentContext().checkpoint.id == null
+        return getCurrentContext().getCheckpoint().id == null
                 && getCurrentContext().resolvedQueue.contains(trimMark);
     }
 
     private boolean isTrimCoveredByCheckpoint(long trimMark) {
-        return getCurrentContext().checkpoint.id != null &&
-                getCurrentContext().checkpoint.startAddress >= trimMark;
+        return getCurrentContext().getCheckpoint().id != null &&
+                getCurrentContext().getCheckpoint().startAddress >= trimMark;
     }
 
     /**

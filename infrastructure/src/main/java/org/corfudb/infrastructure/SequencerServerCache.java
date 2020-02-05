@@ -9,7 +9,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.UUID;

@@ -125,15 +125,6 @@ public class State {
                 .begin();
     }
 
-    public void startSnapshotTx(Token snapshot) {
-        runtime.getObjectsView()
-                .TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .snapshot(snapshot)
-                .build()
-                .begin();
-    }
-
     public void startWriteAfterWriteTx() {
         runtime.getObjectsView()
                 .TXBuild()

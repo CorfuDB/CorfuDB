@@ -1,27 +1,29 @@
 package org.corfudb.universe.scenario;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
+import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_WAIT_TIME;
 
 @Slf4j
 public class ScenarioUtils {
 
     public static void waitForNextEpoch(CorfuClient corfuClient, long nextEpoch) {
         waitForLayoutChange(layout -> {
-            if(layout.getEpoch() > nextEpoch){
+            if (layout.getEpoch() > nextEpoch) {
                 throw new IllegalStateException("Layout epoch is ahead of next epoch. Next epoch: " + nextEpoch +
                         ", layout epoch: " + layout.getEpoch());
             }
@@ -37,6 +39,7 @@ public class ScenarioUtils {
      * @param corfuClient corfu client.
      */
     public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuClient corfuClient) {
+
         corfuClient.invalidateLayout();
         Layout refreshedLayout = corfuClient.getLayout();
 
@@ -46,7 +49,7 @@ public class ScenarioUtils {
             }
             corfuClient.invalidateLayout();
             refreshedLayout = corfuClient.getLayout();
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
+            sleep();
         }
 
         assertThat(verifier.test(refreshedLayout)).isTrue();
@@ -59,7 +62,8 @@ public class ScenarioUtils {
      * @param verifier    IntPredicate to test the refreshed unresponsive servers size
      * @param corfuClient corfu client.
      */
-    public static void waitForUnresponsiveServersChange(IntPredicate verifier, CorfuClient corfuClient) {
+    public static void waitForUnresponsiveServersChange(
+            IntPredicate verifier, CorfuClient corfuClient) {
         corfuClient.invalidateLayout();
         Layout refreshedLayout = corfuClient.getLayout();
 
@@ -69,10 +73,19 @@ public class ScenarioUtils {
             }
             corfuClient.invalidateLayout();
             refreshedLayout = corfuClient.getLayout();
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
+            sleep();
         }
 
         assertThat(verifier.test(refreshedLayout.getUnresponsiveServers().size())).isTrue();
+    }
+
+    private static void sleep() {
+        try {
+            TimeUnit.SECONDS.sleep(DEFAULT_WAIT_TIME.getSeconds());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new UniverseException("Interrupted", e);
+        }
     }
 
     /**
@@ -92,7 +105,7 @@ public class ScenarioUtils {
             }
             corfuClient.invalidateLayout();
             refreshedLayout = corfuClient.getLayout();
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
+            sleep();
         }
 
         assertThat(verifier.test(refreshedLayout.getAllServers().size())).isTrue();

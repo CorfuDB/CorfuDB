@@ -74,7 +74,6 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         return new SerializationHandle(this);
     }
 
-
     /**
      * Return the payload as a log entry.
      */
@@ -136,13 +135,18 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
+     * Return true if this LogData contains data
+     */
+    default boolean isData() { return  getType() == DataType.DATA; }
+
+    /**
      * Return the serialized size of an object
      *
      * @param obj the entry's payload object
      * @return size of serialized buffer
      */
-    static int getSerializedSize(Object obj) {
-        ILogData ld = new LogData(DataType.DATA, obj);
+    static int getSerializedSize(Object obj, String codecType) {
+        ILogData ld = new LogData(DataType.DATA, obj, codecType);
         ld.acquireBuffer();
         int size = ld.getSizeEstimate();
         ld.releaseBuffer();

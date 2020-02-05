@@ -9,8 +9,8 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.junit.Before;
 import org.junit.Test;
@@ -20,17 +20,17 @@ import org.junit.Test;
  */
 public abstract class AbstractTransactionContextTest extends AbstractTransactionsTest {
 
-    protected ISMRMap<String, String> testMap;
+    protected ICorfuTable<String, String> testMap;
 
     @Before
     public void resetMap() {
         testMap = null;
     }
 
-    public ISMRMap<String, String> getMap() {
+    public ICorfuTable<String, String> getMap() {
         if (testMap == null) {
-            testMap = (ISMRMap<String, String>) instantiateCorfuObject(
-                    new TypeToken<SMRMap<String, String>>() {},
+            testMap = (ICorfuTable<String, String>) instantiateCorfuObject(
+                    new TypeToken<CorfuTable<String, String>>() {},
                     "test stream"
             );
         }
@@ -47,7 +47,7 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
 
     // Write only, don't read previous value.
     void write(String key, String value) {
-        getMap().blindPut(key, value);
+        getMap().insert(key, value);
     }
 
     // counter-array tests below

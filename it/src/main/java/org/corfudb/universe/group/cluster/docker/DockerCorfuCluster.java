@@ -11,7 +11,6 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
-import org.corfudb.universe.group.cluster.SupportClusterParams;
 import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.server.CorfuServer;
@@ -29,7 +28,7 @@ import java.util.stream.Collectors;
  * Provides Docker implementation of {@link CorfuCluster}.
  */
 @Slf4j
-public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
+public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuServerParams, UniverseParams> {
 
     @NonNull
     private final DockerClient docker;
@@ -39,14 +38,14 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<UniverseParams> {
     private final DockerManager dockerManager;
 
     @Builder
-    public DockerCorfuCluster(DockerClient docker, CorfuClusterParams params,
-                              UniverseParams universeParams,
-                              SupportClusterParams monitoringParams,
-                              LoggingParams loggingParams) {
+    public DockerCorfuCluster(DockerClient docker, CorfuClusterParams<CorfuServerParams> params,
+                              UniverseParams universeParams, LoggingParams loggingParams) {
         super(params, universeParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
         this.dockerManager = DockerManager.builder().docker(docker).build();
+
+        init();
     }
 
     @Override

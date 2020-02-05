@@ -15,7 +15,6 @@ import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.view.Address;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.

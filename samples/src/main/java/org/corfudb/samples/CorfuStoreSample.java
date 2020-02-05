@@ -35,7 +35,6 @@ public class CorfuStoreSample {
     private static CorfuRuntime getRuntimeAndConnect(String configurationString) {
 
         return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-            .useFastLoader(false)
             .cacheDisabled(true)
             .tlsEnabled(false)
             .build())

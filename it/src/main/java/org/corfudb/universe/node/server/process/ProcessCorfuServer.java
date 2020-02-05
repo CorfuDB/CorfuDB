@@ -1,6 +1,8 @@
 package org.corfudb.universe.node.server.process;
 
 import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.node.NodeException;
@@ -8,6 +10,7 @@ import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.UniverseParams;
+import org.corfudb.universe.util.IpAddress;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -21,10 +24,12 @@ import java.util.Optional;
  */
 @Slf4j
 public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, UniverseParams> {
-    private static final String LOCALHOST = "127.0.0.1";
+    private static final IpAddress LOCALHOST = IpAddress.builder().ip("127.0.0.1").build();
 
     @NonNull
-    private final String ipAddress;
+    @Default
+    @Getter
+    private final IpAddress ipAddress = LOCALHOST;
 
     @NonNull
     private final CorfuProcessManager processManager;
@@ -35,10 +40,9 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     public ProcessCorfuServer(
             @NonNull CorfuServerParams params, @NonNull UniverseParams universeParams) {
         super(params, universeParams);
-        this.ipAddress = getIpAddress();
 
         Path corfuDir = Paths.get(System.getProperty("user.home"), "corfu");
-        this.processManager = new CorfuProcessManager(corfuDir, params, getNetworkInterface());
+        this.processManager = new CorfuProcessManager(corfuDir, params);
     }
 
     /**
@@ -117,6 +121,11 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         throw new UnsupportedOperationException("Not supported");
     }
 
+    @Override
+    public String execute(String command) {
+        return executeCommand(Optional.empty(), command);
+    }
+
     /**
      * Reconnect a server to a list of servers.
      */
@@ -138,20 +147,12 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     /**
      * Executes a certain command on the local machine.
      */
-    private void executeCommand(Optional<Path> workDir, String cmdLine) {
+    private String executeCommand(Optional<Path> workDir, String cmdLine) {
         try {
-            commandHelper.executeCommand(workDir, cmdLine);
+            return commandHelper.executeCommand(workDir, cmdLine);
         } catch (IOException e) {
             throw new NodeException("Execution error. Cmd: " + cmdLine, e);
         }
-    }
-
-    /**
-     * @return the IpAddress of this local machine.
-     */
-    @Override
-    public String getIpAddress() {
-        return LOCALHOST;
     }
 
     /**
@@ -211,7 +212,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     }
 
     @Override
-    public String getNetworkInterface() {
+    public IpAddress getNetworkInterface() {
         return ipAddress;
     }
 }

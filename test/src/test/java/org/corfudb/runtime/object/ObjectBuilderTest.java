@@ -1,12 +1,17 @@
 package org.corfudb.runtime.object;
 
-import org.corfudb.runtime.collections.ISMRObject;
+import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
 import org.junit.Test;
 import java.lang.reflect.InvocationTargetException;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 /**
- * Tests related to {@link ISMRObject} creation.
+ * Tests related to {@link ICorfuSMR} creation.
  */
 public class ObjectBuilderTest {
 
@@ -40,6 +45,18 @@ public class ObjectBuilderTest {
         public Example(Child base) {
             // NOOP.
         }
+    }
+
+    @Test
+    public void testObjectWithInvalidStreamId() {
+        CorfuRuntime rt = new CorfuRuntime();
+        assertThatThrownBy(() -> {
+            SMRObject.builder()
+                    .runtime(rt)
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .open();
+        }).isInstanceOf(NullPointerException.class)
+          .hasMessageStartingWith("streamID is marked non-null but is null");
     }
 
     /**

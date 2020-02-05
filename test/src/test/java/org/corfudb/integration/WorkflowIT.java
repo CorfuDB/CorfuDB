@@ -65,9 +65,9 @@ public class WorkflowIT extends AbstractIT {
         runtime = new CorfuRuntime(getConnectionString(n1Port))
                 .setCacheDisabled(true).connect();
 
-        CorfuTable table = runtime.getObjectsView()
+        CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName(streamName)
                 .open();
 
@@ -166,8 +166,8 @@ public class WorkflowIT extends AbstractIT {
         Process p2 = runServer(n2Port, false);
 
         runtime = new CorfuRuntime(getConnectionString(n0Port)).connect();
-        CorfuTable table = runtime.getObjectsView().build()
-                .setType(CorfuTable.class)
+        CorfuTable<String, String> table = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("table1").open();
 
         final int iter = 1000;
@@ -226,8 +226,8 @@ public class WorkflowIT extends AbstractIT {
         Process p2 = runServer(n2Port, false);
 
         runtime = new CorfuRuntime(getConnectionString(n0Port)).connect();
-        CorfuTable table = runtime.getObjectsView().build()
-                .setType(CorfuTable.class)
+        CorfuTable<String, String> table = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("table1").open();
 
         final int iter = 100;
@@ -288,7 +288,7 @@ public class WorkflowIT extends AbstractIT {
         final String streamName = "test";
         CorfuTable<String, Integer> table = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                 .setStreamName(streamName)
                 .open();
         final int entriesCount = 1_000;

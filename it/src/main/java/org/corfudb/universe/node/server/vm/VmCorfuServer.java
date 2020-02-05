@@ -1,8 +1,7 @@
 package org.corfudb.universe.node.server.vm;
 
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
@@ -11,7 +10,9 @@ import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.process.CorfuProcessManager;
 import org.corfudb.universe.node.stress.vm.VmStress;
+import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
+import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
 
 import java.nio.file.Path;
@@ -26,28 +27,34 @@ import java.util.List;
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
 
     @NonNull
-    private final VirtualMachine vm;
+    @Getter
+    private final VmManager vmManager;
+
     @NonNull
-    private final String ipAddress;
+    private final IpAddress ipAddress;
+
+    @Getter
     @NonNull
-    private final RemoteOperationHelper commandHelper;
+    private final RemoteOperationHelper remoteOperationHelper;
+
     @NonNull
     private final VmStress stress;
+
     @NonNull
     private final CorfuProcessManager processManager;
 
     @Builder
     public VmCorfuServer(
-            VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams,
-            VmStress stress) {
+            VmCorfuServerParams params, VmManager vmManager, VmUniverseParams universeParams,
+            VmStress stress, RemoteOperationHelper remoteOperationHelper) {
         super(params, universeParams);
-        this.vm = vm;
+        this.vmManager = vmManager;
         this.ipAddress = getIpAddress();
         this.stress = stress;
-        commandHelper = RemoteOperationHelper.getInstance();
+        this.remoteOperationHelper = remoteOperationHelper;
 
         Path corfuDir = Paths.get("~");
-        this.processManager = new CorfuProcessManager(corfuDir, params, getNetworkInterface());
+        this.processManager = new CorfuProcessManager(corfuDir, params);
     }
 
     /**
@@ -57,12 +64,12 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public CorfuServer deploy() {
+        log.info("Deploy vm server: {}", params.getVmName());
+
         executeCommand(processManager.createServerDirCommand());
         executeCommand(processManager.createStreamLogDirCommand());
 
-        commandHelper.copyFile(
-                ipAddress,
-                universeParams.getCredentials().getVmCredentials(),
+        remoteOperationHelper.copyFile(
                 params.getInfrastructureJar(),
                 processManager.getServerJar()
         );
@@ -150,6 +157,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanOutput()));
     }
 
+    @Override
+    public String execute(String command) {
+        return executeCommand(command);
+    }
+
     /**
      * Reconnect a server to a list of servers.
      */
@@ -178,36 +190,23 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     /**
      * Executes a certain command on the VM.
      */
-    private void executeCommand(String cmdLine) {
-        String ipAddress = getIpAddress();
-
-        commandHelper.executeCommand(
-                ipAddress,
-                universeParams.getCredentials().getVmCredentials(),
-                cmdLine
-        );
+    private String executeCommand(String cmdLine) {
+        return remoteOperationHelper.executeCommand(cmdLine);
     }
 
     /**
      * Executes a certain Sudo command on the VM.
      */
-    private void executeSudoCommand(String cmdLine) {
-        String ipAddress = getIpAddress();
-
-        commandHelper.executeSudoCommand(
-                ipAddress,
-                universeParams.getCredentials().getVmCredentials(),
-                cmdLine
-        );
+    private String executeSudoCommand(String cmdLine) {
+        return remoteOperationHelper.executeSudoCommand(cmdLine);
     }
 
     /**
      * @return the IpAddress of this VM.
      */
     @Override
-    public String getIpAddress() {
-        GuestInfo guest = vm.getGuest();
-        return guest.getIpAddress();
+    public IpAddress getIpAddress() {
+        return vmManager.getResolvedIpAddress();
     }
 
     /**
@@ -270,7 +269,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     }
 
     @Override
-    public String getNetworkInterface() {
+    public IpAddress getNetworkInterface() {
         return ipAddress;
     }
 }

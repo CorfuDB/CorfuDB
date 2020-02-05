@@ -18,6 +18,7 @@ import org.junit.Before;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,6 +32,9 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     @Getter
     TestServerRouter router;
 
+    @Getter
+    TestClientRouter clientRouter;
+
     AtomicInteger requestCounter;
 
     public AbstractServerTest() {
@@ -38,6 +42,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         requestCounter = new AtomicInteger();
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
+        clientRouter = getClientRouter();
     }
 
     public void setServer(AbstractServer server) {
@@ -47,6 +52,33 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
 
     public abstract AbstractServer getDefaultServer();
 
+    public <T> CompletableFuture<T> sendRequest(UUID clientId, CorfuMsg msg) {
+        msg.setClientID(clientId)
+                .setRequestID(requestCounter.getAndIncrement())
+                .setEpoch(0L);
+        clientRouter.setClientID(clientId);
+        return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
+    public <T> CompletableFuture<T> sendRequest(CorfuMsg msg) {
+        msg.setClientID(testClientId)
+                .setRequestID(requestCounter.getAndIncrement())
+                .setEpoch(0L);
+        clientRouter.setClientID(testClientId);
+        return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
+    public TestClientRouter getClientRouter() {
+        TestClientRouter tcn = new TestClientRouter(router);
+        tcn.setClientID(testClientId);
+        tcn.addClient(new BaseHandler())
+                .addClient(new SequencerHandler())
+                .addClient(new LayoutHandler())
+                .addClient(new LogUnitHandler())
+                .addClient(new ManagementHandler());
+        return tcn;
+    }
+
     @Before
     public void resetTest() {
         router.reset();
@@ -54,9 +86,6 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         requestCounter.set(0);
     }
 
-    public List<CorfuMsg> getResponseMessages() {
-        return router.getResponseMessages();
-    }
 
     public CorfuMsg getLastMessage() {
         if (router.getResponseMessages().size() == 0) return null;
@@ -69,15 +98,17 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
                 .isInstanceOf(CorfuPayloadMsg.class);
         return ((CorfuPayloadMsg<T>)getLastMessage()).getPayload();
     }
+
     public void sendMessage(CorfuMsg message) {
         sendMessage(testClientId, message);
     }
+
 
     public void sendMessage(UUID clientId, CorfuMsg message) {
         message.setClientID(clientId)
                 .setRequestID(requestCounter.getAndIncrement())
                 .setEpoch(0L);
-        router.sendServerMessage(message);
+        clientRouter.sendMessageAndGetCompletable(message);
     }
 
     /**

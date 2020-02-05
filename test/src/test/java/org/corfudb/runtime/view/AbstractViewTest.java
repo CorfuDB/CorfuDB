@@ -197,17 +197,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.shutdown();
     }
 
-    /** Add a server at a specific port, using the given configuration options.
-     *
-     * @param port      The port to use.
-     * @param config    The configuration to use for the server.
-     */
-    public void addServer(int port, Map<String, Object> config) {
-        ServerContext sc = new ServerContext(config);
-        sc.setServerRouter(new TestServerRouter(port));
-        addServer(port, sc);
-    }
-
     /**
      * Add a server to a specific port, using the given ServerContext.
      * @param port
@@ -234,7 +223,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addSingleServer(int port) {
-        new TestServer(port).addToTest(port, this);
+        TestServer testServer = new TestServer(port);
+        testServer.addToTest(port, this);
+        Layout layout = testServer.getLayoutServer().getCurrentLayout();
+        bootstrapAllServers(layout);
     }
 
 
@@ -282,15 +274,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     public ManagementServer getManagementServer(int port) {
         return getServer(port).getManagementServer();
-    }
-
-    /** Get a instance of base server, given a port.
-     *
-     * @param port      The port of the base server to retrieve.
-     * @return          A base server instance.
-     */
-    public BaseServer getBaseServer(int port) {
-        return getServer(port).getBaseServer();
     }
 
     public IServerRouter getServerRouter(int port) {
@@ -406,11 +389,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return runtime;
     }
 
-    /** Clear installed rules for the default runtime.
-     */
-    public void clearClientRules() {
-        clearClientRules(getRuntime());
-    }
 
     /** Clear installed rules for a given runtime.
      *
@@ -487,16 +465,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     public String getEndpoint(int port) {
         return "test:" + port;
-    }
-
-    /**
-     * Get the port from the endpoint.
-     *
-     * @param endpoint The endpoint string.
-     * @return The port in the endpoint.
-     */
-    public Integer getPort(String endpoint) {
-        return Integer.parseInt(endpoint.split(":")[1]);
     }
 
     // Private

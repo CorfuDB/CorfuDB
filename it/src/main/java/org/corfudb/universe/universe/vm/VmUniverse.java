@@ -1,6 +1,7 @@
 package org.corfudb.universe.universe.vm;
 
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
@@ -30,6 +31,7 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
     private final AtomicBoolean destroyed = new AtomicBoolean(false);
 
     @NonNull
+    @Getter
     private final ApplianceManager applianceManager;
 
     @Builder
@@ -61,15 +63,16 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
      */
     @Override
     protected Group buildGroup(GroupParams groupParams) {
-        if (groupParams.getType() == ClusterType.CORFU_CLUSTER) {
-            return VmCorfuCluster.builder()
-                    .universeParams(universeParams)
-                    .corfuClusterParams(ClassUtils.cast(groupParams))
-                    .vms(applianceManager.getVms())
-                    .build();
+        if (groupParams.getType() != ClusterType.CORFU_CLUSTER) {
+            throw new UniverseException("Unknown node type: " + groupParams.getType());
         }
 
-        throw new UniverseException("Unknown node type");
+        return VmCorfuCluster.builder()
+                .universeParams(universeParams)
+                .corfuClusterParams(ClassUtils.cast(groupParams))
+                .vms(applianceManager.getVms())
+                .build();
+
     }
 
     /**

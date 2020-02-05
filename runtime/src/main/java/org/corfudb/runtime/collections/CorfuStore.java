@@ -32,13 +32,20 @@ public class CorfuStore {
     private final CorfuRuntime runtime;
 
     /**
+     * Transaction Streamer.
+     */
+    private final TxnStreamingManager txnStreamingManager;
+
+    /**
      * Creates a new CorfuStore.
      *
      * @param runtime Connected instance of the Corfu Runtime.
      */
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
+        runtime.setTransactionLogging(true);
         this.runtime = runtime;
+        this.txnStreamingManager = new TxnStreamingManager(runtime);
     }
 
     /**
@@ -166,6 +173,8 @@ public class CorfuStore {
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                    @Nonnull List<TableSchema> tablesOfInterest,
                    @Nullable Timestamp timestamp) {
+        txnStreamingManager.subscribe(streamListener, namespace, tablesOfInterest,
+                (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
     }
 
     /**
@@ -174,5 +183,6 @@ public class CorfuStore {
      * @param streamListener - callback context.
      */
     public void unsubscribe(@Nonnull StreamListener streamListener) {
+        txnStreamingManager.unsubscribe(streamListener);
     }
 }

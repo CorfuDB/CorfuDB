@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /** An interface for accessing a proxy, which
@@ -9,6 +10,16 @@ import java.util.function.Supplier;
  * Created by mwei on 11/10/16.
  */
 public interface ICorfuSMRProxy<T> {
+
+    /**
+     * Pass-through: invoke a method on the object without mutator/accessor
+     * synchronization.
+     *
+     * @param method pass through method to invoke
+     * @param <R>               The type to return.
+     * @return result of the pass through method
+     */
+    <R> R passThrough(Function<T, R> method);
 
     /** Access the state of the object.
      * @param accessMethod      The method to execute when accessing an object.
@@ -43,11 +54,6 @@ public interface ICorfuSMRProxy<T> {
      */
     <R> R getUpcallResult(long timestamp, Object[] conflictObject);
 
-    /**
-     * Update the proxy to the latest committed version.
-     */
-    void sync();
-
     /** Get the ID of the stream this proxy is subscribed to.
      *
      * @return  The UUID of the stream this proxy is subscribed to.
@@ -61,12 +67,6 @@ public interface ICorfuSMRProxy<T> {
      * @return              The value supplied by the function.
      */
     <R> R TXExecute(Supplier<R> txFunction);
-
-    /** Get an object builder to build new objects.
-     *
-     * @return  An object which permits the construction of new objects.
-     */
-    IObjectBuilder<?> getObjectBuilder();
 
     /** Return the type of the object being replicated.
      *

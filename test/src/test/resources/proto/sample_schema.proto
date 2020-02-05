@@ -4,6 +4,7 @@ package org.corfudb.test;
 option java_package = "org.corfudb.test";
 
 import "corfu_options.proto";
+import "google/protobuf/descriptor.proto";
 import "sample_appliance.proto";
 
 message FirewallRule {
@@ -22,6 +23,8 @@ message LogicalSwitch {
 message ManagedResources {
     optional string create_user = 1;
     optional int64 version = 2 [(org.corfudb.runtime.schema).version = true];
+    optional int64 create_timestamp = 3;
+    optional NestedTypeA nested_type = 4;
 }
 
 message EventInfo {
@@ -35,4 +38,23 @@ message EventInfo {
 message Uuid {
     optional uint64 msb = 1;
     optional uint64 lsb = 2;
+}
+
+message NestedTypeA {
+    repeated NestedTypeB tag = 1;
+}
+
+message NestedTypeB {
+    option (org.corfudb.test.mgoptions).skip_snapshot = true;
+    optional string something = 1;
+    optional string something2 = 2;
+}
+
+message ManagedResourceOptionsMsg {
+    optional bool skip_snapshot = 1;
+
+}
+
+extend google.protobuf.MessageOptions {
+    optional ManagedResourceOptionsMsg mgoptions = 54312;
 }

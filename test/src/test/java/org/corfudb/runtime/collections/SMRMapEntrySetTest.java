@@ -33,7 +33,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
     @Test
     public void manipulateSets()
             throws Exception {
-        Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class,
+        Map<Long, Long> testMap = instantiateCorfuObject(CorfuTable.class,
                 "mapsettest");
 
 
@@ -72,7 +72,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
     @Test
     public void manipulateSetsConcurrent()
             throws Exception {
-        Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class,
+        Map<Long, Long> testMap = instantiateCorfuObject(CorfuTable.class,
                 "mapsettest");
         CountDownLatch l1 = new CountDownLatch(1);
         CountDownLatch l2 = new CountDownLatch(1);

@@ -13,9 +13,6 @@ import org.junit.Ignore;
 @Ignore
 public class QuorumReplicationProtocolTest extends AbstractReplicationProtocolTest {
 
-
-    public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
-
     /** {@inheritDoc} */
     @Override
     IReplicationProtocol getProtocol() {

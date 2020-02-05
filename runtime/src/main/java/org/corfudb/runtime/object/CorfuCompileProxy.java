@@ -6,7 +6,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -32,9 +31,8 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -60,7 +58,7 @@ import java.util.function.Supplier;
  * <p>Created by mwei on 11/11/16.
  */
 @Slf4j
-public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
+public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
 
     /**
      * The underlying object. This object stores the actual
@@ -101,17 +99,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     private final Object[] args;
 
-    private final MetricRegistry metrics;
     /**
      * Metrics: meter (counter), histogram.
      */
-    private final String mpObj;
     private final Timer timerAccess;
     private final Timer timerLogWrite;
     private final Timer timerTxn;
     private final Timer timerUpcall;
-    private final Counter counterAccessOptimistic;
-    private final Counter counterAccessLocked;
     private final Counter counterTxnRetry1;
     private final Counter counterTxnRetryN;
 
@@ -128,19 +122,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @param type                Type of underlying object to instantiate a new instance.
      * @param args                Arguments to create this proxy.
      * @param serializer          Serializer used by the SMR entries to serialize the arguments.
-     * @param upcallTargetMap     upCallTargetMap
-     * @param undoTargetMap       undoTargetMap
-     * @param undoRecordTargetMap undoRecordTargetMap
-     * @param resetSet            resetSet
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                             ISerializer serializer,
-                             Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
-                             Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
-                             Set<String> resetSet
+                             ISerializer serializer, ICorfuSMR<T> wrapperObject
     ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -152,19 +138,23 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // because the VLO will control access to the stream
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                upcallTargetMap, undoRecordTargetMap,
-                undoTargetMap, resetSet);
+                wrapperObject);
 
-        metrics = CorfuRuntime.getDefaultMetrics();
-        mpObj = CorfuComponent.OBJECT.toString();
-        timerAccess = metrics.timer(mpObj + "access");
-        timerLogWrite = metrics.timer(mpObj + "log-write");
-        timerTxn = metrics.timer(mpObj + "txn");
-        timerUpcall = metrics.timer(mpObj + "upcall");
-        counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
-        counterAccessLocked = metrics.counter(mpObj + "access-locked");
-        counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
-        counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+        final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+        timerAccess = metrics.timer(CorfuComponent.OBJECT + "access");
+        timerLogWrite = metrics.timer(CorfuComponent.OBJECT + "log-write");
+        timerTxn = metrics.timer(CorfuComponent.OBJECT + "txn");
+        timerUpcall = metrics.timer(CorfuComponent.OBJECT + "upcall");
+        counterTxnRetry1 = metrics.counter(CorfuComponent.OBJECT + "txn-first-retry");
+        counterTxnRetryN = metrics.counter(CorfuComponent.OBJECT + "txn-extra-retries");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public  <R> R passThrough(Function<T, R> method) {
+        return underlyingObject.passThrough(method);
     }
 
     /**
@@ -173,14 +163,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {
-            return accessInner(accessMethod, conflictObject, isEnabled);
+        try (Timer.Context context = MetricsUtils.getConditionalContext(timerAccess)) {
+            return accessInner(accessMethod, conflictObject);
         }
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
-                              Object[] conflictObject, boolean isMetricsEnabled) {
+                              Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             try {
                 return TransactionalContext.getCurrentContext()
@@ -204,8 +193,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         o -> o.syncObjectUnsafe(timestamp),
                         o -> accessMethod.access(o));
             } catch (TrimmedException te) {
-                log.warn("accessInner: Encountered a trim exception while accessing version {} on attempt {}",
-                        timestamp, x);
+                log.info("accessInner: Encountered trimmed address space " +
+                    "while accessing version {} of stream {} on attempt {}",
+                    timestamp, getStreamID(), x);
                 // We encountered a TRIM during sync, reset the object
                 underlyingObject.update(o -> {
                     o.resetUnsafe();
@@ -264,24 +254,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void sync() {
-        // Linearize this read against a timestamp
-        TokenResponse response = rt.getSequencerView()
-                .query(new UUID[]{getStreamID()});
-        final Token timestamp = new Token(response.getEpoch(), response.getStreamTail(getStreamID()));
-
-        log.debug("Sync[{}] {}", this, timestamp);
-        // Acquire locks and perform read.
-        underlyingObject.update(o -> {
-            o.syncObjectUnsafe(timestamp.getSequence());
-            return null;
-        });
-    }
-
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
@@ -325,8 +297,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                             + " and we don't have a copy");
                 });
             } catch (TrimmedException ex) {
-                log.warn("getUpcallResultInner: Encountered a trim exception while accessing version {} on attempt {}",
-                        timestamp, x);
+                log.info("getUpcallResultInner: Encountered trimmed address space " +
+                    "while accessing version {} of stream {} on attempt {}",
+                    timestamp, getStreamID(), x);
                 // We encountered a TRIM during sync, reset the object
                 underlyingObject.update(o -> {
                     o.resetUnsafe();
@@ -356,14 +329,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
-            return TXExecuteInner(txFunction, isEnabled);
+        try (Timer.Context context = MetricsUtils.getConditionalContext(timerTxn)) {
+            return TXExecuteInner(txFunction);
         }
     }
 
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})
-    private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
+    private <R> R TXExecuteInner(Supplier<R> txFunction) {
         // Don't nest transactions if we are already running in a transaction
         if (TransactionalContext.isInTransaction()) {
             try {
@@ -398,9 +370,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
                 if (retries == 1) {
                     MetricsUtils
-                            .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
+                            .incConditionalCounter(counterTxnRetry1, 1);
                 }
-                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
+                MetricsUtils.incConditionalCounter(counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
                 Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));
@@ -411,16 +383,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 this.abortTransaction(e);
             }
         }
-    }
-
-    /**
-     * Get an object builder to build new objects.
-     *
-     * @return An object which permits the construction of new objects.
-     */
-    @Override
-    public IObjectBuilder<?> getObjectBuilder() {
-        return rt.getObjectsView().build();
     }
 
     /**
@@ -462,6 +424,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             throw new RuntimeException(e);
         }
     }
+
     @Override
     public String toString() {
         return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";

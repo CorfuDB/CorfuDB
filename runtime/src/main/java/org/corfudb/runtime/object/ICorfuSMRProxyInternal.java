@@ -12,7 +12,7 @@ import org.corfudb.util.serializer.ISerializer;
  * <p>Created by mwei on 11/15/16.
  */
 @SuppressWarnings("checkstyle:abbreviation")
-public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
+public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSMRProxy<T> {
 
     /**
      * Directly get the state of the object the proxy is managing,

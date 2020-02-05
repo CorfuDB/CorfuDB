@@ -3,7 +3,6 @@ package org.corfudb.protocols.wireprotocol;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableRangeSet;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
@@ -12,13 +11,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.JsonUtils;
-import org.corfudb.util.serializer.Serializers;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.DataOutputStream;
@@ -71,6 +70,7 @@ public interface ICorfuPayload<T> {
                     })
                     .put(DataRank.class, x -> new DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))
                     .put(CheckpointEntryType.class, x -> CheckpointEntryType.typeMap.get(x.readByte()))
+                    .put(Codec.Type.class, x -> Codec.getCodecTypeById(x.readInt()))
                     .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                     .put(byte[].class, x -> {
                         int length = x.readInt();
@@ -368,6 +368,8 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntryType) payload).asByte());
+        } else if (payload instanceof Codec.Type) {
+            buffer.writeInt(((Codec.Type) payload).getId());
         } else if (payload instanceof PriorityLevel) {
             buffer.writeByte(((PriorityLevel) payload).asByte());
         } else if (payload instanceof StreamAddressSpace) {

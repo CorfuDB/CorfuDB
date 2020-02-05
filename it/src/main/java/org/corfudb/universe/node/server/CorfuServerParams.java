@@ -78,6 +78,9 @@ public class CorfuServerParams implements NodeParams {
     @Default
     private final String dockerImage = DOCKER_IMAGE_NAME;
 
+    @Default
+    private final double logSizeQuotaPercentage = 100;
+
     @Override
     public String getName() {
         return clusterName + "-corfu-node" + getPort();
@@ -106,6 +109,7 @@ public class CorfuServerParams implements NodeParams {
      * https://docs.docker.com/config/containers/resource_constraints/
      */
     @Builder
+    @ToString
     public static class ContainerResources {
 
         /**
