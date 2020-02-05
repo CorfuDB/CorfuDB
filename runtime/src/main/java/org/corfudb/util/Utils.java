@@ -6,6 +6,7 @@ import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.apache.commons.lang3.ArrayUtils;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -237,6 +238,20 @@ public class Utils {
         }
 
         return aggregateLogAddressSpace(luResponses);
+    }
+
+    public static Throwable extractCauseWithCompleteStacktrace(Throwable throwable) {
+        final Throwable cause = throwable.getCause();
+        if (cause == null) {
+            return cause;
+        }
+
+        final StackTraceElement[] entireStackTrace = ArrayUtils.addAll(
+            throwable.getStackTrace(),
+            cause.getStackTrace()
+        );
+        cause.setStackTrace(entireStackTrace);
+        return cause;
     }
 
     static StreamsAddressResponse aggregateLogAddressSpace(Set<StreamsAddressResponse> responses) {
