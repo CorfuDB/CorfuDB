@@ -396,7 +396,7 @@ public class AddressSpaceView extends AbstractView {
             // Guava wraps the exceptions thrown from the lower layers, therefore
             // we need to unwrap them before throwing them to the upper layers that
             // don't understand the guava exceptions
-            Throwable cause = e.getCause();
+            final Throwable cause = Utils.extractCauseWithCompleteStacktrace(e);
             if (cause instanceof RuntimeException) {
                 throw (RuntimeException) cause;
             } else {
@@ -455,7 +455,7 @@ public class AddressSpaceView extends AbstractView {
                                 try {
                                     return future.join();
                                 } catch (CompletionException ex) {
-                                    Throwable cause = ex.getCause();
+                                    final Throwable cause = Utils.extractCauseWithCompleteStacktrace(ex);
                                     if (cause instanceof RuntimeException) {
                                         throw (RuntimeException) cause;
                                     } else {
