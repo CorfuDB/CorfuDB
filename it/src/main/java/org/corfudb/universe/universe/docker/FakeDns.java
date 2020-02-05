@@ -3,6 +3,8 @@ package org.corfudb.universe.universe.docker;
 import com.google.common.base.Throwables;
 import com.google.common.net.InetAddresses;
 
+import org.corfudb.util.Utils;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -137,7 +139,7 @@ public class FakeDns {
                 method.setAccessible(true);
                 return (InetAddress[]) method.invoke(fallbackNameService, host);
             } catch (ReflectiveOperationException | NoSuchElementException | SecurityException e) {
-                Throwables.propagateIfPossible(e.getCause(), UnknownHostException.class);
+                Throwables.propagateIfPossible(Utils.extractCauseWithCompleteStacktrace(e), UnknownHostException.class);
                 throw new AssertionError("unexpected reflection issue", e);
             }
         }
@@ -163,7 +165,7 @@ public class FakeDns {
                 method.setAccessible(true);
                 return (String) method.invoke(fallbackNameService, (Object) addr);
             } catch (ReflectiveOperationException | NoSuchElementException | SecurityException e) {
-                Throwables.propagateIfPossible(e.getCause(), UnknownHostException.class);
+                Throwables.propagateIfPossible(Utils.extractCauseWithCompleteStacktrace(e), UnknownHostException.class);
                 throw new AssertionError("unexpected reflection issue", e);
             }
         }
