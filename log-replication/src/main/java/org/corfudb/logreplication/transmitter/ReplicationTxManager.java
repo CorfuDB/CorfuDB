@@ -4,12 +4,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.fsm.LogReplicationContext;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Data
@@ -17,7 +17,7 @@ import java.util.concurrent.Executors;
 /**
  * A class that represents the entry point to initiate log replication on the transmitter side.
  **/
-public class DataTransmitter {
+public class ReplicationTxManager {
 
     /*
       Log Replication State Machine
@@ -25,7 +25,7 @@ public class DataTransmitter {
     private final LogReplicationFSM logReplicationFSM;
 
     /**
-     * Constructor Data Transmitter
+     * Constructor ReplicationTxManager
      *
      * @param runtime Corfu Runtime
      * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
@@ -34,52 +34,44 @@ public class DataTransmitter {
      *                         for log entry data transmission.
      * @param config Log Replication Configuration
      */
-    public DataTransmitter(CorfuRuntime runtime,
-                           SnapshotListener snapshotListener,
-                           LogEntryListener logEntryListener,
-                           LogReplicationConfig config) {
-        LogReplicationContext context = LogReplicationContext.builder()
-                .logEntryListener(logEntryListener)
-                .corfuRuntime(runtime)
-                .logReplicationFSM(this.getLogReplicationFSM())
-                .snapshotReader(new StreamsSnapshotReader(runtime, snapshotListener, config))
-                .stateMachineWorker(Executors.newSingleThreadExecutor(new
-                        ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build()))
-                .config(config)
-                .build();
-        this.logReplicationFSM = new LogReplicationFSM(context);
+    public ReplicationTxManager(CorfuRuntime runtime,
+                                SnapshotListener snapshotListener,
+                                LogEntryListener logEntryListener,
+                                LogReplicationConfig config) {
+
+        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(config.getLogReplicationFSMNumWorkers(), new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build());
+
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
+                logReplicationFSMWorkers);
     }
 
     /**
-     * Constructor Data Transmitter
+     * Constructor ReplicationTxManager
      *
      * @param runtime
      * @param logEntryListener
      * @param snapshotReader
      * @param config
      */
-    public DataTransmitter(CorfuRuntime runtime,
-                           LogEntryListener logEntryListener,
-                           SnapshotReader snapshotReader,
-                           LogReplicationConfig config) {
-        LogReplicationContext context = LogReplicationContext.builder()
-                .logEntryListener(logEntryListener)
-                .corfuRuntime(runtime)
-                .snapshotReader(snapshotReader)
-                .logReplicationFSM(this.getLogReplicationFSM())
-                .stateMachineWorker(Executors.newSingleThreadExecutor(new
-                        ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build()))
-                .config(config)
-                .build();
-        this.logReplicationFSM = new LogReplicationFSM(context);
+    public ReplicationTxManager(CorfuRuntime runtime,
+                                LogEntryListener logEntryListener,
+                                SnapshotListener snapshotListener,
+                                SnapshotReader snapshotReader,
+                                LogEntryReader logEntryReader,
+                                LogReplicationConfig config) {
+        ExecutorService logReplicationFSMWorkers = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build());
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotReader, snapshotListener,
+                logEntryReader, logEntryListener, logReplicationFSMWorkers);
     }
 
     /**
-     * Signal start of snapshot sync.
+     * Signal start of snapshot transmit.
      *
      * A snapshot is a consistent view of the database at a given timestamp.
      *
-     * @param context snapshot sync context
+     * @param context snapshot transmit context
      */
     public void startSnapshotSync(SnapshotSyncContext context) {
         // Verify if we really need SnapshotSyncContext, and if we need to pass to the fsm
@@ -108,9 +100,9 @@ public class DataTransmitter {
     }
 
     /**
-     * Signal to cancel snapshot sync.
+     * Signal to cancel snapshot transmit.
      *
-     * @param context snapshot sync context
+     * @param context snapshot transmit context
      */
     public void cancelSnapshotSync(SnapshotSyncContext context) {
         // Enqueue event into Log Replication FSM

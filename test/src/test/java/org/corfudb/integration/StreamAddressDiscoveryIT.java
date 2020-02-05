@@ -152,13 +152,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read S1 from new runtime (following backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
+            System.out.println("**** Total time new runtime to transmit 'Stream 1' (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read S1 from new runtime (retrieving address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
+            System.out.println("**** Total time new runtime to transmit 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -249,13 +249,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read from fresh runtime (follow backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
+            System.out.println("**** Total time new runtime to transmit 'Stream 1' (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
+            System.out.println("**** Total time new runtime to transmit 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -366,13 +366,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read from fresh runtime (follow backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync stream (following backpointers): "
+            System.out.println("**** Total time new runtime to transmit stream (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync stream (address maps): "
+            System.out.println("**** Total time new runtime to transmit stream (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
