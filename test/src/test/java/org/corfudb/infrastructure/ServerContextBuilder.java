@@ -70,7 +70,7 @@ public class ServerContextBuilder {
         }
          builder
                  .put("--no-verify", noVerify)
-                 .put("--no-sync", noSync)
+                 .put("--no-transmit", noSync)
                  .put("--address", address)
                  .put("--cache-heap-ratio", cacheSizeHeapRatio)
                  .put("--enable-tls", tlsEnabled)
