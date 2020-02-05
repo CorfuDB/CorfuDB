@@ -1,7 +1,6 @@
 package org.corfudb.util;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 import java.time.Duration;
