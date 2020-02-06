@@ -42,10 +42,10 @@ public class SnapshotTransmitter {
                 snapshotReadMessage = snapshotReader.read();
             } catch (TrimmedException te) {
                 /*
-                  In the case of Trimmed Exception enqueue event.
+                  In the case of Trimmed Exception, enqueue the event for state transition.
 
-                  We need to bind the event to the snapshotSyncEventId so it correlates
-                  to the same initiating state.
+                  The event needs to carry the snapshotSyncEventId under which it was originated, so it is
+                  correlated to the same initiating state.
                  */
                 logReplicationFSM
                         .input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.TRIMMED_EXCEPTION,
