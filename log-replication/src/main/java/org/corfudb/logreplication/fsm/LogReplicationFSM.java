@@ -49,12 +49,21 @@ public class LogReplicationFSM {
      */
     private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
 
+    /**
+     * An observable object on the number of transitions.
+     */
     @Getter
     private ObservableValue numTransitions = new ObservableValue(0);
 
-
-
-
+    /**
+     * Constructor for LogReplicationFSM, default readers.
+     *
+     * @param runtime Corfu Runtime
+     * @param config log replication configuration
+     * @param snapshotListener application callback for snapshot sync
+     * @param logEntryListener application callback for log entry sync
+     * @param workers FSM executor service for state tasks
+     */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, SnapshotListener snapshotListener,
                              LogEntryListener logEntryListener, ExecutorService workers) {
 
@@ -76,6 +85,17 @@ public class LogReplicationFSM {
         Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
     }
 
+    /**
+     * Constructor for LogReplicationFSM, custom readers.
+     *
+     * @param runtime Corfu Runtime
+     * @param config log replication configuration
+     * @param snapshotReader snapshot reader implementation
+     * @param snapshotListener application callback for snapshot sync
+     * @param logEntryReader log entry reader implementation
+     * @param logEntryListener application callback for log entry sync
+     * @param workers FSM executor service for state tasks
+     */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config,
                              SnapshotReader snapshotReader, SnapshotListener snapshotListener,
                              LogEntryReader logEntryReader, LogEntryListener logEntryListener, ExecutorService workers) {
@@ -94,11 +114,20 @@ public class LogReplicationFSM {
 
         // Consumer thread will run on a dedicated single thread (poll queue for incoming events)
         ThreadFactory consumerThreadFactory =
-                new ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-%d").build();
+                new ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build();
         Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
     }
 
+    /**
+     * Initialize all states for the Log Replication FSM.
+     *
+     * @param snapshotTransmitter reads and transmits snapshot syncs
+     * @param logEntryTransmitter reads and transmits log entry sync
+     */
     private void initializeStates(SnapshotTransmitter snapshotTransmitter, LogEntryTransmitter logEntryTransmitter) {
+        /*
+        Log Replication State instances are kept in a map to be reused in transitions.
+         */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotTransmitter));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntryTransmitter));
@@ -155,6 +184,12 @@ public class LogReplicationFSM {
         }
     }
 
+    /**
+     * Perform transition between states.
+     *
+     * @param from initial state
+     * @param to final state
+     */
     void transition(LogReplicationState from, LogReplicationState to) {
         from.onExit(to);
         to.clear();
