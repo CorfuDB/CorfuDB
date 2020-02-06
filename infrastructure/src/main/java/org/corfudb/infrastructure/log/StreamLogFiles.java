@@ -169,10 +169,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             String corfuDir = logDir.getParent().toString();
             FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
 
-            if (corfuDirBackend.isReadOnly()) {
-                throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
-            }
-
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
