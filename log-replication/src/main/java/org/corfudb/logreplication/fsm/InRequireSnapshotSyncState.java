@@ -3,7 +3,7 @@ package org.corfudb.logreplication.fsm;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * A class that represents the 'In Require Snapshot Sync' state of the Log Replication FSM.
+ * This class represents the InRequireSnapshotSync state of the Log Replication FSM.
  *
  * In this state we are waiting for a signal to start snapshot transmit, as it was determined as required by
  * the source site.
@@ -37,7 +37,8 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-
+        // TODO: since a SNAPSHOT_SYNC_REQUEST is the only event that can take us out of this state,
+        //  we need to scheduler to re-notify the remote site of the error, in case the request was lost.
     }
 
     @Override

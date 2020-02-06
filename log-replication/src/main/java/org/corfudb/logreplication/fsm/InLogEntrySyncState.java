@@ -7,7 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 
 /**
- * A class that represents the 'In Log Entry Sync' state of the Log Replication FSM.
+ * A class that represents the InLogEntrySync state of the Log Replication FSM.
  *
  * In this state incremental (delta) updates are being synced to the remote site.
  */
@@ -22,6 +22,12 @@ public class InLogEntrySyncState implements LogReplicationState {
 
     private Future<?> logEntrySyncFuture;
 
+    /**
+     * Constructor
+     *
+     * @param logReplicationFSM log replication finite state machine
+     * @param logEntryTransmitter
+     */
     public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntryTransmitter logEntryTransmitter) {
         this.fsm = logReplicationFSM;
         this.logEntryTransmitter = logEntryTransmitter;

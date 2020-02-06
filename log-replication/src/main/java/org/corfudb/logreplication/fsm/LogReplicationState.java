@@ -35,8 +35,16 @@ public interface LogReplicationState {
      */
     void onExit(LogReplicationState to);
 
+    /**
+     * Provides capability to clear/clean state information onEntry.
+     */
     default void clear() {}
 
+    /**
+     * Link state to the event that caused the transition to it.
+     *
+     * @param eventId event identifier
+     */
     default void setTransitionEventId(UUID eventId) {}
 }
 

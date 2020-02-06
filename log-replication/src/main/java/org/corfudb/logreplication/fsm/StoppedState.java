@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 /**
- * A class that represents the stopped state of the log replication state machine.
+ * This class represents the stopped state of the log replication state machine.
  **/
 public class StoppedState implements LogReplicationState {
 
