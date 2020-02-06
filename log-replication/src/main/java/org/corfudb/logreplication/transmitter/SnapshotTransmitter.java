@@ -1,13 +1,18 @@
 package org.corfudb.logreplication.transmitter;
 
-import org.corfudb.logreplication.fsm.InSnapshotSyncState;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
+
+import java.util.UUID;
 
 /**
  * A class that reads a snapshot and transmits it.
  */
+@Slf4j
 public class SnapshotTransmitter {
 
     private CorfuRuntime runtime;
@@ -23,9 +28,9 @@ public class SnapshotTransmitter {
         this.logReplicationFSM = logReplicationFSM;
     }
 
-    public void transmit() {
+    public void transmit(UUID snapshotSyncEventId) {
         boolean endRead = false;
-        SnapshotReadMessage snapshotReadMessage;
+        SnapshotReadMessage snapshotReadMessage = null;
 
         // Get global tail, this will represent the snapshot for a consistent cut of the data
         long snapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
@@ -33,17 +38,37 @@ public class SnapshotTransmitter {
         snapshotReader.reset(snapshotTimestamp);
 
         while(!endRead) {
-            snapshotReadMessage = snapshotReader.read();
+            try {
+                snapshotReadMessage = snapshotReader.read();
+            } catch (TrimmedException te) {
+                /*
+                  In the case of Trimmed Exception, enqueue the event for state transition.
+
+                  The event needs to carry the snapshotSyncEventId under which it was originated, so it is
+                  correlated to the same initiating state.
+                 */
+                logReplicationFSM
+                        .input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.TRIMMED_EXCEPTION,
+                                snapshotSyncEventId));
+
+                // Report error to the snapshotListener
+                listener.onError(LogReplicationError.TRIM_SNAPSHOT_SYNC, snapshotSyncEventId);
+            }
+
             if (!snapshotReadMessage.getMessages().isEmpty()) {
-                listener.onNext(snapshotReadMessage.getMessages());
+                listener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId);
             } else {
-                // Log Error
+                log.warn("Snapshot Read Message is EMPTY. End record should be found.");
             }
             endRead = snapshotReadMessage.isEndRead();
         }
 
-        // Insert SNAPSHOT_SYNC_COMPLETE event in the FSM queue
+        log.debug("End of snapshot read found. Snapshot sync completed.");
+
+        // We need to bind the event to the snapshotSyncEventId so it correlates
+        // to the same initiating state.
         logReplicationFSM
-                .input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE));
+                .input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
+                        snapshotSyncEventId));
     }
 }
