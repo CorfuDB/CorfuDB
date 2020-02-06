@@ -52,6 +52,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         this.config = config;
+        streams = config.getStreamsToReplicate();
     }
 
     /**
