@@ -1,48 +1,61 @@
 package org.corfudb.logreplication.receiver;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageMetadata;
 import org.corfudb.logreplication.transmitter.TxMessage;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.view.stream.IStreamView;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import java.nio.ByteBuffer;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * The AR will pass in FullSyncQue and DeltaQue and API for fullSyncDone()
+ * Writing a fullsync
  * Open streams interested and append all entries
  */
 
+@Slf4j
+@NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
     private List<UUID> streamUUIDs;
-    HashMap<UUID, IStreamView> streamViewMap;
+    private Set<String> streams;
+    HashMap<UUID, StreamViewSMRAdapter> streamViewMap;
     CorfuRuntime rt;
     long proccessedMsgTs;
     final private int QUEUE_SIZE = 20;
     private PriorityQueue<TxMessage> msgQ;
     private long srcGlobalSnapshot;
+    private long recvSeq;
 
-    StreamsSnapshotWriter() {
-        //init rt, streamUUIDs, srcGlobalSnapshot
-        msgQ = new PriorityQueue(QUEUE_SIZE, Comparator.comparingLong(a ->(((TxMessage)a).metadata.entryTimeStamp)));
+    StreamsSnapshotWriter(CorfuRuntime rt, Set<String> streams) {
+        this.rt = rt;
+        this.streams = streams;
     }
 
     /**
      * clear all tables interested
      */
     void clearTables() {
-        for (UUID stream : streamUUIDs) {
+        for (String stream : streams) {
+            UUID streamID = CorfuRuntime.getStreamID(stream);
             CorfuTable<String, String> corfuTable = rt.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                     })
-                    .setStreamID(stream)
+                    .setStreamID(streamID)
                     .open();
             corfuTable.clear();
             corfuTable.close();
@@ -54,14 +67,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     void openStreams() {
         for (UUID streamID : streamUUIDs) {
-            IStreamView sv = rt.getStreamsView().getUnsafe(streamID);
-            streamViewMap.put(streamID, sv);
-        }
-    }
-
-    void processSMREntries(UUID streamId, List<SMREntry> entries) {
-        for (SMREntry entry : entries) {
-            streamViewMap.get(streamId).append(entry);
+            StreamViewSMRAdapter svAdapter = new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID));
+            streamViewMap.put(streamID, svAdapter);
         }
     }
 
@@ -70,34 +77,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param metadata
      * @return
      */
-    void verifyMetadata(MessageMetadata metadata) {
-    }
-
-    // If the message is out of order, buffer it. If buffer is overflown, thrown an exception.
-    // Will define the exception type later.
-    // will use Maithem's api to query the msg to get the uuid and
-    // list of smr entries
-    void processTxMessage(TxMessage msg) throws Exception {
-        MessageMetadata metadata = msg.getMetadata();
-        verifyMetadata(metadata);
-        TxMessage currentMsg = null;
-
-        //decide to queue message or not according the snapshot value
-        if (metadata.getPreviousEntryTimestamp() > proccessedMsgTs) {
-            msgQ.add(msg);
-            TxMessage first = msgQ.peek();
-            if (first.getMetadata().getPreviousEntryTimestamp() == proccessedMsgTs) {
-                currentMsg = msgQ.poll();
-            }
-        } else if (metadata.getPreviousEntryTimestamp() == proccessedMsgTs){
-            currentMsg = msg;
-        }
-
-        if (currentMsg != null) {
-            // process the message
-            //UUID streamID = streamUUIDs.get(0);
-            //List<SMREntry> entries; //get the entries from the msg
-            //processSMREntries(streamID, entries);
+    void verifyMetadata(MessageMetadata metadata) throws Exception {
+        if (metadata.getFullSyncSeqNum() != recvSeq ||
+                metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
+            log.error("Expecting sequencer {} != recvSeq {} or snapshot expected {} != recv snapshot {}, metadata {}",
+                    metadata.getFullSyncSeqNum(), recvSeq, srcGlobalSnapshot, metadata.getSnapshotTimestamp(), metadata);
+            throw new Exception("Message is out of order");
         }
     }
 
@@ -106,24 +91,24 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     void reset(long snapshot) {
        srcGlobalSnapshot = snapshot;
-       msgQ.clear();
-    }
-
-    /**
-     * The fullSyncQue guarantee the ordering of the messages.
-     */
-    void processFullSyncQue() {
-        //reset();
-        //get message, call processTxMessage()
+       recvSeq = 0;
     }
 
     @Override
-    public void apply(TxMessage message) {
-
+    public void apply(TxMessage message) throws Exception {
+        verifyMetadata(message.getMetadata());
+        OpaqueEntry entry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(message.getData()));
+        for (UUID uuid : entry.getEntries().keySet()) {
+            for(SMREntry smrEntry : entry.getEntries().get(uuid)) {
+                streamViewMap.get(uuid).append(smrEntry, null, null);
+            }
+        }
     }
 
     @Override
-    public void apply(List<TxMessage> messages) {
-
+    public void apply(List<TxMessage> messages) throws Exception {
+        for (TxMessage msg : messages) {
+            apply(msg);
+        }
     }
 }
