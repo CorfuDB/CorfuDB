@@ -367,10 +367,10 @@ public class Layout {
             }
 
             @Override
-            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
-                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())
-                        ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
+            public ClusterStatus getClusterHealthForSegment(
+                    LayoutSegment layoutSegment, Set<String> responsiveNodes) {
+                return responsiveNodes.containsAll(layoutSegment.getAllLogServers())
+                        ? ClusterStatus.STABLE : ClusterStatus.UNAVAILABLE;
             }
         },
         QUORUM_REPLICATION {
@@ -572,7 +572,7 @@ public class Layout {
          * @return Set of log unit servers.
          */
         public Set<String> getAllLogServers() {
-            return this.getStripes().stream()
+            return stripes.stream()
                     .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
                     .collect(Collectors.toSet());
         }

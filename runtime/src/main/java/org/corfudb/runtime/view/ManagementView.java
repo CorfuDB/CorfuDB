@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -32,8 +33,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -48,7 +51,9 @@ public class ManagementView extends AbstractView {
     /**
      * Number of attempts to ping a node to query the cluster status.
      */
-    private static final int CLUSTER_STATUS_QUERY_ATTEMPTS = 3;
+    private final int clusterStatusQueryAttempts = 3;
+
+    private final ClusterHealth clusterHealth = new ClusterHealth();
 
     public ManagementView(@NonNull CorfuRuntime runtime) {
         super(runtime);
@@ -134,159 +139,40 @@ public class ManagementView extends AbstractView {
     }
 
     /**
-     * If all the layout servers are responsive the cluster status is STABLE,
-     * if a minority of them are unresponsive then the status is DEGRADED,
-     * else the cluster is UNAVAILABLE.
-     *
-     * @param layout              Current layout on which responsiveness was checked.
-     * @param peerResponsiveNodes responsive nodes in the current layout.
-     * @return ClusterStatus
-     */
-    private ClusterStatus getLayoutServersClusterHealth(Layout layout,
-                                                        Set<String> peerResponsiveNodes) {
-        ClusterStatus clusterStatus = ClusterStatus.STABLE;
-        // A quorum of layout servers need to be responsive for the cluster to be STABLE.
-        List<String> responsiveLayoutServers = new ArrayList<>(layout.getLayoutServers());
-        // Retain only the responsive servers.
-        responsiveLayoutServers.retainAll(peerResponsiveNodes);
-        if (responsiveLayoutServers.size() != layout.getLayoutServers().size()) {
-            clusterStatus = ClusterStatus.DEGRADED;
-            int quorumSize = (layout.getLayoutServers().size() / 2) + 1;
-            if (responsiveLayoutServers.size() < quorumSize) {
-                clusterStatus = ClusterStatus.UNAVAILABLE;
-            }
-        }
-        return clusterStatus;
-    }
-
-    /**
-     * If the primary sequencer is unresponsive then the cluster is UNAVAILABLE.
-     *
-     * @param layout              Current layout on which responsiveness was checked.
-     * @param peerResponsiveNodes responsive nodes in the current layout.
-     * @return ClusterStatus
-     */
-    private ClusterStatus getSequencerServersClusterHealth(Layout layout,
-                                                           Set<String> peerResponsiveNodes) {
-        // The primary sequencer should be reachable for the cluster to be STABLE.
-        return !peerResponsiveNodes.contains(layout.getPrimarySequencer())
-                ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
-    }
-
-    /**
-     * Gets the log unit cluster status based on the replication protocol.
-     *
-     * @param layout              Current layout on which responsiveness was checked.
-     * @param peerResponsiveNodes responsive nodes in the current layout.
-     * @return ClusterStatus
-     */
-    private ClusterStatus getLogUnitServersClusterHealth(Layout layout,
-                                                         Set<String> peerResponsiveNodes) {
-        // logUnitRedundancyStatus marks the cluster as DB_SYNCING if any of the nodes is performing
-        // stateTransfer and is in process of achieving full redundancy.
-        ClusterStatus logUnitRedundancyStatus = peerResponsiveNodes.stream()
-                .anyMatch(s -> getLogUnitNodeStatusInLayout(layout, s) == NodeStatus.DB_SYNCING)
-                ? ClusterStatus.DB_SYNCING : ClusterStatus.STABLE;
-        // Check the availability of the log servers in all segments as reads to all addresses
-        // should be accessible.
-        ClusterStatus logunitClusterStatus = layout.getSegments().stream()
-                .map(segment -> segment.getReplicationMode()
-                        .getClusterHealthForSegment(segment, peerResponsiveNodes))
-                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
-                .orElse(ClusterStatus.UNAVAILABLE);
-        // Gets max of cluster status and logUnitRedundancyStatus.
-        return Stream.of(logunitClusterStatus, logUnitRedundancyStatus)
-                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
-                .orElse(ClusterStatus.UNAVAILABLE);
-    }
-
-    /**
-     * Analyzes the health of the cluster based on the views of the cluster of all the
-     * ManagementAgents.
-     * STABLE: if all nodes in the layout are responsive.
-     * DEGRADED: if a minority of Layout servers
-     * or a minority of LogUnit servers - in QUORUM_REPLICATION mode only are unresponsive.
-     * UNAVAILABLE: if a majority of Layout servers or the Primary Sequencer
-     * or a node in the CHAIN_REPLICATION or a majority of nodes in QUORUM_REPLICATION is
-     * unresponsive.
-     *
-     * @param layout              Layout based on which the health is analyzed.
-     * @param peerResponsiveNodes Responsive nodes according to the management services.
-     * @return ClusterStatus
-     */
-    private ClusterStatus getClusterHealth(Layout layout, Set<String> peerResponsiveNodes) {
-
-        return Stream.of(getLayoutServersClusterHealth(layout, peerResponsiveNodes),
-                getSequencerServersClusterHealth(layout, peerResponsiveNodes),
-                getLogUnitServersClusterHealth(layout, peerResponsiveNodes))
-                // Gets cluster status from the layout, sequencer and log unit clusters.
-                // The status is then aggregated by the max of the 3 statuses acquired.
-                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
-                .orElse(ClusterStatus.UNAVAILABLE);
-    }
-
-    /**
-     * Returns a LogUnit Server's status in the layout. It is marked as:
-     * UP if it is present in all segments or none of the segments and not in the unresponsive list,
-     * NOTE: A node is UP if its not in any of the segments as it might not be a LogUnit component
-     * but has only the Layout or the Sequencer (or both) component(s) active.
-     * DB_SYNCING if it is present in some but not all or none of the segments,
-     * DOWN if it is present in the unresponsive servers list.
-     *
-     * @param layout Layout to check.
-     * @param server LogUnit Server endpoint.
-     * @return NodeState with respect to the layout specified.
-     */
-    private NodeStatus getLogUnitNodeStatusInLayout(Layout layout, String server) {
-        if (layout.getUnresponsiveServers().contains(server)) {
-            return NodeStatus.DOWN;
-        }
-        final int segmentsCount = layout.getSegments().size();
-        int nodeInSegments = 0;
-        for (LayoutSegment layoutSegment : layout.getSegments()) {
-            if (layoutSegment.getAllLogServers().contains(server)) {
-                nodeInSegments++;
-            }
-        }
-        return nodeInSegments == segmentsCount || nodeInSegments == 0
-                ? NodeStatus.UP : NodeStatus.DB_SYNCING;
-    }
-
-    /**
      * Get the Cluster Status.
-     *
+     * <p>
      * This is reported as follows:
      * - (1) The status of the cluster itself (regardless of clients connectivity) as reflected in the
-     *   layout. This information is presented along each node's status (up, down, db_sync).
-     *
-     *   It is important to note that as the cluster state is obtained from the layout,
-     *   when quorum is not available (majority of nodes) there are lower guarantees on the
-     *   reliability of this state.
-     *   For example, in the absence of quorum the system might be in an unstable state which
-     *   cannot converge due to lack of consensus. This is reflected in the
-     *   cluster status report as clusterStatusReliability.
-     *
+     * layout. This information is presented along each node's status (up, down, db_sync).
+     * <p>
+     * It is important to note that as the cluster state is obtained from the layout,
+     * when quorum is not available (majority of nodes) there are lower guarantees on the
+     * reliability of this state.
+     * For example, in the absence of quorum the system might be in an unstable state which
+     * cannot converge due to lack of consensus. This is reflected in the
+     * cluster status report as clusterStatusReliability.
+     * <p>
      * - (2) The connectivity status of the client to every node in the cluster,
-     *   i.e., can the client connect to the cluster. This will be obtained by
-     *   ping(ing) every node and show as RESPONSIVE, for successful connections or UNRESPONSIVE for
-     *   clients unable to communicate.
-     *
-     *  In this sense a cluster can be STABLE with all nodes UP, while not being available for a
-     *  client, as all connections from the client to the cluster nodes are down, showing in this
-     *  case connectivity status to all nodes as UNRESPONSIVE.
-     *
-     *  The ClusterStatusReport consists of the following:
-     *
-     *  CLUSTER-SPECIFIC STATUS
-     *  - clusterStatus: the cluster status a perceived by the system's layout.
-     *  STABLE, DEGRADED, DB_SYNCING or UNAVAILABLE
-     *  - nodeStatusMap: each node's status as perceived by the system's layout.
-     *  (UP, DOWN or DB_SYNC)
-     *  - Cluster Status Reliability: STRONG_QUORUM, WEAK_NO_QUORUM or UNAVAILABLE
-     *
-     *  CLIENT-CLUSTER SPECIFIC STATUS:
-     *  - clientServerConnectivityStatusMap: the connectivity status of this client to the cluster.
-     *    (RESPONSIVE, UNRESPONSIVE).
+     * i.e., can the client connect to the cluster. This will be obtained by
+     * ping(ing) every node and show as RESPONSIVE, for successful connections or UNRESPONSIVE for
+     * clients unable to communicate.
+     * <p>
+     * In this sense a cluster can be STABLE with all nodes UP, while not being available for a
+     * client, as all connections from the client to the cluster nodes are down, showing in this
+     * case connectivity status to all nodes as UNRESPONSIVE.
+     * <p>
+     * The ClusterStatusReport consists of the following:
+     * <p>
+     * CLUSTER-SPECIFIC STATUS
+     * - clusterStatus: the cluster status a perceived by the system's layout.
+     * STABLE, DEGRADED, DB_SYNCING or UNAVAILABLE
+     * - nodeStatusMap: each node's status as perceived by the system's layout.
+     * (UP, DOWN or DB_SYNC)
+     * - Cluster Status Reliability: STRONG_QUORUM, WEAK_NO_QUORUM or UNAVAILABLE
+     * <p>
+     * CLIENT-CLUSTER SPECIFIC STATUS:
+     * - clientServerConnectivityStatusMap: the connectivity status of this client to the cluster.
+     * (RESPONSIVE, UNRESPONSIVE).
      *
      * @return ClusterStatusReport
      */
@@ -321,11 +207,21 @@ public class ManagementView extends AbstractView {
                 // Even if we weren't able to obtain any layout from LayoutServers, we attempt to ping all
                 // layoutServers for this runtime, to provide info of connectivity.
                 // Note: layout should be null, as this is not the layout that leads to cluster status.
-                Map<String, ConnectivityStatus> connectivityStatusMap = getConnectivityStatusMap(runtime.getLayoutView().getLayout());
-                return getUnavailableClusterStatusReport(layoutServers, ClusterStatusReliability.UNAVAILABLE,
-                        connectivityStatusMap.entrySet().stream()
-                                .filter(x -> x.getValue().equals(ConnectivityStatus.RESPONSIVE))
-                                .map(x -> x.getKey()).collect(Collectors.toSet()), null);
+                Map<String, ConnectivityStatus> connectivityStatusMap = getConnectivityStatusMap(
+                        runtime.getLayoutView().getLayout()
+                );
+
+                Set<String> responsiveServers = connectivityStatusMap
+                        .entrySet()
+                        .stream()
+                        .filter(status -> status.getValue() == ConnectivityStatus.RESPONSIVE)
+                        .map(Entry::getKey)
+                        .collect(Collectors.toSet());
+
+                return getUnavailableClusterStatusReport(
+                        layoutServers, ClusterStatusReliability.UNAVAILABLE, responsiveServers, null
+                );
+
             } else {
                 int serversLayoutResponses = layoutMap.size();
 
@@ -341,9 +237,9 @@ public class ManagementView extends AbstractView {
                     return getUnavailableClusterStatusReport(getLayoutServers(layoutMap.values()),
                             ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);
                 } else {
-                    layout = getLayoutFromQuorum(layoutMap, quorum);
+                    Optional<Layout> quorumLayout = getLayoutFromQuorum(layoutMap, quorum);
 
-                    if (layout == null) {
+                    if (!quorumLayout.isPresent()) {
                         // No quorum nodes with same layout
                         // Report cluster status unavailable, but still for debug purposes provide
                         // information of the highest epoch layout in the system.
@@ -351,14 +247,15 @@ public class ManagementView extends AbstractView {
                         layout = getHighestEpochLayout(layoutMap);
                         return getUnavailableClusterStatusReport(getLayoutServers(layoutMap.values()),
                                 ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);
+                    } else {
+                        log.debug("getClusterStatus: quorum layout {}", quorumLayout.get());
+                        layout = quorumLayout.get();
                     }
-
-                    log.debug("getClusterStatus: quorum layout {}", layout);
                 }
             }
 
             // Get Cluster Status from Layout
-            ClusterStatus clusterStatus = getClusterHealth(layout, layout.getAllActiveServers());
+            ClusterStatus clusterStatus = clusterHealth.getClusterHealth(layout, layout.getAllActiveServers());
 
             // Get Node Status from Layout
             Map<String, NodeStatus> nodeStatusMap = getNodeStatusMap(layout);
@@ -366,11 +263,18 @@ public class ManagementView extends AbstractView {
             // To complete cluster status with connectivity information of this
             // client to every node in the cluster, ping all servers
             // TODO: we could eventually skip pinging the nodes, as the layout fetch is indirectly a measure of connectivity.
-            Map <String, ClusterStatusReport.ConnectivityStatus> connectivityStatusMap = getConnectivityStatusMap(layout);
+            Map<String, ConnectivityStatus> connectivityStatusMap = getConnectivityStatusMap(layout);
 
             log.debug("getClusterStatus: successful. Overall cluster status: {}", clusterStatus);
 
-            return new ClusterStatusReport(layout, clusterStatus, statusReliability, nodeStatusMap, connectivityStatusMap);
+            return ClusterStatusReport.builder()
+                    .layout(layout)
+                    .clusterStatus(clusterStatus)
+                    .clusterStatusReliability(statusReliability)
+                    .clientServerConnectivityStatusMap(connectivityStatusMap)
+                    .clusterNodeStatusMap(nodeStatusMap)
+                    .build();
+
         } catch (Exception e) {
             log.error("getClusterStatus[{}]: cluster status unavailable. Exception: {}",
                     this.runtime.getParameters().getClientId(), e);
@@ -378,16 +282,33 @@ public class ManagementView extends AbstractView {
         }
     }
 
-    private ClusterStatusReport getUnavailableClusterStatusReport(List<String> layoutServers, ClusterStatusReliability reliability, @Nonnull Set<String> responsiveServers, Layout layout) {
+    private ClusterStatusReport getUnavailableClusterStatusReport(
+            List<String> layoutServers, ClusterStatusReliability reliability,
+            @Nonnull Set<String> responsiveServers, Layout layout) {
+
+        Map<String, NodeStatus> clusterNodeStatusMap = layoutServers
+                .stream()
+                .collect(Collectors.toMap(Function.identity(), node -> NodeStatus.NA));
+
+        Map<String, ConnectivityStatus> connectivity = layoutServers
+                .stream()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        endpoint -> getConnectivityStatus(responsiveServers, endpoint))
+                );
+
         return new ClusterStatusReport(layout,
                 ClusterStatus.UNAVAILABLE,
                 reliability,
-                layoutServers.stream().collect(Collectors.toMap(
-                        endpoint -> endpoint,
-                        node -> NodeStatus.NA)),
-                layoutServers.stream().collect(Collectors.toMap(
-                        endpoint -> endpoint,
-                        endpoint -> responsiveServers.contains(endpoint) ? ConnectivityStatus.RESPONSIVE : ConnectivityStatus.UNRESPONSIVE)));
+                clusterNodeStatusMap,
+                connectivity);
+    }
+
+    private ConnectivityStatus getConnectivityStatus(Set<String> responsiveServers, String endpoint) {
+        if (responsiveServers.contains(endpoint)) {
+            return ConnectivityStatus.RESPONSIVE;
+        }
+        return ConnectivityStatus.UNRESPONSIVE;
     }
 
     private ClusterStatusReport getUnavailableClusterStatusReport(List<String> layoutServers) {
@@ -397,14 +318,14 @@ public class ManagementView extends AbstractView {
     /**
      * Get Layouts from list of specified layout servers.
      *
-     * @param layoutServers list of initial layout servers to retrieve layouts from.
+     * @param layoutServers         list of initial layout servers to retrieve layouts from.
      * @param discoverLayoutServers flag to indicate if we want to discover new layout servers from
      *                              the layouts retrieved from initial set of layout servers.
      *                              Note: this is required as runtime.getBootstrapLayoutServers might have been
      *                              initialized with a single server (from all in cluster).
      * @return Map of endpoint id and layout.
      */
-    private Map<String, Layout> getLayouts(List<String> layoutServers, Boolean discoverLayoutServers) {
+    private Map<String, Layout> getLayouts(List<String> layoutServers, boolean discoverLayoutServers) {
         Map<String, CompletableFuture<Layout>> layoutFuturesMap = getLayoutFutures(layoutServers);
         Map<String, Layout> layoutMap = new HashMap<>();
 
@@ -424,7 +345,7 @@ public class ManagementView extends AbstractView {
         // discovered in the first search which are not contained in the initial list.
         if (discoverLayoutServers) {
             List<String> discoveredLayoutServers = layoutMap.values().stream()
-                    .map(layout -> layout.getLayoutServers())
+                    .map(Layout::getLayoutServers)
                     .flatMap(servers -> servers.stream())
                     .distinct()
                     .filter(servers -> !layoutServers.contains(servers))
@@ -432,7 +353,7 @@ public class ManagementView extends AbstractView {
 
             if (!discoveredLayoutServers.isEmpty()) {
                 log.debug("Get layout from discovered layout servers: {} ", discoveredLayoutServers);
-                Map <String, Layout> recursiveLayouts = getLayouts(new ArrayList<>(discoveredLayoutServers), false);
+                Map<String, Layout> recursiveLayouts = getLayouts(new ArrayList<>(discoveredLayoutServers), false);
                 layoutMap.putAll(recursiveLayouts);
             }
         }
@@ -440,43 +361,30 @@ public class ManagementView extends AbstractView {
         return layoutMap;
     }
 
-    private Layout getLayoutFromQuorum(@Nonnull Map<String, Layout> layoutMap, int quorum) {
-        Layout layout = null;
+    @VisibleForTesting
+    Optional<Layout> getLayoutFromQuorum(@Nonnull Map<String, Layout> layoutMap, int quorum) {
         // Map of layout to number of nodes containing this layout.
         Map<Layout, Integer> uniqueLayoutMap = new HashMap<>();
 
         // Find if layouts are the same in all nodes (at least quorum nodes should agree in the
         // same layout) - count occurrences of each layout in cluster nodes.
         for (Layout nodeLayout : layoutMap.values()) {
-            if (uniqueLayoutMap.keySet().contains(nodeLayout)) {
-                uniqueLayoutMap.merge(nodeLayout, 1, Integer::sum);
-            } else {
-                uniqueLayoutMap.put(nodeLayout, 1);
-            }
+            int layoutsSum = uniqueLayoutMap.getOrDefault(nodeLayout, 0) + 1;
+            uniqueLayoutMap.put(nodeLayout, layoutsSum);
         }
 
-        // Filter layouts present in quorum number of nodes
-        Map<Layout, Integer> uniqueLayoutsQuorumMap = uniqueLayoutMap.entrySet().stream()
+        return uniqueLayoutMap
+                .entrySet()
+                .stream()
+                // Filter layouts present in quorum number of nodes
                 .filter(uniqueLayout -> uniqueLayout.getValue() >= quorum)
-                .collect(Collectors.toMap(uniqueLayout -> uniqueLayout.getKey(),
-                        uniqueLayout -> uniqueLayout.getValue()));
-
-        // Select layout with greater number of occurrences.
-        if (!uniqueLayoutsQuorumMap.isEmpty()) {
-            Map.Entry<Layout, Integer> maxEntry = null;
-            for (Map.Entry<Layout, Integer> entry : uniqueLayoutsQuorumMap.entrySet()) {
-                if (maxEntry == null || entry.getValue().compareTo(maxEntry.getValue()) > 0) {
-                    maxEntry = entry;
-                }
-            }
-            layout = maxEntry.getKey();
-        }
-
-        return layout;
+                //find layout with max frequency
+                .max(Comparator.comparingInt(Entry::getValue))
+                .map(Entry::getKey);
     }
 
     private Layout getHighestEpochLayout(Map<String, Layout> layoutMap) {
-        Layout layout  = null;
+        Layout layout = null;
         for (Entry<String, Layout> entry : layoutMap.entrySet()) {
             Layout nodeLayout = entry.getValue();
             if (layout == null || nodeLayout.getEpoch() > layout.getEpoch()) {
@@ -486,7 +394,6 @@ public class ManagementView extends AbstractView {
 
         return layout;
     }
-
 
     private Map<String, CompletableFuture<Layout>> getLayoutFutures(List<String> layoutServers) {
 
@@ -501,25 +408,25 @@ public class ManagementView extends AbstractView {
         return layoutFuturesMap;
     }
 
-    private Map<String, ClusterStatusReport.ConnectivityStatus> getConnectivityStatusMap(Layout layout) {
-        Map<String, ClusterStatusReport.ConnectivityStatus> connectivityStatusMap = new HashMap<>();
+    private Map<String, ConnectivityStatus> getConnectivityStatusMap(Layout layout) {
+        Map<String, ConnectivityStatus> connectivityStatusMap = new HashMap<>();
 
         // Initialize connectivity status map to all servers as unresponsive
         for (String serverEndpoint : layout.getAllServers()) {
-            connectivityStatusMap.put(serverEndpoint, ClusterStatusReport.ConnectivityStatus.UNRESPONSIVE);
+            connectivityStatusMap.put(serverEndpoint, ConnectivityStatus.UNRESPONSIVE);
         }
 
         RuntimeLayout runtimeLayout = new RuntimeLayout(layout, runtime);
         Map<String, CompletableFuture<Boolean>> pingFutureMap = new HashMap<>();
 
-
-        for (int i = 0; i < CLUSTER_STATUS_QUERY_ATTEMPTS; i++) {
+        for (int i = 0; i < clusterStatusQueryAttempts; i++) {
             // If a server is unresponsive attempt to ping for cluster_status_query_attempts
-            if(connectivityStatusMap.containsValue(ConnectivityStatus.UNRESPONSIVE)) {
+            if (connectivityStatusMap.containsValue(ConnectivityStatus.UNRESPONSIVE)) {
                 // Ping only unresponsive endpoints
-                List<String> endpoints = connectivityStatusMap.entrySet()
+                List<String> endpoints = connectivityStatusMap
+                        .entrySet()
                         .stream()
-                        .filter(entry -> entry.getValue().equals(ClusterStatusReport.ConnectivityStatus.UNRESPONSIVE))
+                        .filter(entry -> entry.getValue().equals(ConnectivityStatus.UNRESPONSIVE))
                         .map(Entry::getKey)
                         .collect(Collectors.toList());
 
@@ -532,7 +439,7 @@ public class ManagementView extends AbstractView {
                 // Accumulate all responses.
                 pingFutureMap.forEach((endpoint, pingFuture) -> {
                     try {
-                        ClusterStatusReport.ConnectivityStatus connectivityStatus = CFUtils.getUninterruptibly(pingFuture,
+                        ConnectivityStatus connectivityStatus = CFUtils.getUninterruptibly(pingFuture,
                                 WrongEpochException.class) ? ConnectivityStatus.RESPONSIVE : ConnectivityStatus.UNRESPONSIVE;
                         connectivityStatusMap.put(endpoint, connectivityStatus);
                     } catch (WrongEpochException wee) {
@@ -547,14 +454,14 @@ public class ManagementView extends AbstractView {
         return connectivityStatusMap;
     }
 
-    private Map<String, NodeStatus> getNodeStatusMap(Layout layout) {
+    @VisibleForTesting
+    Map<String, NodeStatus> getNodeStatusMap(Layout layout) {
         Map<String, NodeStatus> nodeStatusMap = new HashMap<>();
-        for (String endpoint: layout.getAllServers()) {
+        for (String endpoint : layout.getAllServers()) {
             if (layout.getUnresponsiveServers().contains(endpoint)) {
                 nodeStatusMap.put(endpoint, NodeStatus.DOWN);
             } else if (layout.getSegments().size() != layout.getSegmentsForEndpoint(endpoint).size()) {
                 // Note: this is based on the assumption that all nodes in the layout are log unit servers
-                // (TODO) We can go ahead with this assumption, but in the future we should change this accordingly.
                 nodeStatusMap.put(endpoint, NodeStatus.DB_SYNCING);
             } else {
                 nodeStatusMap.put(endpoint, NodeStatus.UP);
@@ -597,5 +504,137 @@ public class ManagementView extends AbstractView {
                     log.info("bootstrapManagementServer: Management Server {} bootstrap successful.", endpoint);
                     return true;
                 });
+    }
+
+    public static class ClusterHealth {
+
+        /**
+         * Analyzes the health of the cluster based on the views of the cluster of all the
+         * ManagementAgents.
+         * STABLE: if all nodes in the layout are responsive.
+         * DEGRADED: if a minority of Layout servers
+         * or a minority of LogUnit servers - in QUORUM_REPLICATION mode only are unresponsive.
+         * UNAVAILABLE: if a majority of Layout servers or the Primary Sequencer
+         * or a node in the CHAIN_REPLICATION or a majority of nodes in QUORUM_REPLICATION is
+         * unresponsive.
+         *
+         * @param layout              Layout based on which the health is analyzed.
+         * @param peerResponsiveNodes Responsive nodes according to the management services.
+         * @return ClusterStatus
+         */
+        public ClusterStatus getClusterHealth(Layout layout, Set<String> peerResponsiveNodes) {
+
+            return Stream.of(getLayoutServersClusterHealth(layout, peerResponsiveNodes),
+                    getSequencerServersClusterHealth(layout, peerResponsiveNodes),
+                    getLogUnitServersClusterHealth(layout, peerResponsiveNodes))
+                    // Gets cluster status from the layout, sequencer and log unit clusters.
+                    // The status is then aggregated by the max of the 3 statuses acquired.
+                    .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
+                    .orElse(ClusterStatus.UNAVAILABLE);
+        }
+
+        /**
+         * If all the layout servers are responsive the cluster status is STABLE,
+         * if a minority of them are unresponsive then the status is DEGRADED,
+         * else the cluster is UNAVAILABLE.
+         *
+         * @param layout              Current layout on which responsiveness was checked.
+         * @param peerResponsiveNodes responsive nodes in the current layout.
+         * @return ClusterStatus
+         */
+        @VisibleForTesting
+        ClusterStatus getLayoutServersClusterHealth(
+                Layout layout, Set<String> peerResponsiveNodes) {
+
+            ClusterStatus clusterStatus = ClusterStatus.STABLE;
+            // A quorum of layout servers need to be responsive for the cluster to be STABLE.
+            List<String> responsiveLayoutServers = new ArrayList<>(layout.getLayoutServers());
+            // Retain only the responsive servers.
+            responsiveLayoutServers.retainAll(peerResponsiveNodes);
+            if (responsiveLayoutServers.size() == layout.getLayoutServers().size()) {
+                return clusterStatus;
+            }
+
+            clusterStatus = ClusterStatus.DEGRADED;
+            int quorumSize = (layout.getLayoutServers().size() / 2) + 1;
+            if (responsiveLayoutServers.size() < quorumSize) {
+                clusterStatus = ClusterStatus.UNAVAILABLE;
+            }
+            return clusterStatus;
+        }
+
+        /**
+         * If the primary sequencer is unresponsive then the cluster is UNAVAILABLE.
+         *
+         * @param layout              Current layout on which responsiveness was checked.
+         * @param peerResponsiveNodes responsive nodes in the current layout.
+         * @return ClusterStatus
+         */
+        private ClusterStatus getSequencerServersClusterHealth(
+                Layout layout, Set<String> peerResponsiveNodes) {
+            // The primary sequencer should be reachable for the cluster to be STABLE.
+            return peerResponsiveNodes.contains(layout.getPrimarySequencer())
+                    ? ClusterStatus.STABLE : ClusterStatus.UNAVAILABLE;
+        }
+
+        /**
+         * Gets the log unit cluster status based on the replication protocol.
+         *
+         * @param layout              Current layout on which responsiveness was checked.
+         * @param peerResponsiveNodes responsive nodes in the current layout.
+         * @return ClusterStatus
+         */
+        private ClusterStatus getLogUnitServersClusterHealth(
+                Layout layout, Set<String> peerResponsiveNodes) {
+
+            // logUnitRedundancyStatus marks the cluster as DB_SYNCING if any of the nodes is performing
+            // stateTransfer and is in process of achieving full redundancy.
+            ClusterStatus logUnitRedundancyStatus = peerResponsiveNodes.stream()
+                    .anyMatch(server -> getLogUnitNodeStatusInLayout(layout, server) == NodeStatus.DB_SYNCING)
+                    ? ClusterStatus.DB_SYNCING : ClusterStatus.STABLE;
+
+            // Check the availability of the log servers in all segments as reads to all addresses
+            // should be accessible.
+            ClusterStatus logUnitClusterStatus = layout
+                    .getSegments()
+                    .stream()
+                    .map(segment -> segment.getReplicationMode()
+                            .getClusterHealthForSegment(segment, peerResponsiveNodes))
+                    .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
+                    .orElse(ClusterStatus.UNAVAILABLE);
+
+            // Gets max of cluster status and logUnitRedundancyStatus.
+            return Stream.of(logUnitClusterStatus, logUnitRedundancyStatus)
+                    .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
+                    .orElse(ClusterStatus.UNAVAILABLE);
+        }
+
+        /**
+         * Returns a LogUnit Server's status in the layout. It is marked as:
+         * UP if it is present in all segments or none of the segments and not in the unresponsive list,
+         * NOTE: A node is UP if its not in any of the segments as it might not be a LogUnit component
+         * but has only the Layout or the Sequencer (or both) component(s) active.
+         * DB_SYNCING if it is present in some but not all or none of the segments,
+         * DOWN if it is present in the unresponsive servers list.
+         *
+         * @param layout Layout to check.
+         * @param server LogUnit Server endpoint.
+         * @return NodeState with respect to the layout specified.
+         */
+        private NodeStatus getLogUnitNodeStatusInLayout(Layout layout, String server) {
+            if (layout.getUnresponsiveServers().contains(server)) {
+                return NodeStatus.DOWN;
+            }
+
+            final int segmentsCount = layout.getSegments().size();
+            int nodeInSegments = 0;
+            for (LayoutSegment layoutSegment : layout.getSegments()) {
+                if (layoutSegment.getAllLogServers().contains(server)) {
+                    nodeInSegments++;
+                }
+            }
+            return nodeInSegments == segmentsCount || nodeInSegments == 0
+                    ? NodeStatus.UP : NodeStatus.DB_SYNCING;
+        }
     }
 }

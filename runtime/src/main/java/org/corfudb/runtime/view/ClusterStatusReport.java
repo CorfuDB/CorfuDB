@@ -1,9 +1,10 @@
 package org.corfudb.runtime.view;
 
-import java.util.Map;
-
-import lombok.Data;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
+
+import java.util.Map;
 
 /**
  * Status report of the connectivity of the client to the cluster and the health of the cluster
@@ -11,7 +12,8 @@ import lombok.Getter;
  *
  * <p>Created by zlokhandwala on 5/7/18.
  */
-@Data
+@Builder
+@Getter
 public class ClusterStatusReport {
 
     /**
@@ -129,20 +131,24 @@ public class ClusterStatusReport {
     /**
      * Cluster health.
      */
+    @NonNull
     private final ClusterStatus clusterStatus;
 
     /**
      * Cluster Status Reliability (source of information)
      */
+    @NonNull
     private final ClusterStatusReliability clusterStatusReliability;
 
     /**
      * Individual Node Status (within cluster view).
      */
+    @NonNull
     private final Map<String, NodeStatus> clusterNodeStatusMap;
 
     /**
      * Map of connectivity of the client to the each cluster node.
      */
+    @NonNull
     private final Map<String, ConnectivityStatus> clientServerConnectivityStatusMap;
 }
