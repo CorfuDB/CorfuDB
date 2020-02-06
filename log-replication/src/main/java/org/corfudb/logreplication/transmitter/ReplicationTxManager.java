@@ -9,14 +9,15 @@ import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-@Data
-@Slf4j
 /**
  * A class that represents the entry point to initiate log replication on the transmitter side.
  **/
+@Data
+@Slf4j
 public class ReplicationTxManager {
 
     /*
@@ -67,17 +68,17 @@ public class ReplicationTxManager {
     }
 
     /**
-     * Signal start of snapshot transmit.
+     * Signal start of snapshot sync.
      *
      * A snapshot is a consistent view of the database at a given timestamp.
      *
-     * @param context snapshot transmit context
+     * @return unique identifier for this snapshot sync request.
      */
-    public void startSnapshotSync(SnapshotSyncContext context) {
-        // Verify if we really need SnapshotSyncContext, and if we need to pass to the fsm
-
-        // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+    public UUID startSnapshotSync() {
+        // Enqueue snapshot sync request into Log Replication FSM
+        LogReplicationEvent snapshotSyncRequest = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+        logReplicationFSM.input(snapshotSyncRequest);
+        return snapshotSyncRequest.getEventID();
     }
 
     /**
@@ -102,10 +103,10 @@ public class ReplicationTxManager {
     /**
      * Signal to cancel snapshot transmit.
      *
-     * @param context snapshot transmit context
+     * @param snapshotSyncId identifier of the snapshot sync task to cancel.
      */
-    public void cancelSnapshotSync(SnapshotSyncContext context) {
+    public void cancelSnapshotSync(UUID snapshotSyncId) {
         // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL));
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL, snapshotSyncId));
     }
 }

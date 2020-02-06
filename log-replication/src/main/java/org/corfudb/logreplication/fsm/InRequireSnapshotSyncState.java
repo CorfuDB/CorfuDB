@@ -11,21 +11,23 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InRequireSnapshotSyncState implements LogReplicationState {
 
-    LogReplicationFSM logReplicationFSM;
+    LogReplicationFSM fsm;
 
     public InRequireSnapshotSyncState(LogReplicationFSM logReplicationFSM) {
-        this.logReplicationFSM = logReplicationFSM;
+        this.fsm = logReplicationFSM;
     }
 
     @Override
     public LogReplicationState processEvent(LogReplicationEvent event) {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                return logReplicationFSM.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                snapshotSyncState.setTransitionEventId(event.getEventID());
+                return snapshotSyncState;
             case REPLICATION_STOP:
-                return logReplicationFSM.getStates().get(LogReplicationStateType.INITIALIZED);
+                return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_TERMINATED:
-                return logReplicationFSM.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
                 log.warn("Unexpected log replication event {} when in require snapshot transmit state.", event.getType());
             }
