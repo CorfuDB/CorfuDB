@@ -109,4 +109,14 @@ public class ReplicationTxManager {
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL, snapshotSyncId));
     }
+
+    /**
+     * Shutdown Log Replication.
+     *
+     * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
+     */
+    public void shutdown() {
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
+    }
 }

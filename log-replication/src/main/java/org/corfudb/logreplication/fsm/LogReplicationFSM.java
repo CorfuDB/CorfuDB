@@ -21,7 +21,67 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 
 /**
- * This class represents the Log Replication Finite State Machine.
+ * This class implements the Log Replication Finite State Machine.
+ *
+ * CorfuDB provides a Log Replication functionality for standby data-stores. This enables logs to
+ * be automatically replicated from the primary site to a remote site. So in the case of failure or data corruption,
+ * the system can failover to the standby data-store.
+ *
+ * This functionality is driven by the application and initiated through the ReplicationTxManager
+ * on the source (primary) site and handled through the ReplicationRxManager on the destination site.
+ *
+ * Log Replication on the transmitter side is defined by an event-driven finite state machine, with 5 states
+ * and 7 events/messages---which can trigger the transition between states.
+ *
+ * States:
+ * ------
+ *  - Initialized (initial state)
+ *  - In_Log_Entry_Sync
+ *  - In_Snapshot_Sync
+ *  - Snapshot_Sync_Required
+ *  - Stopped
+ *
+ * Events:
+ * ------
+ *  - replication_start
+ *  - replication_stop
+ *  - snapshot_sync_request
+ *  - snapshot_sync_complete
+ *  - log_entry_sync_request
+ *  - trimmed_exception
+ *  - replication_shutdown
+ *
+ *
+ *
+ *                                       replication_stop
+ *                      +-------------------------------------------------+
+ *    replication_stop  |                                                 |
+ *             +-----+  |              replication_stop                   |
+ *             |     |  v      v-----------------------------+            |
+ *             |    ++--+---------+                          |        +---+--------------------+
+ *             +--->+ INITIALIZED +------------------------+ |        | SNAPSHOT_SYNC_REQUIRED +<---+
+ *                  +---+----+----+ snapshot_sync_request  | |        +---+-------------+----+-+    |
+ *                      ^    |                             | |            |             ^    ^      |
+ *                      |    |                             | |    snapshot|             |    |      |
+ *                      |    |                             | |      sync  |             |    |      |
+ *     replication_stop |    | replication_start           | |     request|     trimmed |    |      |
+ *                      |    |                             | |            |    exception|    |      |
+ *                      |    v                             v |            v             |    |      |
+ *               +------+----+-------+  snapshot_sync    +-+-+------------+-+           |    |      |
+ *               | IN_LOG_ENTRY_SYNC |     request       | IN_SNAPSHOT_SYNC +-----------+    |      |
+ *               |                   +------------------>+                  |                |      |
+ *               +----+----+---------+                   +---+--------------+----------------+      |
+ *                    |    ^                                 |                  snapshot_sync       |
+ *                    |    +---------------------------------+                     cancel           |
+ *                    |                snapshot_sync                                                |
+ *                    |                  complete                                                   |
+ *                    |                                                                             |
+ *                    +-----------------------------------------------------------------------------+
+ *                                                     trimmed_exception
+ *               replication
+ * +---------+    shutdown    +------------+
+ * | STOPPED +<---------------+ ALL_STATES |
+ * +---------+                +------------+
  */
 @Slf4j
 public class LogReplicationFSM {
@@ -126,7 +186,7 @@ public class LogReplicationFSM {
      */
     private void initializeStates(SnapshotTransmitter snapshotTransmitter, LogEntryTransmitter logEntryTransmitter) {
         /*
-        Log Replication State instances are kept in a map to be reused in transitions.
+         * Log Replication State instances are kept in a map to be reused in transitions.
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotTransmitter));

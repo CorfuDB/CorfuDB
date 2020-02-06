@@ -3,11 +3,11 @@ package org.corfudb.logreplication.transmitter;
 import org.corfudb.runtime.CorfuRuntime;
 
 /**
- * This class is responsible of the transmission of log entries,
+ * This class is responsible of managing the transmission of log entries,
  * i.e, reading and sending incremental updates to a remote site.
  *
- * It reads log entries from the datastore and sends them for
- * transmission through the application listener callback.
+ * It reads log entries from the datastore through the LogEntryReader, and sends them
+ * through the LogEntryListener (the application specific callback).
  */
 public class LogEntryTransmitter {
 
@@ -30,8 +30,8 @@ public class LogEntryTransmitter {
      * Constructor
      *
      * @param runtime corfu runtime
-     * @param logEntryReader log entry reader
-     * @param logEntryListener log entry listener (application callback)
+     * @param logEntryReader log entry reader implementation
+     * @param logEntryListener log entry listener implementation (application callback)
      */
     public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, LogEntryListener logEntryListener) {
         this.runtime = runtime;
@@ -42,5 +42,7 @@ public class LogEntryTransmitter {
     /**
      * Read and send incremental updates (log entries)
      */
-    public void transmit() {}
+    public void transmit() {
+            // TODO
+    }
 }
