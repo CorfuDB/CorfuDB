@@ -43,6 +43,8 @@ public class LogEntryTransmitter {
      * Read and send incremental updates (log entries)
      */
     public void transmit() {
-            // TODO
+        while (true) {
+            // Read and Send Log Entries
+        }
     }
 }
