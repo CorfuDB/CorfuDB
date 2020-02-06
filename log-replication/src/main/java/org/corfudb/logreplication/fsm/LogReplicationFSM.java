@@ -1,6 +1,5 @@
 package org.corfudb.logreplication.fsm;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.LogEntryListener;
@@ -16,9 +15,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadFactory;
 
 /**
  * This class implements the Log Replication Finite State Machine.
@@ -125,7 +122,7 @@ public class LogReplicationFSM {
      * @param workers FSM executor service for state tasks
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, SnapshotListener snapshotListener,
-                             LogEntryListener logEntryListener, ExecutorService workers) {
+                             LogEntryListener logEntryListener, ExecutorService workers, ExecutorService consumers) {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
@@ -139,10 +136,7 @@ public class LogReplicationFSM {
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.stateMachineWorker = workers;
 
-        // Consumer thread will run on a dedicated single thread (poll queue for incoming events)
-        ThreadFactory consumerThreadFactory =
-                new ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-%d").build();
-        Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
+        consumers.submit(this::consume);
     }
 
     /**
@@ -158,7 +152,8 @@ public class LogReplicationFSM {
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config,
                              SnapshotReader snapshotReader, SnapshotListener snapshotListener,
-                             LogEntryReader logEntryReader, LogEntryListener logEntryListener, ExecutorService workers) {
+                             LogEntryReader logEntryReader, LogEntryListener logEntryListener,
+                             ExecutorService workers, ExecutorService consumers) {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
@@ -172,10 +167,7 @@ public class LogReplicationFSM {
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.stateMachineWorker = workers;
 
-        // Consumer thread will run on a dedicated single thread (poll queue for incoming events)
-        ThreadFactory consumerThreadFactory =
-                new ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build();
-        Executors.newSingleThreadExecutor(consumerThreadFactory).submit(this::consume);
+        consumers.submit(this::consume);
     }
 
     /**
