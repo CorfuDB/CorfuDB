@@ -20,19 +20,21 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class ReplicationTxManager {
 
+    private static final int DEFAULT_FSM_WORKER_THREADS = 1;
+
     /*
      *  Log Replication State Machine
      */
     private final LogReplicationFSM logReplicationFSM;
 
     /**
-     * Constructor ReplicationTxManager
+     * Constructor ReplicationTxManager (default)
      *
      * @param runtime Corfu Runtime
      * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
-     *                         for snapshot data transmission.
+     *                         for snapshot data transmission
      * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
-     *                         for log entry data transmission.
+     *                         for log entry data transmission
      * @param config Log Replication Configuration
      */
     public ReplicationTxManager(CorfuRuntime runtime,
@@ -40,31 +42,98 @@ public class ReplicationTxManager {
                                 LogEntryListener logEntryListener,
                                 LogReplicationConfig config) {
 
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(config.getLogReplicationFSMNumWorkers(), new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build());
+        // Default to single dedicated thread for state machine workers (perform state tasks)
+        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
+
+        // Default to single dedicated thread for state machine consumer (poll of the event queue)
+        ExecutorService logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build());
 
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
-                logReplicationFSMWorkers);
+                logReplicationFSMWorkers, logReplicationFSMConsumer);
+    }
+
+    /**
+     * Constructor ReplicationTxManager to provide ExecutorServices for FSM
+     *
+     * For multi-site log replication multiple managers can share a common thread pool.
+     *
+     * @param runtime corfu runtime
+     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
+     *      *                  for snapshot data transmission
+     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
+     *      *                  for log entry data transmission
+     * @param config Log Replication Configuration
+     * @param logReplicationFSMWorkers worker thread pool (state tasks)
+     * @param logReplicationFSMConsumers consumer thread pool (FSM poll event queue)
+     */
+    public ReplicationTxManager(CorfuRuntime runtime,
+                                SnapshotListener snapshotListener,
+                                LogEntryListener logEntryListener,
+                                LogReplicationConfig config,
+                                ExecutorService logReplicationFSMWorkers,
+                                ExecutorService logReplicationFSMConsumers) {
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
+                logReplicationFSMWorkers, logReplicationFSMConsumers);
     }
 
     /**
      * Constructor ReplicationTxManager
      *
-     * @param runtime
-     * @param logEntryListener
-     * @param snapshotReader
-     * @param config
+     * @param runtime corfu runtime
+     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
+     *                         for snapshot data transmission
+     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
+     *                         for log entry data transmission
+     * @param snapshotReader implementation of snapshot reader
+     * @param logEntryReader implementation of log entry reader
+     * @param config log replication configuration
      */
     public ReplicationTxManager(CorfuRuntime runtime,
-                                LogEntryListener logEntryListener,
                                 SnapshotListener snapshotListener,
+                                LogEntryListener logEntryListener,
                                 SnapshotReader snapshotReader,
                                 LogEntryReader logEntryReader,
                                 LogReplicationConfig config) {
-        ExecutorService logReplicationFSMWorkers = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker-%d").build());
+        // Default to single dedicated thread for state machine workers (perform state tasks)
+        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
+
+        // Default to single dedicated thread for state machine consumer (poll of the event queue)
+        ExecutorService logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build());
+
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotReader, snapshotListener,
-                logEntryReader, logEntryListener, logReplicationFSMWorkers);
+                logEntryReader, logEntryListener, logReplicationFSMWorkers, logReplicationFSMConsumer);
+    }
+
+    /**
+     * Constructor ReplicationTxManager
+     *
+     * For multi-site log replication multiple managers can share a common thread pool.
+     *
+     * @param runtime corfu runtime
+     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
+     *                         for snapshot data transmission
+     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
+     *                         for log entry data transmission
+     * @param snapshotReader implementation of snapshot reader
+     * @param logEntryReader implementation of log entry reader
+     * @param config log replication config
+     * @param logReplicationFSMWorkers worker thread pool (state tasks)
+     * @param logReplicationFSMConsumers consumer thread pool (FSM poll event queue)
+     */
+    public ReplicationTxManager(CorfuRuntime runtime,
+                                SnapshotListener snapshotListener,
+                                LogEntryListener logEntryListener,
+                                SnapshotReader snapshotReader,
+                                LogEntryReader logEntryReader,
+                                LogReplicationConfig config,
+                                ExecutorService logReplicationFSMWorkers,
+                                ExecutorService logReplicationFSMConsumers) {
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotReader, snapshotListener,
+                logEntryReader, logEntryListener, logReplicationFSMWorkers, logReplicationFSMConsumers);
     }
 
     /**
@@ -108,5 +177,15 @@ public class ReplicationTxManager {
     public void cancelSnapshotSync(UUID snapshotSyncId) {
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL, snapshotSyncId));
+    }
+
+    /**
+     * Shutdown Log Replication.
+     *
+     * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
+     */
+    public void shutdown() {
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
     }
 }

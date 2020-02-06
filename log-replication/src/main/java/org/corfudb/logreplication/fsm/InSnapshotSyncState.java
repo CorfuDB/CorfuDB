@@ -1,6 +1,5 @@
 package org.corfudb.logreplication.fsm;
 
-import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
@@ -9,14 +8,15 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 
 /**
- * A class that represents the InSnapshotSync state of the Log Replication FSM.
+ * This class represents the InSnapshotSync state of the Log Replication State Machine.
  *
  * In this state full logs are being synced to the remote site, based on a snapshot timestamp.
  */
 @Slf4j
 public class InSnapshotSyncState implements LogReplicationState {
 
-    @Getter
+    private static final UUID NIL_UUID = new UUID(0,0);
+
     private LogReplicationFSM fsm;
 
     /*
@@ -29,10 +29,10 @@ public class InSnapshotSyncState implements LogReplicationState {
      request (event) is handled.
      */
     @Setter
-    private UUID snapshotSyncEventId;
+    private UUID snapshotSyncEventId = NIL_UUID;
 
     /*
-     Read and transmit a snapshot of the datastore.
+     Read and transmit a snapshot of the data-store.
      */
     private SnapshotTransmitter snapshotTransmitter;
 
@@ -40,6 +40,7 @@ public class InSnapshotSyncState implements LogReplicationState {
      A future on the transmit, in case we need to cancel the ongoing snapshot sync.
      */
     private Future<?> transmitFuture;
+
 
     /**
      * Constructor
@@ -138,7 +139,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                  */
                 return cancelSnapshotSync("request to stop replication.") ?
                         fsm.getStates().get(LogReplicationStateType.INITIALIZED) : this;
-            case REPLICATION_TERMINATED:
+            case REPLICATION_SHUTDOWN:
                 /*
                   Cancel snapshot transmit if still in progress, if transmit cannot be canceled
                   we cannot transition to the new state.
@@ -186,7 +187,8 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-
+        // Reset the event Id that caused the transition to this state
+        this.snapshotSyncEventId = NIL_UUID;
     }
 
     @Override

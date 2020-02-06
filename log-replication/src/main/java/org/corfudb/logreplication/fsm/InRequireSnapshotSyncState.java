@@ -3,10 +3,9 @@ package org.corfudb.logreplication.fsm;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * This class represents the InRequireSnapshotSync state of the Log Replication FSM.
+ * This class represents the InRequireSnapshotSync state of the Log Replication State Machine.
  *
- * In this state we are waiting for a signal to start snapshot transmit, as it was determined as required by
- * the source site.
+ * This state is entered after a cancel or error (trim), and awaits for a signal to start snapshot sync again.
  */
 @Slf4j
 public class InRequireSnapshotSyncState implements LogReplicationState {
@@ -26,7 +25,7 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
                 return snapshotSyncState;
             case REPLICATION_STOP:
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
-            case REPLICATION_TERMINATED:
+            case REPLICATION_SHUTDOWN:
                 return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
                 log.warn("Unexpected log replication event {} when in require snapshot transmit state.", event.getType());
