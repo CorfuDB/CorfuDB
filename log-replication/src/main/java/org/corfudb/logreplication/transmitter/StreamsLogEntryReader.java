@@ -42,10 +42,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     TxMessage generateMessage(ILogData entry) {
         currentMsgTs = entry.getGlobalAddress();
-        TxMessage txMessage = new TxMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot);
+        // TxMessage txMessage = new TxMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot);
         //set data with Maithem's new api
         preMsgTs = currentMsgTs;
-        return  txMessage;
+        return new TxMessage(); // temp Anny cause code does not compile
+        //return  txMessage;
     }
 
     void nextMsgs(List<ILogData> inputs) {
