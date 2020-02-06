@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface SnapshotWriter {
 
-    void apply(TxMessage message);
+    void apply(TxMessage message) throws Exception;
 
-    void apply(List<TxMessage> messages);
+    void apply(List<TxMessage> messages) throws Exception;
 }
