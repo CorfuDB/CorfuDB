@@ -27,10 +27,10 @@ import java.util.stream.Stream;
 @Slf4j
 @NotThreadSafe
 /**
- *  A class that represents the default implementation of a Snapshot Reader for Log Replication functionality.
+ *  Default snapshot reader implementation
  *
- *  This implementation provides log entries at the stream level (no coalesced state).
- *
+ *  This implementation provides reads at the stream level (no coalesced state).
+ *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
     //Todo: will change the max_batch_size while Maithem finish the new API
