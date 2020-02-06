@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
+import java.util.UUID;
+
 /**
  * An interface for log replication state classes.
  *
@@ -33,8 +35,9 @@ public interface LogReplicationState {
      */
     void onExit(LogReplicationState to);
 
-
     default void clear() {}
+
+    default void setTransitionEventId(UUID eventId) {}
 }
 
 

@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.transmitter;
 
 /**
- * Interface for a snapshot reader.
+ * An Interface for snapshot reader.
  *
  * A snapshot reader provides the functionality for reading data from Corfu.
  */
