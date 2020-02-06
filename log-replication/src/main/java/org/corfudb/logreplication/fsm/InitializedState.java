@@ -4,14 +4,15 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * A class that represents the init state of the Log Replication FSM.
+ *
  */
 @Slf4j
 public class InitializedState implements LogReplicationState {
 
-    LogReplicationFSM logReplicationFSM;
+    LogReplicationFSM fsm;
 
     public InitializedState(LogReplicationFSM logReplicationFSM) {
-        this.logReplicationFSM = logReplicationFSM;
+        this.fsm = logReplicationFSM;
     }
 
     /**
@@ -24,13 +25,19 @@ public class InitializedState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                return logReplicationFSM.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                snapshotSyncState.setTransitionEventId(event.getEventID());
+                return snapshotSyncState;
             case REPLICATION_START:
-                return logReplicationFSM.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+                LogReplicationState logEntrySyncState = fsm.getStates()
+                        .get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+                // Set the transition event Id so it can uniquely identify the state and correlate with error events (trim)
+                logEntrySyncState.setTransitionEventId(event.getEventID());
+                return logEntrySyncState;
             case REPLICATION_STOP:
                 return this;
             case REPLICATION_TERMINATED:
-                return logReplicationFSM.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
                 log.warn("Unexpected log replication event {} when in initialized state.", event.getType());
             }

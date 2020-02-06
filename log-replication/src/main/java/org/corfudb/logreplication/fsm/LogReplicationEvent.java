@@ -21,6 +21,16 @@ public class LogReplicationEvent {
     }
 
     /**
+     * Constructor
+     *
+     * @param type log replication event type
+     */
+    public LogReplicationEvent(LogReplicationEventType type, UUID eventID) {
+        this.eventID = eventID;
+        this.type = type;
+    }
+
+    /**
      * Enum listing the various type of LogReplicationEvent.
      */
     public enum LogReplicationEventType {
@@ -30,7 +40,7 @@ public class LogReplicationEvent {
         REPLICATION_START,          // External event which signals start of log replication process
         REPLICATION_STOP,           // External event which signals stop of log replication process
         SNAPSHOT_SYNC_COMPLETE,     // Internal event which signals snapshot transmit has been completed by snapshot reader
-        REPLICATION_TERMINATED        // External/Internal event which signals log replication to be stopped
+        REPLICATION_TERMINATED      // External/Internal event which signals log replication to be stopped
     }
 
     /**
