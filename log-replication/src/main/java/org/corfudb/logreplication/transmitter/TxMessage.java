@@ -17,7 +17,8 @@ public class TxMessage {
 
     public TxMessage() {}
 
-    public TxMessage(MessageType type, long entryTS, long preTS, long snapshot) {
-        metadata = new MessageMetadata(type, entryTS, preTS, snapshot);
+    public TxMessage(MessageType type, long entryTS, long preTS, long snapshot, long sequence, byte[] data) {
+        metadata = new MessageMetadata(type, entryTS, preTS, sequence, snapshot);
+        this.data = data;
     }
 }

@@ -2,26 +2,35 @@ package org.corfudb.logreplication.transmitter;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.StreamViewSMRAdapter;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.OpaqueStream;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
+
 
 @Slf4j
+@NotThreadSafe
 /**
  *  A class that represents the default implementation of a Snapshot Reader for Log Replication functionality.
  *
- *  This implementation provides transmit at the stream level (no coalesced state).
- *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
+ *  This implementation provides log entries at the stream level (no coalesced state).
+ *
  */
 public class StreamsSnapshotReader implements SnapshotReader {
     //Todo: will change the max_batch_size while Maithem finish the new API
@@ -29,101 +38,130 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private final MessageType MSG_TYPE = MessageType.SNAPSHOT_MESSAGE;
     private long globalSnapshot;
     private Set<String> streams;
+    private PriorityQueue<String> streamsToSent;
     private CorfuRuntime rt;
     private long preMsgTs;
     private long currentMsgTs;
     private LogReplicationConfig config;
+    private StreamInfo currentStreamInfo;
+    private long sequence;
 
     /**
-     * Set runtime and callback function to pass message to network
+     * Init runtime and streams to read
      */
     public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         this.config = config;
     }
-    /**
-     * setup globalSnapshot
-     */
-    void setup() {
-        preMsgTs = Address.NON_ADDRESS;
-        currentMsgTs = Address.NON_ADDRESS;
-        globalSnapshot = rt.getAddressSpaceView().getLogTail();
-    }
 
     /**
-     * get all entries for a stream up to the globalSnapshot
-     * @param streamID
+     * Verify that the OpaqueEntry has the correct information.
+     * @param stream
+     * @param entry
      * @return
      */
-    List<SMREntry> readStream(UUID streamID) {
-        StreamViewSMRAdapter smrAdapter =  new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID));
-        return smrAdapter.remainingUpTo(globalSnapshot);
+    boolean verify(StreamInfo stream, OpaqueEntry entry) {
+        Set<UUID> keySet = entry.getEntries().keySet();
+
+        if (keySet.size() != 1 || !keySet.contains(stream.uuid)) {
+            log.error("OpaqueEntry is wrong ", entry);
+            return false;
+        }
+        return true;
     }
 
-    TxMessage generateMessage(List<SMREntry> entries) {
-        currentMsgTs = entries.get(entries.size() - 1).getGlobalAddress();
-        TxMessage txMsg = new TxMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalSnapshot);
+    /**
+     * Given a streamID and list of smrEntries, generate an OpaqueEntry
+     * @param streamID
+     * @param smrEntries
+     * @return
+     */
+    OpaqueEntry generateOpaqueEntry(UUID streamID, List smrEntries) {
+        Map<UUID, List<SMREntry>> map = new HashMap<>();
+        map.put(streamID, smrEntries);
+        return new OpaqueEntry(currentMsgTs, map);
+    }
 
-        // todo: using Maithem API to generate msg data with entries.
+    TxMessage generateMessage(StreamInfo stream, List<SMREntry> entries) {
         ByteBuf buf = Unpooled.buffer();
-        entries.get(0).serialize(buf);
-        txMsg.setData(buf.array());
-
+        OpaqueEntry.serialize(buf, generateOpaqueEntry(stream.uuid, entries));
+        currentMsgTs = stream.maxVersion;
+        if (!stream.iterator.hasNext()) {
+            //mark the end of the current stream.
+            currentMsgTs = globalSnapshot;
+        }
+        TxMessage txMsg = new TxMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
+        preMsgTs = currentMsgTs;
+        sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
-        //set data, will plug in meithem's new api
         return  txMsg;
     }
 
-    /**
-     * Given a stream name, get all entries for this stream,
-     * put entries in a message and call the callback handler
-     * to pass the message to the other site.
-     * @param streamName
-     */
-    void next(String streamName) {
-        UUID streamID = CorfuRuntime.getStreamID(streamName);
-        ArrayList<SMREntry> entries = new ArrayList<>(readStream(streamID));
-        preMsgTs = Address.NON_ADDRESS;
-
-        for (int i = 0; i < entries.size(); i += MAX_BATCH_SIZE) {
-            List<SMREntry> msg_entries = entries.subList(i, i + MAX_BATCH_SIZE);
-            TxMessage txMsg = generateMessage(msg_entries);
-
-            //update preMsgTs only after process a msg successfully
-            preMsgTs = currentMsgTs;
-            log.debug("Successfully pass a TxMsg {}", txMsg.getMetadata());
+    List<SMREntry> next(StreamInfo stream, int numEntries) {
+        //if it is the end of the stream, set an end of stream mark, the current
+        List<SMREntry> list = new ArrayList<>();
+        try {
+            while (stream.iterator.hasNext() && list.size() < numEntries) {
+                OpaqueEntry entry = (OpaqueEntry) stream.iterator.next();
+                verify(stream, entry);
+                stream.maxVersion = Math.max(stream.maxVersion, entry.getVersion());
+                list.addAll(entry.getEntries().get(stream.uuid));
+            }
+        } catch (TrimmedException e) {
+            log.error("Catch an TrimmedException exception ", e);
         }
-
-        log.info("Successfully pass a stream {} for globalSnapshot {}", streamName, globalSnapshot);
-        return;
+        return list;
     }
 
     /**
-     * while transmit finish put an event to the queue
+     * Poll the current stream and get a batch of SMR entries and
+     * generate one message
+     * @param stream bookkeeping of the current stream information.
+     * @return
      */
-    public void sync() {
-        setup();
-        try {
-            for (String streamName : streams) {
-                next(streamName);
-            }
-        } catch (Exception e) {
-            //handle exception
-            log.warn("Sync call get an exception ", e);
-            throw e;
-        }
-
-        //todo: update metadata to record a Snapshot Reader done
-        log.info("Successfully do a transmit read for globalSnapshot {}", globalSnapshot);
+    TxMessage next(StreamInfo stream) {
+        List<SMREntry> entries = next(stream, MAX_BATCH_SIZE);
+        TxMessage txMsg = generateMessage(stream, entries);
+        log.info("Successfully pass a stream {} for globalSnapshot {}", stream.name, globalSnapshot);
+        return txMsg;
     }
 
     @Override
     public SnapshotReadMessage read() {
-        return null;
+        if (currentStreamInfo == null || !currentStreamInfo.iterator.hasNext()) {
+            if (streamsToSent.isEmpty()) {
+                return new SnapshotReadMessage(null, true);
+            }
+            currentStreamInfo = new StreamInfo(streamsToSent.poll(), rt, globalSnapshot);
+        }
+
+        List msgs = new ArrayList<TxMessage>();
+        msgs.add(next(currentStreamInfo));
+        return new SnapshotReadMessage(msgs, streamsToSent.isEmpty()&&!currentStreamInfo.iterator.hasNext());
     }
 
     @Override
     public void reset(long snapshotTimestamp) {
+        streamsToSent = new PriorityQueue<>(streams);
+        preMsgTs = Address.NON_ADDRESS;
+        currentMsgTs = Address.NON_ADDRESS;
+        globalSnapshot = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
+        sequence = 0;
+    }
 
+    public static class StreamInfo {
+        String name;
+        UUID uuid;
+        Stream stream;
+        Iterator iterator;
+        long maxVersion;
+
+        StreamInfo(String name, CorfuRuntime rt, long snapshot) {
+            this.name = name;
+            uuid = CorfuRuntime.getStreamID(name);
+            stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid))).streamUpTo(snapshot);
+            iterator = stream.iterator();
+            maxVersion = 0;
+         }
     }
 }
