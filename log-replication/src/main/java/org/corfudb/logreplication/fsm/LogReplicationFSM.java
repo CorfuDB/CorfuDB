@@ -49,6 +49,9 @@ public class LogReplicationFSM {
      */
     private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
 
+    /**
+     * An observable object on the number of transitions.
+     */
     @Getter
     private ObservableValue numTransitions = new ObservableValue(0);
 
@@ -181,6 +184,12 @@ public class LogReplicationFSM {
         }
     }
 
+    /**
+     * Perform transition between states.
+     *
+     * @param from initial state
+     * @param to final state
+     */
     void transition(LogReplicationState from, LogReplicationState to) {
         from.onExit(to);
         to.clear();
