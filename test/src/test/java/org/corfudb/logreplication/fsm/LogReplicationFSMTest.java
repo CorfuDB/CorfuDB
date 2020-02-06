@@ -7,6 +7,7 @@ import org.corfudb.logreplication.transmitter.SnapshotListener;
 import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -23,15 +24,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Test Log Replication FSM.
  */
-public class LogReplicationFSMTest implements Observer {
+public class LogReplicationFSMTest extends AbstractViewTest implements Observer {
 
     private final Semaphore transitionAvailable = new Semaphore(1, true);
     private ObservableValue transitionObservable;
     private LogReplicationFSM fsm;
+    private CorfuRuntime runtime;
     private SnapshotListener snapshotListener;
     private LogEntryListener logEntryListener;
 
+
     @Before
+    public void setRuntime() {
+        runtime = getDefaultRuntime().connect();
+        initialize();
+    }
+
     public void initialize() {
         snapshotListener = new SnapshotListener() {
             @Override
@@ -46,12 +54,10 @@ public class LogReplicationFSMTest implements Observer {
 
             @Override
             public void complete(UUID snapshotSyncId) {
-
             }
 
             @Override
             public void onError(LogReplicationError error, UUID snapshotSyncId) {
-
             }
         };
 
@@ -103,12 +109,12 @@ public class LogReplicationFSMTest implements Observer {
     }
 
     private void initLogReplicationFSM() {
-        CorfuRuntime rt = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
         LogReplicationConfig config = new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID());
 
-        fsm = new LogReplicationFSM(rt, config, snapshotListener, logEntryListener,
+        fsm = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                        .setNameFormat("state-machine-worker-%d").build()));
+                .setNameFormat("state-machine-worker").build()), Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+                .setNameFormat("state-machine-consumer").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
     }
@@ -148,7 +154,7 @@ public class LogReplicationFSMTest implements Observer {
     }
 
     /**
-     * Observer callback.
+     * Observer callback, will be called on every transition of the log replication FSM.
      */
     @Override
     public void update(Observable obs, Object arg) {

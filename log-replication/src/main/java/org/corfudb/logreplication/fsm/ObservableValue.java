@@ -3,7 +3,9 @@ package org.corfudb.logreplication.fsm;
 import java.util.Observable;
 
 /**
- * This class represents an observable value of type int.
+ * This class represents an observable value of type int, i.e.,
+ * an object that the application will observe
+ * to receive notifications on change.
  */
 public class ObservableValue extends Observable
 {
