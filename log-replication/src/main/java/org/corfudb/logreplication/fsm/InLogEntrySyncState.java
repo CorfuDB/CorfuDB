@@ -7,26 +7,23 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 
 /**
- * A class that represents the InLogEntrySync state of the Log Replication FSM.
+ * This class represents the InLogEntrySync state of the  Log Replication State Machine.
  *
- * In this state incremental (delta) updates are being synced to the remote site.
+ * In this state, incremental (delta) updates are being synced to the remote site.
  */
 @Slf4j
 public class InLogEntrySyncState implements LogReplicationState {
 
     private LogReplicationFSM fsm;
-
-    private LogEntryTransmitter logEntryTransmitter;
-
     private UUID logEntrySyncEventId;
-
+    private LogEntryTransmitter logEntryTransmitter;
     private Future<?> logEntrySyncFuture;
 
     /**
      * Constructor
      *
      * @param logReplicationFSM log replication finite state machine
-     * @param logEntryTransmitter
+     * @param logEntryTransmitter instance that will manage reading and sending log data between sites.
      */
     public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntryTransmitter logEntryTransmitter) {
         this.fsm = logReplicationFSM;
@@ -72,7 +69,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                  */
                 return cancelLogEntrySync(event.getType(), "replication being stopped.") ?
                         fsm.getStates().get(LogReplicationStateType.INITIALIZED) : this;
-            case REPLICATION_TERMINATED:
+            case REPLICATION_SHUTDOWN:
                 /*
                   Cancel log entry transmit if still in progress, if transmit cannot be canceled
                   we cannot transition to the new state.
