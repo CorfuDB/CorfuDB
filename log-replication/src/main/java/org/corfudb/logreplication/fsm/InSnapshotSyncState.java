@@ -20,20 +20,20 @@ public class InSnapshotSyncState implements LogReplicationState {
     private LogReplicationFSM fsm;
 
     /*
-     Uniquely identifies the snapshot sync event that made the FSM transition to this state.
-     This identifier is returned to the application on the snapshotListener callback, so it
-     can be correlated to the process that triggered the request.
+     Uniquely identifies the snapshot sync event that caused the transition to this state.
+     This identifier is hold in order to send it back to the application on the snapshotListener
+     callback, so it can be correlated to the process that triggered the request.
 
-     This is useful in the case that a snapshot sync is canceled and another snapshot sync is requested,
+     This is required in the case that a snapshot sync is canceled and another snapshot sync is requested,
      so the application can discard messages received for the previous snapshot sync, until the new
-     event is handled.
+     request (event) is handled.
      */
     @Setter
     private UUID snapshotSyncEventId;
 
     /*
      Read and transmit a snapshot of the datastore.
-            */
+     */
     private SnapshotTransmitter snapshotTransmitter;
 
     /*
@@ -41,6 +41,12 @@ public class InSnapshotSyncState implements LogReplicationState {
      */
     private Future<?> transmitFuture;
 
+    /**
+     * Constructor
+     *
+     * @param logReplicationFSM state machine
+     * @param snapshotTransmitter transmitter (read & send snapshot across sites)
+     */
     public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotTransmitter snapshotTransmitter) {
         this.fsm = logReplicationFSM;
         this.snapshotTransmitter = snapshotTransmitter;

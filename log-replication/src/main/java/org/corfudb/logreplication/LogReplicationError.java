@@ -10,6 +10,12 @@ public enum LogReplicationError {
     private final int code;
     private final String description;
 
+    /**
+     * Constructor
+     *
+     * @param code error code
+     * @param description error description
+     */
     private LogReplicationError(int code, String description) {
         this.code = code;
         this.description = description;

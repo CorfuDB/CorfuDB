@@ -11,6 +11,21 @@ import java.util.UUID;
 @Data
 public class LogReplicationConfig {
 
+    /*
+     * Unique identifiers for all streams to be replicated across sites.
+     */
+    private Set<String> streamsToReplicate;
+
+    /*
+     * Unique identifier of the remote/destination site ID.
+     */
+    private UUID remoteSiteID;
+
+    /*
+     * Number of worker threads used for log replication state machine tasks.
+     */
+    private int logReplicationFSMNumWorkers = 1;
+
     /**
      * Constructor
      *
@@ -34,19 +49,4 @@ public class LogReplicationConfig {
         this.remoteSiteID = remoteSiteID;
         this.logReplicationFSMNumWorkers = logReplicationFSMNumWorkers;
     }
-
-    /**
-     * Unique identifiers for all streams to be replicated across sites.
-     */
-    private Set<String> streamsToReplicate;
-
-    /**
-     * Unique identifier of the remote/destination site ID.
-     */
-    private UUID remoteSiteID;
-
-    /**
-     * Number of worker threads used for log replication state machine tasks.
-     */
-    private int logReplicationFSMNumWorkers = 1;
 }

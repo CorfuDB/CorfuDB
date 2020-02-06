@@ -4,13 +4,20 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * A class that represents the init state of the Log Replication FSM.
- *
  */
 @Slf4j
 public class InitializedState implements LogReplicationState {
 
-    LogReplicationFSM fsm;
+    /*
+     * Log Replication Finite State Machine Instance
+     */
+    private LogReplicationFSM fsm;
 
+    /**
+     * Constructor
+     *
+     * @param logReplicationFSM Log Replication State Machine
+     */
     public InitializedState(LogReplicationFSM logReplicationFSM) {
         this.fsm = logReplicationFSM;
     }

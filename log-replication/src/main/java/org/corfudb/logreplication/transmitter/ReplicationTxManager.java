@@ -21,7 +21,7 @@ import java.util.concurrent.Executors;
 public class ReplicationTxManager {
 
     /*
-      Log Replication State Machine
+     *  Log Replication State Machine
      */
     private final LogReplicationFSM logReplicationFSM;
 
