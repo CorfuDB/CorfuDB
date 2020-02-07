@@ -49,13 +49,13 @@ public class LogEntryWriter {
     /**
      * Verify the metadata is the correct data type.
      * @param metadata
-     * @throws Exception
+     * @throws ReplicationWriterException
      */
-    void verifyMetadata(MessageMetadata metadata) throws Exception {
+    void verifyMetadata(MessageMetadata metadata) throws ReplicationWriterException {
         if (metadata.getMessageMetadataType() != MessageType.LOG_ENTRY_MESSAGE) {
             log.error("Wrong message metadata {}, expecting  type {} snapshot {}", metadata,
                     MessageType.LOG_ENTRY_MESSAGE, srcGlobalSnapshot);
-            throw new Exception("wrong type of message");
+            throw new ReplicationWriterException("wrong type of message");
         }
     }
 
@@ -63,12 +63,12 @@ public class LogEntryWriter {
      * Convert message data to an MultiObjectSMREntry and write to log.
      * @param txMessage
      */
-    void processMsg(TxMessage txMessage) throws Exception {
+    void processMsg(TxMessage txMessage) {
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getData()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
         if (!streamUUIDs.containsAll(map.keySet())) {
             log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamUUIDs);
-            throw new Exception("Wrong streams set");
+            throw new ReplicationWriterException("Wrong streams set");
         }
 
         try {
@@ -82,9 +82,6 @@ public class LogEntryWriter {
             }
             rt.getAddressSpaceView().write(tokenResponse.getToken(), multiObjectSMREntry);
 
-        } catch (Exception e) {
-            log.error("Catch an exception while processing message {}", txMessage.getMetadata(), e);
-            throw e;
         } finally {
             rt.getObjectsView().TXEnd();
         }
@@ -92,9 +89,8 @@ public class LogEntryWriter {
 
     /**
      * Go over the queue, if the next expecting msg is in queue, process it.
-     * @throws Exception
      */
-    void processQueue() throws Exception {
+    void processQueue() {
         while (true) {
             TxMessage txMessage = msgQ.get(lastMsgTs);
             if (txMessage == null) {
@@ -118,7 +114,7 @@ public class LogEntryWriter {
         }
     }
 
-    void applyTxMessage(TxMessage msg) throws Exception {
+    void applyTxMessage(TxMessage msg) throws ReplicationWriterException {
         verifyMetadata(msg.getMetadata());
 
         // Ignore the out of date messages
