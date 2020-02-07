@@ -66,12 +66,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param metadata
      * @return
      */
-    void verifyMetadata(MessageMetadata metadata) throws Exception {
+    void verifyMetadata(MessageMetadata metadata) throws ReplicationWriterException {
         if (metadata.getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE ||
                 metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
             log.error("snapshot expected {} != recv snapshot {}, metadata {}",
                     srcGlobalSnapshot, metadata.getSnapshotTimestamp(), metadata);
-            throw new Exception("Message is out of order");
+            throw new ReplicationWriterException("Message is out of order");
         }
     }
 
@@ -98,12 +98,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(TxMessage message) throws Exception {
+    public void apply(TxMessage message) throws ReplicationWriterException {
         verifyMetadata(message.getMetadata());
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expecting sequencer {} != recvSeq {}",
                     message.getMetadata().getSnapshotSyncSeqNum(), recvSeq);
-            throw new Exception("Message is out of order");
+            throw new ReplicationWriterException("Message is out of order");
         }
 
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(message.getData()));
@@ -117,7 +117,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(List<TxMessage> messages) throws Exception {
+    public void apply(List<TxMessage> messages) throws ReplicationWriterException {
         for (TxMessage msg : messages) {
             apply(msg);
         }
