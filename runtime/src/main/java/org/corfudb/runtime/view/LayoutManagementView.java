@@ -334,6 +334,7 @@ public class LayoutManagementView extends AbstractView {
      * @param newLayout              New layout to be committed.
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
      * @throws OutrankedException if consensus is outranked.
+     * @throws RuntimeException if the new primary sequencer is not ready
      */
     private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
@@ -346,10 +347,13 @@ public class LayoutManagementView extends AbstractView {
 
         //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
         //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
-        //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
         // Reconfigure servers if required
         // Primary sequencer would be in a not-ready state if its in recovery mode.
         reconfigureSequencerServers(currentLayout, newLayout, forceSequencerRecovery);
+        if (newLayout.getUnresponsiveServers()
+            .contains(newLayout.getPrimarySequencer())) {
+            throw new RuntimeException("New Primary Sequencer is Not Yet Ready");
+        }
     }
 
     /**

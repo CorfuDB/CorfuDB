@@ -28,9 +28,8 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
 
     public static final byte TK_QUERY = 0;
     public static final byte TK_RAW = 1;
-    // todo: remove ..public static final byte TK_STREAM = 2;
-    public static final byte TK_MULTI_STREAM = 3;
-    public static final byte TK_TX = 4;
+    public static final byte TK_MULTI_STREAM = 2;
+    public static final byte TK_TX = 3;
 
     /** The type of request, one of the above. */
     final byte reqType;
