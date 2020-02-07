@@ -10,8 +10,8 @@ import java.util.List;
  */
 public interface SnapshotWriter {
     // The snapshot full sync engine will pass a message to the snapshot writer
-    void apply(TxMessage message) throws Exception;
+    void apply(TxMessage message) throws ReplicationWriterException;
 
     // The snapshot full sync engine will pass a list of message to the snapshot writer
-    void apply(List<TxMessage> messages) throws Exception;
+    void apply(List<TxMessage> messages) throws ReplicationWriterException;
 }

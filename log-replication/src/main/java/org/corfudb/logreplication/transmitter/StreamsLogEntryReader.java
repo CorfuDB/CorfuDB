@@ -7,8 +7,8 @@ import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -54,7 +54,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return  txMessage;
     }
 
-    boolean shouldProcess(OpaqueEntry entry) throws Exception {
+    boolean shouldProcess(OpaqueEntry entry) throws ReplicationReaderException {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
 
         //If the entry's stream set is a subset of interested streams, it is the entry we should process
@@ -70,11 +70,18 @@ public class StreamsLogEntryReader implements LogEntryReader {
         //the expected behavior
         log.error("There are noisy streams {} in the entry, expected streams set {}",
                     entry.getEntries().keySet(), streamUUIDs);
-        throw new Exception("There are noisy streams");
+        throw new ReplicationReaderException("There are noisy streams in the transaction log entry");
 
     }
 
-    void nextMsgs() throws Exception {
+    public void setGlobalBaseSnapshot(long snapshot) {
+        globalBaseSnapshot = snapshot;
+        preMsgTs = snapshot;
+        txStream.seek(snapshot + 1);
+        sequence = 0;
+    }
+
+    public void read() throws TrimmedException, ReplicationReaderException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
         long tail = rt.getAddressSpaceView().getLogTail();
         Stream stream = txStream.streamUpTo(tail); //this can throw trimmed exception
@@ -86,22 +93,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
             }
             TxMessage txMessage = generateMessage(opaqueEntry);
             //callback to send message
-        }
-    }
-
-    public void setGlobalBaseSnapshot(long snapshot) {
-        globalBaseSnapshot = snapshot;
-        preMsgTs = snapshot;
-        txStream.seek(snapshot + 1);
-        sequence = 0;
-    }
-
-    public void read() throws Exception {
-        try {
-            nextMsgs();
-        } catch (Exception e) {
-            log.warn("Sync caught an exception ", e);
-            throw(e);
         }
     }
 }
