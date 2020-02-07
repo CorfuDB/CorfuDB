@@ -6,7 +6,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * A class that contains Log Replication Configuration parameters.
+ * This class represents all configuration parameters required for Log Replication.
  */
 @Data
 public class LogReplicationConfig {
@@ -21,32 +21,14 @@ public class LogReplicationConfig {
      */
     private UUID remoteSiteID;
 
-    /*
-     * Number of worker threads used for log replication state machine tasks.
-     */
-    private int logReplicationFSMNumWorkers = 1;
-
     /**
      * Constructor
      *
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param remoteSiteID Unique identifier of the remote/destination site ID.
+     * @param remoteSiteID Unique identifier of the remote/destination site.
      */
     public LogReplicationConfig(Set<String> streamsToReplicate, UUID remoteSiteID) {
         this.streamsToReplicate = streamsToReplicate;
         this.remoteSiteID = remoteSiteID;
-    }
-
-    /**
-     * Constructor
-     *
-     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param remoteSiteID Unique identifier of the remote/destination site ID.
-     * @param logReplicationFSMNumWorkers Number of worker threads used for log replication state machine tasks (default = 1)
-     */
-    public LogReplicationConfig(Set<String> streamsToReplicate, UUID remoteSiteID, int logReplicationFSMNumWorkers) {
-        this.streamsToReplicate = streamsToReplicate;
-        this.remoteSiteID = remoteSiteID;
-        this.logReplicationFSMNumWorkers = logReplicationFSMNumWorkers;
     }
 }

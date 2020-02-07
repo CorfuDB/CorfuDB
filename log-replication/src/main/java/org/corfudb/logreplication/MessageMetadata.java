@@ -1,7 +1,7 @@
 package org.corfudb.logreplication;
 
 import lombok.Data;
-
+import lombok.Getter;
 @Data
 public class MessageMetadata {
     /*

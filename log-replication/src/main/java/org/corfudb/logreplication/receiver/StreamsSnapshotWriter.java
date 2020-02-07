@@ -11,6 +11,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;

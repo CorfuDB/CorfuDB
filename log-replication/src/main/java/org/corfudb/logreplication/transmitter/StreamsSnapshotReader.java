@@ -96,6 +96,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             //mark the end of the current stream.
             currentMsgTs = globalSnapshot;
         }
+
         TxMessage txMsg = new TxMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
