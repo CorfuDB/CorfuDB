@@ -16,7 +16,7 @@ public class MessageMetadata {
      * From Rx -> Tx: timestamp of the entry applied on the receiving side
      */
     public long entryTimeStamp;
-    //for full sync when the entryTimeStamp == snapshotTimestamp, it means the end of the stream.
+    //for fullsync stream when the entryTimeStamp == snapshotTimestamp, it means the end of the one stream.
 
     /*
      * Used to chain sparse entries for ordering
@@ -29,14 +29,14 @@ public class MessageMetadata {
      */
     private long snapshotTimestamp;
 
-    private long fullSyncSeqNum; //used by fullsync only, zero means the start of the stream.
+    private long snapshotSyncSeqNum; //used by snapshot fullsync stream only, zero means the start of the stream.
 
     public MessageMetadata(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
         this.messageMetadataType = type;
         this.entryTimeStamp = entryTimeStamp;
         this.previousEntryTimestamp = previousEntryTimestamp;
         this.snapshotTimestamp = snapshotTimestamp;
-        this.fullSyncSeqNum = sequence;
+        this.snapshotSyncSeqNum = sequence;
     }
 }
 
