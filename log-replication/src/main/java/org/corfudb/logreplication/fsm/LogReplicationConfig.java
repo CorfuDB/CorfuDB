@@ -17,6 +17,11 @@ public class LogReplicationConfig {
     private Set<String> streamsToReplicate;
 
     /*
+     * Unique identifier of the current site ID.
+     */
+    private UUID siteID;
+
+    /*
      * Unique identifier of the remote/destination site ID.
      */
     private UUID remoteSiteID;
