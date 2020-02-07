@@ -15,7 +15,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
 import java.util.List;
-import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,9 +29,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private Set<String> streams;
     HashMap<UUID, IStreamView> streamViewMap;
     CorfuRuntime rt;
-    long proccessedMsgTs;
-    final private int QUEUE_SIZE = 20;
-    private PriorityQueue<TxMessage> msgQ;
     private long srcGlobalSnapshot;
     private long recvSeq;
 
@@ -70,17 +66,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
-
     /**
      * if the metadata has wrong message type or baseSnapshot, throw an exception
      * @param metadata
      * @return
      */
     void verifyMetadata(MessageMetadata metadata) throws Exception {
-        if (metadata.getFullSyncSeqNum() != recvSeq ||
-                metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
-            log.error("Expecting sequencer {} != recvSeq {} or snapshot expected {} != recv snapshot {}, metadata {}",
-                    metadata.getFullSyncSeqNum(), recvSeq, srcGlobalSnapshot, metadata.getSnapshotTimestamp(), metadata);
+        if (metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
+            log.error("snapshot expected {} != recv snapshot {}, metadata {}",
+                    srcGlobalSnapshot, metadata.getSnapshotTimestamp(), metadata);
             throw new Exception("Message is out of order");
         }
     }
@@ -110,6 +104,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     @Override
     public void apply(TxMessage message) throws Exception {
         verifyMetadata(message.getMetadata());
+        if (message.getMetadata().getFullSyncSeqNum() != recvSeq) {
+            log.error("Expecting sequencer {} != recvSeq {}",
+                    message.getMetadata().getFullSyncSeqNum(), recvSeq);
+            throw new Exception("Message is out of order");
+        }
+
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(message.getData()));
         if (opaqueEntry.getEntries().keySet().size() != 1) {
             log.error("The opaqueEntry has more than one entry {}", opaqueEntry);

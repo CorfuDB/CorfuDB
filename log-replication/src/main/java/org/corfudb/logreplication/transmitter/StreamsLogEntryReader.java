@@ -6,19 +6,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
-import java.util.List;
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 @Slf4j
+@NotThreadSafe
 public class StreamsLogEntryReader implements LogEntryReader {
     private CorfuRuntime rt;
     private final MessageType MSG_TYPE = MessageType.LOG_ENTRY_MESSAGE;
@@ -48,8 +47,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
 
-    //poll txnStream
-
     TxMessage generateMessage(OpaqueEntry entry) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
@@ -63,15 +60,22 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     boolean shouldProcess(OpaqueEntry entry) throws Exception {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
-        if (streamUUIDs.containsAll(tmpUUIDs) == true)
+
+        //If the entry's stream set is a subset of interested streams, it is the entry we should process
+        if (streamUUIDs.containsAll(tmpUUIDs))
             return true;
 
-        if(tmpUUIDs.retainAll(streamUUIDs)) {
-            log.error("There are noisy streams {} in the entry, expected streams set {}",
+        //If the entry's stream set has no overlap with the interested streams, it should be skipped.
+        tmpUUIDs.retainAll(streamUUIDs);
+        if (tmpUUIDs.isEmpty())
+            return false;
+
+        //If the entry's stream set contains both interested streams and other streams, it is not
+        //the expected behavior
+        log.error("There are noisy streams {} in the entry, expected streams set {}",
                     entry.getEntries().keySet(), streamUUIDs);
-            throw new Exception("There are noisy streams");
-        }
-        return false;
+        throw new Exception("There are noisy streams");
+
     }
 
     void nextMsgs() throws Exception {

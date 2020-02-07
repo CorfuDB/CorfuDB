@@ -11,14 +11,13 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,7 +31,7 @@ public class LogEntryWriter {
     private long srcGlobalSnapshot;
     long lastMsgTs;
     private final int MAX_MSG_QUE_SIZE = 20;
-    private HashMap<Long, TxMessage> msgQ; //can query accordinging to the preTs.
+    private HashMap<Long, TxMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
 
     LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
@@ -41,6 +40,8 @@ public class LogEntryWriter {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
         msgQ = new HashMap<>();
+        srcGlobalSnapshot = Address.NON_ADDRESS;
+        lastMsgTs = Address.NON_ADDRESS;
     }
 
     /**
@@ -63,7 +64,9 @@ public class LogEntryWriter {
     void processMsg(TxMessage txMessage) {
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getData()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
-
+        if (!streamUUIDs.contains(map.keySet())) {
+            log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamUUIDs);
+        }
         try {
             rt.getObjectsView().TXBegin();
             TokenResponse tokenResponse = rt.getSequencerView().next((UUID[])(map.keySet().toArray()));
@@ -98,6 +101,19 @@ public class LogEntryWriter {
 
     void applyTxMessage(TxMessage msg) throws Exception {
         verifyMetadata(msg.getMetadata());
+
+        // Ignore the out of date messages
+        if (msg.getMetadata().getSnapshotTimestamp() < srcGlobalSnapshot) {
+            log.warn("Received message with snapshot {} is smaller than current snapshot {}.Ignore it",
+                    msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
+            return;
+        }
+
+        // A new full sync happens, setup the new srcGlobalSnapshot
+        if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
+            srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
+            lastMsgTs = srcGlobalSnapshot;
+        }
 
         //we will skip the entries has been processed.
         if (msg.getMetadata().getEntryTimeStamp() <= lastMsgTs) {
