@@ -33,17 +33,15 @@ import java.util.stream.Stream;
  *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
-    //Todo: will change the max_batch_size while Maithem finish the new API
-    private final int MAX_BATCH_SIZE = 1;
-    private final MessageType MSG_TYPE = MessageType.SNAPSHOT_MESSAGE;
+    private final int MAX_NUM_SMR_ENTRY = 50;
     private long globalSnapshot;
     private Set<String> streams;
-    private PriorityQueue<String> streamsToSent;
+    private PriorityQueue<String> streamsToSend;
     private CorfuRuntime rt;
     private long preMsgTs;
     private long currentMsgTs;
     private LogReplicationConfig config;
-    private StreamInfo currentStreamInfo;
+    private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
 
     /**
@@ -52,6 +50,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         this.config = config;
+        streams = config.getStreamsToReplicate();
     }
 
     /**
@@ -60,7 +59,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param entry
      * @return
      */
-    boolean verify(StreamInfo stream, OpaqueEntry entry) {
+    boolean verify(OpaqueStreamIterator stream, OpaqueEntry entry) {
         Set<UUID> keySet = entry.getEntries().keySet();
 
         if (keySet.size() != 1 || !keySet.contains(stream.uuid)) {
@@ -82,7 +81,14 @@ public class StreamsSnapshotReader implements SnapshotReader {
         return new OpaqueEntry(currentMsgTs, map);
     }
 
-    TxMessage generateMessage(StreamInfo stream, List<SMREntry> entries) {
+    /**
+     * Given a list of entries with the same stream, will generate an OpaqueEntry and
+     * use the opaqueentry to generate a TxMessage.
+     * @param stream
+     * @param entries
+     * @return
+     */
+    TxMessage generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, generateOpaqueEntry(stream.uuid, entries));
         currentMsgTs = stream.maxVersion;
@@ -90,14 +96,21 @@ public class StreamsSnapshotReader implements SnapshotReader {
             //mark the end of the current stream.
             currentMsgTs = globalSnapshot;
         }
-        TxMessage txMsg = new TxMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
+
+        TxMessage txMsg = new TxMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
         return  txMsg;
     }
 
-    List<SMREntry> next(StreamInfo stream, int numEntries) {
+    /**
+     * Read numEntries from the current stream.
+     * @param stream
+     * @param numEntries
+     * @return
+     */
+    List<SMREntry> next(OpaqueStreamIterator stream, int numEntries) {
         //if it is the end of the stream, set an end of stream mark, the current
         List<SMREntry> list = new ArrayList<>();
         try {
@@ -109,6 +122,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
+            throw e;
         }
         return list;
     }
@@ -119,47 +133,86 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    TxMessage next(StreamInfo stream) {
-        List<SMREntry> entries = next(stream, MAX_BATCH_SIZE);
+    TxMessage read(OpaqueStreamIterator stream) {
+        List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
         TxMessage txMsg = generateMessage(stream, entries);
         log.info("Successfully pass a stream {} for globalSnapshot {}", stream.name, globalSnapshot);
         return txMsg;
     }
 
+    /**
+     * If currentStreamInfo is null that is the case for the first call of read, it will init currentStreamInfo.
+     * If the currentStreamInfo ends, poll the next stream.
+     * Otherwise, continue to process the current stream.
+     * @return
+     */
     @Override
     public SnapshotReadMessage read() {
+        // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
+        // and process the remaining entries.
+
         if (currentStreamInfo == null || !currentStreamInfo.iterator.hasNext()) {
-            if (streamsToSent.isEmpty()) {
+            // If it is null, it means the start of snapshot fullsync, we should init the first stream
+            // If the currentStream end, we need to poll the next stream.
+
+            while (!streamsToSend.isEmpty()) {
+                // Setup a new stream
+                currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, globalSnapshot);
+
+                // If the new stream has entries to be proccessed, go to the next step
+                if (currentStreamInfo.iterator.hasNext()) {
+                    break;
+                }
+
+                // Skip process this stream as it has no entries to process, will poll the next one.
+                log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
+                            currentStreamInfo.uuid);
+            }
+
+
+            if (streamsToSend.isEmpty() && !currentStreamInfo.iterator.hasNext()) {
+                //there is no stream to be sent, return an end of full sync message.
+                log.info("");
                 return new SnapshotReadMessage(null, true);
             }
-            currentStreamInfo = new StreamInfo(streamsToSent.poll(), rt, globalSnapshot);
         }
 
         List msgs = new ArrayList<TxMessage>();
-        msgs.add(next(currentStreamInfo));
-        return new SnapshotReadMessage(msgs, streamsToSent.isEmpty()&&!currentStreamInfo.iterator.hasNext());
+        msgs.add(read(currentStreamInfo));
+
+        if (!currentStreamInfo.iterator.hasNext()) {
+            log.debug("Snapshot reader finish reading stream {}", currentStreamInfo.uuid);
+        }
+
+        if (streamsToSend.isEmpty()) {
+            log.info("Snapshot reader finish reading all streams {}", streams);
+        }
+        return new SnapshotReadMessage(msgs, streamsToSend.isEmpty()&&!currentStreamInfo.iterator.hasNext());
     }
 
     @Override
     public void reset(long snapshotTimestamp) {
-        streamsToSent = new PriorityQueue<>(streams);
+        streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
         globalSnapshot = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
+        currentStreamInfo = null;
         sequence = 0;
     }
 
-    public static class StreamInfo {
+    /**
+     * Used to bookkeeping the stream information for the current processing stream
+     */
+    public static class OpaqueStreamIterator {
         String name;
         UUID uuid;
-        Stream stream;
         Iterator iterator;
-        long maxVersion;
+        long maxVersion; //the max address of the log entries processed for this stream.
 
-        StreamInfo(String name, CorfuRuntime rt, long snapshot) {
+        OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;
             uuid = CorfuRuntime.getStreamID(name);
-            stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid))).streamUpTo(snapshot);
+            Stream stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;
          }
