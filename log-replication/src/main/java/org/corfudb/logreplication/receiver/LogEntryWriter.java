@@ -23,19 +23,21 @@ import java.util.UUID;
 
 @NotThreadSafe
 @Slf4j
+/**
+ * Process TxMessage that contains transaction logs for registered streams.
+ */
 public class LogEntryWriter {
-    private Set<String> streams;
-    private List<UUID> streamUUIDs;
-    HashMap<UUID, IStreamView> streamViewMap;
+    private List<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
+    HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the streamview.
     CorfuRuntime rt;
-    private long srcGlobalSnapshot;
-    long lastMsgTs;
-    private final int MAX_MSG_QUE_SIZE = 20;
+    private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
+    long lastMsgTs; //the timestamp of the last message processed.
     private HashMap<Long, TxMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
+    private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
 
     LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
-        this.streams = config.getStreamsToReplicate();
+        Set<String> streams = config.getStreamsToReplicate();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
@@ -45,12 +47,12 @@ public class LogEntryWriter {
     }
 
     /**
-     *
+     * Verify the metadata is the correct data type.
      * @param metadata
      * @throws Exception
      */
     void verifyMetadata(MessageMetadata metadata) throws Exception {
-        if (metadata.getMessageMetadataType() != MessageType.LOG_ENTRY_MESSAGE || metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
+        if (metadata.getMessageMetadataType() != MessageType.LOG_ENTRY_MESSAGE) {
             log.error("Wrong message metadata {}, expecting  type {} snapshot {}", metadata,
                     MessageType.LOG_ENTRY_MESSAGE, srcGlobalSnapshot);
             throw new Exception("wrong type of message");
@@ -61,12 +63,14 @@ public class LogEntryWriter {
      * Convert message data to an MultiObjectSMREntry and write to log.
      * @param txMessage
      */
-    void processMsg(TxMessage txMessage) {
+    void processMsg(TxMessage txMessage) throws Exception {
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getData()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
-        if (!streamUUIDs.contains(map.keySet())) {
+        if (!streamUUIDs.containsAll(map.keySet())) {
             log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamUUIDs);
+            throw new Exception("Wrong streams set");
         }
+
         try {
             rt.getObjectsView().TXBegin();
             TokenResponse tokenResponse = rt.getSequencerView().next((UUID[])(map.keySet().toArray()));
@@ -78,6 +82,9 @@ public class LogEntryWriter {
             }
             rt.getAddressSpaceView().write(tokenResponse.getToken(), multiObjectSMREntry);
 
+        } catch (Exception e) {
+            log.error("Catch an exception while processing message {}", txMessage.getMetadata(), e);
+            throw e;
         } finally {
             rt.getObjectsView().TXEnd();
         }
@@ -87,7 +94,7 @@ public class LogEntryWriter {
      * Go over the queue, if the next expecting msg is in queue, process it.
      * @throws Exception
      */
-    void processQue() throws Exception {
+    void processQueue() throws Exception {
         while (true) {
             TxMessage txMessage = msgQ.get(lastMsgTs);
             if (txMessage == null) {
@@ -96,6 +103,18 @@ public class LogEntryWriter {
             processMsg(txMessage);
             msgQ.remove(lastMsgTs);
             lastMsgTs = txMessage.getMetadata().getEntryTimeStamp();
+        }
+    }
+
+    /**
+     * Remove entries that has timestamp smaller than msgTs
+     * @param msgTs
+     */
+    void cleanMsgQ(long msgTs) {
+        for (long address : msgQ.keySet()) {
+            if (msgQ.get(address).getMetadata().getSnapshotTimestamp() <= lastMsgTs) {
+                msgQ.remove(address);
+            }
         }
     }
 
@@ -109,10 +128,11 @@ public class LogEntryWriter {
             return;
         }
 
-        // A new full sync happens, setup the new srcGlobalSnapshot
+        // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
             lastMsgTs = srcGlobalSnapshot;
+            cleanMsgQ(lastMsgTs);
         }
 
         //we will skip the entries has been processed.
@@ -125,12 +145,14 @@ public class LogEntryWriter {
         if (msg.getMetadata().getPreviousEntryTimestamp() == lastMsgTs) {
             processMsg(msg);
             lastMsgTs = msg.getMetadata().getEntryTimeStamp();
-            processQue();
+            processQueue();
         }
 
         //If the entry's ts is larger than the entry processed, put it in queue
         if (msgQ.size() < MAX_MSG_QUE_SIZE) {
             msgQ.putIfAbsent(msg.getMetadata().getPreviousEntryTimestamp(), msg);
+        } else if (msgQ.get(msg.getMetadata().getPreviousEntryTimestamp()) != null) {
+            log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
         }
     }
 }

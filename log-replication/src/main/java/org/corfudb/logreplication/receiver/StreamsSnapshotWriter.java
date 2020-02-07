@@ -3,6 +3,7 @@ package org.corfudb.logreplication.receiver;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageMetadata;
+import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -19,23 +20,23 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Writing a fullsync
+ * Writing a snapshot fullsync data
  * Open streams interested and append all entries
  */
 
 @Slf4j
 @NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
-    private Set<String> streams;
-    HashMap<UUID, IStreamView> streamViewMap;
+    HashMap<UUID, IStreamView> streamViewMap; // It contains all the streams registered for write to.
     CorfuRuntime rt;
-    private long srcGlobalSnapshot;
-    private long recvSeq;
+    private long srcGlobalSnapshot; // The source snapshot timestamp
 
-    /**
-     * open all streams interested
-     */
-    void openStreams() {
+    private long recvSeq;
+    // The sequence number of the message, it has received.
+    // It is expecting the message in order of the sequence.
+
+    StreamsSnapshotWriter(CorfuRuntime rt, Set<String> streams) {
+        this.rt = rt;
         for (String stream : streams) {
             UUID streamID = CorfuRuntime.getStreamID(stream);
             IStreamView sv = rt.getStreamsView().getUnsafe(streamID);
@@ -43,18 +44,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
-    StreamsSnapshotWriter(CorfuRuntime rt, Set<String> streams) {
-        this.rt = rt;
-        this.streams = streams;
-        openStreams();
-    }
-
     /**
-     * clear all tables interested
+     * clear all tables registered
      */
     void clearTables() {
-        for (String stream : streams) {
-            UUID streamID = CorfuRuntime.getStreamID(stream);
+        for (UUID streamID : streamViewMap.keySet()) {
             CorfuTable<String, String> corfuTable = rt.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
@@ -67,12 +61,13 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     /**
-     * if the metadata has wrong message type or baseSnapshot, throw an exception
+     * If the metadata has wrong message type or baseSnapshot, throw an exception
      * @param metadata
      * @return
      */
     void verifyMetadata(MessageMetadata metadata) throws Exception {
-        if (metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
+        if (metadata.getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE ||
+                metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
             log.error("snapshot expected {} != recv snapshot {}, metadata {}",
                     srcGlobalSnapshot, metadata.getSnapshotTimestamp(), metadata);
             throw new Exception("Message is out of order");
@@ -104,9 +99,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     @Override
     public void apply(TxMessage message) throws Exception {
         verifyMetadata(message.getMetadata());
-        if (message.getMetadata().getFullSyncSeqNum() != recvSeq) {
+        if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expecting sequencer {} != recvSeq {}",
-                    message.getMetadata().getFullSyncSeqNum(), recvSeq);
+                    message.getMetadata().getSnapshotSyncSeqNum(), recvSeq);
             throw new Exception("Message is out of order");
         }
 

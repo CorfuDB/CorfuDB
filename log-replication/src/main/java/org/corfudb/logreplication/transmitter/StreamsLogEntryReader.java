@@ -18,34 +18,30 @@ import java.util.stream.Stream;
 
 @Slf4j
 @NotThreadSafe
+/**
+ * Reading transaction log changes after a snapshot transfer for a specific set of streams.
+ */
 public class StreamsLogEntryReader implements LogEntryReader {
     private CorfuRuntime rt;
     private final MessageType MSG_TYPE = MessageType.LOG_ENTRY_MESSAGE;
-    private OpaqueStream txStream;
-    private long globalBaseSnapshot;
-    private long preMsgTs;
-    private long currentMsgTs;
-    private long sequence;
-    private Set<String> streams;
-    private Set<UUID> streamUUIDs;
+    private OpaqueStream txStream; //The opaquestream wrapper for the transaction stream.
+    private long globalBaseSnapshot; //The base snapshot the log entry reader starts to poll transaction logs
+    private Set<UUID> streamUUIDs; //The set of uuids for the corresponding streams.
+    private long preMsgTs; //the timestamp of the transaction log that is the previous message
+    private long currentMsgTs; //the timestamp of the transaction log that is the current message
+    private long sequence; //the sequence number of the message based on the globalBaseSnapshot
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
-        streams = config.getStreamsToReplicate();
-        initStream();
-    }
+        Set<String> streams = config.getStreamsToReplicate();
 
-    void initStream() {
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
-        StreamOptions options = StreamOptions.builder()
-                .cacheEntries(false)
-                .build();
-        long tail = 0;
+
+        //create an opaque stream for transaction stream
         txStream = new OpaqueStream(rt, rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
     }
-
 
     TxMessage generateMessage(OpaqueEntry entry) {
         ByteBuf buf = Unpooled.buffer();
@@ -100,7 +96,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         sequence = 0;
     }
 
-    public void sync() throws Exception {
+    public void read() throws Exception {
         try {
             nextMsgs();
         } catch (Exception e) {
