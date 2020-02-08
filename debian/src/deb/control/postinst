@@ -27,7 +27,7 @@ fi
 mkdir -p /config/corfu
 mkdir -p /var/log/corfu
 
-mkdir -p /config/corfu-nonconfig
+mkdir -p /nonconfig/corfu
 mkdir -p /var/log/corfu-nonconfig
 
 # if user "corfu" exists, drop root privilege
@@ -39,7 +39,7 @@ if [ "$corfu_user_exist" = 0 ]; then
     chown -R $CORFU_USER:$CORFU_USER /var/log/corfu
     sed -i -e "s/#RUN_AS_USER=/RUN_AS_USER=$CORFU_USER/" /usr/tanuki/bin/corfu-server-wrapper
 
-    chown -R $CORFU_USER:$CORFU_USER /config/corfu-nonconfig
+    chown -R $CORFU_USER:$CORFU_USER /nonconfig/corfu
     chown -R $CORFU_USER:$CORFU_USER /var/log/corfu-nonconfig
     sed -i -e "s/#RUN_AS_USER=/RUN_AS_USER=$CORFU_USER/" /usr/tanuki/bin/corfu-nonconfig-server-wrapper
 fi

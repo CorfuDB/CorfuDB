@@ -23,7 +23,7 @@ CORFU_USER=corfu
 ROLENAME="corfu-nonconfig Infrastructure Server"
 RUNDIR=/var/run/corfu-nonconfig
 LOGDIR=/var/log/corfu-nonconfig
-DATADIR=/config/corfu-nonconfig
+DATADIR=/nonconfig/corfu
 PORT=9040
 . /lib/lsb/init-functions
 
