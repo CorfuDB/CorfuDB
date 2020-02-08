@@ -32,9 +32,13 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private long sequence; //the sequence number of the message based on the globalBaseSnapshot
     private PersistedReaderMetadata persistedMetadata;
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
+    private ReadProcessor readProcessor;
+
+
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config, ReadProcessor readProcessor) {
         this.rt = runtime;
         Set<String> streams = config.getStreamsToReplicate();
+        this.readProcessor = readProcessor;
 
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -45,12 +49,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
         persistedMetadata = new PersistedReaderMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
     }
 
-    TxMessage generateMessage(OpaqueEntry entry) {
+    DataMessage generateMessage(OpaqueEntry entry) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
 
         currentMsgTs = entry.getVersion();
-        TxMessage txMessage = new TxMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
+        DataMessage txMessage = new DataMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         return  txMessage;
@@ -83,7 +87,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         sequence = 0;
     }
 
-    public void read() throws TrimmedException, ReplicationReaderException {
+    @Override
+    public DataMessage read() throws TrimmedException, ReplicationReaderException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
         long tail = rt.getAddressSpaceView().getLogTail();
         Stream stream = txStream.streamUpTo(tail); //this can throw trimmed exception
@@ -93,9 +98,13 @@ public class StreamsLogEntryReader implements LogEntryReader {
             if (!shouldProcess(opaqueEntry)) {
                 continue;
             }
-            TxMessage txMessage = generateMessage(opaqueEntry);
+            DataMessage txMessage = generateMessage(opaqueEntry);
+            return txMessage;
             //callback to send message
         }
+
+        //TODO: this I added so it compiles (fix)
+        return null;
     }
 
     public void ackFromWriter(long timestamp) {
