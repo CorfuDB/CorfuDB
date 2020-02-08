@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.receiver;
 
+import org.corfudb.logreplication.transmitter.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
@@ -25,7 +26,7 @@ public class ReplicationRxManager {
      *
      * @param message
      */
-    public void apply(RxMessage message) {
+    public void apply(DataMessage message) {
         // Buffer data (out of order) and apply
     }
 
@@ -34,7 +35,7 @@ public class ReplicationRxManager {
      *
      * @param messages
      */
-    public void apply(List<RxMessage> messages) {
+    public void apply(List<DataMessage> messages) {
         // Buffer data (out of order) and apply
     }
 

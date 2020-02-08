@@ -1,5 +1,8 @@
 package org.corfudb.logreplication.transmitter;
 
+
+import lombok.NonNull;
+
 /**
  * An Interface for snapshot reader.
  *
@@ -10,8 +13,9 @@ public interface SnapshotReader {
     /**
      * Read streams to replicate across sites.
      *
-     * @return result of read operation.
+     * @return result of read operation. If the read result is NULL, the snapshot sync will be terminated.
      */
+    @NonNull
     SnapshotReadMessage read();
 
     /**
