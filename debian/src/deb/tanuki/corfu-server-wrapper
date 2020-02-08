@@ -34,7 +34,10 @@ if [ -f /vmware_studio_build_in_progress ]; then
     exit 0
 fi
 
+CONVERGED_APP_SYMLINK="../conf/corfu-server-wrapper_converged_app_additional.conf"
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
+ADDITIONAL_CONVERGED_APP_CONF_24GB="../conf/corfu-server-wrapper_converged_app_24gb.conf"
+
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
 
 # If it's not the converged appliance (manager, policy manager, and controller)
@@ -47,6 +50,24 @@ if ( [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ] \
     SCRIPTPATH=$(readlink -f $0)
     SCRIPTBASE=`dirname $SCRIPTPATH`
     rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF"
+    rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF_24GB"
+else
+    if [ -L "$SCRIPTBASE/$CONVERGED_APP_SYMLINK" ]; then
+        rm -f "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+    fi
+
+    ln -s "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF" "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+fi
+
+if ( [ "$NODE_TYPE" = "nsx-manager nsx-policy-manager nsx-controller" ] ); then
+    SYS_MEM_GB=$(free -g --si | awk '/Mem:/ { total=$2 }  END { print total }')
+
+    if [ $SYS_MEM_GB -le 24 ]; then
+        if [ -L "$SCRIPTBASE/$CONVERGED_APP_SYMLINK" ]; then
+            rm -f "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+        fi
+        ln -s "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF_24GB" "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+    fi
 fi
 
 # Changes to enable profile mode
