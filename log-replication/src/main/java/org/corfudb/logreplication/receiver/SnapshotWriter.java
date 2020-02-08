@@ -1,6 +1,6 @@
 package org.corfudb.logreplication.receiver;
 
-import org.corfudb.logreplication.transmitter.TxMessage;
+import org.corfudb.logreplication.transmitter.DataMessage;
 
 import java.util.List;
 
@@ -10,8 +10,7 @@ import java.util.List;
  */
 public interface SnapshotWriter {
     // The snapshot full sync engine will pass a message to the snapshot writer
-    void apply(TxMessage message) throws ReplicationWriterException;
+    void apply(DataMessage message) throws Exception;
 
-    // The snapshot full sync engine will pass a list of message to the snapshot writer
-    void apply(List<TxMessage> messages) throws ReplicationWriterException;
+    void apply(List<DataMessage> messages) throws Exception;
 }
