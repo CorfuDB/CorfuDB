@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
@@ -34,13 +36,14 @@ public class InSnapshotSyncState implements LogReplicationState {
     /*
      Read and transmit a snapshot of the data-store.
      */
+    @Getter
+    @VisibleForTesting
     private SnapshotTransmitter snapshotTransmitter;
 
     /*
      A future on the transmit, in case we need to cancel the ongoing snapshot sync.
      */
     private Future<?> transmitFuture;
-
 
     /**
      * Constructor
@@ -177,9 +180,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            transmitFuture = fsm.getStateMachineWorker().submit(() -> {
-                snapshotTransmitter.transmit(snapshotSyncEventId);
-            });
+            transmitFuture = fsm.getStateMachineWorker().submit(() -> snapshotTransmitter.transmit(snapshotSyncEventId));
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }
@@ -187,8 +188,11 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-        // Reset the event Id that caused the transition to this state
-        this.snapshotSyncEventId = NIL_UUID;
+        // If the transition is to itself in the previous state, no reset.
+        if (to != this) {
+            // Reset the event Id that caused the transition to this state
+            this.snapshotSyncEventId = NIL_UUID;
+        }
     }
 
     @Override

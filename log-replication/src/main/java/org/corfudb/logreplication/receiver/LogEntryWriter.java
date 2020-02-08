@@ -3,9 +3,11 @@ package org.corfudb.logreplication.receiver;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageMetadata;
+
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.transmitter.TxMessage;
+
+import org.corfudb.logreplication.transmitter.DataMessage;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -32,7 +34,7 @@ public class LogEntryWriter {
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     long lastMsgTs; //the timestamp of the last message processed.
-    private HashMap<Long, TxMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
+    private HashMap<Long, DataMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
     private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
     private PersistedWriterMetadata persistedWriterMetadata;
 
@@ -65,7 +67,7 @@ public class LogEntryWriter {
      * Convert message data to an MultiObjectSMREntry and write to log.
      * @param txMessage
      */
-    void processMsg(TxMessage txMessage) {
+    void processMsg(DataMessage txMessage) {
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getData()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
         if (!streamUUIDs.containsAll(map.keySet())) {
@@ -87,7 +89,7 @@ public class LogEntryWriter {
         } finally {
             rt.getObjectsView().TXEnd();
         }
-        persistedWriterMetadata.setLastProcessedLogTimestamp(txMessage.getMetadata().getEntryTimeStamp());
+        persistedWriterMetadata.setLastProcessedLogTimestamp(txMessage.getMetadata().getTimestamp());
     }
 
     /**
@@ -95,13 +97,13 @@ public class LogEntryWriter {
      */
     void processQueue() {
         while (true) {
-            TxMessage txMessage = msgQ.get(lastMsgTs);
+            DataMessage txMessage = msgQ.get(lastMsgTs);
             if (txMessage == null) {
                 return;
             }
             processMsg(txMessage);
             msgQ.remove(lastMsgTs);
-            lastMsgTs = txMessage.getMetadata().getEntryTimeStamp();
+            lastMsgTs = txMessage.getMetadata().getTimestamp();
         }
     }
 
@@ -117,7 +119,7 @@ public class LogEntryWriter {
         }
     }
 
-    void applyTxMessage(TxMessage msg) throws ReplicationWriterException {
+    void applyTxMessage(DataMessage msg) throws ReplicationWriterException {
         verifyMetadata(msg.getMetadata());
 
         // Ignore the out of date messages
@@ -135,22 +137,22 @@ public class LogEntryWriter {
         }
 
         //we will skip the entries has been processed.
-        if (msg.getMetadata().getEntryTimeStamp() <= lastMsgTs) {
+        if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
             return;
         }
 
         //If the entry is the expecting entry, process it and then process
         //the messages in the queue.
-        if (msg.getMetadata().getPreviousEntryTimestamp() == lastMsgTs) {
+        if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
             processMsg(msg);
-            lastMsgTs = msg.getMetadata().getEntryTimeStamp();
+            lastMsgTs = msg.getMetadata().getTimestamp();
             processQueue();
         }
 
         //If the entry's ts is larger than the entry processed, put it in queue
         if (msgQ.size() < MAX_MSG_QUE_SIZE) {
-            msgQ.putIfAbsent(msg.getMetadata().getPreviousEntryTimestamp(), msg);
-        } else if (msgQ.get(msg.getMetadata().getPreviousEntryTimestamp()) != null) {
+            msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
+        } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
         }
     }
