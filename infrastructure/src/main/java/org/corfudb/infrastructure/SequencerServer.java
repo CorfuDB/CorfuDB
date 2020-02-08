@@ -256,12 +256,12 @@ public class SequencerServer extends AbstractServer {
             // for each key pair, check for conflict; if not present, check against the wildcard
             for (byte[] conflictParam : conflictParamSet) {
 
-                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(),
+                Long keyAddress = cache.get(new ConflictTxStream(conflictStream.getKey(),
                         conflictParam, Address.NON_ADDRESS));
 
                 log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
 
-                if (keyAddress != null && keyAddress > txSnapshotTimestamp.getSequence()) {
+                if (keyAddress > txSnapshotTimestamp.getSequence()) {
                     log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
                     return new TxResolutionResponse(
                             TokenType.TX_ABORT_CONFLICT,

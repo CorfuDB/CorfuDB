@@ -95,8 +95,8 @@ public class SequencerServerCache {
      * @param conflictKey conflict stream
      * @return global address
      */
-    public Long getIfPresent(ConflictTxStream conflictKey) {
-        return conflictKeys.get(conflictKey);
+    public Long get(ConflictTxStream conflictKey) {
+        return conflictKeys.getOrDefault(conflictKey, Address.NON_ADDRESS);
     }
 
     /**
@@ -175,8 +175,8 @@ public class SequencerServerCache {
      */
     public boolean put(ConflictTxStream conflictStream) {
 
-        Long val = conflictKeys.get(conflictStream);
-        if (val != null && val > conflictStream.txVersion) {
+        Long val = conflictKeys.getOrDefault(conflictStream, Address.NON_ADDRESS);
+        if (val > conflictStream.txVersion) {
             log.error("For key {} the new entry address {} is smaller than the entry " +
                             "address {} in cache. There is a sequencer regression.",
                     conflictStream, conflictStream.txVersion, conflictKeys.get(conflictStream));

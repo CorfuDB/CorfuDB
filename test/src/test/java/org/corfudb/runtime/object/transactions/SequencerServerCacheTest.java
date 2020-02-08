@@ -76,7 +76,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
             cache.put(secondKey);
 
             assertThat(cache.size()).isOne();
-            assertThat(cache.getIfPresent(firstKey)).isNull();
+            assertThat(cache.get(firstKey)).isEqualTo(Address.NON_ADDRESS);
         }
     }
 
@@ -95,7 +95,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
             assertThat(cache.firstAddress() == address - cacheSize);
         }
         cache.put(key);
-        assertThat(cache.getIfPresent(key) != null);
+        assertThat(cache.get(key) != Address.NON_ADDRESS);
         recordMap.put(key, address);
         assertThat(cache.size() <= cacheSize);
     }
@@ -112,8 +112,8 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
                 continue;
             }
             ConflictTxStream key = new ConflictTxStream(oldKey.getStreamId(), oldKey.getConflictParam(), 0);
-            log.debug("address " + cache.getIfPresent(key) + " expected " + oldAddress);
-            assertThat(cache.getIfPresent(key) == oldAddress);
+            log.debug("address " + cache.get(key) + " expected " + oldAddress);
+            assertThat(cache.get(key) == oldAddress);
         }
     }
 
