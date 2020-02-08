@@ -21,7 +21,6 @@
         <module>debian</module>
         <module>generator</module>
         <module>it</module>
-        <module>benchmarks</module>
         <module>coverage</module>
     </modules>
 
@@ -38,7 +37,7 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-        <revision>0.3.0.20200204063830.3213</revision>
+        <revision>0.3.0.20200208202424.6331</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>

@@ -5,9 +5,13 @@ import com.google.common.reflect.TypeToken;
 import java.util.Map;
 import java.util.UUID;
 
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -88,11 +92,31 @@ public class CorfuStoreBrowser {
      */
     public int printTable(String namespace, String tablename) {
         verifyNamespaceAndTablename(namespace, tablename);
+        StringBuilder builder;
+        // RegistryTable is a special system table that need not be opened
+        // using the DynamicProtobuf Serializer in `getTable` method.
+        // So dumping its contents should be handled differently.
+        if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                tablename.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
+            CorfuTable<TableName,
+                    CorfuRecord<TableDescriptors, Message>> registryTable =
+                    runtime.getTableRegistry().getRegistryTable();
+            int size = registryTable.size();
+            log.info("======Printing Table {} in namespace {} with {} entries======",
+                    tablename, namespace, size);
+            for (Map.Entry<TableName, CorfuRecord<TableDescriptors, Message>> entry:
+            registryTable.entrySet()) {
+                builder = new StringBuilder("\nTableName:\n" + entry.getKey())
+                        .append("\nTableDescriptors:\n" + entry.getValue().getPayload())
+                        .append("\nTableMetadata:\n" + entry.getValue().getMetadata())
+                        .append("\n====================\n");
+                log.info(builder.toString());
+            }
+            return size;
+        }
+
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
         int size = table.size();
-        log.info("======Printing Table {} in namespace {} with {} entries======",
-                tablename, namespace, size);
-        StringBuilder builder;
         for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry :
             table.entrySet()) {
             builder = new StringBuilder("\nKey:\n" + entry.getKey().getKey())
@@ -114,7 +138,7 @@ public class CorfuStoreBrowser {
         verifyNamespace(namespace);
         int numTables = 0;
         log.info("\n=====Tables=======\n");
-        for (CorfuStoreMetadata.TableName tableName : runtime.getTableRegistry()
+        for (TableName tableName : runtime.getTableRegistry()
                 .listTables(namespace)) {
             log.info("Table: " + tableName.getTableName());
             log.info("Namespace: " + tableName.getNamespace());
