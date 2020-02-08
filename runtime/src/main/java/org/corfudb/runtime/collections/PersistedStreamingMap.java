@@ -10,9 +10,8 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
 import org.rocksdb.CompressionType;
-import org.rocksdb.ReadOptions;
-import org.rocksdb.RocksDB;
 import org.rocksdb.Options;
+import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 
 import java.io.File;
@@ -125,7 +124,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     /**
      * {@inheritDoc}
-     *
+     * <p>
      * Please use {@link StreamingMap#entryStream()}.
      */
     @Override
@@ -238,7 +237,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     /**
      * {@inheritDoc}
-     *
+     * <p>
      * Please use {@link StreamingMap#entryStream()}.
      */
     @Override
@@ -248,7 +247,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     /**
      * {@inheritDoc}
-     *
+     * <p>
      * Please use {@link StreamingMap#entryStream()}.
      */
     @Override
