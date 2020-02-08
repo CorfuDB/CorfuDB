@@ -43,6 +43,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private LogReplicationConfig config;
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
+    private PersistedReaderMetadata persistedMetadata;
 
     /**
      * Init runtime and streams to read
@@ -51,6 +52,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = rt;
         this.config = config;
         streams = config.getStreamsToReplicate();
+        persistedMetadata = new PersistedReaderMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
     }
 
     /**
@@ -150,11 +152,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
     public SnapshotReadMessage read() {
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.
+        boolean endStream;
+        boolean endFullSync = false;
+        List msgs = new ArrayList<TxMessage>();
 
-        if (currentStreamInfo == null || !currentStreamInfo.iterator.hasNext()) {
-            // If it is null, it means the start of snapshot fullsync, we should init the first stream
-            // If the currentStream end, we need to poll the next stream.
-
+        if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
                 currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, globalSnapshot);
@@ -162,32 +164,32 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 // If the new stream has entries to be proccessed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
                     break;
-                }
-
-                // Skip process this stream as it has no entries to process, will poll the next one.
-                log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
+                } else {
+                    // Skip process this stream as it has no entries to process, will poll the next one.
+                    log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
                             currentStreamInfo.uuid);
-            }
-
-
-            if (streamsToSend.isEmpty() && !currentStreamInfo.iterator.hasNext()) {
-                //there is no stream to be sent, return an end of full sync message.
-                log.info("");
-                return new SnapshotReadMessage(null, true);
+                }
             }
         }
 
-        List msgs = new ArrayList<TxMessage>();
-        msgs.add(read(currentStreamInfo));
+        if (currentStreamInfo.iterator.hasNext()) {
+            msgs.add(read(currentStreamInfo));
+        }
 
         if (!currentStreamInfo.iterator.hasNext()) {
             log.debug("Snapshot reader finish reading stream {}", currentStreamInfo.uuid);
+            currentStreamInfo = null;
+
+            if (streamsToSend.isEmpty()) {
+                log.info("Snapshot reader finish reading all streams {}", streams);
+                endFullSync = true;
+
+                //This is the end of fullsync at the reader side.
+                persistedMetadata.setLastSentBaseSnapshotTimestamp(globalSnapshot);
+            }
         }
 
-        if (streamsToSend.isEmpty()) {
-            log.info("Snapshot reader finish reading all streams {}", streams);
-        }
-        return new SnapshotReadMessage(msgs, streamsToSend.isEmpty()&&!currentStreamInfo.iterator.hasNext());
+        return new SnapshotReadMessage(msgs, endFullSync);
     }
 
     @Override
