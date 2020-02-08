@@ -3,16 +3,17 @@ package org.corfudb.logreplication.receiver;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageMetadata;
+
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.logreplication.transmitter.DataMessage;
+
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -105,7 +106,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(TxMessage message) throws ReplicationWriterException {
+    public void apply(DataMessage message) throws Exception {
         verifyMetadata(message.getMetadata());
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expecting sequencer {} != recvSeq {}",
@@ -128,8 +129,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(List<TxMessage> messages) throws ReplicationWriterException {
-        for (TxMessage msg : messages) {
+    public void apply(List<DataMessage> messages) throws Exception {
+        for (DataMessage msg : messages) {
             apply(msg);
         }
     }

@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.LogEntryListener;
 import org.corfudb.logreplication.transmitter.LogEntryReader;
 import org.corfudb.logreplication.transmitter.LogEntryTransmitter;
+import org.corfudb.logreplication.transmitter.ReadProcessor;
+import org.corfudb.logreplication.transmitter.SimpleReadProcessor;
 import org.corfudb.logreplication.transmitter.SnapshotListener;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
@@ -113,24 +115,58 @@ public class LogReplicationFSM {
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * Constructor for LogReplicationFSM, default readers.
+     * Constructor for LogReplicationFSM, default read processor.
      *
      * @param runtime Corfu Runtime
      * @param config log replication configuration
      * @param snapshotListener application callback for snapshot sync
      * @param logEntryListener application callback for log entry sync
      * @param workers FSM executor service for state tasks
+     * @param consumers FSM executor service for event consumption
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, SnapshotListener snapshotListener,
                              LogEntryListener logEntryListener, ExecutorService workers, ExecutorService consumers) {
 
+        // This uses the default readProcessor (no actual transformation of the Data)
+        ReadProcessor readProcessor = new SimpleReadProcessor(runtime);
+
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
-        SnapshotReader defaultSnapshotReader = new StreamsSnapshotReader(runtime, config);
-        LogEntryReader defaultLogEntryReader = new StreamsLogEntryReader(runtime, config);
+        SnapshotReader defaultSnapshotReader = new StreamsSnapshotReader(runtime, config, readProcessor);
+        LogEntryReader defaultLogEntryReader = new StreamsLogEntryReader(runtime, config, readProcessor);
 
         SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, defaultSnapshotReader, snapshotListener, this);
-        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, defaultLogEntryReader, logEntryListener);
+        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, defaultLogEntryReader, logEntryListener, this);
+
+        initializeStates(snapshotTransmitter, logEntryTransmitter);
+        this.state = states.get(LogReplicationStateType.INITIALIZED);
+        this.stateMachineWorker = workers;
+
+        consumers.submit(this::consume);
+    }
+
+    /**
+     * Constructor for LogReplicationFSM, custom read processor for data transformation.
+     *
+     * @param runtime Corfu Runtime
+     * @param config log replication configuration
+     * @param snapshotListener application callback for snapshot sync
+     * @param logEntryListener application callback for log entry sync
+     * @param readProcessor read processor for data transformation
+     * @param workers FSM executor service for state tasks
+     * @param consumers FSM executor service for event consumption
+     */
+    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, SnapshotListener snapshotListener,
+                             LogEntryListener logEntryListener, ReadProcessor readProcessor, ExecutorService workers,
+                             ExecutorService consumers) {
+
+        // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
+        // through the callbacks provided by the application
+        SnapshotReader defaultSnapshotReader = new StreamsSnapshotReader(runtime, config, readProcessor);
+        LogEntryReader defaultLogEntryReader = new StreamsLogEntryReader(runtime, config, readProcessor);
+
+        SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, defaultSnapshotReader, snapshotListener, this);
+        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, defaultLogEntryReader, logEntryListener, this);
 
         initializeStates(snapshotTransmitter, logEntryTransmitter);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
@@ -158,7 +194,7 @@ public class LogReplicationFSM {
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
         SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, snapshotReader, snapshotListener, this);
-        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, logEntryReader, logEntryListener);
+        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, logEntryReader, logEntryListener, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotTransmitter, logEntryTransmitter);
@@ -219,6 +255,7 @@ public class LogReplicationFSM {
                     break;
                 }
 
+                // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
                 // Block until an event shows up in the queue.
                 LogReplicationEvent event = eventQueue.take();
 

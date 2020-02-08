@@ -37,7 +37,7 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
     @Override
     public void onEntry(LogReplicationState from) {
         // TODO: since a SNAPSHOT_SYNC_REQUEST is the only event that can take us out of this state,
-        //  we need to scheduler to re-notify the remote site of the error, in case the request was lost.
+        //  we need a scheduler to re-notify the remote site of the error, in case the request was lost.
     }
 
     @Override
