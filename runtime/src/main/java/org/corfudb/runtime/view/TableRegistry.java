@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -82,6 +83,7 @@ public class TableRegistry {
     /**
      * This {@link CorfuTable} holds the schemas of the key, payload and metadata for every table created.
      */
+    @Getter
     private final CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>> registryTable;
 
     public TableRegistry(CorfuRuntime runtime) {
