@@ -1,9 +1,10 @@
 package org.corfudb;
 
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.transmitter.DataMessage;
+import org.corfudb.logreplication.transmitter.SimpleReadProcessor;
 import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
 import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
-import org.corfudb.logreplication.transmitter.TxMessage;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;
@@ -23,9 +24,10 @@ public class SnapshotReaderWriterTest {
 
     }
 
-    void readMsgs(List<TxMessage> msgQ, Set<String > streams, CorfuRuntime rtTx) {
+    void readMsgs(List<DataMessage> msgQ, Set<String > streams, CorfuRuntime rtTx) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rtTx, config);
+        SimpleReadProcessor readProcessor = new SimpleReadProcessor(rtTx);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rtTx, config, readProcessor);
 
         while (true) {
             SnapshotReadMessage snapshotReadMessage = reader.read();
@@ -42,7 +44,7 @@ public class SnapshotReaderWriterTest {
         Set<String> streams = new HashSet<>();
         streams.add("test0");
         streams.add("test1");
-        List<TxMessage> msgQ = new ArrayList<>();
+        List<DataMessage> msgQ = new ArrayList<>();
 
         //generate some data in the streams
         //including a checkpoint in the streams

@@ -6,10 +6,10 @@ import org.corfudb.logreplication.MessageMetadata;
 
 @Builder
 @Data
-public class RxMessage {
+/**
+ * Receiver acknowledgement
+ */
+public class Ack {
 
-    private MessageMetadata metadata;
-
-    private byte[] data;
-    
+    MessageMetadata metadata;
 }
