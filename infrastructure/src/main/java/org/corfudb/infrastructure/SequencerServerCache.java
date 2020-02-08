@@ -67,10 +67,10 @@ public class SequencerServerCache {
      * It is used to calculate the size of ServerCache. Each entry relates two pointers
      * used by HashMap, one pointer in PriorityQueue.
      */
-    static final private int ENTRY_OVERHEAD = 24;
+    private static final int ENTRY_OVERHEAD = 24;
 
     //As calculating object size is expensive, used the value calculated by deepSize
-    static final private int CONFLICTTXSTREAM_OBJ_SIZE = 80; //by calculated by deepSize
+    private final int CONFLICTTXSTREAM_OBJ_SIZE = 80; //by calculated by deepSize
 
     /**
      * The cache limited by size.
@@ -79,7 +79,6 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
-
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
         conflictKeys = new HashMap();

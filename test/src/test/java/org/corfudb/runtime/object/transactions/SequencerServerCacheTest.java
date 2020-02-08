@@ -100,7 +100,11 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         assertThat(cache.size() <= cacheSize);
     }
 
-    // Verify cache contains all the data in recordMap that address >= firstAddress.
+    /**
+     * Verify cache contains all the data in recordMap that address >= firstAddress.
+     * @param recordMap
+     * @param cache
+     */
     void verifyData(HashMap<ConflictTxStream, Long> recordMap, SequencerServerCache cache) {
         for (ConflictTxStream oldKey : recordMap.keySet()) {
             long oldAddress = oldKey.txVersion;
