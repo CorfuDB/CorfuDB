@@ -78,7 +78,10 @@ public class InLogEntrySyncState implements LogReplicationState {
      * @param cancelCause cancel cause specific to the caller for debug.
      */
     private void cancelLogEntrySync(String cancelCause) {
-        // Cancel log entry transmit
+        // Stop log entry transmit.
+        // We can tolerate the last cycle of the transmit being executed before stopped,
+        // as snapshot sync is triggered by the app which handles separate listeners
+        // for log entry sync and snapshot sync (app can handle this)
         logEntryTransmitter.stop();
         log.info("Log Entry transmit has been canceled due to {}", cancelCause);
     }

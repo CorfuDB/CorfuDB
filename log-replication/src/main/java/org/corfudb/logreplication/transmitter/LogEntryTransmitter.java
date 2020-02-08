@@ -35,6 +35,9 @@ public class LogEntryTransmitter {
 
     private volatile boolean taskActive = false;
 
+    /**
+     * Stop the transmit for Log Entry Sync
+     */
     public void stop() {
         taskActive = false;
     }
@@ -46,7 +49,8 @@ public class LogEntryTransmitter {
      * @param logEntryReader log entry reader implementation
      * @param logEntryListener log entry listener implementation (application callback)
      */
-    public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, LogEntryListener logEntryListener, LogReplicationFSM logReplicationFSM) {
+    public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, LogEntryListener logEntryListener,
+                               LogReplicationFSM logReplicationFSM) {
         this.runtime = runtime;
         this.logEntryReader = logEntryReader;
         this.logEntryListener = logEntryListener;

@@ -15,14 +15,14 @@ import org.corfudb.runtime.view.Address;
 import java.util.UUID;
 
 /**
- *  This class is responsible of managing the transmission of a consistent view of the data at a given timestamp,
- *  i.e, reading and sending the full state of the data-store at a given snapshot to a remote site.
+ *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
+ *  i.e, reading and sending a snapshot of the data for the requested streams.
  *
  *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
  *  SnapshotListener (the application specific callback for sending data to the remote site).
  *
- *  The SnapshotReader has a default implementation based on reads at the stream layer (no serialization/deserialization)
- *  required, but can be replaced by custom implementations from the application.
+ *  The SnapshotReader has a default implementation based on reads at the stream layer
+ *  (no serialization/deserialization) required.
  *
  *  SnapshotListener is implemented by the application, as communication channels between sites are out of the scope
  *  of CorfuDB.
@@ -39,6 +39,7 @@ public class SnapshotTransmitter {
 
     @Getter
     @VisibleForTesting
+    // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
     private ObservableValue observedCounter = new ObservableValue(0);
 
     /**
@@ -80,7 +81,6 @@ public class SnapshotTransmitter {
             snapshotReader.reset(snapshotTimestamp);
 
             while (!endRead) {
-                System.out.println("read");
                 try {
                     snapshotReadMessage = snapshotReader.read();
                     // Data Transformation / Processing
