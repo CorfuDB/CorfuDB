@@ -18,7 +18,7 @@ public class SnapshotReadMessage {
     /*
      * List of messages to transmit
      */
-    private List<TxMessage> messages;
+    private List<DataMessage> messages;
 
     /**
      * Constructor
@@ -26,8 +26,13 @@ public class SnapshotReadMessage {
      * @param messages list of messages to transmit
      * @param endRead True, last read of snapshot sync. False, otherwise.
      */
-    public SnapshotReadMessage(List<TxMessage> messages, boolean endRead) {
+    public SnapshotReadMessage(List<DataMessage> messages, boolean endRead) {
         this.messages = messages;
         this.endRead = endRead;
+
+        // Enforce end of read if there is no data
+        if(messages.isEmpty() && !endRead) {
+            throw new IllegalArgumentException("List of messages is empty and no end read marker found.");
+        }
     }
 }

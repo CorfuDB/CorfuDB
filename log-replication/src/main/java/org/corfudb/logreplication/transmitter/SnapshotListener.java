@@ -11,23 +11,22 @@ public interface SnapshotListener {
     /**
      * Application callback on next available message for transmission to remote site during snapshot sync.
      *
-     * @param message TxMessage representing the data to transmit across sites.
+     * @param message DataMessage representing the data to transmit across sites.
      * @param snapshotSyncId snapshot sync event identifier in progress.
      *
      * @return False, in the event of errors. True, otherwise.
      */
-    // TODO: Do we really want to block?
-    boolean onNext(TxMessage message, UUID snapshotSyncId);
+    boolean onNext(DataMessage message, UUID snapshotSyncId);
 
     /**
      * Application callback on next available messages for transmission to remote site during snapshot sync.
      *
-     * @param messages list of TxMessage representing the data to transmit across sites.
+     * @param messages list o DataMessage representing the data to transmit across sites.
      * @param snapshotSyncId snapshot sync event identifier in progress.
      *
      * @return False, in the event of errors. True, otherwise.
      */
-    boolean onNext(List<TxMessage> messages, UUID snapshotSyncId);
+    boolean onNext(List<DataMessage> messages, UUID snapshotSyncId);
 
     /**
      * Call to the application indicating the full sync of streams on the given snapshot has completed.
@@ -35,7 +34,8 @@ public interface SnapshotListener {
      *
      * @param snapshotSyncId  event identifier of the completed snapshot sync.
      */
-    void complete(UUID snapshotSyncId);
+    boolean complete(UUID snapshotSyncId);
+    // TODO (Anny) Optimize? Resend complete message n times, before failing?...
 
     /**
      * Application callback on error during snapshot sync.

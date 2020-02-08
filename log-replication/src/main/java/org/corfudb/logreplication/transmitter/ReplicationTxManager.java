@@ -55,6 +55,35 @@ public class ReplicationTxManager {
     }
 
     /**
+     * Constructor ReplicationxManager (default)
+     *
+     * @param runtime Corfu Runtime
+     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
+     *                         for snapshot data transmission
+     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
+     *                         for log entry data transmission
+     * @param readProcessor implementation for reads processor (transformation)
+     * @param config Log Replication Configuration
+     */
+    public ReplicationTxManager(CorfuRuntime runtime,
+                                SnapshotListener snapshotListener,
+                                LogEntryListener logEntryListener,
+                                ReadProcessor readProcessor,
+                                LogReplicationConfig config) {
+
+        // Default to single dedicated thread for state machine workers (perform state tasks)
+        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
+
+        // Default to single dedicated thread for state machine consumer (poll of the event queue)
+        ExecutorService logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build());
+
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
+                logReplicationFSMWorkers, logReplicationFSMConsumer);
+    }
+
+    /**
      * Constructor ReplicationTxManager to provide ExecutorServices for FSM
      *
      * For multi-site log replication multiple managers can share a common thread pool.
@@ -76,64 +105,6 @@ public class ReplicationTxManager {
                                 ExecutorService logReplicationFSMConsumers) {
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
                 logReplicationFSMWorkers, logReplicationFSMConsumers);
-    }
-
-    /**
-     * Constructor ReplicationTxManager
-     *
-     * @param runtime corfu runtime
-     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
-     *                         for snapshot data transmission
-     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
-     *                         for log entry data transmission
-     * @param snapshotReader implementation of snapshot reader
-     * @param logEntryReader implementation of log entry reader
-     * @param config log replication configuration
-     */
-    public ReplicationTxManager(CorfuRuntime runtime,
-                                SnapshotListener snapshotListener,
-                                LogEntryListener logEntryListener,
-                                SnapshotReader snapshotReader,
-                                LogEntryReader logEntryReader,
-                                LogReplicationConfig config) {
-        // Default to single dedicated thread for state machine workers (perform state tasks)
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
-
-        // Default to single dedicated thread for state machine consumer (poll of the event queue)
-        ExecutorService logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build());
-
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotReader, snapshotListener,
-                logEntryReader, logEntryListener, logReplicationFSMWorkers, logReplicationFSMConsumer);
-    }
-
-    /**
-     * Constructor ReplicationTxManager
-     *
-     * For multi-site log replication multiple managers can share a common thread pool.
-     *
-     * @param runtime corfu runtime
-     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
-     *                         for snapshot data transmission
-     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
-     *                         for log entry data transmission
-     * @param snapshotReader implementation of snapshot reader
-     * @param logEntryReader implementation of log entry reader
-     * @param config log replication config
-     * @param logReplicationFSMWorkers worker thread pool (state tasks)
-     * @param logReplicationFSMConsumers consumer thread pool (FSM poll event queue)
-     */
-    public ReplicationTxManager(CorfuRuntime runtime,
-                                SnapshotListener snapshotListener,
-                                LogEntryListener logEntryListener,
-                                SnapshotReader snapshotReader,
-                                LogEntryReader logEntryReader,
-                                LogReplicationConfig config,
-                                ExecutorService logReplicationFSMWorkers,
-                                ExecutorService logReplicationFSMConsumers) {
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotReader, snapshotListener,
-                logEntryReader, logEntryListener, logReplicationFSMWorkers, logReplicationFSMConsumers);
     }
 
     /**

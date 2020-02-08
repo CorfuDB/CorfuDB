@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
  * This class represents the Init state of the Log Replication State Machine.
  *
  * On FSM start this is the default state, there are two events that enable transitions:
+ *
  * (1) SNAPSHOT_SYNC_REQUEST: external event (application driven) indicating to start full sync at a given snapshot.
  * (2) REPLICATION_START: external event (application driven) indicating that connectivity to remote site has been
  *                        established and the replication can start.

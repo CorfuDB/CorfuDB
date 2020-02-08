@@ -16,18 +16,18 @@ public interface LogEntryListener {
     /**
      * Application callback on next available message for transmission to remote site during log entry sync.
      *
-     * @param message TxMessage representing the data to transmit across sites.
+     * @param message DataMessage representing the data to transmit across sites.
      * @return
      */
-    boolean onNext(TxMessage message);
+    boolean onNext(DataMessage message);
 
     /**
      * Application callback on next available messages for transmission to remote site during log entry sync.
      *
-     * @param messages list of TxMessage representing the data to transmit across sites.
+     * @param messages list of DataMessage representing the data to transmit across sites.
      * @return
      */
-    boolean onNext(List<TxMessage> messages);
+    boolean onNext(List<DataMessage> messages);
 
     /**
      * Application callback on error during log entry sync.

@@ -45,14 +45,17 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private long sequence;
     private PersistedReaderMetadata persistedMetadata;
 
+    private ReadProcessor readProcessor;
+
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
+    public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config, ReadProcessor readProcessor) {
         this.rt = rt;
         this.config = config;
         streams = config.getStreamsToReplicate();
         persistedMetadata = new PersistedReaderMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
+        this.readProcessor = readProcessor;
     }
 
     /**
@@ -90,7 +93,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param entries
      * @return
      */
-    TxMessage generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
+    DataMessage generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, generateOpaqueEntry(stream.uuid, entries));
         currentMsgTs = stream.maxVersion;
@@ -99,7 +102,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             currentMsgTs = globalSnapshot;
         }
 
-        TxMessage txMsg = new TxMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
+        DataMessage txMsg = new DataMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
@@ -135,9 +138,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    TxMessage read(OpaqueStreamIterator stream) {
+    DataMessage read(OpaqueStreamIterator stream) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
-        TxMessage txMsg = generateMessage(stream, entries);
+        DataMessage txMsg = generateMessage(stream, entries);
         log.info("Successfully pass a stream {} for globalSnapshot {}", stream.name, globalSnapshot);
         return txMsg;
     }
@@ -154,7 +157,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         // and process the remaining entries.
         boolean endStream;
         boolean endFullSync = false;
-        List msgs = new ArrayList<TxMessage>();
+        List msgs = new ArrayList<DataMessage>();
 
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {

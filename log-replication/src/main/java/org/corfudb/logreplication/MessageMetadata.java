@@ -1,7 +1,7 @@
 package org.corfudb.logreplication;
 
 import lombok.Data;
-import lombok.Getter;
+
 @Data
 public class MessageMetadata {
     /*
@@ -12,16 +12,15 @@ public class MessageMetadata {
     private MessageType messageMetadataType;
 
     /*
-     * From Tx -> Rx: timestamp of the entry enqueued for shipping
-     * From Rx -> Tx: timestamp of the entry applied on the receiving side
+     * Max timestamp of all log entries in the current messge
      */
-    public long entryTimeStamp;
-    //for fullsync stream when the entryTimeStamp == snapshotTimestamp, it means the end of the one stream.
+    public long timestamp;
+    //for full sync when the timestamp == snapshotTimestamp, it means the end of the stream.
 
     /*
-     * Used to chain sparse entries for ordering
+     * Used to chain sparse sequence for ordering
      */
-    private long previousEntryTimestamp;
+    private long previousTimestamp;
 
     /*
      * Used to keep track of the time used for snapshots.
@@ -33,8 +32,8 @@ public class MessageMetadata {
 
     public MessageMetadata(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
         this.messageMetadataType = type;
-        this.entryTimeStamp = entryTimeStamp;
-        this.previousEntryTimestamp = previousEntryTimestamp;
+        this.timestamp = entryTimeStamp;
+        this.previousTimestamp = previousEntryTimestamp;
         this.snapshotTimestamp = snapshotTimestamp;
         this.snapshotSyncSeqNum = sequence;
     }
