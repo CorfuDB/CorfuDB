@@ -70,15 +70,6 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     @Override
     public CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest) {
         return readRecords(transferBatchRequest)
-                .handle((batch, ex) -> {
-                    if (batch != null && batch.getCauseOfFailure().isPresent()) {
-                        throw batch.getCauseOfFailure().get();
-                    } else if (ex != null) {
-                        throw new ReadBatchException(ex);
-                    } else {
-                        return batch;
-                    }
-                })
                 .thenApply(records ->
                         writeRecords(records, logUnitClient, maxWriteRetries, writeSleepDuration))
                 .exceptionally(error -> TransferBatchResponse
@@ -130,19 +121,10 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 }
             }
 
-            if (latestReadBatch.isPresent() && latestReadException.isPresent()) {
-                // Batch was read, but the retries were exhausted because of an exception.
-                return latestReadBatch.get().toBuilder().causeOfFailure(latestReadException).build();
-            } else if (latestReadBatch.isPresent()) {
-                // No latest read failure, return a read batch.
-                return latestReadBatch.get();
+            if (latestReadException.isPresent()) {
+                throw latestReadException.get();
             } else {
-                // Batch not present, only failure.
-                return ReadBatch.builder()
-                        .failedAddresses(transferBatchRequest.getAddresses())
-                        .status(ReadBatch.ReadStatus.FAILED)
-                        .causeOfFailure(latestReadException)
-                        .build();
+                return latestReadBatch.get();
             }
         });
     }

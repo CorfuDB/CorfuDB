@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -145,12 +146,10 @@ class ProtocolBatchProcessorTest extends DataTest {
 
         CompletableFuture<ReadBatch> res =
                 spy.readRecords(TransferBatchRequest.builder().addresses(addresses).build());
-        ReadBatch batch = res.join();
-        assertThat(batch.getStatus()).isEqualTo(FAILED);
-        assertThat(batch.getCauseOfFailure()).isPresent();
-        assertThatThrownBy(() -> {
-            throw batch.getCauseOfFailure().get();
-        }).isInstanceOf(ReadBatchException.class).hasRootCauseInstanceOf(WrongEpochException.class);
+
+        assertThatThrownBy(res::join)
+                .isInstanceOf(CompletionException.class)
+                .hasRootCauseInstanceOf(WrongEpochException.class);
     }
 
     @Test
