@@ -34,16 +34,13 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     HashMap<UUID, IStreamView> streamViewMap; // It contains all the streams registered for write to.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; // The source snapshot timestamp
-    private long recvSeq;
     private Set<UUID> streamsDone;
+    private long recvSeq;
     // The sequence number of the message, it has received.
     // It is expecting the message in order of the sequence.
 
-    private PersistedWriterMetadata persistedWriterMetadata;
-
     StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
-        persistedWriterMetadata = new PersistedWriterMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
 
         for (String stream : config.getStreamsToReplicate()) {
             UUID streamID = CorfuRuntime.getStreamID(stream);
@@ -106,7 +103,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(DataMessage message) throws Exception {
+    public void apply(DataMessage message) {
         verifyMetadata(message.getMetadata());
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expecting sequencer {} != recvSeq {}",
@@ -121,10 +118,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
 
         processOpaqueEntry(opaqueEntry);
-
-        if (message.getMetadata().getSnapshotTimestamp() == srcGlobalSnapshot) {
-            persistedWriterMetadata.setsrcBaseSnapshotTimestamp(srcGlobalSnapshot);
-        }
         recvSeq++;
     }
 

@@ -27,6 +27,11 @@ public class ReplicationTxManager {
      */
     private final LogReplicationFSM logReplicationFSM;
 
+    /*
+     *
+     */
+    PersistedReaderMetadata persistedReaderMetadata;
+
     /**
      * Constructor ReplicationTxManager (default)
      *
@@ -52,6 +57,7 @@ public class ReplicationTxManager {
 
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
                 logReplicationFSMWorkers, logReplicationFSMConsumer);
+        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
     }
 
     /**
@@ -159,4 +165,17 @@ public class ReplicationTxManager {
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
     }
+
+    void ackSnapshotDone(long ts) {
+        persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(ts);
+    }
+
+    /**
+     * Process ack from replication receiver side.
+     * @param timestamp
+     */
+    void ackLogEntryDone(long timestamp) {
+         persistedReaderMetadata.setLastAckedTimestamp(timestamp);
+    }
+
 }

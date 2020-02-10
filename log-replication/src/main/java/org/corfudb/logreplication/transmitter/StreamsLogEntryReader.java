@@ -30,8 +30,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private long preMsgTs; //the timestamp of the transaction log that is the previous message
     private long currentMsgTs; //the timestamp of the transaction log that is the current message
     private long sequence; //the sequence number of the message based on the globalBaseSnapshot
-    private PersistedReaderMetadata persistedMetadata;
-
     private ReadProcessor readProcessor;
 
 
@@ -46,7 +44,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         //create an opaque stream for transaction stream
         txStream = new OpaqueStream(rt, rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
-        persistedMetadata = new PersistedReaderMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
     }
 
     DataMessage generateMessage(OpaqueEntry entry) {
@@ -105,9 +102,5 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         //TODO: this I added so it compiles (fix)
         return null;
-    }
-
-    public void ackFromWriter(long timestamp) {
-        persistedMetadata.setLastAckedTimestamp(timestamp);
     }
 }
