@@ -180,7 +180,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            transmitFuture = fsm.getStateMachineWorker().submit(() -> snapshotTransmitter.transmit(snapshotSyncEventId));
+            transmitFuture = fsm.getStateMachineWorkers().submit(() -> snapshotTransmitter.transmit(snapshotSyncEventId));
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }

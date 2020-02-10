@@ -22,12 +22,12 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * This class implements the Log Replication Finite State Machine.
  *
- * CorfuDB provides a Log Replication functionality for standby data-stores. This enables logs to
+ * CorfuDB provides a Log Replication functionality for standby sites. This enables logs to
  * be automatically replicated from the primary site to a remote site. So in the case of failure or data corruption,
  * the system can failover to the standby data-store.
  *
  * This functionality is driven by the application and initiated through the ReplicationTxManager
- * on the source (primary) site and handled through the ReplicationRxManager on the destination site.
+ * on the source (primary) site and handled through the ReplicationRxManager on the destination (standby) site.
  *
  * Log Replication on the transmitter side is defined by an event-driven finite state machine, with 5 states
  * and 7 events/messages---which can trigger the transition between states.
@@ -101,7 +101,7 @@ public class LogReplicationFSM {
      * Executor service for FSM state tasks
      */
     @Getter
-    private ExecutorService stateMachineWorker;
+    private ExecutorService stateMachineWorkers;
 
     /**
      * A queue of events.
@@ -109,13 +109,13 @@ public class LogReplicationFSM {
     private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
 
     /**
-     * An observable object on the number of transitions.
+     * An observable object on the number of transitions of this state machine.
      */
     @Getter
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * Constructor for LogReplicationFSM, default read processor.
+     * Constructor for LogReplicationFSM, using default read processor.
      *
      * @param runtime Corfu Runtime
      * @param config log replication configuration
@@ -140,8 +140,10 @@ public class LogReplicationFSM {
 
         initializeStates(snapshotTransmitter, logEntryTransmitter);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.stateMachineWorker = workers;
+        this.stateMachineWorkers = workers;
 
+        // TODO (Medhavi) We can't really use a shared pool across all FSMs, it's a while(true) loop, dedicated thread
+        //   pool for consumer
         consumers.submit(this::consume);
     }
 
@@ -170,7 +172,7 @@ public class LogReplicationFSM {
 
         initializeStates(snapshotTransmitter, logEntryTransmitter);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.stateMachineWorker = workers;
+        this.stateMachineWorkers = workers;
 
         consumers.submit(this::consume);
     }
@@ -201,7 +203,7 @@ public class LogReplicationFSM {
 
         // Set INITIALIZED as the initial state
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.stateMachineWorker = workers;
+        this.stateMachineWorkers = workers;
 
         consumers.submit(this::consume);
     }
@@ -214,7 +216,8 @@ public class LogReplicationFSM {
      */
     private void initializeStates(SnapshotTransmitter snapshotTransmitter, LogEntryTransmitter logEntryTransmitter) {
         /*
-         * Log Replication State instances are kept in a map to be reused in transitions.
+         * Log Replication State instances are kept in a map to be reused in transitions, avoid creating one
+          * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotTransmitter));
