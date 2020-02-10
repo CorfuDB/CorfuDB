@@ -1,10 +1,10 @@
 package org.corfudb.infrastructure.management;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.junit.Test;
 
 import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class NetworkStretcherTest {
 

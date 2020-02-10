@@ -1,5 +1,17 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.junit.Test;
+
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
@@ -12,18 +24,6 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
-import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.junit.Test;
-
-import java.util.Optional;
 
 public class ClusterGraphTest {
 

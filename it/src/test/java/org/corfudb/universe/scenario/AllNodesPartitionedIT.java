@@ -1,12 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterUp;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
@@ -24,6 +17,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterUp;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
 
 @Slf4j
 public class AllNodesPartitionedIT extends GenericIntegrationTest {

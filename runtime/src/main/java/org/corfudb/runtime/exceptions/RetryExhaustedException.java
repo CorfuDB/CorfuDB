@@ -10,4 +10,19 @@ public class RetryExhaustedException extends RuntimeException {
     public RetryExhaustedException(String s) {
         super(s);
     }
+
+    public RetryExhaustedException() {
+    }
+
+    public RetryExhaustedException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public RetryExhaustedException(Throwable cause) {
+        super(cause);
+    }
+
+    public RetryExhaustedException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

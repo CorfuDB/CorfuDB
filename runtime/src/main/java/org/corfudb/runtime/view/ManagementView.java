@@ -581,7 +581,7 @@ public class ManagementView extends AbstractView {
      * @param layout   Layout to bootstrap with.
      * @return Completable Future which completes with True when the management server is bootstrapped.
      */
-    CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
+    public CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
         return runtime.getLayoutView().getRuntimeLayout(layout)
                 .getManagementClient(endpoint)
                 .bootstrapManagement(layout)
