@@ -36,7 +36,6 @@ public class LogEntryWriter {
     long lastMsgTs; //the timestamp of the last message processed.
     private HashMap<Long, DataMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
     private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
-    private PersistedWriterMetadata persistedWriterMetadata;
 
     LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
@@ -47,7 +46,6 @@ public class LogEntryWriter {
         msgQ = new HashMap<>();
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
-        persistedWriterMetadata = new PersistedWriterMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
     }
 
     /**
@@ -89,7 +87,6 @@ public class LogEntryWriter {
         } finally {
             rt.getObjectsView().TXEnd();
         }
-        persistedWriterMetadata.setLastProcessedLogTimestamp(txMessage.getMetadata().getTimestamp());
     }
 
     /**
@@ -128,7 +125,6 @@ public class LogEntryWriter {
                     msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
             return;
         }
-
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();

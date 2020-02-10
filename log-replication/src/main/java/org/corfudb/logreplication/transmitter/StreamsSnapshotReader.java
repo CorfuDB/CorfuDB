@@ -43,7 +43,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private LogReplicationConfig config;
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
-    private PersistedReaderMetadata persistedMetadata;
 
     private ReadProcessor readProcessor;
 
@@ -54,7 +53,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = rt;
         this.config = config;
         streams = config.getStreamsToReplicate();
-        persistedMetadata = new PersistedReaderMetadata(rt, config.getSiteID(), config.getRemoteSiteID());
         this.readProcessor = readProcessor;
     }
 
@@ -186,9 +184,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
             if (streamsToSend.isEmpty()) {
                 log.info("Snapshot reader finish reading all streams {}", streams);
                 endFullSync = true;
-
-                //This is the end of fullsync at the reader side.
-                persistedMetadata.setLastSentBaseSnapshotTimestamp(globalSnapshot);
             }
         }
 
