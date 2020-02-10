@@ -1,22 +1,21 @@
 package org.corfudb.infrastructure.management;
 
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.runtime.view.Layout;
+import org.junit.Test;
+
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-
-import java.time.Duration;
-
-import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.runtime.view.Layout;
-import org.junit.Test;
 
 public class PollReportTest {
 

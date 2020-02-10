@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.log;
 
-import static org.junit.Assert.assertEquals;
-
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 public class StreamLogChecksumTest {
 

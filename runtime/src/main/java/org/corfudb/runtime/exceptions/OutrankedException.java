@@ -6,7 +6,7 @@ import org.corfudb.runtime.view.Layout;
 /**
  * Created by mwei on 12/14/15.
  */
-public class OutrankedException extends Exception {
+public class OutrankedException extends RuntimeException {
     @Getter
     long newRank;
 

@@ -1,13 +1,13 @@
 package org.corfudb.infrastructure.management;
 
-import static org.junit.Assert.assertEquals;
-
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.SortedSet;
 import java.util.TreeSet;
+
+import static org.junit.Assert.assertEquals;
 
 public class NodeRankTest {
 
