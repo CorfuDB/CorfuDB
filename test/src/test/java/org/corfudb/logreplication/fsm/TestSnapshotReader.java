@@ -4,6 +4,7 @@ import org.corfudb.logreplication.transmitter.DataMessage;
 import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,22 +19,26 @@ public class TestSnapshotReader implements SnapshotReader {
 
     private TestTransmitterConfig config;
 
+    private long baseSnapshotTimestamp = Address.NON_ADDRESS;
+
     private int globalIndex = 0;
+
+    private CorfuRuntime runtime;
 
     public TestSnapshotReader(TestTransmitterConfig config) {
         this.config = config;
+        this.runtime = new CorfuRuntime(config.getEndpoint()).connect();
     }
 
     @Override
     public SnapshotReadMessage read() {
         // Connect to endpoint
-        CorfuRuntime runtime = new CorfuRuntime(config.getEndpoint()).connect();
         List<DataMessage> messages = new ArrayList<>();
 
         int index = globalIndex;
 
         // Read numEntries in consecutive address space and add to messages to return
-        for (int i=index; (i<index+config.getBatchSize() && index<config.getNumEntries()) ; i++) {
+        for (int i=index; (i<(index+config.getBatchSize()) && index<config.getNumEntries()) ; i++) {
             Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
             messages.add(new DataMessage((byte[])data));
             globalIndex++;
@@ -44,6 +49,7 @@ public class TestSnapshotReader implements SnapshotReader {
 
     @Override
     public void reset(long snapshotTimestamp) {
+        baseSnapshotTimestamp = snapshotTimestamp;
         globalIndex = 0;
     }
 
