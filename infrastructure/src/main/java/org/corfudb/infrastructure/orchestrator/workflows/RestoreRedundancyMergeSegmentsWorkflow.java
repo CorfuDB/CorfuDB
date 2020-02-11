@@ -1,19 +1,18 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.RESTORE_REDUNDANCY_MERGE_SEGMENTS;
-
 import com.google.common.collect.ImmutableList;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
+import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 
 import java.util.List;
 import java.util.UUID;
 
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.infrastructure.orchestrator.Action;
-import org.corfudb.infrastructure.orchestrator.IWorkflow;
-import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
-import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.RESTORE_REDUNDANCY_MERGE_SEGMENTS;
 
 /**
  * A definition of a workflow that merges all the segments in the layout.
@@ -39,10 +38,15 @@ public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
      *
      * @param request request to restore redundancy and merge a segment.
      */
-    public RestoreRedundancyMergeSegmentsWorkflow(RestoreRedundancyMergeSegmentsRequest request) {
+    public RestoreRedundancyMergeSegmentsWorkflow(
+            RestoreRedundancyMergeSegmentsRequest request) {
         this.id = UUID.randomUUID();
         this.request = request;
-        this.actions = ImmutableList.of(new RestoreRedundancyMergeSegments());
+        this.actions = ImmutableList.of(
+                RestoreRedundancyMergeSegments.builder()
+                        .currentNode(request.getEndpoint())
+                        .redundancyCalculator(new RedundancyCalculator(request.getEndpoint()))
+                        .build());
     }
 
     @Override

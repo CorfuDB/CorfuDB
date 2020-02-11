@@ -1,7 +1,17 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getLogTail;
+import com.google.common.collect.Sets;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.CFUtils;
 
+import javax.annotation.Nonnull;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -10,20 +20,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
-import javax.annotation.Nonnull;
-
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.exceptions.OutrankedException;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.util.CFUtils;
+import static org.corfudb.util.Utils.getLogTail;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -97,18 +96,16 @@ public class LayoutManagementView extends AbstractView {
      * Bootstraps the new node with the current layout.
      * This action is invoked as a part of the add node workflow which requires the new node
      * to be added to the cluster to be bootstrapped with the existing layout of this cluster.
-     * This bootstraps the Layout and the Management server with the existing layout which
-     * initiates failure handling capabilities on the management server.
+     * This bootstraps the Layout server with the existing layout.
      *
      * @param endpoint New node endpoint.
-     * @return Completable Future which completes when the node's layout and management servers are bootstrapped.
+     * @return Completable Future which completes when the node's layout is bootstrapped.
      */
     public CompletableFuture<Boolean> bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         return runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout)
-                .thenCompose(result -> runtime.getManagementView().bootstrapManagementServer(endpoint, layout))
                 .thenApply(result -> {
                     log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
                     return true;
@@ -158,6 +155,11 @@ public class LayoutManagementView extends AbstractView {
             newLayout = layoutBuilder.build();
 
             attemptConsensus(newLayout);
+
+            if (!runtime.getLayoutView().getLayout().equals(newLayout)){
+                throw new IllegalStateException("This node's layout was not committed." +
+                        "Aborting add node workflow.");
+            }
         } else {
             log.info("Node {} already exists in the layout, skipping.", endpoint);
             newLayout = currentLayout;
@@ -212,61 +214,45 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Attempts to merge the last 2 segments.
+     * Attempts to merge all the segments of the layout starting from the first two.
+     * Once the remaining segments can no longer be merged, attempts consensus on a new layout.
      *
      * @param currentLayout Current layout
      * @throws OutrankedException if consensus is outranked.
      */
-    public void mergeSegments(Layout currentLayout) throws OutrankedException {
-
+    public void mergeSegments(Layout currentLayout) {
+        Layout tempLayout = currentLayout;
         Layout newLayout;
-        if (currentLayout.getSegments().size() > 1) {
+        Predicate<Layout> shouldMergeSegments = layout -> {
+            if (layout.getSegments().size() > 1) {
+                return Sets.difference(
+                        layout.getSegments().get(1).getAllLogServers(),
+                        layout.getSegments().get(0).getAllLogServers()).isEmpty();
+            }
+            return false;
+        };
 
-            log.info("mergeSegments: layout is {}", currentLayout);
+        if (shouldMergeSegments.test(tempLayout)) {
 
-            sealEpoch(currentLayout);
+            log.info("mergeSegments: layout is {}", tempLayout);
 
-            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-            newLayout = layoutBuilder
-                    .mergePreviousSegment(1)
-                    .build();
+            sealEpoch(tempLayout);
+
+            while (shouldMergeSegments.test(tempLayout)) {
+                LayoutBuilder layoutBuilder = new LayoutBuilder(tempLayout);
+                tempLayout = layoutBuilder
+                        .mergePreviousSegment(1)
+                        .build();
+            }
+
+            newLayout = tempLayout;
+
             attemptConsensus(newLayout);
         } else {
-            log.info("mergeSegments: skipping, no segments to merge {}", currentLayout);
-            newLayout = currentLayout;
+            log.info("mergeSegments: skipping, no segments to merge {}", tempLayout);
+            newLayout = tempLayout;
         }
-        reconfigureSequencerServers(currentLayout, newLayout, false);
-    }
-
-    /**
-     * Add the log unit to the segment to increase redundancy. This is preceded by state transfer.
-     * Adds the specified log unit to the stripe in all segments, increments the epoch and
-     * proposes the new layout. This method is idempotent - adds the new log unit to each segment
-     * only once.
-     *
-     * @param currentLayout Current layout.
-     * @param endpoint      Endpoint to be added to the segment.
-     * @param stripeIndex   Stripe index.
-     * @throws OutrankedException if consensus is outranked.
-     */
-    public void addLogUnitReplica(@Nonnull Layout currentLayout,
-                                  @Nonnull String endpoint,
-                                  int stripeIndex) throws OutrankedException {
-        boolean isTaskDone = currentLayout.getSegments().stream()
-                .map(layoutSegment -> layoutSegment.getStripes().get(stripeIndex))
-                .allMatch(layoutStripe -> layoutStripe.getLogServers().contains(endpoint));
-
-        if (!isTaskDone) {
-            LayoutBuilder builder = new LayoutBuilder(currentLayout);
-            for (int i = 0; i < currentLayout.getSegments().size(); i++) {
-                builder.addLogunitServerToSegment(endpoint, i, stripeIndex);
-            }
-            Layout newLayout = builder.setEpoch(currentLayout.getEpoch() + 1).build();
-            runLayoutReconfiguration(currentLayout, newLayout, false);
-        } else {
-            log.info("addLogUnitReplica: Ignoring task because {} present in all segments in {}",
-                    endpoint, currentLayout);
-        }
+        reconfigureSequencerServers(tempLayout, newLayout, false);
     }
 
     /**
@@ -335,8 +321,8 @@ public class LayoutManagementView extends AbstractView {
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
      * @throws OutrankedException if consensus is outranked.
      */
-    private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
-                                          final boolean forceSequencerRecovery)
+    public void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
+                                         final boolean forceSequencerRecovery)
             throws OutrankedException {
 
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
