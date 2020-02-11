@@ -13,6 +13,7 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 public class LogEntryTransmitter {
 
+    private static final int READ_BATCH_SIZE = 5;
     /*
      * Corfu Runtime
      */
@@ -62,7 +63,9 @@ public class LogEntryTransmitter {
      */
     public void transmit() {
         taskActive = true;
-        while (taskActive) {
+        int reads = 0;
+
+        while (taskActive && reads < READ_BATCH_SIZE) {
             DataMessage message;
 
             // Read and Send Log Entries
@@ -70,7 +73,7 @@ public class LogEntryTransmitter {
                 message = logEntryReader.read();
                 if (logEntryListener.onNext(message)) {
                     // Write meta-data
-
+                    reads++;
                 } else {
                     // ??
                     // Request full sync (something is wrong I cant deliver)
