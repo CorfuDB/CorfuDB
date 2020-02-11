@@ -24,7 +24,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
-public class SnapshotReaderWriterTest extends AbstractViewTest {
+public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
     static private final int NUM_KEYS = 1000;
     static private final int NUM_STREAMS = 4;
 
