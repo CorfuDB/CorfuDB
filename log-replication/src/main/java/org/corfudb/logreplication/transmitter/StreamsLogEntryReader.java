@@ -77,10 +77,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     }
 
-    public void setGlobalBaseSnapshot(long snapshot) {
+    public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
+        long timestamp = Math.max(snapshot, ackTimestamp);
         globalBaseSnapshot = snapshot;
-        preMsgTs = snapshot;
-        txStream.seek(snapshot + 1);
+        preMsgTs = timestamp;
+        txStream.seek(timestamp + 1);
         sequence = 0;
     }
 

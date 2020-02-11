@@ -39,8 +39,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     // The sequence number of the message, it has received.
     // It is expecting the message in order of the sequence.
 
-    StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config) {
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
+        streamViewMap = new HashMap<>();
 
         for (String stream : config.getStreamsToReplicate()) {
             UUID streamID = CorfuRuntime.getStreamID(stream);
@@ -82,7 +83,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     /**
      *
      */
-    void reset(long snapshot) {
+    public void reset(long snapshot) {
        srcGlobalSnapshot = snapshot;
        recvSeq = 0;
        streamsDone = new HashSet<>();
