@@ -2,7 +2,7 @@ package org.corfudb;
 
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.SimpleReadProcessor;
+import org.corfudb.logreplication.transmitter.DefaultReadProcessor;
 import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
 import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
@@ -26,7 +26,7 @@ public class SnapshotReaderWriterTest {
 
     void readMsgs(List<DataMessage> msgQ, Set<String > streams, CorfuRuntime rtTx) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        SimpleReadProcessor readProcessor = new SimpleReadProcessor(rtTx);
+        DefaultReadProcessor readProcessor = new DefaultReadProcessor(rtTx);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rtTx, config, readProcessor);
 
         while (true) {
