@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,17 +30,7 @@ import static org.corfudb.AbstractCorfuTest.PARAMETERS;
  */
 public class RocksDbEntryIteratorTest {
 
-    @Test
-    public void iteratorTest() throws Exception {
-        String path = PARAMETERS.TEST_TEMP_DIR;
-        String rocksDbPath = Paths.get(path, "rocksdb").toAbsolutePath().toString();
-        final Options options = new Options()
-                .setCreateIfMissing(true);
-        RocksDB rocksDb = RocksDB.open(options, rocksDbPath);
-        ISerializer serializer = Serializers.PRIMITIVE;
-
-        final int numEntries = 57;
-
+    private void generateData(int numEntries, ISerializer serializer, RocksDB rocksDb) {
         // Generate some data
         IntStream.range(0, numEntries).forEach(num -> {
             try {
@@ -55,8 +46,22 @@ public class RocksDbEntryIteratorTest {
                 throw new RuntimeException(e);
             }
         });
+    }
 
-        RocksDbEntryIterator iterator = new RocksDbEntryIterator(rocksDb, serializer);
+    @Test
+    public void iteratorTest() throws Exception {
+        String path = PARAMETERS.TEST_TEMP_DIR;
+        String rocksDbPath = Paths.get(path, UUID.randomUUID().toString()).toAbsolutePath().toString();
+        final Options options = new Options()
+                .setCreateIfMissing(true);
+        RocksDB rocksDb = RocksDB.open(options, rocksDbPath);
+        ISerializer serializer = Serializers.PRIMITIVE;
+
+        final int numEntries = 57;
+
+        generateData(numEntries, serializer, rocksDb);
+
+        RocksDbEntryIterator<Integer, Integer> iterator = new RocksDbEntryIterator<>(rocksDb, serializer);
 
         // Verify that all the entries can be retrieved from the iterator
         IntStream.range(0, numEntries).forEach(num -> {
@@ -72,7 +77,32 @@ public class RocksDbEntryIteratorTest {
 
         // Verify that the iterator can be closed multiple times
 
-        Assertions.assertDoesNotThrow(() -> iterator.close());
-        Assertions.assertDoesNotThrow(() -> iterator.close());
+        Assertions.assertDoesNotThrow(iterator::close);
+        Assertions.assertDoesNotThrow(iterator::close);
+    }
+
+    @Test
+    public void testKeysIterator() throws Exception {
+        String path = PARAMETERS.TEST_TEMP_DIR;
+        String rocksDbPath = Paths.get(path, UUID.randomUUID().toString()).toAbsolutePath().toString();
+        final Options options = new Options()
+                .setCreateIfMissing(true);
+        RocksDB rocksDb = RocksDB.open(options, rocksDbPath);
+        ISerializer serializer = Serializers.PRIMITIVE;
+
+        final int numEntries = 35;
+
+        generateData(numEntries, serializer, rocksDb);
+
+        RocksDbEntryIterator<Integer, Integer> iterator = new RocksDbEntryIterator<>(rocksDb, serializer, false);
+
+        IntStream.range(0, numEntries).forEach(num -> {
+            Map.Entry<Integer, Integer> entry = iterator.next();
+            assertThat(entry.getKey()).isEqualTo(num);
+            assertThat(entry.getValue()).isNull();
+        });
+
+        assertThat(iterator.hasNext()).isFalse();
+        Assertions.assertDoesNotThrow(iterator::close);
     }
 }
