@@ -27,11 +27,6 @@ public class ReplicationTxManager {
      */
     private final LogReplicationFSM logReplicationFSM;
 
-    /*
-     *
-     */
-    PersistedReaderMetadata persistedReaderMetadata;
-
     /**
      * Constructor ReplicationTxManager (default)
      *
@@ -47,28 +42,19 @@ public class ReplicationTxManager {
                                 LogEntryListener logEntryListener,
                                 LogReplicationConfig config) {
 
-        // Default to single dedicated thread for state machine workers (perform state tasks)
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
-
-        // Default to single dedicated thread for state machine consumer (poll of the event queue)
-        ExecutorService logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build());
-
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
-                logReplicationFSMWorkers, logReplicationFSMConsumer);
-        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
+        this(runtime, snapshotListener, logEntryListener, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
     /**
-     * Constructor ReplicationxManager (default)
+     * Constructor ReplicationTxManager (default)
      *
      * @param runtime Corfu Runtime
      * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
      *                         for snapshot data transmission
      * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
      *                         for log entry data transmission
-     * @param readProcessor implementation for reads processor (transformation)
+     * @param readProcessor implementation for reads processor (data transformation)
      * @param config Log Replication Configuration
      */
     public ReplicationTxManager(CorfuRuntime runtime,
@@ -78,15 +64,10 @@ public class ReplicationTxManager {
                                 LogReplicationConfig config) {
 
         // Default to single dedicated thread for state machine workers (perform state tasks)
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
 
         // Default to single dedicated thread for state machine consumer (poll of the event queue)
-        ExecutorService logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build());
-
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
-                logReplicationFSMWorkers, logReplicationFSMConsumer);
+        this(runtime, snapshotListener, logEntryListener, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
     /**
@@ -96,21 +77,45 @@ public class ReplicationTxManager {
      *
      * @param runtime corfu runtime
      * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
-     *      *                  for snapshot data transmission
+     *                         for snapshot data transmission
      * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
-     *      *                  for log entry data transmission
+     *                         for log entry data transmission
      * @param config Log Replication Configuration
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
-     * @param logReplicationFSMConsumers consumer thread pool (FSM poll event queue)
      */
     public ReplicationTxManager(CorfuRuntime runtime,
                                 SnapshotListener snapshotListener,
                                 LogEntryListener logEntryListener,
                                 LogReplicationConfig config,
-                                ExecutorService logReplicationFSMWorkers,
-                                ExecutorService logReplicationFSMConsumers) {
+                                ExecutorService logReplicationFSMWorkers) {
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
-                logReplicationFSMWorkers, logReplicationFSMConsumers);
+                logReplicationFSMWorkers, Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build()));
+    }
+
+    /**
+     * Constructor ReplicationTxManager to provide ExecutorServices for FSM
+     *
+     * For multi-site log replication multiple managers can share a common thread pool.
+     *
+     * @param runtime corfu runtime
+     * @param snapshotListener implementation of a Snapshot Listener, this represents the application callback
+     *                         for snapshot data transmission
+     * @param logEntryListener implementation of a Log Entry Listener, this represents the application callback
+     *                         for log entry data transmission
+     * @param readProcessor implementation for reads processor (transformation)
+     * @param config Log Replication Configuration
+     * @param logReplicationFSMWorkers worker thread pool (state tasks)
+     */
+    public ReplicationTxManager(CorfuRuntime runtime,
+                                SnapshotListener snapshotListener,
+                                LogEntryListener logEntryListener,
+                                ReadProcessor readProcessor,
+                                LogReplicationConfig config,
+                                ExecutorService logReplicationFSMWorkers) {
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
+                readProcessor, logReplicationFSMWorkers, Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build()));
     }
 
     /**
@@ -153,7 +158,8 @@ public class ReplicationTxManager {
      */
     public void cancelSnapshotSync(UUID snapshotSyncId) {
         // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL, snapshotSyncId));
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL,
+                new LogReplicationEventMetadata(snapshotSyncId)));
     }
 
     /**
@@ -166,16 +172,25 @@ public class ReplicationTxManager {
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
     }
 
-    void ackSnapshotDone(long ts) {
-        persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(ts);
+    /**
+     * TODO add comment
+     *
+     * @param requestId unique identifier for the snapshot sync request
+     */
+    public void snapshotSyncReplicated(UUID requestId) {
+        // Enqueue event into Log Replication FSM
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
+                new LogReplicationEventMetadata(requestId)));
     }
 
     /**
      * Process ack from replication receiver side.
+     *
      * @param timestamp
      */
-    void ackLogEntryDone(long timestamp) {
-         persistedReaderMetadata.setLastAckedTimestamp(timestamp);
+    public void logEntrySyncReplicated(long timestamp) {
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
+                new LogReplicationEventMetadata(timestamp)));
     }
 
 }

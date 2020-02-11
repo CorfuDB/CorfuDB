@@ -22,6 +22,7 @@ import java.util.stream.Stream;
  * Reading transaction log changes after a snapshot transfer for a specific set of streams.
  */
 public class StreamsLogEntryReader implements LogEntryReader {
+
     private CorfuRuntime rt;
     private final MessageType MSG_TYPE = MessageType.LOG_ENTRY_MESSAGE;
     private OpaqueStream txStream; //The opaquestream wrapper for the transaction stream.

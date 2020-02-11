@@ -30,35 +30,31 @@ import java.util.UUID;
 @Slf4j
 public class SnapshotTransmitter {
 
+    // TODO (probably move to a configuration file)
+    private static final int SNAPSHOT_BATCH_SIZE = 5;
+
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
-    private SnapshotListener listener;
+    private SnapshotListener snapshotListener;
+    private ReadProcessor readProcessor;
     private LogReplicationFSM fsm;
     private boolean onNext;
     private int messagesSent = 0; // Used for testing purposes
+    private long baseSnapshotTimestamp;
+
 
     @Getter
     @VisibleForTesting
     // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
     private ObservableValue observedCounter = new ObservableValue(0);
 
-    /**
-     * Constructor
-     *
-     * @param runtime corfu runtime
-     * @param snapshotReaderImpl implementation of snapshot reader
-     * @param snapshotListenerImpl implementation of snapshot listener (application callback)
-     * @param logReplicationFSM log replication state machine
-     */
-    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReaderImpl,
-                               SnapshotListener snapshotListenerImpl, LogReplicationFSM logReplicationFSM) {
+    private volatile boolean stopSnapshotSync = false;
+
+    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener, LogReplicationFSM fsm) {
         this.runtime = runtime;
-        this.snapshotReader = snapshotReaderImpl;
-        this.listener = snapshotListenerImpl;
-        /*
-         * The Log Replication FSM is required to enqueue internal events that cause state transition.
-         */
-        this.fsm = logReplicationFSM;
+        this.snapshotReader = snapshotReader;
+        this.snapshotListener = snapshotListener;
+        this.fsm = fsm;
     }
 
     /**
@@ -69,23 +65,16 @@ public class SnapshotTransmitter {
     public void transmit(UUID snapshotSyncEventId) {
         boolean endRead = false;
         SnapshotReadMessage snapshotReadMessage = null;
-        messagesSent = 0;
 
-        // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
-        long snapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+        // Skip if no data is present in the log
+        if (Address.isAddress(baseSnapshotTimestamp)) {
 
-        // Skip if log is empty
-        if (Address.isAddress(snapshotTimestamp)) {
-
-            // Starting a new snapshot sync, reset the reader's snapshot timestamp
-            snapshotReader.reset(snapshotTimestamp);
-
-            while (!endRead) {
+            // Do until SNAPSHOT_BATCH_SIZE messages are sent or the reader reaches the end of the reads
+            while (messagesSent < SNAPSHOT_BATCH_SIZE && !endRead && !stopSnapshotSync) {
                 try {
                     snapshotReadMessage = snapshotReader.read();
                     // Data Transformation / Processing
-                    // Transform to byte[]
-
+                    // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
                     /*
                      In the case of a Trimmed Exception, enqueue the event for state transition.
@@ -94,24 +83,25 @@ public class SnapshotTransmitter {
                      correlated to the same initiating state.
                     */
                     fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.TRIMMED_EXCEPTION,
-                            snapshotSyncEventId));
+                            new LogReplicationEventMetadata(snapshotSyncEventId)));
 
                     // Report error to the snapshotListener
-                    listener.onError(LogReplicationError.TRIM_SNAPSHOT_SYNC, snapshotSyncEventId);
+                    snapshotListener.onError(LogReplicationError.TRIM_SNAPSHOT_SYNC, snapshotSyncEventId);
                 } catch (Exception e) {
                     // Can Snapshot Reader send other exceptions?
                 }
 
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
-                    onNext = listener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId);
+                    onNext = snapshotListener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId);
                     messagesSent++;
                     observedCounter.setValue(messagesSent);
                     if (!onNext) {
                         log.error("SnapshotListener did not acknowledge next sent message(s). Notify error.");
                         // TODO (Anny): Optimize (back-off) retry on the failed send.
                         // Send on Error as snapshot sync is required.
-                        listener.onError(LogReplicationError.LISTENER_ERROR, snapshotSyncEventId);
-                        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL, snapshotSyncEventId));
+                        snapshotListener.onError(LogReplicationError.LISTENER_ERROR, snapshotSyncEventId);
+                        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL,
+                                new LogReplicationEventMetadata(snapshotSyncEventId)));
                         break;
                     }
                 }
@@ -119,11 +109,64 @@ public class SnapshotTransmitter {
                 endRead = snapshotReadMessage.isEndRead();
             }
 
-            log.debug("End of snapshot read found. Snapshot sync completed.");
-        }
+            if (endRead) {
+                // Terminated due to end of reads for this snapshot sync.
+                log.debug("End of snapshot read found. Snapshot sync completed for {} on timestamp {}",
+                        snapshotSyncEventId, baseSnapshotTimestamp);
+                snapshotSyncComplete(snapshotSyncEventId);
+            } else {
+                // Terminated due to number of batch messages being sent. This snapshot sync needs to
+                // continue.
 
+                // Note: Snapshot Sync is not performed continuous as for the case of multi-site replication
+                // the shared thread pool could be lower than the number of sites, so we assign resources in
+                // a round robin fashion.
+                fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                        new LogReplicationEventMetadata(snapshotSyncEventId)));
+            }
+        } else {
+            snapshotSyncComplete(snapshotSyncEventId);
+        }
+    }
+
+    private void snapshotSyncComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
-        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE, snapshotSyncEventId));
+        snapshotListener.complete(snapshotSyncEventId);
+
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
+                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
+    }
+
+    /**
+     * Reset due to the start of a new snapshot sync.
+     */
+    public void reset() {
+        // TODO: Do we need to persist the baseSnapshotTimestamp in the event of failover?
+
+        // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
+        baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+
+        // Starting a new snapshot sync, reset the reader's snapshot timestamp
+        snapshotReader.reset(baseSnapshotTimestamp);
+
+        messagesSent = 0;
+        stopSnapshotSync = false;
+    }
+
+    /**
+     * Stop Snapshot Sync
+     */
+    public void stop() {
+        stopSnapshotSync = true;
+    }
+
+    /**
+     * Retrieve base snapshot timestamp.
+     *
+     * @return base snapshot timestamp
+     */
+    public long getBaseSnapshotTimestamp() {
+        return this.baseSnapshotTimestamp;
     }
 }

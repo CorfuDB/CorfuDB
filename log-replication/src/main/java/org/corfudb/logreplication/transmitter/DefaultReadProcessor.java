@@ -9,11 +9,11 @@ import java.util.stream.Collectors;
 /**
  * This class represents the default read processor implementation to be used by the StreamsSnapshotReader
  */
-public class SimpleReadProcessor implements ReadProcessor {
+public class DefaultReadProcessor implements ReadProcessor {
 
     private CorfuRuntime runtime;
 
-    public SimpleReadProcessor(CorfuRuntime runtime) {
+    public DefaultReadProcessor(CorfuRuntime runtime) {
         this.runtime = runtime;
     }
 

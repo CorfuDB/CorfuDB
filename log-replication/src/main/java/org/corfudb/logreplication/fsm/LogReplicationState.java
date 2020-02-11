@@ -19,21 +19,21 @@ public interface LogReplicationState {
      *
      * @return next LogReplicationState to transition to.
      */
-    LogReplicationState processEvent(LogReplicationEvent event);
+    LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition;
 
     /**
      * On Entry
      *
      * @param from  LogReplicationState transitioning from.
      */
-    void onEntry(LogReplicationState from);
+    default void onEntry(LogReplicationState from) {}
 
     /**
      * On Exit
      *
      * @param to  LogReplicationState transitioning to.
      */
-    void onExit(LogReplicationState to);
+    default void onExit(LogReplicationState to) {}
 
     /**
      * Provides capability to clear/clean state information onEntry.
@@ -46,6 +46,11 @@ public interface LogReplicationState {
      * @param eventId event identifier
      */
     default void setTransitionEventId(UUID eventId) {}
+
+    /**
+     * Retrieve the id of the event that caused the transition to this state.
+     */
+    default UUID getTransitionEventId() { return null; }
 }
 
 

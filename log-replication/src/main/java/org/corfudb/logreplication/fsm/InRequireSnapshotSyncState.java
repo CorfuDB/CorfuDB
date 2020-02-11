@@ -17,7 +17,7 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
     }
 
     @Override
-    public LogReplicationState processEvent(LogReplicationEvent event) {
+    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
@@ -29,9 +29,9 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
                 return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
                 log.warn("Unexpected log replication event {} when in require snapshot transmit state.", event.getType());
+                throw new IllegalLogReplicationTransition(event.getType(), getType());
             }
         }
-        return this;
     }
 
     @Override

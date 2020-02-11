@@ -5,13 +5,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.transmitter.LogEntryListener;
 import org.corfudb.logreplication.transmitter.LogEntryReader;
 import org.corfudb.logreplication.transmitter.LogEntryTransmitter;
+import org.corfudb.logreplication.transmitter.PersistedReaderMetadata;
 import org.corfudb.logreplication.transmitter.ReadProcessor;
-import org.corfudb.logreplication.transmitter.SimpleReadProcessor;
+import org.corfudb.logreplication.transmitter.DefaultReadProcessor;
 import org.corfudb.logreplication.transmitter.SnapshotListener;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
 import org.corfudb.logreplication.transmitter.StreamsLogEntryReader;
 import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
+import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.HashMap;
@@ -22,12 +24,12 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * This class implements the Log Replication Finite State Machine.
  *
- * CorfuDB provides a Log Replication functionality for standby data-stores. This enables logs to
+ * CorfuDB provides a Log Replication functionality for standby sites. This enables logs to
  * be automatically replicated from the primary site to a remote site. So in the case of failure or data corruption,
  * the system can failover to the standby data-store.
  *
  * This functionality is driven by the application and initiated through the ReplicationTxManager
- * on the source (primary) site and handled through the ReplicationRxManager on the destination site.
+ * on the source (primary) site and handled through the ReplicationRxManager on the destination (standby) site.
  *
  * Log Replication on the transmitter side is defined by an event-driven finite state machine, with 5 states
  * and 7 events/messages---which can trigger the transition between states.
@@ -101,7 +103,13 @@ public class LogReplicationFSM {
      * Executor service for FSM state tasks
      */
     @Getter
-    private ExecutorService stateMachineWorker;
+    private ExecutorService stateMachineWorkers;
+
+    /**
+     * Executor service for FSM state tasks
+     */
+    @Getter
+    private ExecutorService stateMachineConsumers;
 
     /**
      * A queue of events.
@@ -109,13 +117,18 @@ public class LogReplicationFSM {
     private final LinkedBlockingQueue<LogReplicationEvent> eventQueue = new LinkedBlockingQueue<>();
 
     /**
-     * An observable object on the number of transitions.
+     * An observable object on the number of transitions of this state machine (for testing & visibility)
      */
     @Getter
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * Constructor for LogReplicationFSM, default read processor.
+     * TODO add comments
+     */
+    PersistedReaderMetadata persistedReaderMetadata;
+
+    /**
+     * Constructor for LogReplicationFSM, using default read processor.
      *
      * @param runtime Corfu Runtime
      * @param config log replication configuration
@@ -128,20 +141,22 @@ public class LogReplicationFSM {
                              LogEntryListener logEntryListener, ExecutorService workers, ExecutorService consumers) {
 
         // This uses the default readProcessor (no actual transformation of the Data)
-        ReadProcessor readProcessor = new SimpleReadProcessor(runtime);
+        ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
-        SnapshotReader defaultSnapshotReader = new StreamsSnapshotReader(runtime, config, readProcessor);
-        LogEntryReader defaultLogEntryReader = new StreamsLogEntryReader(runtime, config, readProcessor);
+        SnapshotReader snapshotReader = new StreamsSnapshotReader(runtime, config, readProcessor);
+        LogEntryReader logEntryReader = new StreamsLogEntryReader(runtime, config, readProcessor);
 
-        SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, defaultSnapshotReader, snapshotListener, this);
-        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, defaultLogEntryReader, logEntryListener, this);
+        SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, snapshotReader, snapshotListener, this);
+        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, logEntryReader, logEntryListener, this);
 
         initializeStates(snapshotTransmitter, logEntryTransmitter);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.stateMachineWorker = workers;
+        this.stateMachineWorkers = workers;
 
+        // TODO (Medhavi) We can't really use a shared pool across all FSMs, it's a while(true) loop, dedicated thread
+        //   pool for consumer
         consumers.submit(this::consume);
     }
 
@@ -170,7 +185,7 @@ public class LogReplicationFSM {
 
         initializeStates(snapshotTransmitter, logEntryTransmitter);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.stateMachineWorker = workers;
+        this.stateMachineWorkers = workers;
 
         consumers.submit(this::consume);
     }
@@ -201,9 +216,10 @@ public class LogReplicationFSM {
 
         // Set INITIALIZED as the initial state
         this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.stateMachineWorker = workers;
+        this.stateMachineWorkers = workers;
+        this.stateMachineConsumers = consumers;
 
-        consumers.submit(this::consume);
+        stateMachineConsumers.submit(this::consume);
     }
 
     /**
@@ -214,7 +230,8 @@ public class LogReplicationFSM {
      */
     private void initializeStates(SnapshotTransmitter snapshotTransmitter, LogEntryTransmitter logEntryTransmitter) {
         /*
-         * Log Replication State instances are kept in a map to be reused in transitions.
+         * Log Replication State instances are kept in a map to be reused in transitions, avoid creating one
+          * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotTransmitter));
@@ -249,25 +266,47 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
-            while (true) {
-                // Finish consumer thread if in STOP state
-                if(state.getType() == LogReplicationStateType.STOPPED) {
-                    break;
+            if (state.getType() == LogReplicationStateType.STOPPED) {
+                log.info("Log Replication State Machine has been stopped. No more events will be processed.");
+                return;
+            }
+
+            // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
+            //   Block until an event shows up in the queue.
+            LogReplicationEvent event = eventQueue.take();
+
+            if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
+                // Verify it's for the same request, as that request could've been canceled and was received later
+                if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC && state.getTransitionEventId()
+                        == event.getMetadata().getRequestId()) {
+                    persistedReaderMetadata.setLastAckedTimestamp(event.getMetadata().getSyncTimestamp());
+                }
+            } else {
+                if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE) {
+                    // Verify it's for the same request, as that request could've been canceled and was received later
+                    if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC && state.getTransitionEventId()
+                            == event.getMetadata().getRequestId()) {
+                        // Retrieve the base snapshot timestamp associated to this snapshot sync request from the
+                        // transmitter
+                        persistedReaderMetadata.setLastAckedTimestamp(((InSnapshotSyncState)state)
+                                .getSnapshotTransmitter().getBaseSnapshotTimestamp());
+                    }
                 }
 
-                // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
-                // Block until an event shows up in the queue.
-                LogReplicationEvent event = eventQueue.take();
-
-                // Process the event
-                LogReplicationState newState = state.processEvent(event);
-
-                transition(state, newState);
-
-                state = newState;
-
-                numTransitions.setValue(numTransitions.getValue() + 1);
+                try {
+                    LogReplicationState newState = state.processEvent(event);
+                    transition(state, newState);
+                    state = newState;
+                    numTransitions.setValue(numTransitions.getValue() + 1);
+                } catch (IllegalLogReplicationTransition illegalState) {
+                    log.debug("Illegal log replication event {} when in state {}", event.getType(), state.getType());
+                }
             }
+
+            // Consume one event in the queue and re-submit, this is done so events are consumed in
+            // a round-robin fashion for the case of multi-site replication.
+            stateMachineConsumers.submit(this::consume);
+
         } catch (Throwable t) {
             log.error("Error on event consumer: ", t);
         }

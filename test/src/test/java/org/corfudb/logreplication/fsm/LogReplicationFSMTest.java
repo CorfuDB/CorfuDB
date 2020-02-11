@@ -5,6 +5,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.logreplication.transmitter.DataMessage;
 import org.corfudb.logreplication.transmitter.LogEntryListener;
 import org.corfudb.logreplication.transmitter.LogEntryReader;
+import org.corfudb.logreplication.transmitter.LogReplicationEventMetadata;
 import org.corfudb.logreplication.transmitter.SnapshotListener;
 import org.corfudb.logreplication.transmitter.SnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -142,14 +143,14 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        // Transition #2: Trimmed Exception on Log Entry Sync for an invalid event id, this should not bne taken as
+        // Transition #2: Trimmed Exception on Log Entry Sync for an invalid event id, this should not be taken as
         // a valid trimmed exception for the current state, hence it remains in the same state
         transition(LogReplicationEventType.TRIMMED_EXCEPTION, LogReplicationStateType.IN_LOG_ENTRY_SYNC, UUID.randomUUID());
 
         // Transition #3: Trimmed Exception
         // Because this is an internal state, we need to capture the actual event id internally generated
-        UUID logEntrySyncId = ((InLogEntrySyncState)fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC)).getLogEntrySyncEventId();
-        transition(LogReplicationEventType.TRIMMED_EXCEPTION, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncId);
+        UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionEventId();
+        transition(LogReplicationEventType.TRIMMED_EXCEPTION, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID);
     }
 
 
@@ -242,7 +243,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void cancelSnapshotSyncInProgressAndRetry() throws Exception {
         // This test needs to observe the number of messages generated during snapshot sync to interrupt/stop it,
-        // after it completes.
+        // before it completes.
         observeSnapshotSync = true;
 
         // Initialize State Machine
@@ -259,16 +260,19 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
-        // Transition #2: Snapshot Sync Request
+        // Transition #1: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
+        // We observe the number of transmitted messages and force a REPLICATION_STOP, when 2 messages have been sent
+        // so we verify the state moves to INITIALIZED again.
         transitionAvailable.acquire();
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
 
+        // Stop observing number of messages in snapshot sync, so this time it completes
         observeSnapshotSync = false;
 
-        // This time the snapshot sync completes
+        // Transition #2: This time the snapshot sync completes
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         transitionAvailable.acquire();
@@ -347,9 +351,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationEvent event;
 
         if (eventId != null) {
-            // For dummy implementations of Readers/Listeners enforce the event Id of the internal
-            // event so it matches the originated trigger.
-            event = new LogReplicationEvent(eventType, eventId);
+            // For testing we are enforcing internal events (like Trimmed Exception or Snapshot Complete),
+            // for this reason we must set the id of the event that preceded it, so it corresponds to the same state.
+            event = new LogReplicationEvent(eventType, new LogReplicationEventMetadata(eventId));
         } else {
             event = new LogReplicationEvent(eventType);
         }
