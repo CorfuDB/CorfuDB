@@ -33,7 +33,7 @@ import java.util.stream.Stream;
  *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
-    private final int MAX_NUM_SMR_ENTRY = 50;
+    private final int MAX_NUM_SMR_ENTRY = 5;
     private long globalSnapshot;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
@@ -78,10 +78,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param smrEntries
      * @return
      */
-    OpaqueEntry generateOpaqueEntry(UUID streamID, List smrEntries) {
+    OpaqueEntry generateOpaqueEntry(long version, UUID streamID, List smrEntries) {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
         map.put(streamID, smrEntries);
-        return new OpaqueEntry(currentMsgTs, map);
+        return new OpaqueEntry(version, map);
     }
 
     /**
@@ -93,8 +93,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     DataMessage generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
         ByteBuf buf = Unpooled.buffer();
-        OpaqueEntry.serialize(buf, generateOpaqueEntry(stream.uuid, entries));
         currentMsgTs = stream.maxVersion;
+        OpaqueEntry.serialize(buf, generateOpaqueEntry(currentMsgTs, stream.uuid, entries));
         if (!stream.iterator.hasNext()) {
             //mark the end of the current stream.
             currentMsgTs = globalSnapshot;

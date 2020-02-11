@@ -68,6 +68,7 @@ public class OpaqueEntry {
             for (int i = 0; i < numStreamUpdates; i++) {
                 streamUpdates.add((SMREntry) SMREntry.deserialize(buf, null, true));
             }
+            updates.put(streamId, streamUpdates);
         }
 
         return new OpaqueEntry(version, updates);

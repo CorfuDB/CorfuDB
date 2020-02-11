@@ -27,7 +27,7 @@ public class DataMessage {
     }
 
     public DataMessage(MessageType type, long entryTS, long preTS, long snapshot, long sequence, byte[] data) {
-        metadata = new MessageMetadata(type, entryTS, preTS, sequence, snapshot);
+        metadata = new MessageMetadata(type, entryTS, preTS, snapshot, sequence);
         this.data = data;
     }
 }
