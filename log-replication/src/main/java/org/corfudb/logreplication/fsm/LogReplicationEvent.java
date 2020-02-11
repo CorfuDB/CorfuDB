@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.Data;
-import org.corfudb.logreplication.transmitter.LogReplicationEventMetadata;
+import org.corfudb.logreplication.transmit.LogReplicationEventMetadata;
 
 import java.util.UUID;
 

@@ -1,11 +1,10 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.logreplication.receiver.StreamsSnapshotWriter;
-import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.SimpleReadProcessor;
-import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
-import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
+import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
+import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.transmit.SnapshotReadMessage;
+import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -36,7 +35,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
     HashMap<String, CorfuTable<Long, Long>> tables = new HashMap<>();
 
     /*
-     * the in-memory data for corfutables for verification.
+     * the in-memory data for corfu tables for verification.
      */
     HashMap<String, HashMap<Long, Long>> hashMap = new HashMap<String, HashMap<Long, Long>>();
 
@@ -98,8 +97,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
 
     void readMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        SimpleReadProcessor readProcessor = new SimpleReadProcessor(rt);
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config, readProcessor);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -154,7 +152,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         ckStreams();
 
         //update some data after checkpoint
-        generateData(NUM_KEYS/10);
+        generateData(NUM_KEYS);
 
         //generate messages
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
