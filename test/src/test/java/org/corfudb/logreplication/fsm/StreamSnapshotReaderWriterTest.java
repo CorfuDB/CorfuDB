@@ -3,7 +3,7 @@ package org.corfudb.logreplication.fsm;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.logreplication.receiver.StreamsSnapshotWriter;
 import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.SimpleReadProcessor;
+import org.corfudb.logreplication.transmitter.DefaultReadProcessor;
 import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
 import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -98,7 +98,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
 
     void readMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        SimpleReadProcessor readProcessor = new SimpleReadProcessor(rt);
+        DefaultReadProcessor readProcessor = new DefaultReadProcessor(rt);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config, readProcessor);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -154,7 +154,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         ckStreams();
 
         //update some data after checkpoint
-        generateData(NUM_KEYS/10);
+        generateData(NUM_KEYS);
 
         //generate messages
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
