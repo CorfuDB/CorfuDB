@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.message;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;

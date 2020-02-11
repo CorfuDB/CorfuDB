@@ -1,8 +1,8 @@
 package org.corfudb.logreplication.fsm;
 
 import org.corfudb.logreplication.LogReplicationError;
-import org.corfudb.logreplication.transmitter.SnapshotListener;
-import org.corfudb.logreplication.transmitter.DataMessage;
+import org.corfudb.logreplication.transmit.SnapshotListener;
+import org.corfudb.logreplication.message.DataMessage;
 
 import java.util.List;
 import java.util.UUID;
