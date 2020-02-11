@@ -1,6 +1,8 @@
 package org.corfudb.logreplication.receiver;
 
 import com.google.common.reflect.TypeToken;
+import lombok.Getter;
+import lombok.val;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.serializer.Serializers;
@@ -32,16 +34,28 @@ public class PersistedWriterMetadata {
     }
 
     public void setsrcBaseSnapshotStart(long ts) {
-        writerMetaDataTable.put(LAST_SNAPSHOT_TS_START, ts);
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
         lastSrcBaseSnapshotTimestamp = ts;
     }
 
     public void setsrcBaseSnapshotDone() {
-        writerMetaDataTable.put(LAST_SNAPSHOT_TS_DONE, lastSrcBaseSnapshotTimestamp);
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapDone.getVal(), lastSrcBaseSnapshotTimestamp);
     }
 
     public void setLastProcessedLogTimestamp(long ts) {
-        writerMetaDataTable.put(LAST_PROCESSED_LOG_TS, ts);
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
         lastProcessedLogTimestamp = ts;
+    }
+
+    enum PersistedWriterMetadataType {
+        LastSnapStart("lastSnapStart"),
+        LastSnapDone("lastSnapDone"),
+        LastLogProcessed("lastLogProcessed");
+
+        @Getter
+        String val;
+        PersistedWriterMetadataType(String newVal) {
+            val  = newVal;
+        }
     }
 }

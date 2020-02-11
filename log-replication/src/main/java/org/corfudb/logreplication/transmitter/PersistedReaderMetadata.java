@@ -2,6 +2,7 @@ package org.corfudb.logreplication.transmitter;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Data;
+import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.serializer.Serializers;
@@ -21,8 +22,8 @@ import java.util.UUID;
 @Data
 public class PersistedReaderMetadata {
     private final String TABLE_PREFIX_NAME = "READER-FOR-";
-    private final String LAST_SENT_SNAP_TS = "lastSentBaseSnapshotTimeStamp";
-    private final String LAST_ACK_SNAP_TS = "lastAckedTimeStamp";
+    //private final String LAST_SENT_SNAP_TS = "lastSentBaseSnapshotTimeStamp";
+    //private final String LAST_ACK_SNAP_TS = "lastAckedTimeStamp";
 
     private long lastSentBaseSnapshotTimestamp; //used by fullsync transmitter
     private long lastAckedTimestamp; //used by fullsync transmitter
@@ -50,7 +51,7 @@ public class PersistedReaderMetadata {
      * @param ts
      */
     public void setLastSentBaseSnapshotTimestamp(long ts) {
-        readerMetaDataTable.put(LAST_SENT_SNAP_TS,ts);
+        readerMetaDataTable.put(PersistedMetaDatayType.LastSnapSync.getVal(), ts);
         lastSentBaseSnapshotTimestamp = ts;
     }
 
@@ -60,7 +61,18 @@ public class PersistedReaderMetadata {
      * @param ts
      */
     public void setLastAckedTimestamp(long ts) {
-        readerMetaDataTable.put(LAST_ACK_SNAP_TS,ts);
+        readerMetaDataTable.put(PersistedMetaDatayType.LastLogSync.getVal(), ts);
         lastAckedTimestamp = ts;
+    }
+
+    private enum PersistedMetaDatayType {
+        LastSnapSync ("lastSnapSync"),
+        LastLogSync ("lastLogSync");
+
+        @Getter
+        String val;
+        PersistedMetaDatayType(String newVal) {
+            val = newVal;
+        }
     }
 }
