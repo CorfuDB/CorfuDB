@@ -21,7 +21,7 @@ public interface StreamingMap<K, V> extends Map<K, V> {
      */
     Stream<Map.Entry<K, V>> entryStream();
 
-    default Stream<Map.Entry<K, V>> mutableEntryStream() {
+    default Stream<Map.Entry<K, V>> unsafeEntryStream() {
         return entryStream();
     }
 }

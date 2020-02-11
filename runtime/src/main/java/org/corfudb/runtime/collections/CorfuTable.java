@@ -369,9 +369,11 @@ public class CorfuTable<K, V> implements
     @Override
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        return pool.submit(() -> mainMap.mutableEntryStream()
-                .map(Entry::getValue).filter(valuePredicate)
-                .collect(Collectors.toCollection(ArrayList::new))).join();
+        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+            return pool.submit(() -> entries
+                    .map(Entry::getValue).filter(valuePredicate)
+                    .collect(Collectors.toCollection(ArrayList::new))).join();
+        }
     }
 
     /** {@inheritDoc} */
@@ -379,9 +381,11 @@ public class CorfuTable<K, V> implements
     @Accessor
     public Collection<Map.Entry<K, V>> scanAndFilterByEntry(
             Predicate<? super Map.Entry<K, V>> entryPredicate) {
-        return pool.submit(() -> mainMap.mutableEntryStream()
-                .filter(entryPredicate)
-                .collect(Collectors.toCollection(ArrayList::new))).join();
+        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+            return pool.submit(() -> entries
+                    .filter(entryPredicate)
+                    .collect(Collectors.toCollection(ArrayList::new))).join();
+        }
     }
 
     /** {@inheritDoc} */

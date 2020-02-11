@@ -40,7 +40,7 @@ public class StreamingMapDecorator<K, V> implements ContextAwareMap<K, V> {
      * {@inheritDoc}
      */
     @Override
-    public Stream<Entry<K, V>> mutableEntryStream() {
+    public Stream<Entry<K, V>> unsafeEntryStream() {
         return mapImpl.entrySet().stream().parallel();
     }
 
