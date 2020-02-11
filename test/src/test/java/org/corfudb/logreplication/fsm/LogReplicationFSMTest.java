@@ -1,17 +1,22 @@
 package org.corfudb.logreplication.fsm;
 
+import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.LogEntryListener;
-import org.corfudb.logreplication.transmitter.LogEntryReader;
-import org.corfudb.logreplication.transmitter.LogReplicationEventMetadata;
-import org.corfudb.logreplication.transmitter.SnapshotListener;
-import org.corfudb.logreplication.transmitter.SnapshotReader;
+import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.transmit.DefaultReadProcessor;
+import org.corfudb.logreplication.transmit.LogEntryListener;
+import org.corfudb.logreplication.transmit.LogEntryReader;
+import org.corfudb.logreplication.transmit.LogReplicationEventMetadata;
+import org.corfudb.logreplication.transmit.SnapshotListener;
+import org.corfudb.logreplication.transmit.SnapshotReader;
+import org.corfudb.logreplication.transmit.SnapshotTransmitter;
+import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.junit.Before;
@@ -34,19 +39,21 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     // Parameters for writes
     private static final int NUM_ENTRIES = 10;
+    private static final int LARGE_NUM_ENTRIES = 100;
     private static final String PAYLOAD_FORMAT = "hello world %s";
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
-
-    private boolean observeSnapshotSync = false;
-    private int limitSnapshotMessages = 0;
-
     // We observe the transition counter to know that a transition occurred.
     private ObservableValue transitionObservable;
+
+    // Flag indicating if we should observer a snapshot sync, this is to interrupt it at any given stage
+    private boolean observeSnapshotSync = false;
+    private int limitSnapshotMessages = 0;
     private ObservableValue snapshotMessageCounterObservable;
+
     private LogReplicationFSM fsm;
     private CorfuRuntime runtime;
     private SnapshotListener snapshotListener;
@@ -54,7 +61,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private SnapshotReader snapshotReader;
     private LogEntryReader logEntryReader;
     private LogReplicationConfig logReplicationConfig;
-    private TestTransmitterConfig testConfig;
 
     @Before
     public void setRuntime() {
@@ -66,16 +72,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     private void initialize() {
         // Test configuration shared with Readers and Listeners for testing purposes
-        testConfig = TestTransmitterConfig.builder()
-                .endpoint(getDefaultEndpoint())
-                .numEntries(NUM_ENTRIES)
-                .payloadFormat(PAYLOAD_FORMAT)
-                .streamName(TEST_STREAM_NAME)
-                .batchSize(BATCH_SIZE).build();
+
 
         // The dummy implementation of our test snapshot/log entry reader does not look into streams,
         // it works at the address layer, for this reason we can provide an empty set as the streams to replicate.
-        logReplicationConfig = new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID());
+        logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME), UUID.randomUUID());
     }
 
     /**
@@ -94,7 +95,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testLogReplicationFSMTransitions() throws Exception {
 
-        initLogReplicationFSM(true);
+        initLogReplicationFSM(ReaderImplementation.EMPTY);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -131,7 +132,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testTrimExceptionFSM() throws Exception {
-        initLogReplicationFSM(true);
+        initLogReplicationFSM(ReaderImplementation.EMPTY);
 
         // Initial acquire of the semaphore, so the occurrence of the transition releases it for the transition itself.
         transitionAvailable.acquire();
@@ -143,14 +144,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
+        // TODO: CHANGE TRIMMED EXCEPTION, CANCEL_SYNC
+
         // Transition #2: Trimmed Exception on Log Entry Sync for an invalid event id, this should not be taken as
         // a valid trimmed exception for the current state, hence it remains in the same state
-        transition(LogReplicationEventType.TRIMMED_EXCEPTION, LogReplicationStateType.IN_LOG_ENTRY_SYNC, UUID.randomUUID());
+        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_LOG_ENTRY_SYNC, UUID.randomUUID());
 
         // Transition #3: Trimmed Exception
         // Because this is an internal state, we need to capture the actual event id internally generated
         UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionEventId();
-        transition(LogReplicationEventType.TRIMMED_EXCEPTION, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID);
+        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID);
     }
 
 
@@ -196,7 +199,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private void testSnapshotTransmitter(int batchSize) throws Exception {
 
         // Initialize State Machine
-        initLogReplicationFSM(false);
+        initLogReplicationFSM(ReaderImplementation.TEST);
 
         // Modify test configuration to the specified batch size
         ((TestSnapshotReader)snapshotReader).setBatchSize(batchSize);
@@ -247,7 +250,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         observeSnapshotSync = true;
 
         // Initialize State Machine
-        initLogReplicationFSM(false);
+        initLogReplicationFSM(ReaderImplementation.TEST);
 
         // Modify test configuration to the specified batch size (since we write NUM_ENTRIES = 10) and we send in
         // batches of BATCH_SIZE = 2, we will stop snapshot sync at 2 sent messages.
@@ -269,6 +272,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
 
+        ((TestSnapshotListener)snapshotListener).getTxQueue().clear();
+
         // Stop observing number of messages in snapshot sync, so this time it completes
         observeSnapshotSync = false;
 
@@ -277,6 +282,78 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
+        Queue<DataMessage> listenerQueue = ((TestSnapshotListener)snapshotListener).getTxQueue();
+
+        assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
+
+        for (int i=0; i<NUM_ENTRIES; i++) {
+            assertThat(listenerQueue.poll().getData())
+                    .isEqualTo( String.format("hello world %s", i).getBytes());
+        }
+    }
+
+
+    /**
+     * Test Snapshot Sync for Default Stream-based implementations.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSnapshotSyncStreamImplementation() throws Exception {
+
+        // Initialize State Machine
+        initLogReplicationFSM(ReaderImplementation.STREAMS);
+
+        // Write LARGE_NUM_ENTRIES to streamA
+        writeToMap();
+
+        // Initial acquire of semaphore, the transition method will block until a transition occurs
+        transitionAvailable.acquire();
+
+        // Transition #1: Replication Start
+        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
+        // Transition #2: Snapshot Sync Request
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+
+        // Block until the snapshot sync completes and next transition occurs.
+        // The transition should happen to IN_LOG_ENTRY_SYNC state.
+        for (int i = 0; i<LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY*SnapshotTransmitter.SNAPSHOT_BATCH_SIZE); i++) {
+            transitionAvailable.acquire();
+        }
+
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
+        Queue<DataMessage> listenerQueue = ((TestSnapshotListener)snapshotListener).getTxQueue();
+
+        assertThat(listenerQueue.size()).isEqualTo(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY);
+
+        // Transactional puts into the stream (incremental updates)
+        writeTxIncrementalUpdates();
+
+        int incrementalUpdates = 0;
+
+        while(incrementalUpdates < NUM_ENTRIES) {
+           ((TestLogEntryListener)logEntryListener).getDataMessageQueue().poll();
+           incrementalUpdates++;
+        }
+
+        assertThat(incrementalUpdates).isEqualTo(NUM_ENTRIES);
+    }
+
+    private void writeTxIncrementalUpdates() {
+        CorfuTable<String, String> map = runtime.getObjectsView()
+                .build()
+                .setStreamName(TEST_STREAM_NAME)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .open();
+
+        for(int i=0; i<NUM_ENTRIES; i++) {
+            runtime.getObjectsView().TXBegin();
+            map.put(String.valueOf(i), String.valueOf(i));
+            runtime.getObjectsView().TXEnd();
+        }
     }
 
     private void writeToStream() {
@@ -300,32 +377,66 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
     }
 
+    private void writeToMap() {
+        CorfuTable<String, String> map = runtime.getObjectsView()
+                .build()
+                .setStreamName(TEST_STREAM_NAME)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .open();
+
+        for (int i=0; i<LARGE_NUM_ENTRIES; i++) {
+            map.put(String.valueOf(i), String.valueOf(i));
+        }
+    }
+
     /**
      * Initialize Log Replication FSM
      *
      * Use empty implementations for those cases where you want to verify the behavior of the state machine.
      *
-     * @param emptyImpl True, use empty implementations of readers and listeners (no logic). False, otherwise.
+     * @param readerImpl implementation to use for readers.
      */
-    private void initLogReplicationFSM(boolean emptyImpl) {
+    private void initLogReplicationFSM(ReaderImplementation readerImpl) {
 
         logEntryReader = new TestLogEntryReader();
         logEntryListener = new TestLogEntryListener();
 
-        if (emptyImpl) {
-            // Empty Implementations of Readers and Listeners - desired for testing transitions only
-            snapshotReader = new EmptySnapshotReader();
-            snapshotListener = new EmptySnapshotListener();
-        } else {
-            // Dummy implementations of readers/listener which query the log and insert into a queue
-            snapshotReader = new TestSnapshotReader(testConfig);
-            snapshotListener = new TestSnapshotListener(testConfig);
+
+        switch(readerImpl) {
+            case EMPTY:
+                // Empty implementations of reader and listener - used for testing transitions
+                snapshotReader = new EmptySnapshotReader();
+                snapshotListener = new EmptySnapshotListener();
+                break;
+            case TEST:
+                // Dummy implementations of reader and listener for testing
+                // The reader queries the log for the config provided (stream name, number of entries)
+                // The listener inserts what it receives into a queue
+                TestReaderConfiguration testConfig = TestReaderConfiguration.builder()
+                        .endpoint(getDefaultEndpoint())
+                        .numEntries(NUM_ENTRIES)
+                        .payloadFormat(PAYLOAD_FORMAT)
+                        .streamName(TEST_STREAM_NAME)
+                        .batchSize(BATCH_SIZE).build();
+
+                snapshotReader = new TestSnapshotReader(testConfig);
+                snapshotListener = new TestSnapshotListener();
+                break;
+            case STREAMS:
+                // Default implementation used for Log Replication (stream-based)
+                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME),
+                        UUID.randomUUID());
+                snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
+                        logReplicationConfig);
+                snapshotListener = new TestSnapshotListener();
+                break;
+            default:
+                break;
         }
 
-        fsm = new LogReplicationFSM(runtime, logReplicationConfig, snapshotReader, snapshotListener,
-                logEntryReader, logEntryListener,
-                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-consumer").build()));
+        fsm = new LogReplicationFSM(runtime, snapshotReader, snapshotListener,
+                logEntryReader, logEntryListener, new DefaultReadProcessor(runtime),
+                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
 
@@ -399,5 +510,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }
+    }
+
+    public enum ReaderImplementation {
+        EMPTY,
+        TEST,
+        STREAMS
     }
 }

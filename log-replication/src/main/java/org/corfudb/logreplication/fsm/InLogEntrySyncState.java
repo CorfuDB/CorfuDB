@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.transmitter.LogEntryTransmitter;
+import org.corfudb.logreplication.transmit.LogEntryTransmitter;
 
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -25,7 +25,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     private LogEntryTransmitter logEntryTransmitter;
 
     /*
-     * A future on the log entry transmitter, transmit call.
+     * A future on the log entry transmit, transmit call.
      */
     private Future<?> logEntrySyncFuture;
 
@@ -47,21 +47,22 @@ public class InLogEntrySyncState implements LogReplicationState {
     }
 
     @Override
-    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition {
+    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 cancelLogEntrySync("snapshot sync request.");
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionEventId(event.getEventID());
                 return snapshotSyncState;
-            case TRIMMED_EXCEPTION:
-                // If trim was intended for current snapshot sync task, cancel and transition to new state
+            case SYNC_CANCEL:
+                // If cancel was intended for current snapshot sync task, cancel and transition to new state
+                // In the case of lpg entry sync, cancel is caused by an encountered trimmed exception.
                 if (transitionEventId == event.getMetadata().getRequestId()) {
                     cancelLogEntrySync("trimmed exception.");
                     return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
                 }
 
-                log.warn("Trimmed exception for eventId {}, but running log entry sync for {}",
+                log.warn("Log Entry Sync cancel for eventId {}, but running log entry sync for {}",
                         event.getEventID(), transitionEventId);
                 return this;
             case REPLICATION_STOP:
@@ -86,7 +87,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
             }
 
-            throw new IllegalLogReplicationTransition(event.getType(), getType());
+            throw new IllegalTransitionException(event.getType(), getType());
         }
     }
 
@@ -115,7 +116,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            logEntrySyncFuture = fsm.getStateMachineWorkers().submit(logEntryTransmitter::transmit);
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntryTransmitter::transmit);
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
         }

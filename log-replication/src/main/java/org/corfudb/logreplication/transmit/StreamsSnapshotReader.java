@@ -1,10 +1,11 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.MessageType;
+import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -33,7 +34,7 @@ import java.util.stream.Stream;
  *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
-    private final int MAX_NUM_SMR_ENTRY = 5;
+    public static final int MAX_NUM_SMR_ENTRY = 5;
     private long globalSnapshot;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
@@ -44,16 +45,13 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
 
-    private ReadProcessor readProcessor;
-
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config, ReadProcessor readProcessor) {
+    public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         this.config = config;
         streams = config.getStreamsToReplicate();
-        this.readProcessor = readProcessor;
     }
 
     /**
@@ -157,12 +155,14 @@ public class StreamsSnapshotReader implements SnapshotReader {
         boolean endFullSync = false;
         List msgs = new ArrayList<DataMessage>();
 
+        System.out.println("read xq");
+
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
                 currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, globalSnapshot);
 
-                // If the new stream has entries to be proccessed, go to the next step
+                // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
                     break;
                 } else {

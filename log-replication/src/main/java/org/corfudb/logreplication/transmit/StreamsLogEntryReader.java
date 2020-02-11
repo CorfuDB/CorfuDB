@@ -1,10 +1,11 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.MessageType;
+import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -31,13 +32,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private long preMsgTs; //the timestamp of the transaction log that is the previous message
     private long currentMsgTs; //the timestamp of the transaction log that is the current message
     private long sequence; //the sequence number of the message based on the globalBaseSnapshot
-    private ReadProcessor readProcessor;
 
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config, ReadProcessor readProcessor) {
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         Set<String> streams = config.getStreamsToReplicate();
-        this.readProcessor = readProcessor;
 
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));

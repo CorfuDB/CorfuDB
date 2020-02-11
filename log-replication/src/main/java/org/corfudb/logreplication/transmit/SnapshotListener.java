@@ -1,6 +1,6 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
-import org.corfudb.logreplication.LogReplicationError;
+import org.corfudb.logreplication.message.DataMessage;
 
 import java.util.List;
 import java.util.UUID;
