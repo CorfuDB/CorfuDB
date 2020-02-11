@@ -24,6 +24,7 @@ public class LogReplicationConfig {
     /*
      * Unique identifier of the remote/destination site ID.
      */
+    // TODO: Tuple? <APP_ID, DEST_CLUSTER_ID> ?
     private UUID remoteSiteID;
 
     /**
