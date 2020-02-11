@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.receiver;
+package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
@@ -7,7 +7,7 @@ import org.corfudb.logreplication.MessageMetadata;
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.logreplication.transmitter.DataMessage;
+import org.corfudb.logreplication.message.DataMessage;
 
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;

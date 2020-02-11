@@ -1,7 +1,8 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 
 /**
@@ -34,6 +35,8 @@ public class LogEntryTransmitter {
      */
     private LogReplicationFSM logReplicationFSM;
 
+    private ReadProcessor readProcessor;
+
     private volatile boolean taskActive = false;
 
     /**
@@ -51,10 +54,11 @@ public class LogEntryTransmitter {
      * @param logEntryListener log entry listener implementation (application callback)
      */
     public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, LogEntryListener logEntryListener,
-                               LogReplicationFSM logReplicationFSM) {
+                               ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
         this.runtime = runtime;
         this.logEntryReader = logEntryReader;
         this.logEntryListener = logEntryListener;
+        this.readProcessor = readProcessor;
         this.logReplicationFSM = logReplicationFSM;
     }
 
@@ -71,6 +75,7 @@ public class LogEntryTransmitter {
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read();
+                // readProcessor.process(message);
                 if (logEntryListener.onNext(message)) {
                     // Write meta-data
                     reads++;
