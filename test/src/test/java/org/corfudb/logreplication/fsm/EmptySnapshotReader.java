@@ -11,7 +11,7 @@ import java.util.Collections;
 public class EmptySnapshotReader implements SnapshotReader {
     @Override
     public SnapshotReadMessage read() {
-        return new SnapshotReadMessage(Collections.EMPTY_LIST, false);
+        return new SnapshotReadMessage(Collections.EMPTY_LIST, true);
     }
 
     @Override
