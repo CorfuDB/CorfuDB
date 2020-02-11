@@ -29,7 +29,7 @@ public class InitializedState implements LogReplicationState {
     }
 
     @Override
-    public LogReplicationState processEvent(LogReplicationEvent event) {
+    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 // Set the id of the event that caused the transition to the new state
@@ -49,21 +49,9 @@ public class InitializedState implements LogReplicationState {
                 return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
                 log.warn("Unexpected log replication event {} when in initialized state.", event.getType());
+                throw new IllegalLogReplicationTransition(event.getType(), getType());
             }
         }
-        return this;
-    }
-
-    @Override
-    public void onEntry(LogReplicationState from) {
-        /*
-         * There is no automatic transition from this state, external signals to start snapshot sync or
-         * to start replication (upon connectivity to remote site) are required.
-         */
-    }
-
-    @Override
-    public void onExit(LogReplicationState to) {
     }
 
     @Override
