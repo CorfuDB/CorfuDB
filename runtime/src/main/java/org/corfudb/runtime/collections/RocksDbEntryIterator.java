@@ -35,15 +35,25 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
      */
     private Map.Entry<K, V> next;
 
+    /**
+     * Whether to load the value of a mapping
+     */
+    private final boolean loadValues;
+
     final private ReadOptions readOptions;
 
-    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer) {
+    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer, boolean loadValues) {
         // Start iterator at the current snapshot
         readOptions = new ReadOptions();
         readOptions.setSnapshot(null);
         this.wrappedRocksIterator = new WrappedRocksIterator(rocksDB.newIterator(readOptions));
         this.serializer = serializer;
         wrappedRocksIterator.seekToFirst();
+        this.loadValues = loadValues;
+    }
+
+    public RocksDbEntryIterator(RocksDB rocksDB, ISerializer serializer) {
+        this(rocksDB, serializer, true);
     }
 
     /**
@@ -53,9 +63,10 @@ public class RocksDbEntryIterator<K, V> implements Iterator<Map.Entry<K, V>>, Au
     public boolean hasNext() {
         if (next == null && wrappedRocksIterator.isOpen() && wrappedRocksIterator.isValid()) {
             // Retrieve entry if it exists and move the iterator
-            next = new AbstractMap.SimpleEntry(
-                    serializer.deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.key()), null),
-                    serializer.deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.value()), null));
+            K key = (K) serializer.deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.key()), null);
+            V value = loadValues ? (V) serializer
+                    .deserialize(Unpooled.wrappedBuffer(wrappedRocksIterator.value()), null) : null;
+            next = new AbstractMap.SimpleEntry(key, value);
             wrappedRocksIterator.next();
         }
 
