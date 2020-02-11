@@ -12,6 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ClusterHealthTest {
     private final LayoutUtil layoutUtil = new LayoutUtil();
 
+    /**
+     * Get cluster status from a layout with all responsive nodes. Expected result is STABLE status
+     */
     @Test
     public void testClusterHealth() {
         final String server1 = "server1";

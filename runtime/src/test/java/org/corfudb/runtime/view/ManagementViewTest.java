@@ -17,6 +17,9 @@ class ManagementViewTest {
     private final LayoutUtil layoutUtil = new LayoutUtil();
     private final ManagementView managementView = new ManagementView(Mockito.mock(CorfuRuntime.class));
 
+    /**
+     * Check that getting a quorum layout from the list of layouts works as expected
+     */
     @Test
     void testGetLayoutForQuorum() {
         final String server1 = "server1";
