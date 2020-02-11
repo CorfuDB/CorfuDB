@@ -79,7 +79,11 @@ public class ReplicationRxManager {
         this.snapshotWriter.reset(srcSnapTimestamp);
     }
 
+    /**
+     * The end of snapshot fullsync
+     */
     public void snapshotDone() {
+        //check if the all the expected message has received
         rxState = RxState.LOG_SYN;
         persistedWriterMetadata.setsrcBaseSnapshotDone();
     }
