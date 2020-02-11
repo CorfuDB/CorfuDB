@@ -1,6 +1,6 @@
-package org.corfudb.logreplication.receiver;
+package org.corfudb.logreplication.receive;
 
-import org.corfudb.logreplication.transmitter.DataMessage;
+import org.corfudb.logreplication.message.DataMessage;
 
 import java.util.List;
 

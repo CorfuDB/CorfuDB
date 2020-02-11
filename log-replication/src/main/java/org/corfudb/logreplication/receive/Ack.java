@@ -1,8 +1,8 @@
-package org.corfudb.logreplication.receiver;
+package org.corfudb.logreplication.receive;
 
 import lombok.Builder;
 import lombok.Data;
-import org.corfudb.logreplication.MessageMetadata;
+import org.corfudb.logreplication.message.MessageMetadata;
 
 @Builder
 @Data

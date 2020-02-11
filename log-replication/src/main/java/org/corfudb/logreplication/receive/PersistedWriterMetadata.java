@@ -1,8 +1,7 @@
-package org.corfudb.logreplication.receiver;
+package org.corfudb.logreplication.receive;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
-import lombok.val;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.serializer.Serializers;

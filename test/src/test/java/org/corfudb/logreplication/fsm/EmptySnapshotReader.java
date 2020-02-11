@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
-import org.corfudb.logreplication.transmitter.SnapshotReader;
+import org.corfudb.logreplication.transmit.SnapshotReadMessage;
+import org.corfudb.logreplication.transmit.SnapshotReader;
 
 import java.util.Collections;
 

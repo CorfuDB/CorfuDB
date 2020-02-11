@@ -1,10 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -16,7 +13,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 

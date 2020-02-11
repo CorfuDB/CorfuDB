@@ -1,6 +1,7 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import lombok.Data;
+import org.corfudb.logreplication.message.DataMessage;
 
 import java.util.List;
 

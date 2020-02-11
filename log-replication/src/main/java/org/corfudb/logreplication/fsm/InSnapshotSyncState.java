@@ -4,7 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
+import org.corfudb.logreplication.transmit.SnapshotTransmitter;
 
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -46,7 +46,7 @@ public class InSnapshotSyncState implements LogReplicationState {
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
-     * @param snapshotTransmitter snapshot sync transmitter (read and send)
+     * @param snapshotTransmitter snapshot sync transmit (read and send)
      */
     public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotTransmitter snapshotTransmitter) {
         this.fsm = logReplicationFSM;
@@ -54,7 +54,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     }
 
     @Override
-    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition {
+    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 /*
@@ -85,30 +85,14 @@ public class InSnapshotSyncState implements LogReplicationState {
                     log.warn("Unexpected snapshot sync continue event {} when in snapshot sync state {}.",
                             event.getEventID(), transitionEventId);
                 }
-            case SNAPSHOT_SYNC_CANCEL:
+            case SYNC_CANCEL:
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
-                if (transitionEventId == event.getEventID()) {
-                    //Cancel snapshot sync, if it is still in progress.
-                    cancelSnapshotSync("a explicit cancel by app.");
-                    return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
-                }
-
-                log.warn("Snapshot sync cancel requested for eventId {}, but running snapshot sync for {}",
-                        event.getEventID(), transitionEventId);
-                return this;
-            case TRIMMED_EXCEPTION:
-                // If trim was intended for current snapshot sync task, cancel and transition to new state
                 if (transitionEventId == event.getMetadata().getRequestId()) {
-                    /*
-                    Cancel snapshot sync, if it is still in progress. If transmit cannot be canceled
-                    we cannot transition to the new state. In this case it should be canceled as a TrimmedException
-                    occurred.
-                    */
-                    cancelSnapshotSync("trimmed exception.");
+                    cancelSnapshotSync("cancellation request.");
                     return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
                 }
 
-                log.warn("Trimmed exception for eventId {}, but running snapshot sync for {}",
+                log.warn("Sync Cancel for eventId {}, but running snapshot sync for {}",
                         event.getEventID(), transitionEventId);
                 return this;
             case SNAPSHOT_SYNC_COMPLETE:
@@ -151,7 +135,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
 
-            throw new IllegalLogReplicationTransition(event.getType(), getType());
+            throw new IllegalTransitionException(event.getType(), getType());
         }
     }
 
@@ -159,7 +143,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         try {
             /*
-             If the transition is to itself, the snapshot sync is continuing, no need to reset the transmitter.
+             If the transition is to itself, the snapshot sync is continuing, no need to reset the transmit.
              */
             if (from != this) {
                 snapshotTransmitter.reset();
@@ -168,7 +152,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             /*
              Start transmit of snapshot sync
              */
-            transmitFuture = fsm.getStateMachineWorkers().submit(() -> snapshotTransmitter.transmit(transitionEventId));
+            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotTransmitter.transmit(transitionEventId));
 
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);

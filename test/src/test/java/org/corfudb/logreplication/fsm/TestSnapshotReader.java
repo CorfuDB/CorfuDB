@@ -1,10 +1,9 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
-import org.corfudb.logreplication.transmitter.SnapshotReader;
+import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.transmit.SnapshotReadMessage;
+import org.corfudb.logreplication.transmit.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,15 +16,13 @@ import java.util.List;
  */
 public class TestSnapshotReader implements SnapshotReader {
 
-    private TestTransmitterConfig config;
-
-    private long baseSnapshotTimestamp = Address.NON_ADDRESS;
+    private TestReaderConfiguration config;
 
     private int globalIndex = 0;
 
     private CorfuRuntime runtime;
 
-    public TestSnapshotReader(TestTransmitterConfig config) {
+    public TestSnapshotReader(TestReaderConfiguration config) {
         this.config = config;
         this.runtime = new CorfuRuntime(config.getEndpoint()).connect();
     }
@@ -49,7 +46,6 @@ public class TestSnapshotReader implements SnapshotReader {
 
     @Override
     public void reset(long snapshotTimestamp) {
-        baseSnapshotTimestamp = snapshotTimestamp;
         globalIndex = 0;
     }
 
