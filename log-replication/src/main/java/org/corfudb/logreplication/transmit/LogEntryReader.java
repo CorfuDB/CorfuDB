@@ -1,4 +1,6 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
+
+import org.corfudb.logreplication.message.DataMessage;
 
 /**
  * An Interface for Log Entry Reader

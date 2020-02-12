@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
@@ -50,10 +50,12 @@ public class SnapshotTransmitter {
 
     private volatile boolean stopSnapshotSync = false;
 
-    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener, LogReplicationFSM fsm) {
+    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener,
+                               ReadProcessor readProcessor,LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.snapshotListener = snapshotListener;
+        this.readProcessor = readProcessor;
         this.fsm = fsm;
     }
 
@@ -73,6 +75,7 @@ public class SnapshotTransmitter {
             while (messagesSent < SNAPSHOT_BATCH_SIZE && !endRead && !stopSnapshotSync) {
                 try {
                     snapshotReadMessage = snapshotReader.read();
+                    System.out.println("read");
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
@@ -94,6 +97,7 @@ public class SnapshotTransmitter {
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
                     onNext = snapshotListener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId);
                     messagesSent++;
+                    System.out.println("sent: " + messagesSent);
                     observedCounter.setValue(messagesSent);
                     if (!onNext) {
                         log.error("SnapshotListener did not acknowledge next sent message(s). Notify error.");
@@ -104,6 +108,8 @@ public class SnapshotTransmitter {
                                 new LogReplicationEventMetadata(snapshotSyncEventId)));
                         break;
                     }
+                } else {
+                    System.out.println("Nothing!!!");
                 }
 
                 endRead = snapshotReadMessage.isEndRead();

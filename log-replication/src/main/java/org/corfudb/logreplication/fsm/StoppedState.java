@@ -20,16 +20,6 @@ public class StoppedState implements LogReplicationState {
     }
 
     @Override
-    public void onEntry(LogReplicationState from) {
-
-    }
-
-    @Override
-    public void onExit(LogReplicationState to) {
-
-    }
-
-    @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.STOPPED;
     }

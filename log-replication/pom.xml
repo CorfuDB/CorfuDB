@@ -9,7 +9,7 @@
   </parent>
   <groupId>org.corfudb</groupId>
   <artifactId>log-replication</artifactId>
-  <version>${revision}</version>
+  <version>1.0-SNAPSHOT</version>
   <name>log-replication</name>
   <url>http://maven.apache.org</url>
   <dependencies>
