@@ -3,7 +3,6 @@ package org.corfudb.logreplication.transmit;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
@@ -31,17 +30,14 @@ import java.util.UUID;
 public class SnapshotTransmitter {
 
     // TODO (probably move to a configuration file)
-    private static final int SNAPSHOT_BATCH_SIZE = 5;
+    public static final int SNAPSHOT_BATCH_SIZE = 5;
 
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
     private SnapshotListener snapshotListener;
     private ReadProcessor readProcessor;
     private LogReplicationFSM fsm;
-    private boolean onNext;
-    private int messagesSent = 0; // Used for testing purposes
     private long baseSnapshotTimestamp;
-
 
     @Getter
     @VisibleForTesting
@@ -65,62 +61,56 @@ public class SnapshotTransmitter {
      * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
      */
     public void transmit(UUID snapshotSyncEventId) {
-        boolean endRead = false;
-        SnapshotReadMessage snapshotReadMessage = null;
+
+        boolean endRead = false;    // Flag indicating the snapshot sync is completed
+        boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
+        int messagesSent = 0;
+        SnapshotReadMessage snapshotReadMessage;
+
 
         // Skip if no data is present in the log
         if (Address.isAddress(baseSnapshotTimestamp)) {
 
-            // Do until SNAPSHOT_BATCH_SIZE messages are sent or the reader reaches the end of the reads
+            // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
+            // or snapshot sync is stopped
             while (messagesSent < SNAPSHOT_BATCH_SIZE && !endRead && !stopSnapshotSync) {
                 try {
                     snapshotReadMessage = snapshotReader.read();
-                    System.out.println("read");
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
-                    /*
-                     In the case of a Trimmed Exception, enqueue the event for state transition.
-
-                     The event needs to carry the snapshotSyncEventId under which it was originated, so it is
-                     correlated to the same initiating state.
-                    */
-                    fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.TRIMMED_EXCEPTION,
-                            new LogReplicationEventMetadata(snapshotSyncEventId)));
-
-                    // Report error to the snapshotListener
-                    snapshotListener.onError(LogReplicationError.TRIM_SNAPSHOT_SYNC, snapshotSyncEventId);
+                    log.warn("Cancel snapshot sync due to trimmed exception.", te);
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
+                    cancel = true;
+                    break;
                 } catch (Exception e) {
-                    // Can Snapshot Reader send other exceptions?
+                    log.error("Caught exception during snapshot sync", e);
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
+                    cancel = true;
+                    break;
                 }
 
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
-                    onNext = snapshotListener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId);
-                    messagesSent++;
-                    System.out.println("sent: " + messagesSent);
-                    observedCounter.setValue(messagesSent);
-                    if (!onNext) {
+                    // Send message to snapshotListener (application)
+                    if (!snapshotListener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
+                        // TODO: Optimize (back-off) retry on the failed send.
                         log.error("SnapshotListener did not acknowledge next sent message(s). Notify error.");
-                        // TODO (Anny): Optimize (back-off) retry on the failed send.
-                        // Send on Error as snapshot sync is required.
-                        snapshotListener.onError(LogReplicationError.LISTENER_ERROR, snapshotSyncEventId);
-                        fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL,
-                                new LogReplicationEventMetadata(snapshotSyncEventId)));
+                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.LISTENER_ERROR);
+                        cancel = true;
                         break;
                     }
-                } else {
-                    System.out.println("Nothing!!!");
-                }
 
+                    messagesSent++;
+                    observedCounter.setValue(messagesSent);
+                }
                 endRead = snapshotReadMessage.isEndRead();
             }
 
             if (endRead) {
-                // Terminated due to end of reads for this snapshot sync.
-                log.debug("End of snapshot read found. Snapshot sync completed for {} on timestamp {}",
-                        snapshotSyncEventId, baseSnapshotTimestamp);
+                // Snapshot Sync Completed
+                log.info("Snapshot sync completed for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
                 snapshotSyncComplete(snapshotSyncEventId);
-            } else {
+            } else if (!cancel) {
                 // Terminated due to number of batch messages being sent. This snapshot sync needs to
                 // continue.
 
@@ -144,6 +134,15 @@ public class SnapshotTransmitter {
                 new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
     }
 
+    private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
+        // Enqueue cancel event
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
+                new LogReplicationEventMetadata(snapshotSyncEventId)));
+
+        // Report error to the application through the snapshotListener
+        snapshotListener.onError(error, snapshotSyncEventId);
+    }
+
     /**
      * Reset due to the start of a new snapshot sync.
      */
@@ -156,7 +155,6 @@ public class SnapshotTransmitter {
         // Starting a new snapshot sync, reset the reader's snapshot timestamp
         snapshotReader.reset(baseSnapshotTimestamp);
 
-        messagesSent = 0;
         stopSnapshotSync = false;
     }
 

@@ -160,7 +160,7 @@ public class ReplicationTxManager {
      */
     public void cancelSnapshotSync(UUID snapshotSyncId) {
         // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CANCEL,
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncId)));
     }
 
