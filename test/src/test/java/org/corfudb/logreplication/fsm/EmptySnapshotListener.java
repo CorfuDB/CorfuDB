@@ -1,6 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.LogReplicationError;
+import org.corfudb.logreplication.transmit.LogReplicationError;
 import org.corfudb.logreplication.transmit.SnapshotListener;
 import org.corfudb.logreplication.message.DataMessage;
 
