@@ -1,6 +1,5 @@
 package org.corfudb.logreplication.transmit;
 
-import org.corfudb.logreplication.LogReplicationError;
 import org.corfudb.logreplication.message.DataMessage;
 
 import java.util.List;

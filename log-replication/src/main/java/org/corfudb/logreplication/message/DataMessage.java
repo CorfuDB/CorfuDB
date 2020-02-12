@@ -4,8 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.logreplication.MessageMetadata;
-import org.corfudb.logreplication.MessageType;
 
 /**
  * This class represents the data message, it contains the data to be replicated and metadata required for sequencing.

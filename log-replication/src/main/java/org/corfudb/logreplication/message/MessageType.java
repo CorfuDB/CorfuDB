@@ -1,4 +1,4 @@
-package org.corfudb.logreplication;
+package org.corfudb.logreplication.message;
 
 public enum MessageType {
     LOG_ENTRY_MESSAGE,
