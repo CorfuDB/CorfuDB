@@ -116,6 +116,11 @@ public class LogEntryWriter {
         }
     }
 
+    /**
+     * Apply message generate by log entry reader and will apply at the destination corfu cluster.
+     * @param msg
+     * @throws ReplicationWriterException
+     */
     public void apply(DataMessage msg) throws ReplicationWriterException {
         verifyMetadata(msg.getMetadata());
 
@@ -125,6 +130,7 @@ public class LogEntryWriter {
                     msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
             return;
         }
+
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
@@ -151,5 +157,13 @@ public class LogEntryWriter {
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
         }
+    }
+
+    /*
+     */
+    public void setTimestamp(long snapshot, long ackTimestamp) {
+        srcGlobalSnapshot = snapshot;
+        lastMsgTs = ackTimestamp;
+        cleanMsgQ(ackTimestamp);
     }
 }
