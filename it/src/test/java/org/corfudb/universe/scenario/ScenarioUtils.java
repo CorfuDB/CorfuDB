@@ -134,7 +134,7 @@ public class ScenarioUtils {
                 table.get(value);
                 return;
             } catch (UnreachableClusterException e) {
-                log.info("Successfully waited failure detector to detect cluster down");
+                log.info("Successfully waited failure detector to detect cluster up");
             }
 
             waitUninterruptibly(Duration.ofSeconds(10));

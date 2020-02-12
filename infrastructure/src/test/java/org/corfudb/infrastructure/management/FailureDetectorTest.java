@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.management;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -11,6 +9,8 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class FailureDetectorTest {
 
