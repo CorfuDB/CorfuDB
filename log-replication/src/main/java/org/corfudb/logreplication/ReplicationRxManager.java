@@ -1,9 +1,12 @@
-package org.corfudb.logreplication.receiver;
+package org.corfudb.logreplication;
 
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.transmitter.DataMessage;
+import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.receive.LogEntryWriter;
+import org.corfudb.logreplication.receive.PersistedWriterMetadata;
+import org.corfudb.logreplication.receive.ReplicationWriterException;
+import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
@@ -45,7 +48,7 @@ public class ReplicationRxManager {
             if (rxState == RxState.SNAPSHOT_SYNC) {
                 this.snapshotWriter.apply(message);
             } else if (rxState == RxState.LOG_SYN) {
-                this.logEntryWriter.applyTxMessage(message);
+                this.logEntryWriter.apply(message);
                 persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
             } else {
                 log.error("it is in the wrong state {}", rxState);
@@ -75,7 +78,7 @@ public class ReplicationRxManager {
         rxState = RxState.SNAPSHOT_SYNC;
         persistedWriterMetadata.setsrcBaseSnapshotStart(srcSnapTimestamp);
 
-        // Signal start of snapshot sync to the receiver, so data can be cleared.
+        // Signal start of snapshot sync to the receive, so data can be cleared.
         this.snapshotWriter.reset(srcSnapTimestamp);
     }
 
