@@ -34,6 +34,8 @@ public class ReplicationRxManager {
         this.logEntryWriter = new LogEntryWriter(rt, config);
         this.persistedWriterMetadata = new PersistedWriterMetadata(rt, config.getRemoteSiteID());
         this.rxState = RxState.IDLE_STATE;
+        this.logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
+                persistedWriterMetadata.getLastProcessedLogTimestamp());
     }
 
     /**
