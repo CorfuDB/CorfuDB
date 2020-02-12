@@ -66,20 +66,20 @@ import java.util.concurrent.LinkedBlockingQueue;
  *                      ^    |                             | |            |             ^    ^      |
  *                      |    |                             | |    snapshot|             |    |      |
  *                      |    |                             | |      sync  |             |    |      |
- *     replication_stop |    | replication_start           | |     request|     trimmed |    |      |
- *                      |    |                             | |            |    exception|    |      |
+ *     replication_stop |    | replication_start           | |     request|       sync  |    |      |
+ *                      |    |                             | |            |      cancel |    |      |
  *                      |    v                             v |            v             |    |      |
  *               +------+----+-------+  snapshot_sync    +-+-+------------+-+           |    |      |
- *               | IN_LOG_ENTRY_SYNC |     request       | IN_SNAPSHOT_SYNC +-----------+    |      |
- *               |                   +------------------>+                  |                |      |
- *               +----+----+---------+                   +---+--------------+----------------+      |
- *                    |    ^                                 |                  snapshot_sync       |
- *                    |    +---------------------------------+                     cancel           |
- *                    |                snapshot_sync                                                |
- *                    |                  complete                                                   |
- *                    |                                                                             |
+ *         +-----| IN_LOG_ENTRY_SYNC |     request       | IN_SNAPSHOT_SYNC +-----------+    |      |
+ *         |     |                   +------------------>+                  |                |      |
+ *         |     +----+----+---------+                   +---+---+----------+----------------+      |
+ *         |       ^  |   ^                                 |    |        ^        sync             |
+ *         |       |  |   +---------------------------------+    |        |       cancel            |
+ *         + ----- +  |                snapshot_sync             + -------+                         |
+ *  log_entry_sync    |                  complete               snapshot_sync                       |
+ *    continue        |                                           continue                          |
  *                    +-----------------------------------------------------------------------------+
- *                                                     trimmed_exception
+ *                                                     sync_cancel
  *               replication
  * +---------+    shutdown    +------------+
  * | STOPPED +<---------------+ ALL_STATES |

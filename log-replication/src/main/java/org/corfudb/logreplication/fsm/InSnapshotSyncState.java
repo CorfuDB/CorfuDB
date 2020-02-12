@@ -85,30 +85,14 @@ public class InSnapshotSyncState implements LogReplicationState {
                     log.warn("Unexpected snapshot sync continue event {} when in snapshot sync state {}.",
                             event.getEventID(), transitionEventId);
                 }
-            case SNAPSHOT_SYNC_CANCEL:
+            case SYNC_CANCEL:
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
-                if (transitionEventId == event.getEventID()) {
-                    //Cancel snapshot sync, if it is still in progress.
-                    cancelSnapshotSync("a explicit cancel by app.");
-                    return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
-                }
-
-                log.warn("Snapshot sync cancel requested for eventId {}, but running snapshot sync for {}",
-                        event.getEventID(), transitionEventId);
-                return this;
-            case TRIMMED_EXCEPTION:
-                // If trim was intended for current snapshot sync task, cancel and transition to new state
                 if (transitionEventId == event.getMetadata().getRequestId()) {
-                    /*
-                    Cancel snapshot sync, if it is still in progress. If transmit cannot be canceled
-                    we cannot transition to the new state. In this case it should be canceled as a TrimmedException
-                    occurred.
-                    */
-                    cancelSnapshotSync("trimmed exception.");
+                    cancelSnapshotSync("cancellation request.");
                     return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
                 }
 
-                log.warn("Trimmed exception for eventId {}, but running snapshot sync for {}",
+                log.warn("Sync Cancel for eventId {}, but running snapshot sync for {}",
                         event.getEventID(), transitionEventId);
                 return this;
             case SNAPSHOT_SYNC_COMPLETE:
