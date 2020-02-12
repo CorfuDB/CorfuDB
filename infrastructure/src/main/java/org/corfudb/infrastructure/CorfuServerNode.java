@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -14,7 +13,19 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
+import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Version;
 
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
@@ -23,22 +34,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
-import org.corfudb.security.tls.SslContextConstructor;
-import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Version;
 
 
 /**
@@ -102,8 +97,8 @@ public class CorfuServerNode implements AutoCloseable {
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
-                (String)serverContext.getServerConfig().get("--address"),
-                Integer.parseInt((String)serverContext.getServerConfig().get("<port>")));
+                (String) serverContext.getServerConfig().get("--address"),
+                Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
 
         return bindFuture.syncUninterruptibly();
     }

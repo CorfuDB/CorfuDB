@@ -86,7 +86,7 @@ public class ManagementAgent {
      * @param runtimeSingletonResource Singleton resource to fetch runtime.
      * @param serverContext            Server Context.
      */
-    ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
+    public ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
                     @NonNull ClusterStateContext clusterContext,
                     @NonNull FailureDetector failureDetector,
