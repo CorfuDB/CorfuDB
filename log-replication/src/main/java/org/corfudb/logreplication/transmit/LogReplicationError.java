@@ -1,4 +1,4 @@
-package org.corfudb.logreplication;
+package org.corfudb.logreplication.transmit;
 
 /**
  * Log Replication Error
