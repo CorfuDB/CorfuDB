@@ -874,10 +874,10 @@ public class StateTransferTest extends AbstractViewTest {
         // Instantiate 2 different codecs, one for each none default codec type (state transfer will run with the
         // default runtime)
         corfuRuntime = getNewRuntime(getDefaultNode()).connect();
-        corfuRuntime.getParameters().setCodecType(Codec.Type.LZ4.toString());
+        corfuRuntime.getParameters().setCodecType(Codec.Type.LZ4);
 
         CorfuRuntime rtNoCodec = getNewRuntime(getDefaultNode()).connect();
-        rtNoCodec.getParameters().setCodecType(Codec.Type.NONE.toString());
+        rtNoCodec.getParameters().setCodecType(Codec.Type.NONE);
 
         // Confirm that both codecs are different (we want to test all combinations) to the default codec (ZSTD)
         assertThat(corfuRuntime.getParameters().getCodecType())

@@ -181,7 +181,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     }
 
     public LogData(DataType type, final Object object, final int codecId) {
-        this(type, object, Codec.getCodecTypeById(codecId).toString());
+        this(type, object, Codec.getCodecTypeById(codecId));
     }
 
     /**
@@ -219,9 +219,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      * @param object The actual data/value
      * @param codecType The encoder/decoder type
      */
-    public LogData(DataType type, final Object object, final String codecType) {
+    public LogData(DataType type, final Object object, final Codec.Type codecType) {
         this(type, object);
-        setPayloadCodecType(Codec.Type.valueOf(codecType));
+        setPayloadCodecType(codecType);
     }
 
     /**
