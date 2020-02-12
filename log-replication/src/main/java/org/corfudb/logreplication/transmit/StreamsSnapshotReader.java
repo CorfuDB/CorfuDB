@@ -34,7 +34,7 @@ import java.util.stream.Stream;
  *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
-    private final int MAX_NUM_SMR_ENTRY = 5;
+    public static final int MAX_NUM_SMR_ENTRY = 5;
     private long globalSnapshot;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
@@ -154,6 +154,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
         boolean endStream;
         boolean endFullSync = false;
         List msgs = new ArrayList<DataMessage>();
+
+        System.out.println("read xq");
 
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
