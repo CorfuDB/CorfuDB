@@ -1,5 +1,7 @@
 package org.corfudb.universe.group.cluster;
 
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
@@ -23,7 +25,7 @@ public interface CorfuCluster<T extends Node, G extends GroupParams> extends Clu
      *
      * @return local corfu client
      */
-    LocalCorfuClient getLocalCorfuClient(int metricsPort);
+    LocalCorfuClient getLocalCorfuClient(CorfuRuntimeParametersBuilder runtimeParametersBuilder);
 
     /**
      * Find a corfu server by index in the cluster:

@@ -38,7 +38,7 @@ public class LocalCorfuClient implements CorfuClient {
     @Builder
     public LocalCorfuClient(
             ClientParams params, ImmutableSortedSet<String> serverEndpoints,
-            Optional<Integer> prometheusMetricsPort) {
+            CorfuRuntimeParametersBuilder corfuRuntimeParams) {
 
         this.params = params;
         this.serverEndpoints = serverEndpoints;
@@ -48,14 +48,11 @@ public class LocalCorfuClient implements CorfuClient {
                 .map(NodeLocator::parseString)
                 .collect(Collectors.toList());
 
-        CorfuRuntimeParametersBuilder parametersBuilder =
-                CorfuRuntimeParameters
-                        .builder()
-                        .layoutServers(layoutServers)
-                        .systemDownHandler(this::systemDownHandler);
+        corfuRuntimeParams
+                .layoutServers(layoutServers)
+                .systemDownHandler(this::systemDownHandler);
 
-        prometheusMetricsPort.ifPresent(parametersBuilder::prometheusMetricsPort);
-        this.runtime = fromParameters(parametersBuilder.build());
+        this.runtime = fromParameters(corfuRuntimeParams.build());
     }
 
     /**
