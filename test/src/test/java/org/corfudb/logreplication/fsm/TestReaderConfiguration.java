@@ -10,7 +10,7 @@ import lombok.Setter;
  */
 @Builder
 @Data
-public class TestTransmitterConfig {
+public class TestReaderConfiguration {
 
     private int numEntries;
 

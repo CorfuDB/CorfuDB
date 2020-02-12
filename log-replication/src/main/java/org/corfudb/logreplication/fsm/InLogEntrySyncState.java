@@ -54,14 +54,15 @@ public class InLogEntrySyncState implements LogReplicationState {
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionEventId(event.getEventID());
                 return snapshotSyncState;
-            case TRIMMED_EXCEPTION:
-                // If trim was intended for current snapshot sync task, cancel and transition to new state
+            case SYNC_CANCEL:
+                // If cancel was intended for current snapshot sync task, cancel and transition to new state
+                // In the case of lpg entry sync, cancel is caused by an encountered trimmed exception.
                 if (transitionEventId == event.getMetadata().getRequestId()) {
                     cancelLogEntrySync("trimmed exception.");
                     return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
                 }
 
-                log.warn("Trimmed exception for eventId {}, but running log entry sync for {}",
+                log.warn("Log Entry Sync cancel for eventId {}, but running log entry sync for {}",
                         event.getEventID(), transitionEventId);
                 return this;
             case REPLICATION_STOP:
