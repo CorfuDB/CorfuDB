@@ -52,9 +52,11 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -108,6 +110,9 @@ public class CorfuRuntime {
          */
         @Default
         Duration fastLoaderTimeout = Duration.ofMinutes(30);
+
+        @Default
+        Map<UUID, Set<UUID>> streamsMap = new HashMap<>();
         // endregion
 
         // region Address Space Parameters
@@ -461,6 +466,7 @@ public class CorfuRuntime {
         @Default
         volatile Runnable beforeRpcHandler = () -> {
         };
+
         //endregion
 
         /**

@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -239,9 +240,19 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return NOWRITE_ADDRESS;
         }
 
-        // Write to the transaction stream if transaction logging is enabled
         Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
 
+        affectedStreamsIds.forEach(s -> {
+            for (UUID uuid :
+                transaction.runtime.getParameters().getStreamsMap().keySet()) {
+                if (transaction.runtime.getParameters().getStreamsMap()
+                    .get(uuid).contains(s)) {
+                    affectedStreamsIds.add(uuid);
+                }
+            }
+        });
+
+        // Write to the transaction stream if transaction logging is enabled
         if (this.transaction.isLoggingEnabled()) {
             affectedStreamsIds.add(TRANSACTION_STREAM_ID);
         }
