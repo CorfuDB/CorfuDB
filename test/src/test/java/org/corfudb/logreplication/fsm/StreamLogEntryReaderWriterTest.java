@@ -152,7 +152,7 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
     }
 
     @Test
-    public void testLog() {
+    public void test() {
         setup();
         openStreams(dataRuntime);
         generateData(NUM_KEYS);
