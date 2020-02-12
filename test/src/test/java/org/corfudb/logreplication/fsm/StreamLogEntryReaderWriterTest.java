@@ -151,6 +151,7 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
         }
     }
 
+
     @Test
     public void test() {
         setup();
