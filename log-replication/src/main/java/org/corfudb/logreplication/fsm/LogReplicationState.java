@@ -19,7 +19,7 @@ public interface LogReplicationState {
      *
      * @return next LogReplicationState to transition to.
      */
-    LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition;
+    LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException;
 
     /**
      * On Entry

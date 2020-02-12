@@ -4,17 +4,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.transmitter.LogEntryListener;
-import org.corfudb.logreplication.transmitter.LogEntryReader;
-import org.corfudb.logreplication.transmitter.LogEntryTransmitter;
-import org.corfudb.logreplication.transmitter.PersistedReaderMetadata;
-import org.corfudb.logreplication.transmitter.ReadProcessor;
-import org.corfudb.logreplication.transmitter.DefaultReadProcessor;
-import org.corfudb.logreplication.transmitter.SnapshotListener;
-import org.corfudb.logreplication.transmitter.SnapshotReader;
-import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
-import org.corfudb.logreplication.transmitter.StreamsLogEntryReader;
-import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
+import org.corfudb.logreplication.transmit.LogEntryListener;
+import org.corfudb.logreplication.transmit.LogEntryReader;
+import org.corfudb.logreplication.transmit.LogEntryTransmitter;
+import org.corfudb.logreplication.transmit.PersistedReaderMetadata;
+import org.corfudb.logreplication.transmit.ReadProcessor;
+import org.corfudb.logreplication.transmit.DefaultReadProcessor;
+import org.corfudb.logreplication.transmit.SnapshotListener;
+import org.corfudb.logreplication.transmit.SnapshotReader;
+import org.corfudb.logreplication.transmit.SnapshotTransmitter;
+import org.corfudb.logreplication.transmit.StreamsLogEntryReader;
+import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -34,7 +34,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * This functionality is driven by the application and initiated through the ReplicationTxManager
  * on the source (primary) site and handled through the ReplicationRxManager on the destination (standby) site.
  *
- * Log Replication on the transmitter side is defined by an event-driven finite state machine, with 5 states
+ * Log Replication on the transmit side is defined by an event-driven finite state machine, with 5 states
  * and 7 events/messages---which can trigger the transition between states.
  *
  * States:
@@ -51,7 +51,6 @@ import java.util.concurrent.LinkedBlockingQueue;
  *  - replication_stop
  *  - snapshot_sync_request
  *  - snapshot_sync_complete
- *  - log_entry_sync_request
  *  - trimmed_exception
  *  - replication_shutdown
  *
@@ -125,7 +124,7 @@ public class LogReplicationFSM {
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * TODO add comments
+     * Metadata to persist in the Transmitter
      */
     PersistedReaderMetadata persistedReaderMetadata;
 
@@ -275,7 +274,7 @@ public class LogReplicationFSM {
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC && state.getTransitionEventId()
                             == event.getMetadata().getRequestId()) {
                         // Retrieve the base snapshot timestamp associated to this snapshot sync request from the
-                        // transmitter
+                        // transmit
                         persistedReaderMetadata.setLastAckedTimestamp(((InSnapshotSyncState)state)
                                 .getSnapshotTransmitter().getBaseSnapshotTimestamp());
                     }
@@ -286,7 +285,7 @@ public class LogReplicationFSM {
                     transition(state, newState);
                     state = newState;
                     numTransitions.setValue(numTransitions.getValue() + 1);
-                } catch (IllegalLogReplicationTransition illegalState) {
+                } catch (IllegalTransitionException illegalState) {
                     log.debug("Illegal log replication event {} when in state {}", event.getType(), state.getType());
                 }
             }

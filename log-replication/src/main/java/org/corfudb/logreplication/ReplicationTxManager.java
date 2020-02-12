@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
@@ -6,6 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
+import org.corfudb.logreplication.transmit.LogEntryListener;
+import org.corfudb.logreplication.transmit.LogReplicationEventMetadata;
+import org.corfudb.logreplication.transmit.ReadProcessor;
+import org.corfudb.logreplication.transmit.SnapshotListener;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
@@ -14,7 +18,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * A class that represents the entry point to initiate log replication on the transmitter side.
+ * A class that represents the entry point to initiate log replication on the transmit side.
  **/
 @Data
 @Slf4j
@@ -175,18 +179,18 @@ public class ReplicationTxManager {
      *
      * @param requestId unique identifier for the snapshot sync request
      */
-    public void snapshotSyncReplicated(UUID requestId) {
+    public void snapshotReplicated(UUID requestId) {
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
                 new LogReplicationEventMetadata(requestId)));
     }
 
     /**
-     * Process ack from replication receiver side.
+     * Process ack from replication receive side.
      *
      * @param timestamp
      */
-    public void logEntrySyncReplicated(long timestamp) {
+    public void logEntryReplicated(long timestamp) {
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
                 new LogReplicationEventMetadata(timestamp)));
     }

@@ -1,7 +1,8 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 
 /**

@@ -1,10 +1,11 @@
-package org.corfudb.logreplication.transmitter;
+package org.corfudb.logreplication.transmit;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -159,7 +160,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 // Setup a new stream
                 currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, globalSnapshot);
 
-                // If the new stream has entries to be proccessed, go to the next step
+                // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
                     break;
                 } else {

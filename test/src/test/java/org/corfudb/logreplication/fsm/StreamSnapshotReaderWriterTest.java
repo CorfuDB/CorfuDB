@@ -1,11 +1,10 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.logreplication.receiver.StreamsSnapshotWriter;
-import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.DefaultReadProcessor;
-import org.corfudb.logreplication.transmitter.SnapshotReadMessage;
-import org.corfudb.logreplication.transmitter.StreamsSnapshotReader;
+import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
+import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.transmit.SnapshotReadMessage;
+import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;

@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.transmitter.LogEntryTransmitter;
+import org.corfudb.logreplication.transmit.LogEntryTransmitter;
 
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -25,7 +25,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     private LogEntryTransmitter logEntryTransmitter;
 
     /*
-     * A future on the log entry transmitter, transmit call.
+     * A future on the log entry transmit, transmit call.
      */
     private Future<?> logEntrySyncFuture;
 
@@ -47,7 +47,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     }
 
     @Override
-    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition {
+    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 cancelLogEntrySync("snapshot sync request.");
@@ -86,7 +86,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
             }
 
-            throw new IllegalLogReplicationTransition(event.getType(), getType());
+            throw new IllegalTransitionException(event.getType(), getType());
         }
     }
 

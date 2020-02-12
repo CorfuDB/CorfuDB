@@ -4,7 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.transmitter.SnapshotTransmitter;
+import org.corfudb.logreplication.transmit.SnapshotTransmitter;
 
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -46,7 +46,7 @@ public class InSnapshotSyncState implements LogReplicationState {
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
-     * @param snapshotTransmitter snapshot sync transmitter (read and send)
+     * @param snapshotTransmitter snapshot sync transmit (read and send)
      */
     public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotTransmitter snapshotTransmitter) {
         this.fsm = logReplicationFSM;
@@ -54,7 +54,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     }
 
     @Override
-    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalLogReplicationTransition {
+    public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 /*
@@ -151,7 +151,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
 
-            throw new IllegalLogReplicationTransition(event.getType(), getType());
+            throw new IllegalTransitionException(event.getType(), getType());
         }
     }
 
@@ -159,7 +159,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         try {
             /*
-             If the transition is to itself, the snapshot sync is continuing, no need to reset the transmitter.
+             If the transition is to itself, the snapshot sync is continuing, no need to reset the transmit.
              */
             if (from != this) {
                 snapshotTransmitter.reset();

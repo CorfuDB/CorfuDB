@@ -2,8 +2,8 @@ package org.corfudb.logreplication.fsm;
 
 import lombok.Getter;
 import org.corfudb.logreplication.LogReplicationError;
-import org.corfudb.logreplication.transmitter.DataMessage;
-import org.corfudb.logreplication.transmitter.SnapshotListener;
+import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.transmit.SnapshotListener;
 
 import java.util.LinkedList;
 import java.util.List;
