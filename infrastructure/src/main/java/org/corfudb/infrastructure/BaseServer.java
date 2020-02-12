@@ -14,8 +14,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.net.InetSocketAddress;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,19 +27,13 @@ public class BaseServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+    /** HandlerMethod for the base server. */
+    @Getter
+    private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
-
-    @Override
-    public List<ExecutorService> getExecutors() {
-        return Collections.singletonList(executor);
     }
 
     public BaseServer(@Nonnull ServerContext context) {
@@ -50,10 +42,16 @@ public class BaseServer extends AbstractServer {
                 new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
     }
 
-    /** Handler for the base server. */
-    @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    @Override
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
+    }
 
     /**
      * Respond to a ping message.

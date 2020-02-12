@@ -5,6 +5,7 @@ import com.google.protobuf.UnknownFieldSet;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 
+import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -108,18 +109,27 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .commit();
         runtime.shutdown();
 
-        // Invoke the browser and go through each item
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(browser.listTables(namespace), 1);
+
+        // Invoke the browser and go through each item
         CorfuTable table = browser.getTable(namespace, tableName);
-        browser.printTable(table);
-        Assert.assertEquals(1, table.size());
+        Assert.assertEquals(browser.printTable(namespace, tableName), 1);
         for(Object obj : table.values()) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
                 UnknownFieldSet.newBuilder().build(),
                 record.getPayload().getUnknownFields());
         }
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 1);
+        // Invoke dropTable and verify size
+        Assert.assertEquals(browser.dropTable(namespace, tableName), 1);
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
     }
 
     /**
@@ -177,7 +187,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         CorfuTable table = browser.getTable(namespace, tableName);
-        browser.printTable(table);
+        browser.printTable(namespace, tableName);
         Assert.assertEquals(1, table.size());
 
         for(Object obj : table.values()) {
@@ -186,5 +196,66 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 UnknownFieldSet.newBuilder().build(),
                 record.getPayload().getUnknownFields());
         }
+    }
+
+    /**
+     * Create a table and add data to it.  Verify that the browser tool is able
+     * to read the system TableRegistry contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void browserRegistryTableTest() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().build());
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+        TxBuilder tx = store.tx(namespace);
+        tx.create(tableName, uuidKey, uuidVal, metadata)
+                .update(tableName, uuidKey, uuidVal, metadata)
+                .commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+        TableRegistry.REGISTRY_TABLE_NAME));
     }
 }

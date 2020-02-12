@@ -244,12 +244,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
                 R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
-
-                long versionForCorrectness = getVersionUnsafe();
-                if (lock.validate(ts)) {
-                    correctnessLogger.trace("Version, {}", versionForCorrectness);
-                    return ret;
-                }
+                correctnessLogger.trace("Version, {}", getVersionUnsafe());
+                return ret;
             }
             // If not, perform the update operations
             updateFunction.accept(this);

@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -401,17 +402,17 @@ public abstract class AbstractQueuedStreamView extends
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult
         // a checkpoint first.
-        if (context.getGlobalPointer() == Address.NEVER_READ &&
-                context.checkpoint.id == null) {
+        if (context.getCheckpoint() == StreamCheckpoint.UNINITIALIZED) {
+            context.checkpoint = StreamCheckpoint.INITIALIZED;
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
                     .getCheckpointStreamIdFromId(context.id);
             // Find the checkpoint, if present
             try {
                 if (discoverAddressSpace(checkpointId, context.readCpQueue,
-                        runtime.getSequencerView()
-                                .query(checkpointId),
-                        Address.NEVER_READ, d -> scanCheckpointStream(context, d, maxGlobal),
+                        runtime.getSequencerView().query(checkpointId),
+                        Address.NEVER_READ,
+                        data -> scanCheckpointStream(context, data, maxGlobal),
                         true, maxGlobal)) {
                     log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
                             this, context.readCpQueue.size());
@@ -853,7 +854,9 @@ public abstract class AbstractQueuedStreamView extends
         /** Info on checkpoint we used for initial stream replay,
          *  other checkpoint-related info & stats.
          */
-        StreamCheckpoint checkpoint = new StreamCheckpoint();
+        @Getter
+        @Setter
+        private StreamCheckpoint checkpoint = StreamCheckpoint.UNINITIALIZED;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -875,8 +878,7 @@ public abstract class AbstractQueuedStreamView extends
             resolvedQueue.clear();
             minResolution = Address.NON_ADDRESS;
             maxResolution = Address.NON_ADDRESS;
-
-            checkpoint.reset();
+            setCheckpoint(StreamCheckpoint.UNINITIALIZED);
         }
 
         /**
@@ -912,6 +914,8 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Data
     static class StreamCheckpoint {
+        public final static StreamCheckpoint UNINITIALIZED = new StreamCheckpoint();
+        public final static StreamCheckpoint INITIALIZED = new StreamCheckpoint();
 
         UUID id = null;
         // Represents the VLO version at the time of checkpoint, i.e., last update observed

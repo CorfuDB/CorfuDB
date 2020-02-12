@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -82,6 +83,7 @@ public class TableRegistry {
     /**
      * This {@link CorfuTable} holds the schemas of the key, payload and metadata for every table created.
      */
+    @Getter
     private final CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>> registryTable;
 
     public TableRegistry(CorfuRuntime runtime) {
@@ -240,37 +242,6 @@ public class TableRegistry {
     }
 
     /**
-     * A set of options defined for disk-backed {@link CorfuTable}.
-     *
-     * For a set of options that dictate RocksDB memory usage can be found here:
-     * https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-     *
-     * Block Cache:  Which can be set via Options::setTableFormatConfig.
-     *               Out of box, RocksDB will use LRU-based block cache
-     *               implementation with 8MB capacity.
-     * Index/Filter: Is a function of the block cache. Generally it infates
-     *               the block cache by about 50%. The exact number can be
-     *               retrieved via "rocksdb.estimate-table-readers-mem"
-     *               property.
-     * Write Buffer: Also known as memtable is defined by the ColumnFamilyOptions
-     *               option. The default is 64 MB.
-     */
-    private Options getPersistentMapOptions() {
-        final int maxSizeAmplificationPercent = 50;
-        final Options options = new Options();
-
-        options.setCreateIfMissing(true);
-        options.setCompressionType(CompressionType.LZ4_COMPRESSION);
-
-        // Set a threshold at which full compaction will be triggered.
-        // This is important as it purges tombstoned entries.
-        final CompactionOptionsUniversal compactionOptions = new CompactionOptionsUniversal();
-        compactionOptions.setMaxSizeAmplificationPercent(maxSizeAmplificationPercent);
-        options.setCompactionOptionsUniversal(compactionOptions);
-        return options;
-    }
-
-    /**
      * Opens a Corfu table with the specified options.
      *
      * @param namespace    Namespace of the table.
@@ -316,7 +287,7 @@ public class TableRegistry {
             versionPolicy = ICorfuVersionPolicy.MONOTONIC;
             mapSupplier = () -> new PersistedStreamingMap<>(
                     tableOptions.getPersistentDataPath().get(),
-                    getPersistentMapOptions(),
+                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
                     protobufSerializer, this.runtime);
         }
 

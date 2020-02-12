@@ -168,10 +168,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             String corfuDir = logDir.getParent().toString();
             FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
 
-            if (corfuDirBackend.isReadOnly()) {
-                throw new LogUnitException("Cannot start Corfu on a read-only filesystem:" + corfuDir);
-            }
-
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
@@ -433,12 +429,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol
                 .DataType.typeMap.get((byte) entry.getDataType().getNumber()),
                 Unpooled.wrappedBuffer(entryData.array()), ldCodecType);
-
-        if (logData.hasPayloadCodec()) {
-            // The server assumes that if a codec has been specified then
-            // the payload it received was already compressed
-            logData.setCompressedFlag();
-        }
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());

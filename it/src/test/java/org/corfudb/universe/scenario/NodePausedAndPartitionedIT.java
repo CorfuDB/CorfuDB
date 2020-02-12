@@ -1,12 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -18,6 +11,14 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 
 public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
 
@@ -70,13 +71,12 @@ public class NodePausedAndPartitionedIT extends GenericIntegrationTest {
             waitForClusterDown(table);
 
             // Recover cluster by resuming the paused node, removing
-            // partition and wait for layout's unresponsive servers to change
+            // partition and wait for layout's unresponsive servers to change.
+            // Also wait for the segment merge.
             server1.resume();
             server2.reconnect(Arrays.asList(server0, server1));
             waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
-
-            waitUninterruptibly(Duration.ofSeconds(30));
-
+            waitForLayoutChange(layout -> layout.getSegments().size() == 1, corfuClient);
             // Verify cluster status is STABLE
             corfuClient.invalidateLayout();
             clusterStatusReport = corfuClient.getManagementView().getClusterStatus();

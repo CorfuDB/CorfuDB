@@ -116,7 +116,7 @@ public class AddressSpaceView extends AbstractView {
 
         MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
         final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                                         this.hashCode());
+                this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
@@ -146,14 +146,14 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Validates the state of a write after an exception occurred during the process
-     *
+     * <p>
      * There are [currently] three different scenarios:
-     *   1. The data was persisted to some log units and we were able to recover it.
-     *   2. The data was not persisted and another client (or this client) hole filled.
-     *      In that case, we return an OverwriteException and let the upper layer handle it.
-     *   3. The address we tried to write to was trimmed. In this case, there is no way to
-     *      know if the write went through or not. For sanity, we throw an OverwriteException
-     *      and let the above layer retry.
+     * 1. The data was persisted to some log units and we were able to recover it.
+     * 2. The data was not persisted and another client (or this client) hole filled.
+     * In that case, we return an OverwriteException and let the upper layer handle it.
+     * 3. The address we tried to write to was trimmed. In this case, there is no way to
+     * know if the write went through or not. For sanity, we throw an OverwriteException
+     * and let the above layer retry.
      *
      * @param address
      */
@@ -166,7 +166,7 @@ public class AddressSpaceView extends AbstractView {
             throw new UnrecoverableCorfuError("We cannot determine state of an update because of a trim.");
         }
 
-        if (!logData.equals(ld)){
+        if (!logData.equals(ld)) {
             throw new OverwriteException(OverwriteCause.DIFF_DATA);
         }
     }
@@ -178,13 +178,13 @@ public class AddressSpaceView extends AbstractView {
      * has been adopted, or a WrongEpochException if the
      * token epoch is invalid.
      *
-     * @param token        The token to use for the write.
-     * @param data         The data to write.
-     * @param cacheOption  The caching behaviour for this write
-     * @throws OverwriteException   If the globalAddress given
-     *                              by the token has adopted
-     *                              another value.
-     * @throws WrongEpochException  If the token epoch is invalid.
+     * @param token       The token to use for the write.
+     * @param data        The data to write.
+     * @param cacheOption The caching behaviour for this write
+     * @throws OverwriteException  If the globalAddress given
+     *                             by the token has adopted
+     *                             another value.
+     * @throws WrongEpochException If the token epoch is invalid.
      */
     public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
         ILogData ld;
@@ -213,7 +213,7 @@ public class AddressSpaceView extends AbstractView {
                         .getReplicationProtocol(runtime)
                         .write(e, ld);
             } catch (OverwriteException ex) {
-                if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA){
+                if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA) {
                     // If we have an overwrite exception with the SAME_DATA cause, it means that the
                     // server suspects our data has already been written, in this case we need to
                     // validate the state of the write.
@@ -256,15 +256,16 @@ public class AddressSpaceView extends AbstractView {
      * committed value, or NULL, if no value has
      * been committed.
      *
-     * @param address   The address to read from.
-     * @return          Committed data stored in the
-     *                  log, or NULL, if no value
-     *                  has been committed.
+     * @param address The address to read from.
+     * @return Committed data stored in the
+     * log, or NULL, if no value
+     * has been committed.
      */
-    public @Nullable ILogData peek(final long address) {
+    public @Nullable
+    ILogData peek(final long address) {
         return layoutHelper(e -> e.getLayout().getReplicationMode(address)
-                    .getReplicationProtocol(runtime)
-                    .peek(e, address));
+                .getReplicationProtocol(runtime)
+                .peek(e, address));
     }
 
     /**
@@ -316,13 +317,13 @@ public class AddressSpaceView extends AbstractView {
     /**
      * This method reads a batch of addresses if 'nextRead' is not found in the cache.
      * In the case of a cache miss, it piggybacks on the read for nextRead.
-     *
+     * <p>
      * If 'nextRead' is present in the cache, it directly returns this data.
      *
-     * @param nextRead current address of interest
+     * @param nextRead  current address of interest
      * @param addresses batch of addresses to read (bring into the cache) in case
      *                  there is a cache miss (includes nextRead)
-     * @param options  options for this read request
+     * @param options   options for this read request
      * @return data for current 'address' of interest.
      */
     public @Nonnull
@@ -347,7 +348,7 @@ public class AddressSpaceView extends AbstractView {
      * Prepare a batch of entries to be read, including the current address to retrieve.
      *
      * @param currentRead current address to retrieve.
-     * @param queue queue to get entries from.
+     * @param queue       queue to get entries from.
      * @return batch of entries.
      */
     private List<Long> getBatch(long currentRead, @NonNull NavigableSet<Long> queue) {
@@ -364,7 +365,7 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Read the given object from a range of addresses.
-     *
+     * <p>
      * - If the waitForWrite flag is set to true, when an empty address is encountered,
      * it waits for one hole to be filled. All the rest empty addresses within the list
      * are hole filled directly and the reader does not wait.
@@ -438,6 +439,36 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * A version of a protocol read that reads a single batch of addresses, and also propagates
+     * exceptions back to the caller.
+     *
+     * @param addressBatch A batch of addresses, small enough to fit within one rpc call.
+     * @param readOptions  A read options for the protocol read.
+     * @return A mapping from addresses to log data.
+     */
+    public Map<Long, ILogData> simpleProtocolRead(List<Long> addressBatch, ReadOptions readOptions) {
+
+        Map<Long, ILogData> data = layoutHelper(runtimeLayout ->
+                        runtimeLayout.getLayout()
+                                .getReplicationMode(addressBatch.iterator().next())
+                                .getReplicationProtocol(runtime)
+                                .readAll(runtimeLayout, addressBatch,
+                                        readOptions.isWaitForHole(),
+                                        readOptions.isServerCacheable()),
+                true);
+        final List<Long> trimmedAddresses = filterTrimmedAddresses(data);
+        trimmedAddresses.forEach(data::remove);
+        if (!trimmedAddresses.isEmpty()) {
+            if (!readOptions.isIgnoreTrim()) {
+                throw new TrimmedException(trimmedAddresses);
+            }
+
+            log.warn("simpleProtocolRead: ignoring trimmed addresses {}", trimmedAddresses);
+        }
+        return data;
+    }
+
+    /**
      * Get the first address in the address space.
      */
     public Token getTrimMark() {
@@ -486,8 +517,9 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Get log address space, which includes:
-     *     1. Addresses belonging to each stream.
-     *     2. Log Tail.
+     * 1. Addresses belonging to each stream.
+     * 2. Log Tail.
+     *
      * @return
      */
     public StreamsAddressResponse getLogAddressSpace() {
@@ -522,16 +554,17 @@ public class AddressSpaceView extends AbstractView {
                 runtime.getSequencerView().trimCache(address.getSequence());
 
                 layoutHelper(e -> {
-                            e.getLayout().getPrefixSegments(address.getSequence()).stream()
-                                    .flatMap(seg -> seg.getStripes().stream())
-                                    .flatMap(stripe -> stripe.getLogServers().stream())
-                                    .map(e::getLogUnitClient)
-                                    .map(client -> client.prefixTrim(address))
-                                    .forEach(cf -> {CFUtils.getUninterruptibly(cf,
-                                            NetworkException.class, TimeoutException.class,
-                                            WrongEpochException.class);
-                                    });
-                            return null;
+                    e.getLayout().getPrefixSegments(address.getSequence()).stream()
+                            .flatMap(seg -> seg.getStripes().stream())
+                            .flatMap(stripe -> stripe.getLogServers().stream())
+                            .map(e::getLogUnitClient)
+                            .map(client -> client.prefixTrim(address))
+                            .forEach(cf -> {
+                                CFUtils.getUninterruptibly(cf,
+                                        NetworkException.class, TimeoutException.class,
+                                        WrongEpochException.class);
+                            });
+                    return null;
                 }, true);
                 break;
             } catch (NetworkException | TimeoutException e) {
@@ -549,10 +582,10 @@ public class AddressSpaceView extends AbstractView {
         }
     }
 
-    /** Force compaction on an address space, which will force
+    /**
+     * Force compaction on an address space, which will force
      * all log units to free space, and process any outstanding
      * trim requests.
-     *
      */
     public void gc() {
         log.debug("GarbageCollect");
@@ -592,11 +625,10 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Fetch a collection of addresses for insertion into the cache.
-     *
+     * <p>
      * Does not validate log entries.
      *
-     * @param addresses     collection of addresses to read from.
-     *
+     * @param addresses collection of addresses to read from.
      * @return a map of read addresses.
      */
     @Nonnull
@@ -631,7 +663,6 @@ public class AddressSpaceView extends AbstractView {
      * Given the input data, deduce which addresses have been trimmed.
      *
      * @param allData data on which the operation will be performed
-     *
      * @return the list of addresses that have been trimmed.
      */
     private List<Long> filterTrimmedAddresses(Map<Long, ILogData> allData) {
@@ -671,7 +702,7 @@ public class AddressSpaceView extends AbstractView {
      * @param address an address to read from.
      * @return the log data read at address
      */
-    private  @Nonnull
+    private @Nonnull
     ILogData fetch(final long address) {
         ILogData result = layoutHelper(e -> e.getLayout().getReplicationMode(address)
                 .getReplicationProtocol(runtime)

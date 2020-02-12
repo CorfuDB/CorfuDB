@@ -228,8 +228,8 @@ public class LogUnitClient extends AbstractClient {
     /**
      * Request for known addresses in the specified range.
      *
-     * @param startRange Start of range.
-     * @param endRange   End of range.
+     * @param startRange Start of range (inclusive).
+     * @param endRange   End of range (inclusive).
      * @return Known addresses.
      */
     public CompletableFuture<KnownAddressResponse> requestKnownAddresses(long startRange,

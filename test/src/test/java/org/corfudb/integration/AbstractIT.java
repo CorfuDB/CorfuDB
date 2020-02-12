@@ -298,7 +298,11 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     public static CorfuRuntime createRuntimeWithCache() {
-        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT)
+        return createRuntimeWithCache(DEFAULT_ENDPOINT);
+    }
+
+    public static CorfuRuntime createRuntimeWithCache(String endpoint) {
+        CorfuRuntime rt = new CorfuRuntime(endpoint)
                 .setCacheDisabled(false)
                 .connect();
         return rt;

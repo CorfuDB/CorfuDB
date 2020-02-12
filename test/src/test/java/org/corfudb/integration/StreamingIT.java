@@ -84,12 +84,12 @@ public class StreamingIT extends AbstractIT {
         }
 
         @Override
-        public boolean equals(StreamListener o) {
+        public boolean equals(Object o) {
             return this.hashCode() == o.hashCode();
         }
 
         @Override
-        public int hashcode() {
+        public int hashCode() {
             return name.hashCode();
         }
 
@@ -177,6 +177,8 @@ public class StreamingIT extends AbstractIT {
         CorfuStreamEntries update = updates.getLast();
         assertThat(update.getEntries().size() == 1).isTrue();
         List<CorfuStreamEntry> entry = update.getEntries().values().stream().findFirst().get();
+        assertThat(entry.get(0).getAddress()).isGreaterThan(0L);
+        assertThat(entry.get(0).getEpoch()).isEqualTo(0L);
         assertThat(entry.size() == 1).isTrue();
         assertThat(entry.get(0).getOperation().equals(CorfuStreamEntry.OperationType.DELETE)).isTrue();
         assertThat(entry.get(0).getKey().equals(uuid0)).isTrue();
@@ -306,7 +308,19 @@ public class StreamingIT extends AbstractIT {
             assertThat(entry.get(0).getMetadata()).isEqualTo(uuid);
         }
 
+        // Now clear a table and make sure that the clear gets propogated
+        n1t1.clear();
+
+        // After a brief pause validate that the listener obtains the clear() table SRM update.
+        TimeUnit.SECONDS.sleep(1);
+        updates = s1n1t1.getUpdates();
+        assertThat(updates.size()).isGreaterThan(0);
+        {
+            CorfuStreamEntries update = updates.get(updates.size() - 1);
+            List<CorfuStreamEntry> entry = update.getEntries().values().stream().findFirst().get();
+            assertThat(entry.get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.CLEAR);
+        }
+
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
-
 }

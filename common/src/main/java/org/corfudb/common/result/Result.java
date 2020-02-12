@@ -68,7 +68,7 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
      * @throws NoSuchElementException if there is no error present.
      */
     public E getError() {
-        if (error == null) {
+        if(error == null) {
             throw new NoSuchElementException("No error present");
         }
 
@@ -127,9 +127,26 @@ public class Result<T, E extends RuntimeException> implements Supplier<T> {
         }
     }
 
-    public<U> Result<U, E> flatMap(Function<T, Result<U, E>> mapper) {
+    /**
+     * Maps a given function to the {@link Result#error}, if the error is valid.
+     *
+     * @param function mapping function to apply to the internal result
+     * @param <Q>      type of the mapped error
+     * @return a new instance of {@link Result} which contains the result of applying the mapping
+     * function to the original internal value.
+     */
+    public <Q extends RuntimeException> Result<T, Q> mapError(Function<? super E, ? extends Q> function) {
+        if (isError()) {
+            return Result.error(function.apply(error));
+        } else {
+            return Result.ok(get());
+        }
+    }
 
-        if(isError()) {
+
+    public <U> Result<U, E> flatMap(Function<T, Result<U, E>> mapper) {
+
+        if (isError()) {
             return Result.error(getError());
         }
 

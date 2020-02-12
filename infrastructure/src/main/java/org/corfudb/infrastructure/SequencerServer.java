@@ -115,10 +115,10 @@ public class SequencerServer extends AbstractServer {
     private final Map<Byte, String> timerNameCache = new HashMap<>();
 
     /**
-     * Handler for this server.
+     * HandlerMethod for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler = CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
     private SequencerServerCache cache;
@@ -158,6 +158,17 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
+    }
+
+    @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         if (getState() != ServerState.READY){
             return false;
@@ -170,16 +181,6 @@ public class SequencerServer extends AbstractServer {
             return false;
         }
         return true;
-    }
-
-    @Override
-    public ExecutorService getExecutor(CorfuMsgType corfuMsgType) {
-        return executor;
-    }
-
-    @Override
-    public List<ExecutorService> getExecutors() {
-        return Collections.singletonList(executor);
     }
 
     /**
@@ -684,11 +685,6 @@ public class SequencerServer extends AbstractServer {
         }
 
         return requestedAddressSpaces;
-    }
-
-    @Override
-    public void shutdown() {
-        super.shutdown();
     }
 
     /**

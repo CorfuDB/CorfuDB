@@ -1,9 +1,5 @@
 package org.corfudb.universe.universe.vm;
 
-import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.DATA_STORE;
-import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.HOST_SYSTEM;
-import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.RESOURCE_TYPE;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.vmware.vim25.GuestInfo;
@@ -22,19 +18,22 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.vm.ApplianceManager.ManagedEntityType;
 import org.corfudb.universe.universe.vm.ApplianceManager.ResourceType;
 import org.corfudb.universe.util.IpAddress;
 
-import java.rmi.RemoteException;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
+
+import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.DATA_STORE;
+import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.HOST_SYSTEM;
+import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.RESOURCE_TYPE;
 
 /**
  * Virtual machine manager
@@ -78,7 +77,7 @@ public class VmManager {
         return getVm().flatMap(vm -> Result.of(() -> {
             try {
                 vm.shutdownGuest();
-            } catch (RemoteException e) {
+            } catch (Exception e) {
                 throw new UniverseException(e);
             }
 
@@ -90,7 +89,7 @@ public class VmManager {
         return getVm().flatMap(vm -> Result.of(() -> {
             try {
                 vm.rebootGuest();
-            } catch (RemoteException e) {
+            } catch (Exception e) {
                 throw new UniverseException(e);
             }
 
@@ -124,8 +123,12 @@ public class VmManager {
                     Thread.currentThread().interrupt();
                     throw new UniverseException("Error ", e);
                 }
-                GuestInfo guest = getVm().map(VirtualMachine::getGuest).get();
-                ipAddress = Optional.ofNullable(guest.getIpAddress());
+
+                ipAddress = getVm()
+                        .flatMap(vm -> Result.of(vm::getGuest))
+                        .map(GuestInfo::getIpAddress)
+                        .map(Optional::of)
+                        .orElse(Optional.empty());
             }
 
             return IpAddress.builder().ip(ipAddress.get()).build();
@@ -154,8 +157,13 @@ public class VmManager {
     }
 
     private Result<VirtualMachine, UniverseException> getVm(String name) {
-        return findVm(name)
-                .map(maybeVm -> maybeVm.orElseThrow(vmNotFoundError()));
+        return findVm(name).flatMap(maybeVm -> {
+            if (maybeVm.isPresent()) {
+                return Result.ok(maybeVm.get());
+            } else {
+                return Result.error(vmNotFoundError());
+            }
+        });
     }
 
     /**
@@ -172,7 +180,7 @@ public class VmManager {
                         ManagedEntityType.VIRTUAL_MACHINE.typeName, name
                 );
                 return Optional.ofNullable(vm);
-            } catch (RemoteException e) {
+            } catch (Exception e) {
                 throw new UniverseException("Can't find a vm: " + vmName, e);
             }
         });
@@ -210,33 +218,38 @@ public class VmManager {
         return getVm(universeParams.getTemplateVMName()).flatMap(vmTemplate -> {
             log.info("Cloning the VM {} via vSphere {}", vmName, universeParams.getVSphereUrl());
 
-            Properties vmPropsResult = VmConfigPropertiesLoader
-                    .loadVmProperties()
-                    .get();
+            try {
 
-            ImmutableMap<String, String> vmProps = Maps.fromProperties(vmPropsResult);
+                Properties vmPropsResult = VmConfigPropertiesLoader
+                        .loadVmProperties()
+                        .get();
 
-            // Create customization for cloning process
-            VirtualMachineCloneSpec cloneSpec = createLinuxCustomization(vmProps);
+                ImmutableMap<String, String> vmProps = Maps.fromProperties(vmPropsResult);
 
-            String folderProp = String.format(
-                    "vm%d.%s", vmName.getIndex(), ResourceType.FOLDER.resource
-            );
+                // Create customization for cloning process
+                VirtualMachineCloneSpec cloneSpec = createLinuxCustomization(vmProps);
 
-            Folder folder;
-            if (vmProps.containsKey(folderProp)) {
-                ManagedObjectReference folderR = new ManagedObjectReference();
-                folderR.setType(ResourceType.FOLDER.resource);
+                String folderProp = String.format(
+                        "vm%d.%s", vmName.getIndex(), ResourceType.FOLDER.resource
+                );
 
-                String prop = vmProps.get(folderProp);
-                folderR.setVal(prop);
+                Folder folder;
+                if (vmProps.containsKey(folderProp)) {
+                    ManagedObjectReference folderR = new ManagedObjectReference();
+                    folderR.setType(ResourceType.FOLDER.resource);
 
-                folder = new Folder(vmTemplate.getServerConnection(), folderR);
-            } else {
-                folder = (Folder) vmTemplate.getParent();
+                    String prop = vmProps.get(folderProp);
+                    folderR.setVal(prop);
+
+                    folder = new Folder(vmTemplate.getServerConnection(), folderR);
+                } else {
+                    folder = (Folder) vmTemplate.getParent();
+                }
+
+                return executeTask(() -> vmTemplate.cloneVM_Task(folder, vmName.getName(), cloneSpec));
+            } catch (RuntimeException ex) {
+                return Result.error(new UniverseException(ex));
             }
-
-            return executeTask(() -> vmTemplate.cloneVM_Task(folder, vmName.getName(), cloneSpec));
         });
     }
 
@@ -284,16 +297,20 @@ public class VmManager {
     }
 
     private Result<VmManager, UniverseException> cloneAndPowerOn(VirtualMachine vm) {
-        VirtualMachinePowerState powerState = vm.getSummary().runtime.powerState;
-        if (powerState == VirtualMachinePowerState.poweredOn) {
-            return Result.ok(this);
-        } else {
-            return powerOn().map(taskInfo -> this);
+        try {
+            VirtualMachinePowerState powerState = vm.getSummary().runtime.powerState;
+            if (powerState == VirtualMachinePowerState.poweredOn) {
+                return Result.ok(this);
+            } else {
+                return powerOn().map(taskInfo -> this);
+            }
+        } catch (RuntimeException ex) {
+            return Result.error(new UniverseException(ex));
         }
     }
 
-    private Supplier<UniverseException> vmNotFoundError() {
-        return () -> new UniverseException("A vm not found: " + vmName);
+    private UniverseException vmNotFoundError() {
+        return new UniverseException("A vm not found: " + vmName);
     }
 
     @FunctionalInterface

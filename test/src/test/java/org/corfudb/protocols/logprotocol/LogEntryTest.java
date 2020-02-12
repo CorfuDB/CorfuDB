@@ -93,7 +93,7 @@ public class LogEntryTest {
 
         SMREntry update1 = new SMREntry("method1", new Object[]{"arg1"}, Serializers.PRIMITIVE);
 
-        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
+        ISerializer customSerializer = new CustomSerializer((byte)(Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
 
         SMREntry update2 = new SMREntry("method2", new Object[]{"arg1"}, customSerializer);
 
