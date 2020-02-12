@@ -155,8 +155,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
         boolean endFullSync = false;
         List msgs = new ArrayList<DataMessage>();
 
-        System.out.println("read xq");
-
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream

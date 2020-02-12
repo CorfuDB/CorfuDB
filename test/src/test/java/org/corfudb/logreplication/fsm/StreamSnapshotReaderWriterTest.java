@@ -5,11 +5,14 @@ import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.transmit.SnapshotReadMessage;
 import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -24,15 +27,18 @@ import java.util.UUID;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
-    static private final int NUM_KEYS = 1000;
-    static private final int NUM_STREAMS = 4;
+    static private final int NUM_KEYS = 5;
+    static private final int NUM_STREAMS = 1;
 
     CorfuRuntime dataRuntime = null;
     CorfuRuntime readerRuntime = null;
     CorfuRuntime writerRuntime = null;
+    CorfuRuntime testRuntime = null;
+    CorfuRuntime dstRunTime = null;
 
     Random random = new Random();
-    HashMap<String, CorfuTable<Long, Long>> tables = new HashMap<>();
+    HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
+    HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
 
     /*
      * the in-memory data for corfu tables for verification.
@@ -50,9 +56,11 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         dataRuntime = getNewRuntime(getDefaultNode()).connect();
         readerRuntime = getNewRuntime(getDefaultNode()).connect();
         writerRuntime = getNewRuntime(getDefaultNode()).connect();
+        testRuntime = getNewRuntime(getDefaultNode()).connect();
+        dstRunTime = getNewRuntime(getDefaultNode()).connect();
     }
 
-    void openStreams(CorfuRuntime rt) {
+    void openStreams(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
         for (int i = 0; i < NUM_STREAMS; i++) {
             String name = "test" + Integer.toString(i);
 
@@ -64,15 +72,15 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
                     .setSerializer(Serializers.PRIMITIVE)
                     .open();
             tables.put(name, table);
-            hashMap.put(name, new HashMap<>());
+            hashMap.putIfAbsent(name, new HashMap<>());
         }
     }
 
     //Generate data and the same time push the data to the hashtable
-    void generateData(int numKeys) {
+    void generateData(HashMap<String, CorfuTable<Long, Long>> tables, int numKeys) {
         for (int i = 0; i < numKeys; i++) {
             for (String name : tables.keySet()) {
-                long key = i;
+                long key = i + NUM_KEYS;
                 tables.get(name).put(key, key);
                 ((HashMap<Long, Long>)hashMap.get(name)).put(key, key);
             }
@@ -82,7 +90,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
     /**
      * enforce checkpoint entries at the streams.
      */
-    void ckStreams() {
+    void ckStreams(HashMap<String, CorfuTable<Long, Long>> tables) {
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
         for (CorfuTable map : tables.values()) {
             mcw1.addMap(map);
@@ -120,7 +128,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         }
     }
 
-    void verifyNoValue() {
+    void verifyNoValue(HashMap<String, CorfuTable<Long, Long>> tables) {
         for (String name : tables.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             table.clear();
@@ -128,42 +136,56 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         }
     }
 
-    void verifyData() {
+    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables) throws Exception {
+        System.out.println("numStreams " + hashMap.keySet().size());
         for (String name : hashMap.keySet()) {
+            System.out.println("table numKeys " + hashMap.keySet().size());
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
             assertThat(hashMap.keySet().containsAll(table.keySet()));
             assertThat(table.keySet().containsAll(hashMap.keySet()));
             for (Long key : mapKeys.keySet()) {
+                System.out.println("\ntable key " + key + " val " + table.get(key));
+                if (table.get(key) == null)
+                    throw new Exception("null value");
                 assertThat(table.get(key) == mapKeys.get(key));
             }
         }
     }
 
     @Test
-    public void test0() {
+    public void test0() throws Exception {
 
         setRuntime();
-        openStreams(dataRuntime);
+        openStreams(dataRuntime, srcTables);
 
         //generate some data in the streams
         //including a checkpoint in the streams
-        generateData(NUM_KEYS);
-        ckStreams();
-
-        //update some data after checkpoint
-        generateData(NUM_KEYS);
+        generateData(srcTables, NUM_KEYS);
+        //ckStreams(srcTables);
 
         //generate messages
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
 
-        //call clear table
-        verifyNoValue();
+        verifyNoValue(srcTables);
 
-        //clear all tables, play messages
+        //play messages
         writeMsgs(msgQ, hashMap.keySet(), writerRuntime);
 
+        for (String name : hashMap.keySet()) {
+            IStreamView sv = testRuntime.getStreamsView().get(CorfuRuntime.getStreamID(name));
+            ILogData data = sv.next();
+            System.out.println("\n first entry " + data.getLogEntry(testRuntime));
+
+            List<ILogData> dataList = sv.remaining();
+            for (ILogData entry : dataList) {
+                System.out.println("\n" + entry.getLogEntry(testRuntime));
+            }
+            System.out.println("\nstream " + name + " numkeys " + dataList.size());
+        }
+
         //verify data with hashtable
-        verifyData();
+        openStreams(dstRunTime, dstTables);
+        verifyData(dstTables);
     }
 }

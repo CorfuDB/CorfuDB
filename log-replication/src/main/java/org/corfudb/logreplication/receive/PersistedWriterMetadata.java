@@ -18,8 +18,12 @@ public class PersistedWriterMetadata {
     private final String LAST_SNAPSHOT_TS_DONE = "lastSrcBaseSnapshotTimestamp_done";
     private final String LAST_PROCESSED_LOG_TS = "lastProcessedLogTimestamp";
 
+    @Getter
     private long lastSrcBaseSnapshotTimestamp;
+
+    @Getter
     private long lastProcessedLogTimestamp;
+
     private CorfuTable<String, Long> writerMetaDataTable;
 
     public PersistedWriterMetadata(CorfuRuntime rt, UUID dst) {
@@ -30,15 +34,18 @@ public class PersistedWriterMetadata {
                 })
                 .setSerializer(Serializers.JSON)
                 .open();
+        lastSrcBaseSnapshotTimestamp = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapDone);
+        lastProcessedLogTimestamp = writerMetaDataTable.get(PersistedWriterMetadataType.LastLogProcessed);
     }
 
     public void setsrcBaseSnapshotStart(long ts) {
         writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
-        lastSrcBaseSnapshotTimestamp = ts;
     }
 
     public void setsrcBaseSnapshotDone() {
-        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapDone.getVal(), lastSrcBaseSnapshotTimestamp);
+        long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapDone);
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapDone.getVal(), ts);
+        lastProcessedLogTimestamp = ts;
     }
 
     public void setLastProcessedLogTimestamp(long ts) {
