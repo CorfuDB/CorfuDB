@@ -19,10 +19,7 @@ public class TestSnapshotListener implements SnapshotListener {
     @Getter
     private Queue<DataMessage> txQueue = new LinkedList<>();
 
-    private TestTransmitterConfig config;
-
-    public TestSnapshotListener(TestTransmitterConfig config) {
-        this.config = config;
+    public TestSnapshotListener() {
     }
 
     @Override
@@ -45,9 +42,5 @@ public class TestSnapshotListener implements SnapshotListener {
     @Override
     public void onError(LogReplicationError error, UUID snapshotSyncId) {
 
-    }
-
-    public void clearQueue() {
-        txQueue.clear();
     }
 }

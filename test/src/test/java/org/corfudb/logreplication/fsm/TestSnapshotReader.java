@@ -16,13 +16,13 @@ import java.util.List;
  */
 public class TestSnapshotReader implements SnapshotReader {
 
-    private TestTransmitterConfig config;
+    private TestReaderConfiguration config;
 
     private int globalIndex = 0;
 
     private CorfuRuntime runtime;
 
-    public TestSnapshotReader(TestTransmitterConfig config) {
+    public TestSnapshotReader(TestReaderConfiguration config) {
         this.config = config;
         this.runtime = new CorfuRuntime(config.getEndpoint()).connect();
     }
