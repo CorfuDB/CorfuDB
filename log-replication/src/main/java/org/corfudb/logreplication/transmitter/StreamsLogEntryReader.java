@@ -31,13 +31,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private long preMsgTs; //the timestamp of the transaction log that is the previous message
     private long currentMsgTs; //the timestamp of the transaction log that is the current message
     private long sequence; //the sequence number of the message based on the globalBaseSnapshot
-    private ReadProcessor readProcessor;
 
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config, ReadProcessor readProcessor) {
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         Set<String> streams = config.getStreamsToReplicate();
-        this.readProcessor = readProcessor;
 
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));

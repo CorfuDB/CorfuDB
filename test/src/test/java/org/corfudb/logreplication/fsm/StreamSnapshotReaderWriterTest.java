@@ -36,7 +36,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
     HashMap<String, CorfuTable<Long, Long>> tables = new HashMap<>();
 
     /*
-     * the in-memory data for corfutables for verification.
+     * the in-memory data for corfu tables for verification.
      */
     HashMap<String, HashMap<Long, Long>> hashMap = new HashMap<String, HashMap<Long, Long>>();
 
@@ -98,8 +98,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
 
     void readMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        DefaultReadProcessor readProcessor = new DefaultReadProcessor(rt);
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config, readProcessor);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {

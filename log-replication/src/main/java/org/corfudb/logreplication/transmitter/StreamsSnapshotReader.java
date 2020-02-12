@@ -44,16 +44,13 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
 
-    private ReadProcessor readProcessor;
-
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config, ReadProcessor readProcessor) {
+    public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         this.config = config;
         streams = config.getStreamsToReplicate();
-        this.readProcessor = readProcessor;
     }
 
     /**

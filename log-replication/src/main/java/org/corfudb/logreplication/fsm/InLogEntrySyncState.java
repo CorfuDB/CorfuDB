@@ -115,7 +115,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            logEntrySyncFuture = fsm.getStateMachineWorkers().submit(logEntryTransmitter::transmit);
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntryTransmitter::transmit);
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
         }

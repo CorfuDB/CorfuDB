@@ -89,8 +89,7 @@ public class ReplicationTxManager {
                                 LogReplicationConfig config,
                                 ExecutorService logReplicationFSMWorkers) {
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
-                logReplicationFSMWorkers, Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build()));
+                logReplicationFSMWorkers);
     }
 
     /**
@@ -114,8 +113,7 @@ public class ReplicationTxManager {
                                 LogReplicationConfig config,
                                 ExecutorService logReplicationFSMWorkers) {
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, snapshotListener, logEntryListener,
-                readProcessor, logReplicationFSMWorkers, Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("state-machine-consumer").build()));
+                readProcessor, logReplicationFSMWorkers);
     }
 
     /**

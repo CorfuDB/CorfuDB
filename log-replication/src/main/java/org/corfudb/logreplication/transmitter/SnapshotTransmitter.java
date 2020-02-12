@@ -50,10 +50,12 @@ public class SnapshotTransmitter {
 
     private volatile boolean stopSnapshotSync = false;
 
-    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener, LogReplicationFSM fsm) {
+    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener,
+                               ReadProcessor readProcessor,LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.snapshotListener = snapshotListener;
+        this.readProcessor = readProcessor;
         this.fsm = fsm;
     }
 
