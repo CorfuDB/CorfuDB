@@ -161,6 +161,11 @@
             <artifactId>logback-classic</artifactId>
             <version>${logback.classic.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.agrona</groupId>
+            <artifactId>Agrona</artifactId>
+            <version>0.9.1</version>
+        </dependency>
     </dependencies>
 
 </project>

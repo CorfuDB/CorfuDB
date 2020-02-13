@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.agrona.collections.Long2LongHashMap;
 import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
@@ -34,9 +35,10 @@ class SegmentHandle {
     @NonNull
     String fileName;
 
-    private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
-    private final Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private final Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Map<Long, Long> knownAddresses = new Long2LongHashMap(StreamLogFiles.RECORDS_PER_LOG_FILE,
+            0.67F, // Load factor
+            -1); // missing value
+
     private volatile int refCount = 0;
 
 

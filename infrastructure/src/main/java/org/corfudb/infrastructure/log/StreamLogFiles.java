@@ -673,13 +673,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 return;
             }
 
+            /**
             AddressMetaData addressMetadata = new AddressMetaData(
                     metadata.getPayloadChecksum(),
                     metadata.getLength(),
                     channelOffset + METADATA_SIZE
             );
+             **/
 
-            segment.getKnownAddresses().put(entry.getGlobalAddress(), addressMetadata);
+            segment.getKnownAddresses().put(entry.getGlobalAddress(), channelOffset);
         }
     }
 
@@ -693,15 +695,25 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private LogData readRecord(SegmentHandle segment, long address) throws IOException {
         FileChannel fileChannel = segment.getReadChannel();
 
-        AddressMetaData metaData = segment.getKnownAddresses().get(address);
-        if (metaData == null) {
+        if (!segment.getKnownAddresses().containsKey(address)) {
             return null;
         }
 
         try {
-            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fileChannel.read(entryBuf, metaData.offset);
+            long metaDataOffSet = segment.getKnownAddresses().get(address);
+            // TODO(Maithem): Pre-allocate a large buffer to avoid the second read
+            ByteBuffer metaData = ByteBuffer.allocate(METADATA_SIZE);
+            fileChannel.read(metaData, metaDataOffSet);
+            Metadata metadata = Metadata.parseFrom(metaData.array());
+            ByteBuffer entryBuf = ByteBuffer.allocate(metadata.getLength());
+            fileChannel.read(entryBuf, metaDataOffSet + METADATA_SIZE);
+            if (Checksum.getChecksum(entryBuf.array()) != metadata.getPayloadChecksum()) {
+                throw new DataCorruptionException("Failed CRC on " + address);
+            }
             return getLogData(LogEntry.parseFrom(entryBuf.array()));
+            //ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+            //fileChannel.read(entryBuf, metaData.offset);
+            //return getLogData(LogEntry.parseFrom(entryBuf.array()));
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
                     fileChannel, segment.getFileName()
@@ -889,9 +901,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return A map of AddressMetaData for the written records
      * @throws IOException IO exception
      */
-    private Map<Long, AddressMetaData> writeRecords(SegmentHandle segment,
+    private Map<Long, Long> writeRecords(SegmentHandle segment,
                                                     List<LogData> entries) throws IOException {
-        Map<Long, AddressMetaData> recordsMap = new HashMap<>();
+        Map<Long, Long> recordsMap = new HashMap<>();
 
         List<ByteBuffer> entryBuffs = new ArrayList<>();
         int totalBytes = 0;
@@ -913,12 +925,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
             for (int ind = 0; ind < entryBuffs.size(); ind++) {
                 long channelOffset = segment.getWriteChannel().position()
-                        + allRecordsBuf.position() + METADATA_SIZE;
+                        + allRecordsBuf.position();
                 allRecordsBuf.put(entryBuffs.get(ind));
                 Metadata metadata = metadataList.get(ind);
-                recordsMap.put(entries.get(ind).getGlobalAddress(),
-                        new AddressMetaData(metadata.getPayloadChecksum(),
-                                metadata.getLength(), channelOffset));
+                recordsMap.put(entries.get(ind).getGlobalAddress(), channelOffset);
             }
 
             allRecordsBuf.flip();
@@ -959,7 +969,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param entry   The LogData to append.
      * @return Returns metadata for the written record
      */
-    private AddressMetaData writeRecord(SegmentHandle segment, long address,
+    private long writeRecord(SegmentHandle segment, long address,
                                         LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
         Metadata metadata = getMetadata(logEntry);
@@ -969,14 +979,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
-            channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
+            channelOffset = segment.getWriteChannel().position();
             writeByteBuffer(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
             syncTailSegment(address);
             logMetadata.update(entry, false);
         }
 
-        return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
+        return channelOffset;
     }
 
     private long getSegment(LogData entry) {
@@ -1113,12 +1123,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try {
             if (!segOneEntries.isEmpty()) {
-                Map<Long, AddressMetaData> firstSegAddresses = writeRecords(firstSh, segOneEntries);
+                Map<Long, Long> firstSegAddresses = writeRecords(firstSh, segOneEntries);
                 firstSh.getKnownAddresses().putAll(firstSegAddresses);
             }
 
             if (!segTwoEntries.isEmpty()) {
-                Map<Long, AddressMetaData> lastSegAddresses = writeRecords(lastSh, segTwoEntries);
+                Map<Long, Long> lastSegAddresses = writeRecords(lastSh, segTwoEntries);
                 lastSh.getKnownAddresses().putAll(lastSegAddresses);
             }
         } catch (IOException e) {
@@ -1142,8 +1152,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            if (segment.getKnownAddresses().containsKey(address)
-                    || segment.getTrimmedAddresses().contains(address)) {
+            if (segment.getKnownAddresses().containsKey(address)) {
                 if (entry.getRank() == null) {
                     OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
                     log.trace("Disk_write[{}]: overwritten exception, cause: {}", address, overwriteCause);
@@ -1151,11 +1160,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 } else {
                     // the method below might throw DataOutrankedException or ValueAdoptedException
                     assertAppendPermittedUnsafe(address, entry);
-                    AddressMetaData addressMetaData = writeRecord(segment, address, entry);
+                    long addressMetaData = writeRecord(segment, address, entry);
                     segment.getKnownAddresses().put(address, addressMetaData);
                 }
             } else {
-                AddressMetaData addressMetaData = writeRecord(segment, address, entry);
+                long addressMetaData = writeRecord(segment, address, entry);
                 segment.getKnownAddresses().put(address, addressMetaData);
             }
             log.trace("Disk_write[{}]: Written to disk.", address);
@@ -1175,9 +1184,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         SegmentHandle segment = getSegmentHandleForAddress(address);
 
         try {
-            if (segment.getPendingTrims().contains(address)) {
-                return LogData.getTrimmed(address);
-            }
             return readRecord(segment, address);
         } catch (IOException e) {
             throw new RuntimeException(e);
