@@ -171,9 +171,13 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         //clear all tables, play messages
         writeMsgs(msgQ, hashMap.keySet(), writerRuntime);
 
-        IStreamView sv = testRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test0"));
-        for (ILogData data : sv.remaining()) {
-            System.out.println(data);
+        for (String name : hashMap.keySet()) {
+            IStreamView sv = testRuntime.getStreamsView().get(CorfuRuntime.getStreamID(name));
+            List<ILogData> dataList = sv.remaining();
+            for (ILogData data : dataList) {
+                System.out.println(data);
+            }
+            System.out.println("stream " + name + " numkeys " + dataList.size());
         }
         //verify data with hashtable
         verifyData();
