@@ -168,14 +168,6 @@ public class CorfuRuntime {
         int handshakeTimeout = 10;
         // endregion
 
-        // region Stream Parameters
-        /**
-         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
-         * False, if strategy to discover the address space of a stream relies on the get stream address map.
-         */
-        @Default
-        boolean followBackpointersEnabled = false;
-
         /**
          * Whether or not hole filling should be disabled.
          */

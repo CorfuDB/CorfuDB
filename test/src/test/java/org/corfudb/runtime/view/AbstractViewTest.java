@@ -97,14 +97,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
-        this(false);
-    }
-
-    public AbstractViewTest(boolean followBackpointers) {
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-                .followBackpointersEnabled(followBackpointers)
                 .nettyEventLoop(NETTY_EVENT_LOOP)
                 .build());
         // Default number of times to read before hole filling to 0

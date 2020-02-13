@@ -24,20 +24,7 @@ public class ThreadSafeStreamView implements IStreamView {
     public ThreadSafeStreamView(final CorfuRuntime runtime,
                                  final UUID streamId,
                                  @Nonnull final StreamOptions options) {
-        if (runtime.getParameters().isFollowBackpointersEnabled()) {
-            stream = new BackpointerStreamView(runtime, streamId, options);
-        } else {
-            stream = new AddressMapStreamView(runtime, streamId, options);
-        }
-    }
-
-    public ThreadSafeStreamView(final CorfuRuntime runtime,
-                                 final UUID streamId) {
-        if (runtime.getParameters().isFollowBackpointersEnabled()) {
-            stream = new BackpointerStreamView(runtime, streamId, StreamOptions.DEFAULT);
-        } else {
-            stream = new AddressMapStreamView(runtime, streamId, StreamOptions.DEFAULT);
-        }
+        stream = new AddressMapStreamView(runtime, streamId, options);
     }
 
     @Override

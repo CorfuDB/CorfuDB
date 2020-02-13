@@ -21,7 +21,6 @@ import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
 import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
 
@@ -383,11 +382,7 @@ public class Layout {
 
             @Override
             public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                if (r.getParameters().isFollowBackpointersEnabled()) {
-                    return new BackpointerStreamView(r, streamId, options);
-                } else {
-                    return new AddressMapStreamView(r, streamId, options);
-                }
+                return new AddressMapStreamView(r, streamId, options);
             }
 
             @Override
@@ -430,11 +425,7 @@ public class Layout {
 
             @Override
             public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                if (r.getParameters().isFollowBackpointersEnabled()) {
-                    return new BackpointerStreamView(r, streamId, options);
-                } else {
-                    return new AddressMapStreamView(r, streamId, options);
-                }
+                return new AddressMapStreamView(r, streamId, options);
             }
 
             @Override

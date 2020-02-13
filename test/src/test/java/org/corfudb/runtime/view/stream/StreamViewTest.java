@@ -21,11 +21,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * Created by zlokhandwala on 5/24/17.
  */
-public abstract class AbstractStreamViewTest extends AbstractViewTest {
-
-    public AbstractStreamViewTest(boolean followBackpointers) {
-        super(followBackpointers);
-    }
+public class StreamViewTest extends AbstractViewTest {
 
     /**
      * Tests the hasNext functionality of the streamView.
