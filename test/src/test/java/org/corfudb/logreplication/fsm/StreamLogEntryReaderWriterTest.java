@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
-    static private final int NUM_KEYS = 1000;
+    static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 4;
     static private final int NUM_TRANS = 1000;
 
@@ -142,10 +142,11 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
-            assertThat(hashMap.keySet().containsAll(table.keySet()));
-            assertThat(table.keySet().containsAll(hashMap.keySet()));
+            assertThat(hashMap.keySet().containsAll(table.keySet()) == true);
+            assertThat(table.keySet().containsAll(hashMap.keySet()) == true);
             assertThat(table.keySet().isEmpty() == false);
             for (Long key : mapKeys.keySet()) {
+                System.out.println("table key " + key + " val " + table.get(key));
                 assertThat(table.get(key) == mapKeys.get(key));
             }
         }

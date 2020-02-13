@@ -94,11 +94,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param opaqueEntry
      */
     void processOpaqueEntry(OpaqueEntry opaqueEntry) {
-        MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
         for (UUID uuid : opaqueEntry.getEntries().keySet()) {
             for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                multiObjectSMREntry.addTo(uuid, smrEntry);
-                streamViewMap.get(uuid).append(multiObjectSMREntry);
+                streamViewMap.get(uuid).append(smrEntry);
             }
         }
     }
