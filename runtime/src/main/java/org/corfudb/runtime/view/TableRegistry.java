@@ -336,7 +336,8 @@ public class TableRegistry {
                 defaultMetadataMessage,
                 this.runtime,
                 this.protobufSerializer,
-                mapSupplier, versionPolicy);
+                mapSupplier, versionPolicy, tableOptions.getStreamTags()
+                );
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);

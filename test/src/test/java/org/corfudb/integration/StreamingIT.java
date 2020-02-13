@@ -12,6 +12,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Before;
 import org.junit.Test;
@@ -128,7 +129,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, Uuid, Uuid> n1t1 = store.openTable(
                 "n1", "t1", Uuid.class,
                 Uuid.class, Uuid.class,
-                TableOptions.builder().build()
+                createTableOptions(ObjectsView.TRANSACTION_STREAM_ID)
         );
 
         // Make some updates to the table.
@@ -250,14 +251,12 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, Uuid, Uuid> n1t1 = store.openTable(
                 "n1", "t1", Uuid.class,
                 Uuid.class, Uuid.class,
-                TableOptions.builder().build()
-        );
+                createTableOptions(ObjectsView.TRANSACTION_STREAM_ID));
 
         Table<Uuid, Uuid, Uuid> n2t1 = store.openTable(
                 "n2", "t1", Uuid.class,
                 Uuid.class, Uuid.class,
-                TableOptions.builder().build()
-        );
+                createTableOptions(ObjectsView.TRANSACTION_STREAM_ID));
 
         // Make some updates to the table.
         final int numUpdates = 3;

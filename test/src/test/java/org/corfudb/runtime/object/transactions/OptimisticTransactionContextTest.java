@@ -3,9 +3,12 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.reflect.TypeToken;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -23,6 +26,7 @@ import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -951,5 +955,90 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         assertThat(rt.getSequencerView().query().getSequence()).isEqualTo(currentTail + 2);
         assertThat(get("k1")).isEqualTo("v1");
         assertThat(get("k2")).isEqualTo("v2");
+    }
+    /**
+     *
+     */
+    @Test
+    public void testAffectedStreamsWithStreamTags() {
+        CorfuRuntime rt = getDefaultRuntime().connect();
+
+        // Create a table with a stream tag
+        Map<String, String> testMap1 = rt.getObjectsView()
+            .build().setStreamName("test-1")
+            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setStreamTags(CorfuRuntime.getStreamID("test-1"))
+            .open();
+
+        // Create another table without custom tag.
+        Map<String, String> testMap2 = rt.getObjectsView()
+            .build().setStreamName("test-2")
+            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .open();
+
+        t1(() -> rt.getObjectsView().TXBegin());
+        t2(() -> rt.getObjectsView().TXBegin());
+        t1(() -> testMap1.put("azusavnj", "1"));
+        t2(() -> testMap2.put("ajkenmbb", "2"));
+
+        t1(() -> {
+            OptimisticTransactionalContext context =
+                (OptimisticTransactionalContext) TransactionalContext
+                    .getCurrentContext();
+            assertThat(context.getModifiedProxies().size()).isEqualTo(1);
+            context.getModifiedProxies().forEach(p ->
+                assertThat(
+            p.getStreamTags().contains(CorfuRuntime.getStreamID("test-1"))).isTrue());
+        });
+
+        t2(() -> {
+            OptimisticTransactionalContext context =
+                (OptimisticTransactionalContext) TransactionalContext
+                    .getCurrentContext();
+            assertThat(context.getModifiedProxies().isEmpty()).isTrue();
+            assertThat(context.getWriteSetInfo().getAffectedStreams().contains(
+                CorfuRuntime.getStreamID("test-2"))).isTrue();
+        });
+        t1(() -> rt.getObjectsView().TXEnd());
+        t2(() -> rt.getObjectsView().TXEnd());
+    }
+
+    @Test
+    public void testPollingWithStreams() {
+        final String testTag = "testTag";
+
+        CorfuRuntime rt = getDefaultRuntime().connect();
+
+        final CorfuTable<String, String>
+            instance1 = rt.getObjectsView().build()
+            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setStreamName("txTestMap")
+            .setStreamTags(CorfuRuntime.getStreamID(testTag))
+            .open();
+
+        rt.getObjectsView().TXBegin();
+        instance1.put("K1", "V1");
+        rt.getObjectsView().TXEnd();
+
+        IStreamView streamView = rt.getStreamsView()
+            .get(CorfuRuntime.getStreamID(testTag));
+
+        List<ILogData> txns = streamView.remainingUpTo(Long.MAX_VALUE);
+        assertThat(txns).hasSize(1);
+        assertThat(txns.get(0).getLogEntry(getRuntime()).getType()).isEqualTo
+            (LogEntry.LogEntryType.MULTIOBJSMR);
+
+        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
+            (getRuntime());
+        assertThat(tx1.getEntryMap().size()).isEqualTo(1);
+        MultiSMREntry entryMap = tx1.getEntryMap().entrySet().iterator()
+            .next().getValue();
+        assertThat(entryMap).isNotNull();
+        assertThat(entryMap.getUpdates().size()).isEqualTo(1);
+        SMREntry smrEntry = entryMap.getUpdates().get(0);
+        Object[] args = smrEntry.getSMRArguments();
+        assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
+        assertThat((String) args[0]).isEqualTo("K1");
+        assertThat((String) args[1]).isEqualTo("V1");
     }
 }

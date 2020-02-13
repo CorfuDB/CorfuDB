@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import java.util.Set;
 import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -31,8 +32,9 @@ public class CorfuCompileWrapperBuilder {
      */
     @SuppressWarnings("checkstyle:abbreviation")
     public static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                                         UUID streamID, Object[] args,
-                                                         ISerializer serializer)
+                                                        UUID streamID, Object[] args,
+                                                        ISerializer serializer,
+                                                        Set<UUID> streamTags)
             throws Exception {
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
@@ -45,7 +47,7 @@ public class CorfuCompileWrapperBuilder {
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
         wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<T>(rt, streamID,
-                type, args, serializer, wrapperObject));
+                type, args, serializer, streamTags, wrapperObject));
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)
@@ -60,6 +62,7 @@ public class CorfuCompileWrapperBuilder {
                 smrObject.getRuntime(),
                 smrObject.getStreamID(),
                 smrObject.getArguments(),
-                smrObject.getSerializer());
+                smrObject.getSerializer(),
+                smrObject.getStreamTags());
     }
 }

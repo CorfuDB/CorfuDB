@@ -54,6 +54,7 @@ public class TransactionStreamIT extends AbstractIT {
 
     @Test
     public void txnStreamTest() throws Exception {
+        UUID txnStreamTag = CorfuRuntime.getStreamID("txn_stream_tag");
 
         Process server_1 = new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -85,7 +86,7 @@ public class TransactionStreamIT extends AbstractIT {
 
             consumerRts.add(consumerRt);
 
-            IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+            IStreamView txStream = consumerRt.getStreamsView().get(txnStreamTag);
 
             Map<UUID, Integer> counters = new HashMap<>(numWriters);
             int consumed = 0;
@@ -128,6 +129,7 @@ public class TransactionStreamIT extends AbstractIT {
                 CorfuTable<Integer, Integer> map = producersRt.getObjectsView()
                         .build()
                         .setStreamName(String.valueOf(idx))
+                        .setStreamTags(txnStreamTag)
                         .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                         .open();
                 for (int i = 1; i <= numWritesPerThread; i++) {

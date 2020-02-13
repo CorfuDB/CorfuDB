@@ -488,6 +488,7 @@ public class StreamViewTest extends AbstractViewTest {
                 instance1 = localRuntime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("txTestMap")
+                .setStreamTags(ObjectsView.TRANSACTION_STREAM_ID)
                 .open();
 
         // Populate the Transaction Stream up to NUM_ITERATIONS_LOW entries.

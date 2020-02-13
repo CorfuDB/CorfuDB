@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object;
 
+import java.util.Set;
+import java.util.UUID;
+
 import org.corfudb.util.serializer.ISerializer;
 
 /**
@@ -26,4 +29,6 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
      * @return  The serializer to use.
      */
     ISerializer getSerializer();
+
+    Set<UUID> getStreamTags();
 }

@@ -6,6 +6,7 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -24,6 +25,8 @@ import org.junit.Test;
  * Created by mwei on 2/18/16.
  */
 public class ObjectsViewTest extends AbstractViewTest {
+    private static final UUID TEST_STREAM_ID =
+        CorfuRuntime.getStreamID("Test_Stream_Id");
 
     @Test
     @SuppressWarnings("unchecked")
@@ -47,6 +50,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(mapA)
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamTags(TEST_STREAM_ID)
                 .open();
 
         // TODO: fix so this does not require mapCopy.
@@ -54,6 +58,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(mapA)
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamTags(TEST_STREAM_ID)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -93,8 +98,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(map)
                 .containsEntry("k", "v2");
 
-        IStreamView txStream = r.getStreamsView().get(ObjectsView
-                .TRANSACTION_STREAM_ID);
+        IStreamView txStream = r.getStreamsView().get(TEST_STREAM_ID);
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).getLogEntry(getRuntime()).getType())

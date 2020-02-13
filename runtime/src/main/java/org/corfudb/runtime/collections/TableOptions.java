@@ -4,6 +4,7 @@ import lombok.Builder;
 
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Created by zlokhandwala on 2019-08-09.
@@ -12,6 +13,7 @@ import java.util.Optional;
 public class TableOptions<K, V> {
 
     private final Index.Registry<K, V> indexRegistry;
+    private UUID [] streamTags;
 
     /**
      * If this path is set, {@link CorfuStore} will utilize disk-backed {@link CorfuTable}.
@@ -20,5 +22,13 @@ public class TableOptions<K, V> {
 
     public Optional<Path> getPersistentDataPath() {
         return Optional.ofNullable(persistentDataPath);
+    }
+
+    public void setStreamTags(UUID... tags) {
+        streamTags = tags;
+    }
+
+    public UUID[] getStreamTags() {
+        return streamTags;
     }
 }

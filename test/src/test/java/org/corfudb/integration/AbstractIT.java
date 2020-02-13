@@ -12,6 +12,7 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.junit.After;
@@ -29,6 +30,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -374,6 +376,14 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                 .open();
         return map;
+    }
+
+    public static TableOptions createTableOptions(UUID ... streamTags) {
+        TableOptions options = TableOptions.builder().build();
+        if (streamTags.length != 0) {
+            options.setStreamTags(streamTags);
+        }
+        return options;
     }
 
     public static class StreamGobbler implements Runnable {
