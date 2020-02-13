@@ -16,25 +16,49 @@ import java.util.List;
  * This is the entry point for destination site.
  */
 @Slf4j
-public class ReplicationRxManager {
+public class ReplicationDestinationManager implements DataReceiver {
     private CorfuRuntime runtime;
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
     private PersistedWriterMetadata persistedWriterMetadata;
     private RxState rxState;
+    private LogReplicationConfig config;
 
     /**
      * Constructor
      *
      * @param rt Corfu Runtime
+     * @param config log replication configuration
      */
-    public ReplicationRxManager(CorfuRuntime rt, LogReplicationConfig config) {
+    public ReplicationDestinationManager(CorfuRuntime rt, LogReplicationConfig config) {
         this.runtime = rt;
         this.snapshotWriter = new StreamsSnapshotWriter(rt, config);
         this.logEntryWriter = new LogEntryWriter(rt, config);
         this.persistedWriterMetadata = new PersistedWriterMetadata(rt, config.getRemoteSiteID());
         this.rxState = RxState.IDLE_STATE;
         this.logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
+                persistedWriterMetadata.getLastProcessedLogTimestamp());
+    }
+
+    /**
+     * Constructor
+     *
+     * This is temp to solve a dependency issue in application (to be removed as config is required)
+     * This requires setLogReplicationConfig to be called.
+     *
+     * @param rt Corfu Runtime
+     */
+    public ReplicationDestinationManager(CorfuRuntime rt) {
+        this.runtime = rt;
+        this.rxState = RxState.IDLE_STATE;
+    }
+
+    public void setLogReplicationConfig(LogReplicationConfig config) {
+        this.config = config;
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config);
+        logEntryWriter = new LogEntryWriter(runtime, config);
+        persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
+        logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
     }
 
@@ -46,19 +70,23 @@ public class ReplicationRxManager {
     public void apply(DataMessage message) {
         // @maxi, how do we distinguish log entry apply from snapshot apply?
         // Buffer data (out of order) and apply
-        try {
-            if (rxState == RxState.SNAPSHOT_SYNC) {
-                this.snapshotWriter.apply(message);
-            } else if (rxState == RxState.LOG_SYN) {
-                this.logEntryWriter.apply(message);
-                persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
-            } else {
-                log.error("it is in the wrong state {}", rxState);
-                throw new ReplicationWriterException("wrong state");
+        if (config != null) {
+            try {
+                if (rxState == RxState.SNAPSHOT_SYNC) {
+                    this.snapshotWriter.apply(message);
+                } else if (rxState == RxState.LOG_SYN) {
+                    this.logEntryWriter.apply(message);
+                    persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+                } else {
+                    log.error("it is in the wrong state {}", rxState);
+                    throw new ReplicationWriterException("wrong state");
+                }
+            } catch (ReplicationWriterException e) {
+                log.error("Get an exception: ", e);
+                throw e;
             }
-        } catch (ReplicationWriterException e) {
-            log.error("Get an exception: " , e);
-            throw e;
+        } else {
+            log.warn("Set LogReplicationConfig for ReplicationDestinationManager");
         }
     }
 
@@ -91,6 +119,16 @@ public class ReplicationRxManager {
         //check if the all the expected message has received
         rxState = RxState.LOG_SYN;
         persistedWriterMetadata.setsrcBaseSnapshotDone();
+    }
+
+    @Override
+    public void receive(DataMessage message) {
+
+    }
+
+    @Override
+    public void receive(List<DataMessage> messages) {
+
     }
 
     enum RxState {
