@@ -88,7 +88,7 @@ public class TransactionPoller implements Runnable {
         log.trace("txStream current global position after seeking {}, hasNext {}",
                 txnStream.getCurrentGlobalPosition(), txnStream.hasNext());
 
-        List<ILogData> updates = txnStream.remaining();
+        List<ILogData> updates = txnStream.remaining().collect(Collectors.toList());
 
         log.trace("{} updates remaining in the txStream", updates.size());
 

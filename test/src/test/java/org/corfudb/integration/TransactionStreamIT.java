@@ -20,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,7 +94,7 @@ public class TransactionStreamIT extends AbstractIT {
             // Stop polling only when all updates (from all writers) have
             // been consumed.
             while (consumed < numWriters * numWritesPerThread) {
-                List<ILogData> entries = txStream.remaining();
+                List<ILogData> entries = txStream.remaining().collect(Collectors.toList());
 
                 if (!entries.isEmpty()) {
                     ConsumeDelta(counters, entries);

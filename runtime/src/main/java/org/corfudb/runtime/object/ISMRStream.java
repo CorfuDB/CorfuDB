@@ -23,9 +23,6 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 @SuppressWarnings("checkstyle:abbreviation")
 public interface ISMRStream {
 
-
-    List<SMREntry> remainingUpTo(long maxGlobal);
-
     List<SMREntry> current();
 
     List<SMREntry> previous();
@@ -34,11 +31,7 @@ public interface ISMRStream {
 
     void reset();
 
-    void seek(long globalAddress);
-
     void gc(long trimMark);
-
-    Stream<SMREntry> stream();
 
     Stream<SMREntry> streamUpTo(long maxGlobal);
 
@@ -71,7 +64,5 @@ public interface ISMRStream {
      * @return The UUID for this stream.
      */
     @SuppressWarnings("checkstyle:abbreviation")
-    default UUID getID() {
-        return new UUID(0L, 0L);
-    }
+    UUID getID();
 }

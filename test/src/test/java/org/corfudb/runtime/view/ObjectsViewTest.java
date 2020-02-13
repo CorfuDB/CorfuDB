@@ -7,6 +7,7 @@ import com.google.common.reflect.TypeToken;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
+import java.util.stream.Collectors;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -95,7 +96,7 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         IStreamView txStream = r.getStreamsView().get(ObjectsView
                 .TRANSACTION_STREAM_ID);
-        List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
+        List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE).collect(Collectors.toList());
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).getLogEntry(getRuntime()).getType())
                 .isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);

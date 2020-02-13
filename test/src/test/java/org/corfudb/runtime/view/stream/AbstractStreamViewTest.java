@@ -15,6 +15,7 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Tests the BackpointerStreamView
@@ -237,7 +238,7 @@ public abstract class AbstractStreamViewTest extends AbstractViewTest {
 
         // Traverse remaining of the stream, because trimmed exceptions are ignored
         // we should get the remaining entries in the stream (trimMark - end of stream).
-        List<ILogData> stream = sv.remaining();
+        List<ILogData> stream = sv.remaining().collect(Collectors.toList());
         assertThat(sv.getCurrentGlobalPosition()).isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW - 1);
         assertThat(stream.size()).isEqualTo(trimMark - 1);
 

@@ -10,6 +10,7 @@ import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * A thread-safe implementation of IStreamView.
@@ -88,7 +89,7 @@ public class ThreadSafeStreamView implements IStreamView {
     }
 
     @Override
-    public synchronized List<ILogData> remainingUpTo(long maxGlobal) {
+    public synchronized Stream<ILogData> remainingUpTo(long maxGlobal) {
         return stream.remainingUpTo(maxGlobal);
     }
 

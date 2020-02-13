@@ -139,35 +139,6 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public List<SMREntry> remainingUpTo(long maxGlobal) {
-        // Check for any new contexts
-        if (TransactionalContext.getTransactionStack().size()
-                > contexts.size()) {
-            contexts = TransactionalContext.getTransactionStackAsList();
-        } else if (TransactionalContext.getTransactionStack().size()
-                < contexts.size()) {
-            mergeTransaction();
-        }
-        List<SMREntry> entryList = new LinkedList<>();
-
-
-        for (int i = currentContext; i < contexts.size(); i++) {
-            final List<SMREntry> writeSet = contexts.get(i)
-                    .getWriteSetEntryList(id);
-            long readContextStart = i == currentContext ? currentContextPos + 1 : 0;
-            for (long j = readContextStart; j < writeSet.size(); j++) {
-                entryList.add(writeSet.get((int) j));
-                writePos++;
-            }
-            if (writeSet.size() > 0) {
-                currentContext = i;
-                currentContextPos = writeSet.size() - 1;
-            }
-        }
-        return entryList;
-    }
-
-    @Override
     public List<SMREntry> current() {
         if (Address.nonAddress(writePos)) {
             return Collections.emptyList();
@@ -226,19 +197,32 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public void seek(long globalAddress) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Stream<SMREntry> stream() {
-        return streamUpTo(Address.MAX);
-    }
-
-    @Override
     public Stream<SMREntry> streamUpTo(long maxGlobal) {
-        return remainingUpTo(maxGlobal)
-                .stream();
+        // Check for any new contexts
+        if (TransactionalContext.getTransactionStack().size()
+                > contexts.size()) {
+            contexts = TransactionalContext.getTransactionStackAsList();
+        } else if (TransactionalContext.getTransactionStack().size()
+                < contexts.size()) {
+            mergeTransaction();
+        }
+        List<SMREntry> entryList = new LinkedList<>();
+
+
+        for (int i = currentContext; i < contexts.size(); i++) {
+            final List<SMREntry> writeSet = contexts.get(i)
+                    .getWriteSetEntryList(id);
+            long readContextStart = i == currentContext ? currentContextPos + 1 : 0;
+            for (long j = readContextStart; j < writeSet.size(); j++) {
+                entryList.add(writeSet.get((int) j));
+                writePos++;
+            }
+            if (writeSet.size() > 0) {
+                currentContext = i;
+                currentContextPos = writeSet.size() - 1;
+            }
+        }
+        return entryList.stream();
     }
 
     @Override

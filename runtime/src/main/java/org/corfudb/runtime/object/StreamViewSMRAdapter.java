@@ -73,22 +73,6 @@ public class StreamViewSMRAdapter implements ISMRStream {
     }
 
     /**
-     * Returns all entries remaining upto the specified the global address specified.
-     *
-     * @param maxGlobal Max Global up to which SMR Entries are required.
-     * @return Returns a list of SMR Entries upto the maxGlobal.
-     */
-    public List<SMREntry> remainingUpTo(long maxGlobal) {
-        return streamView.remainingUpTo(maxGlobal).stream()
-                .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
-                        || m.hasCheckpointMetadata())
-                .map(this::dataAndCheckpointMapper)
-                .flatMap(List::stream)
-                .collect(Collectors.toList());
-    }
-
-    /**
      * Returns the list of SMREntries positioned at the current global log.
      * It returns null of no data is null.
      *
@@ -132,15 +116,6 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     public void reset() {
         streamView.reset();
-    }
-
-    public void seek(long globalAddress) {
-        streamView.seek(globalAddress);
-    }
-
-    @Override
-    public Stream<SMREntry> stream() {
-        return streamUpTo(Address.MAX);
     }
 
     @Override

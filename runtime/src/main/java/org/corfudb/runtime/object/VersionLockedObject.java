@@ -308,17 +308,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     }
 
     /**
-     * Move the pointer for this object (effectively, forcefuly
-     * change the version of this object without playing
-     * any updates).
-     *
-     * @param globalAddress The global address to set the pointer to
-     */
-    public void seek(long globalAddress) {
-        smrStream.seek(globalAddress);
-    }
-
-    /**
      * @see VersionLockedObject#syncObjectUnsafeInner
      */
     public void syncObjectUnsafe(long timestamp) {
@@ -709,16 +698,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             log.warn("OptimisticRollback[{}] failed", this);
             resetUnsafe();
         }
-    }
-
-    /** Apply an SMREntry to the version object, while
-     * doing bookkeeping for the underlying stream.
-     *
-     * @param entry smr entry
-     */
-    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
-        applyUpdateUnsafe(entry, globalAddress);
-        seek(globalAddress + 1);
     }
 
     /**

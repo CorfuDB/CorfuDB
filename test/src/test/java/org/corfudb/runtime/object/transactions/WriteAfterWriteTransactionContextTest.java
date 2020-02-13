@@ -11,6 +11,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -52,7 +53,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
         IStreamView txStream = getRuntime().getStreamsView()
                 .get(ObjectsView.TRANSACTION_STREAM_ID);
 
-        List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
+        List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE).collect(Collectors.toList());
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).getLogEntry(getRuntime()).getType()).isEqualTo
             (LogEntry.LogEntryType.MULTIOBJSMR);

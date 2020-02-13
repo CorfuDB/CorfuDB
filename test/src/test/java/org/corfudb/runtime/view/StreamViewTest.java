@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -137,7 +138,7 @@ public class StreamViewTest extends AbstractViewTest {
             txStream.append(data);
         }
 
-        List<ILogData> entries = txStream.remainingUpTo((firstIter - 1) / 2);
+        List<ILogData> entries = txStream.remainingUpTo((firstIter - 1) / 2).collect(Collectors.toList());
         assertThat(entries.size()).isEqualTo(firstIter / 2);
 
         Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), (firstIter - 1) / 2);
@@ -145,10 +146,10 @@ public class StreamViewTest extends AbstractViewTest {
         runtime.getAddressSpaceView().invalidateServerCaches();
         runtime.getAddressSpaceView().invalidateClientCache();
 
-        entries = txStream.remainingUpTo((firstIter - 1) / 2);
+        entries = txStream.remainingUpTo((firstIter - 1) / 2).collect(Collectors.toList());
         assertThat(entries.size()).isEqualTo(0);
 
-        entries = txStream.remainingUpTo(firstIter);
+        entries = txStream.remainingUpTo(firstIter).collect(Collectors.toList());
         assertThat(entries.size()).isEqualTo((firstIter / 2));
 
         // Open the stream with a new client
@@ -160,7 +161,7 @@ public class StreamViewTest extends AbstractViewTest {
                 .isInstanceOf(TrimmedException.class);
 
         txStream2.seek(firstIter / 2);
-        entries = txStream2.remainingUpTo(Long.MAX_VALUE);
+        entries = txStream2.remainingUpTo(Long.MAX_VALUE).collect(Collectors.toList());
         assertThat(entries.size()).isEqualTo((firstIter / 2));
     }
 

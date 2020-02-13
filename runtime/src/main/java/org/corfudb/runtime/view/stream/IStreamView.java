@@ -128,8 +128,8 @@ public interface IStreamView extends
      *                  if no entries are available.
      */
     @Nonnull
-    default List<ILogData> remaining() {
-        return remainingUpTo(Address.MAX);
+    default Stream<ILogData> remaining() {
+        return streamUpTo(Address.MAX);
     }
 
     /** Retrieve all of the entries from this stream, up to the address given or
@@ -141,7 +141,10 @@ public interface IStreamView extends
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
-    List<ILogData> remainingUpTo(long maxGlobal);
+    @Nonnull
+    default Stream<ILogData> remainingUpTo(long maxGlobal) {
+        return streamUpTo(maxGlobal);
+    }
 
     /** Returns whether or not there are potentially more entries in this
      * stream - this function may return true even if there are no entries
@@ -174,12 +177,6 @@ public interface IStreamView extends
         return new StreamSpliterator(this, maxGlobal);
     }
 
-    /** Get a Java stream from this stream view.
-     * @return  A Java stream for this stream view.
-     */
-    default Stream<ILogData> stream() {
-        return StreamSupport.stream(spliterator(), false);
-    }
 
     /** Get a Java stream from this stream view, limiting
      * reads to a specified global address.

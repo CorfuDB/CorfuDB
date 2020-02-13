@@ -148,63 +148,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         return entry;
     }
 
-    /** {@inheritDoc}
-     */
-    @Override
-    public final synchronized List<ILogData> remainingUpTo(long maxGlobal) {
-
-        // Pop the context if it has changed.
-        if (getCurrentContext().getGlobalPointer()
-                >= getCurrentContext().maxGlobalAddress) {
-            final T last = streamContexts.pollFirst();
-            log.trace("Completed context {}@{}, removing.",
-                    last.id, last.maxGlobalAddress);
-        }
-
-        final List<ILogData> entries = getNextEntries(getCurrentContext(), maxGlobal,
-                this::doesEntryUpdateContext);
-
-        // Nothing read, nothing to process.
-        if (entries.size() == 0) {
-            // We've resolved up to maxGlobal, so remember it. (if it wasn't max)
-            if (maxGlobal != Address.MAX) {
-                // Set Global Pointer and check that it is not pointing to an address in the trimmed space.
-                getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
-            }
-            return entries;
-        }
-
-        // Check if the last entry updates the context.
-        if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
-
-            // Remove the entry which updates the context
-            entries.remove(entries.size() - 1);
-
-            // do a read again, which will consume the inner context
-            entries.addAll(remainingUpTo(maxGlobal));
-
-            // and now read again, in case the context returned, to make
-            // sure we get up to maxGlobal.
-            entries.addAll(remainingUpTo(maxGlobal));
-        }
-
-        // Otherwise update the pointer
-        if (maxGlobal != Address.MAX) {
-            // Set Global Pointer and check that it is not pointing to an address in the trimmed space.
-            getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
-        } else {
-            // Update pointer from log data and then validate final position of the pointer against GC trim mark.
-            updatePointer(entries.get(entries.size() - 1));
-            getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
-        }
-
-        // And return the entries.
-        return entries;
-    }
-
     /**
      * {@inheritDoc}
      */

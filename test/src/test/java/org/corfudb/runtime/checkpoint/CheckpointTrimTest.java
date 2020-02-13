@@ -6,6 +6,7 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -215,7 +216,8 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Seek beyond the last trimmed address.
         // The first call to remainingUpTo() will load the checkpoint, and the
         // second one will fetch the actual data.
-        Assertions.assertThat(Stream.of(s.remainingUpTo(Long.MAX_VALUE), s.remainingUpTo(Long.MAX_VALUE))
+        Assertions.assertThat(Stream.of(s.remainingUpTo(Long.MAX_VALUE).collect(Collectors.toList()),
+                s.remainingUpTo(Long.MAX_VALUE).collect(Collectors.toList()))
                 .map(List::size).mapToInt(Integer::intValue).sum())
                 .isEqualTo(BATCH_SIZE);
 
