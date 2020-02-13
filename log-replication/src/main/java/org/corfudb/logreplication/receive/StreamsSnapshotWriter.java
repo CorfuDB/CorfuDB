@@ -52,9 +52,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
     /**
      * clear all tables registered
+     * TODO: replace with stream API
      */
     void clearTables() {
-        for (UUID streamID : streamViewMap.keySet()) {
+        /*for (UUID streamID : streamViewMap.keySet()) {
             CorfuTable<String, String> corfuTable = rt.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
@@ -63,6 +64,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                     .open();
             corfuTable.clear();
             corfuTable.close();
+        }*/
+
+        for (IStreamView sv : streamViewMap.values()) {
+            SMREntry entry = new SMREntry("clear", null, null);
+            sv.append(entry);
         }
     }
 
@@ -87,6 +93,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
        srcGlobalSnapshot = snapshot;
        recvSeq = 0;
        streamsDone = new HashSet<>();
+       //clearTables();
     }
 
     /**
