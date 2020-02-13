@@ -5,11 +5,14 @@ import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.transmit.SnapshotReadMessage;
 import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -24,12 +27,13 @@ import java.util.UUID;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
-    static private final int NUM_KEYS = 1000;
-    static private final int NUM_STREAMS = 4;
+    static private final int NUM_KEYS = 5;
+    static private final int NUM_STREAMS = 1;
 
     CorfuRuntime dataRuntime = null;
     CorfuRuntime readerRuntime = null;
     CorfuRuntime writerRuntime = null;
+    CorfuRuntime testRuntime = null;
 
     Random random = new Random();
     HashMap<String, CorfuTable<Long, Long>> tables = new HashMap<>();
@@ -50,6 +54,7 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         dataRuntime = getNewRuntime(getDefaultNode()).connect();
         readerRuntime = getNewRuntime(getDefaultNode()).connect();
         writerRuntime = getNewRuntime(getDefaultNode()).connect();
+        testRuntime = getNewRuntime(getDefaultNode()).connect();
     }
 
     void openStreams(CorfuRuntime rt) {
@@ -128,20 +133,23 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         }
     }
 
-    void verifyData() {
+    void verifyData() throws Exception {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
             assertThat(hashMap.keySet().containsAll(table.keySet()));
             assertThat(table.keySet().containsAll(hashMap.keySet()));
             for (Long key : mapKeys.keySet()) {
+                System.out.println("\ntable key " + key + " val " + table.get(key));
+                if (table.get(key) == null)
+                    throw new Exception("null value");
                 assertThat(table.get(key) == mapKeys.get(key));
             }
         }
     }
 
     @Test
-    public void test0() {
+    public void test0() throws Exception {
 
         setRuntime();
         openStreams(dataRuntime);
@@ -163,6 +171,10 @@ public class StreamSnapshotReaderWriterTest extends AbstractViewTest {
         //clear all tables, play messages
         writeMsgs(msgQ, hashMap.keySet(), writerRuntime);
 
+        IStreamView sv = testRuntime.getStreamsView().get(CorfuRuntime.getStreamID("test0"));
+        for (ILogData data : sv.remaining()) {
+            System.out.println(data);
+        }
         //verify data with hashtable
         verifyData();
     }
