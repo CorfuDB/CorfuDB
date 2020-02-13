@@ -4,13 +4,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.transmit.LogEntryListener;
+import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.transmit.LogEntryReader;
 import org.corfudb.logreplication.transmit.LogEntryTransmitter;
 import org.corfudb.logreplication.transmit.PersistedReaderMetadata;
 import org.corfudb.logreplication.transmit.ReadProcessor;
 import org.corfudb.logreplication.transmit.DefaultReadProcessor;
-import org.corfudb.logreplication.transmit.SnapshotListener;
 import org.corfudb.logreplication.transmit.SnapshotReader;
 import org.corfudb.logreplication.transmit.SnapshotTransmitter;
 import org.corfudb.logreplication.transmit.StreamsLogEntryReader;
@@ -31,8 +30,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * be automatically replicated from the primary site to a remote site. So in the case of failure or data corruption,
  * the system can failover to the standby data-store.
  *
- * This functionality is driven by the application and initiated through the ReplicationTxManager
- * on the source (primary) site and handled through the ReplicationRxManager on the destination (standby) site.
+ * This functionality is driven by the application and initiated through the ReplicationSourceManager
+ * on the source (primary) site and handled through the ReplicationDestinationManager on the destination (standby) site.
  *
  * Log Replication on the transmit side is defined by an event-driven finite state machine, with 5 states
  * and 7 events/messages---which can trigger the transition between states.
@@ -133,14 +132,14 @@ public class LogReplicationFSM {
      *
      * @param runtime Corfu Runtime
      * @param config log replication configuration
-     * @param snapshotListener application callback for snapshot sync
-     * @param logEntryListener application callback for log entry sync
+     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
+     *                   the application callback for data transmission
      * @param workers FSM executor service for state tasks
      */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, SnapshotListener snapshotListener,
-                             LogEntryListener logEntryListener, ExecutorService workers) {
+    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
+                             ExecutorService workers) {
 
-        this(runtime, config, snapshotListener, logEntryListener, new DefaultReadProcessor(runtime), workers);
+        this(runtime, config, dataSender, new DefaultReadProcessor(runtime), workers);
     }
 
     /**
@@ -148,22 +147,22 @@ public class LogReplicationFSM {
      *
      * @param runtime Corfu Runtime
      * @param config log replication configuration
-     * @param snapshotListener application callback for snapshot sync
-     * @param logEntryListener application callback for log entry sync
+     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
+     *                   the application callback for data transmission
      * @param readProcessor read processor for data transformation
      * @param workers FSM executor service for state tasks
      */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, SnapshotListener snapshotListener,
-                             LogEntryListener logEntryListener, ReadProcessor readProcessor, ExecutorService workers) {
+    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
+                             ReadProcessor readProcessor, ExecutorService workers) {
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
         SnapshotReader defaultSnapshotReader = new StreamsSnapshotReader(runtime, config);
         LogEntryReader defaultLogEntryReader = new StreamsLogEntryReader(runtime, config);
 
         SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, defaultSnapshotReader,
-                snapshotListener, readProcessor, this);
+                dataSender, readProcessor, this);
         LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, defaultLogEntryReader,
-                logEntryListener, readProcessor, this);
+                dataSender, readProcessor, this);
 
         initializeStates(snapshotTransmitter, logEntryTransmitter);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
@@ -179,22 +178,20 @@ public class LogReplicationFSM {
      *
      * @param runtime Corfu Runtime
      * @param snapshotReader snapshot reader implementation
-     * @param snapshotListener application callback for snapshot sync
+     * @param dataSender application callback for snapshot sync
      * @param logEntryReader log entry reader implementation
-     * @param logEntryListener application callback for log entry sync
      * @param readProcessor read processor (for data transformation)
      * @param workers FSM executor service for state tasks
      */
     @VisibleForTesting
-    public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener,
-                             LogEntryReader logEntryReader, LogEntryListener logEntryListener,
-                             ReadProcessor readProcessor, ExecutorService workers) {
+    public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+                             LogEntryReader logEntryReader, ReadProcessor readProcessor, ExecutorService workers) {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and transmit data
         // through the callbacks provided by the application
-        SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, snapshotReader, snapshotListener,
+        SnapshotTransmitter snapshotTransmitter = new SnapshotTransmitter(runtime, snapshotReader, dataSender,
                 readProcessor, this);
-        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, logEntryReader, logEntryListener,
+        LogEntryTransmitter logEntryTransmitter = new LogEntryTransmitter(runtime, logEntryReader, dataSender,
                 readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state

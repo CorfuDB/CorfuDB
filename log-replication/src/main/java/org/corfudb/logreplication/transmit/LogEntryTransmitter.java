@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.transmit;
 
+import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.message.DataMessage;
@@ -28,7 +29,7 @@ public class LogEntryTransmitter {
     /*
      * Log Entry Listener, application callback to send out reads.
      */
-    private LogEntryListener logEntryListener;
+    private DataSender dataSender;
 
     /*
      * Log Replication FSM (to insert internal events)
@@ -51,13 +52,14 @@ public class LogEntryTransmitter {
      *
      * @param runtime corfu runtime
      * @param logEntryReader log entry reader implementation
-     * @param logEntryListener log entry listener implementation (application callback)
+     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
+     *                   the application callback for data transmission
      */
-    public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, LogEntryListener logEntryListener,
+    public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, DataSender dataSender,
                                ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
         this.runtime = runtime;
         this.logEntryReader = logEntryReader;
-        this.logEntryListener = logEntryListener;
+        this.dataSender = dataSender;
         this.readProcessor = readProcessor;
         this.logReplicationFSM = logReplicationFSM;
     }
@@ -76,7 +78,7 @@ public class LogEntryTransmitter {
             try {
                 message = logEntryReader.read();
                 // readProcessor.process(message);
-                if (logEntryListener.onNext(message)) {
+                if (dataSender.onNext(message)) {
                     // Write meta-data
                     reads++;
                 } else {
@@ -86,6 +88,7 @@ public class LogEntryTransmitter {
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
             } catch (Exception e) {
+                System.out.println(e);
                 // Unrecoverable error, noisy streams found in transaction stream (streams of interest and others not
                 // intended for replication). Shutdown.
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN));

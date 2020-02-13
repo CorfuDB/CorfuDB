@@ -1,12 +1,13 @@
-package org.corfudb.logreplication.transmit;
+package org.corfudb.logreplication;
 
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.transmit.LogReplicationError;
 
 import java.util.List;
 import java.util.UUID;
 
 
-public interface SnapshotListener {
+public interface DataSender {
 
     /**
      * Application callback on next available message for transmission to remote site during snapshot sync.
@@ -27,6 +28,22 @@ public interface SnapshotListener {
      * @return False, in the event of errors. True, otherwise.
      */
     boolean onNext(List<DataMessage> messages, UUID snapshotSyncId);
+
+    /**
+     * Application callback on next available message for transmission to remote site during log entry sync.
+     *
+     * @param message DataMessage representing the data to transmit across sites.
+     * @return
+     */
+    boolean onNext(DataMessage message);
+
+    /**
+     * Application callback on next available messages for transmission to remote site during log entry sync.
+     *
+     * @param messages list of DataMessage representing the data to transmit across sites.
+     * @return
+     */
+    boolean onNext(List<DataMessage> messages);
 
     /**
      * Call to the application indicating the full sync of streams on the given snapshot has completed.

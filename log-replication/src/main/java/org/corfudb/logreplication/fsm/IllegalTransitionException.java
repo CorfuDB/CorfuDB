@@ -3,8 +3,8 @@ package org.corfudb.logreplication.fsm;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
 /**
- * This class represents an exception in the case where an unexpected event
- * is processed for a given state, i.e., an invalid transition is detected.
+ * This class indicates an invalid transition has been detected,
+ * i.e., unexpected event has been processed when in a given state.
  */
 public class IllegalTransitionException extends Exception {
 

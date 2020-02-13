@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  *  Default snapshot reader implementation
  *
  *  This implementation provides reads at the stream level (no coalesced state).
- *  It generates TxMessages which will be transmitted by the SnapshotListener (provided by the application).
+ *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
     public static final int MAX_NUM_SMR_ENTRY = 5;
