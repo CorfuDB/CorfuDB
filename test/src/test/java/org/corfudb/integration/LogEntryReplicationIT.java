@@ -277,3 +277,4 @@ public class LogEntryReplicationIT extends AbstractIT {
         System.out.println("test done");
     }
 }
+
