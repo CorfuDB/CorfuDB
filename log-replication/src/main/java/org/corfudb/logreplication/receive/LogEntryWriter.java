@@ -2,7 +2,6 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.MessageMetadata;
 
 import org.corfudb.logreplication.message.MessageType;
@@ -12,7 +11,6 @@ import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -38,11 +36,9 @@ public class LogEntryWriter {
     long lastMsgTs; //the timestamp of the last message processed.
     private HashMap<Long, DataMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
     private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
-    private DataSender dataSender;
 
-    public LogEntryWriter(CorfuRuntime rt, DataSender dataSender, LogReplicationConfig config) {
+    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
-        this.dataSender = dataSender;
         Set<String> streams = config.getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
 
@@ -52,6 +48,12 @@ public class LogEntryWriter {
         msgQ = new HashMap<>();
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
+
+        streamViewMap = new HashMap<>();
+
+        for (UUID uuid : streamUUIDs) {
+            streamViewMap.put(uuid, rt.getStreamsView().getUnsafe(uuid));
+        }
     }
 
     /**
@@ -73,30 +75,31 @@ public class LogEntryWriter {
      */
     void processMsg(DataMessage txMessage) {
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getData()));
-        Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
+
         if (!streamUUIDs.containsAll(map.keySet())) {
             log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamUUIDs);
             throw new ReplicationWriterException("Wrong streams set");
         }
 
         try {
-            rt.getObjectsView().TXBegin();
-            TokenResponse tokenResponse = rt.getSequencerView().next((UUID[])(map.keySet().toArray()));
             MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
+
             for (UUID uuid : opaqueEntry.getEntries().keySet()) {
                 for(SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
                     multiObjectSMREntry.addTo(uuid, smrEntry);
                 }
             }
-            rt.getAddressSpaceView().write(tokenResponse.getToken(), multiObjectSMREntry);
-
-        } finally {
-            rt.getObjectsView().TXEnd();
+            rt.getStreamsView().append(multiObjectSMREntry, null, opaqueEntry.getEntries().keySet().toArray(new UUID[0]));
+        } catch (Exception e) {
+            log.warn("Caught an exception ", e);
+            throw e;
         }
+
+        lastMsgTs = txMessage.getMetadata().getTimestamp();
     }
 
     /**
-     * Go over the queue, if the next expecting msg is in queue, process it.
+     * Go over the queue, if the expecting messages in queue, process it.
      */
     void processQueue() {
         while (true) {
@@ -106,7 +109,6 @@ public class LogEntryWriter {
             }
             processMsg(txMessage);
             msgQ.remove(lastMsgTs);
-            lastMsgTs = txMessage.getMetadata().getTimestamp();
         }
     }
 
@@ -116,7 +118,7 @@ public class LogEntryWriter {
      */
     void cleanMsgQ(long msgTs) {
         for (long address : msgQ.keySet()) {
-            if (msgQ.get(address).getMetadata().getSnapshotTimestamp() <= lastMsgTs) {
+            if (msgQ.get(address).getMetadata().getTimestamp() <= lastMsgTs) {
                 msgQ.remove(address);
             }
         }
@@ -125,16 +127,17 @@ public class LogEntryWriter {
     /**
      * Apply message generate by log entry reader and will apply at the destination corfu cluster.
      * @param msg
+     * @return long: the last processed message timestamp if apply processing any messages.
      * @throws ReplicationWriterException
      */
-    public void apply(DataMessage msg) throws ReplicationWriterException {
+    public long apply(DataMessage msg) throws ReplicationWriterException {
         verifyMetadata(msg.getMetadata());
 
         // Ignore the out of date messages
         if (msg.getMetadata().getSnapshotTimestamp() < srcGlobalSnapshot) {
             log.warn("Received message with snapshot {} is smaller than current snapshot {}.Ignore it",
                     msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
-            return;
+            return Address.NON_ADDRESS;
         }
 
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
@@ -146,31 +149,33 @@ public class LogEntryWriter {
 
         //we will skip the entries has been processed.
         if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
-            return;
+            return Address.NON_ADDRESS;
         }
 
-        //If the entry is the expecting entry, process it and then process
+        //If the entry is the expecting entry, process it and process
         //the messages in the queue.
         if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
             processMsg(msg);
-            lastMsgTs = msg.getMetadata().getTimestamp();
             processQueue();
-            // Send ACK to sender for the set of processed
-            MessageMetadata metadata = new MessageMetadata(MessageType.LOG_ENTRY_REPLICATED, lastMsgTs, srcGlobalSnapshot);
-            DataMessage ack = new DataMessage(metadata);
-            dataSender.send(ack);
+            return lastMsgTs;
         }
 
-        //If the entry's ts is larger than the entry processed, put it in queue
+        //If the entry's ts is larger than the entry processed, put it to the queue
         if (msgQ.size() < MAX_MSG_QUE_SIZE) {
             msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
         }
+
+        return Address.NON_ADDRESS;
     }
 
     /**
-     *
+     * Set the basesnapshot that last full sync based on and ackTimesstamp
+     * that is the last log entry it has played.
+     * This is called while the writer enter the log entry sync state.
+     * @param snapshot
+     * @param ackTimestamp
      */
     public void setTimestamp(long snapshot, long ackTimestamp) {
         srcGlobalSnapshot = snapshot;

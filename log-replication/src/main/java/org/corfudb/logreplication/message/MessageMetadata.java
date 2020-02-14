@@ -16,9 +16,9 @@ public class MessageMetadata {
 
     /*
      * Max timestamp of all log entries in the current message
+     * for full sync when the timestamp == snapshotTimestamp, it means the end of the stream.
      */
     public long timestamp;
-    //for full sync when the timestamp == snapshotTimestamp, it means the end of the stream.
 
     /*
      * Used to chain sparse sequence for ordering

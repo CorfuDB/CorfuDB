@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.UUID;
@@ -14,9 +15,6 @@ import java.util.UUID;
  */
 public class PersistedWriterMetadata {
     private final String TABLE_PREFIX_NAME = "WRITER-";
-    private final String LAST_SNAPSHOT_TS_START = "lastSrcBaseSnapshotTimestamp_start";
-    private final String LAST_SNAPSHOT_TS_DONE = "lastSrcBaseSnapshotTimestamp_done";
-    private final String LAST_PROCESSED_LOG_TS = "lastProcessedLogTimestamp";
 
     @Getter
     private long lastSrcBaseSnapshotTimestamp;
@@ -32,10 +30,10 @@ public class PersistedWriterMetadata {
                 .setStreamName(TABLE_PREFIX_NAME + dst.toString())
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
-                .setSerializer(Serializers.JSON)
+                .setSerializer(Serializers.PRIMITIVE)
                 .open();
-        lastSrcBaseSnapshotTimestamp = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapDone);
-        lastProcessedLogTimestamp = writerMetaDataTable.get(PersistedWriterMetadataType.LastLogProcessed);
+        lastSrcBaseSnapshotTimestamp = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastSnapDone, Address.NON_ADDRESS);
+        lastProcessedLogTimestamp = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastLogProcessed, Address.NON_ADDRESS);
     }
 
     public void setsrcBaseSnapshotStart(long ts) {

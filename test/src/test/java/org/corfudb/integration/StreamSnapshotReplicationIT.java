@@ -155,23 +155,20 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
         }
     }
 
-    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap){
+    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
-            assertThat(hashMap.keySet().containsAll(table.keySet()));
-            assertThat(table.keySet().containsAll(hashMap.keySet()));
-            if (table.keySet().size() != mapKeys.keySet().size()) {
-                System.out.println("**********table size " + table.keySet().size() +
-                        " map size " + mapKeys.keySet().size());
-            }
-
-            for (Long key : mapKeys.keySet()) {
-                System.out.println(" table key " + key + " val " + table.get(key));
-                assertThat(table.get(key) == mapKeys.get(key));
-            }
             System.out.println("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
+
+            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
+            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
+            assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
+
+            for (Long key : mapKeys.keySet()) {
+                assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
+            }
         }
     }
 
