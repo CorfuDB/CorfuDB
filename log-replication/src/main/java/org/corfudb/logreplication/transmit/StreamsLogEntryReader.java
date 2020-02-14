@@ -17,7 +17,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 @Slf4j
 @NotThreadSafe
@@ -32,9 +31,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private Set<UUID> streamUUIDs;
 
     // the opaquestream wrapper for the transaction stream.
-    private OpaqueStream txStream;
-    // the iterator over txStream;
-    private Iterator iterator;
+    private TxOpaqueStream txStream;
+   
 
     // the base snapshot the log entry reader starts to poll transaction logs
     private long globalBaseSnapshot;
@@ -55,7 +53,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         }
 
         //create an opaque stream for transaction stream
-        txStream = new OpaqueStream(rt, rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
+        txStream = new TxOpaqueStream(rt);
     }
 
     DataMessage generateMessage(OpaqueEntry entry) {
@@ -90,35 +88,18 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
-        long timestamp = Math.max(snapshot, ackTimestamp);
         globalBaseSnapshot = snapshot;
-        preMsgTs = snapshot;
-        txStream.seek(ackTimestamp + 1);
+        preMsgTs = Math.max(snapshot, ackTimestamp);
+        txStream.seek(preMsgTs + 1);
         sequence = 0;
     }
-
-    boolean hasNext() {
-        if (iterator == null || !iterator.hasNext()) {
-            iterator = txStream.streamUpTo(rt.getAddressSpaceView().getLogTail()).iterator();
-        }
-        return iterator.hasNext();
-    }
-
-    OpaqueEntry nextEntry() {
-        if (!hasNext())
-            return null;
-        return (OpaqueEntry)iterator.next();
-    }
-
 
     @Override
     public DataMessage read() throws TrimmedException, ReplicationReaderException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
-        long tail = rt.getAddressSpaceView().getLogTail();
-        Stream stream = txStream.streamUpTo(tail); //this can throw trimmed exception
-
-        while(stream.iterator().hasNext()) {
-            OpaqueEntry opaqueEntry = (OpaqueEntry)stream.iterator().next();
+        
+        while(txStream.hasNext()) {
+            OpaqueEntry opaqueEntry = txStream.next();
             if (!shouldProcess(opaqueEntry)) {
                 continue;
             }
@@ -129,5 +110,65 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         //TODO: this I added so it compiles (fix)
         return null;
+    }
+
+    /**
+     * The class used to track the transaction opaque stream
+     */
+    public static class TxOpaqueStream {
+        CorfuRuntime rt;
+        OpaqueStream txStream;
+        Iterator iterator;
+        
+        public TxOpaqueStream(CorfuRuntime rt) {
+            //create an opaque stream for transaction stream
+            this.rt = rt;
+            txStream = new OpaqueStream(rt, rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
+            streamUpTo();
+        }
+
+        /**
+         * Set the iterator with entries from current seekAddress till snapshot
+         * @param snapshot
+         */
+        void streamUpTo(long snapshot) {
+            iterator = txStream.streamUpTo(snapshot).iterator();
+        }
+
+        /**
+         * Set the iterator with entries from current seekAddress till end of the log tail
+         */
+        void streamUpTo() {
+            streamUpTo(rt.getAddressSpaceView().getLogTail());
+        }
+            
+        /**
+         * Tell if the transaction stream has the next entry
+         */
+        boolean hasNext() {
+            if (!iterator.hasNext()) {
+                streamUpTo();
+            }
+            return iterator.hasNext();
+        }
+
+        /**
+         * Get the next entry from the transaction stream.
+         */
+        OpaqueEntry next() {
+            if (!hasNext())
+                return null;
+            return (OpaqueEntry)iterator.next();
+        }
+
+        /**
+         * Set stream head as firstAddress, set the iterator from 
+         * firstAddress till the current tail of the log
+         * @param firstAddress
+         */
+        public void seek(long firstAddress) {
+            txStream.seek(firstAddress);
+            streamUpTo();
+        }
     }
 }

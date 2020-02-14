@@ -34,9 +34,8 @@ public class LogEntryReplicationIT extends AbstractIT {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
-    static private final int NUM_KEYS = 100;
-    static private final int NUM_STREAMS = 1;
-    static private final int NUM_TRANSACTIONS = 1;
+    static private final int NUM_STREAMS = 2;
+    static private final int NUM_TRANSACTIONS = 100;
 
     Process server1;
     Process server2;
@@ -98,24 +97,23 @@ public class LogEntryReplicationIT extends AbstractIT {
 
         srcTestRuntime = CorfuRuntime.fromParameters(params);
         srcTestRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        srcTestRuntime.connect();
-
+        srcTestRuntime.setTransactionLogging(true).connect();
 
         readerRuntime = CorfuRuntime.fromParameters(params);
         readerRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        readerRuntime.connect();
+        readerRuntime.setTransactionLogging(true).connect();
 
         writerRuntime = CorfuRuntime.fromParameters(params);
         writerRuntime.parseConfigurationString(WRTIER_ENDPOINT);
-        writerRuntime.connect();
+        writerRuntime.setTransactionLogging(true).connect();
 
         dstDataRuntime = CorfuRuntime.fromParameters(params);
         dstDataRuntime.parseConfigurationString(WRTIER_ENDPOINT);
-        dstDataRuntime.connect();
+        dstDataRuntime.setTransactionLogging(true).connect();
 
         dstTestRuntime = CorfuRuntime.fromParameters(params);
         dstTestRuntime.parseConfigurationString(WRTIER_ENDPOINT);
-        dstTestRuntime.connect();
+        dstTestRuntime.setTransactionLogging(true).connect();
     }
 
     void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
@@ -144,7 +142,7 @@ public class LogEntryReplicationIT extends AbstractIT {
                 long key = i + startval;
                 tables.get(name).put(key, key);
                 log.trace("tail " + rt.getAddressSpaceView().getLogTail() + " seq " + rt.getSequencerView().query().getSequence());
-                ((HashMap<Long, Long>) hashMap.get(name)).put(key, key);
+                hashMap.get(name).put(key, key);
             }
             rt.getObjectsView().TXEnd();
         }
@@ -209,7 +207,7 @@ public class LogEntryReplicationIT extends AbstractIT {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
 
-        reader.setGlobalBaseSnapshot(rt.getAddressSpaceView().getLogTail(), Address.NON_ADDRESS);
+        reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {
             DataMessage dataMessage = reader.read();
