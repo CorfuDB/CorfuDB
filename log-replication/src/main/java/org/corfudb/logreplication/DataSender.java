@@ -14,35 +14,43 @@ import java.util.UUID;
  */
 public interface DataSender {
 
+    /*
+     -------------------- SNAPSHOT SYNC METHODS ----------------------
+     */
+
     /**
      * Application callback on next available message for transmission to remote site during snapshot sync.
      *
      * @param message DataMessage representing the data to send across sites.
      * @param snapshotSyncId snapshot sync event identifier in progress.
+     * @param completed indicates this is the last message
      *
      * @return False, in the event of errors. True, otherwise.
      */
-    boolean send(DataMessage message, UUID snapshotSyncId);
+    boolean send(DataMessage message, UUID snapshotSyncId, boolean completed);
 
     /**
      * Application callback on next available messages for transmission to remote site during snapshot sync.
      *
      * @param messages list o DataMessage representing the data to send across sites.
      * @param snapshotSyncId snapshot sync event identifier in progress.
+     * @param completed indicates this is the last message
      *
      * @return False, in the event of errors. True, otherwise.
      */
-    boolean send(List<DataMessage> messages, UUID snapshotSyncId);
+    boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed);
 
     /**
-     * Call to the application indicating the full sync of streams on the given snapshot has completed.
-     * Applications can react on completeness according to their protocol.
+     * Application callback on error during snapshot sync.
      *
-     * @param snapshotSyncId  event identifier of the completed snapshot sync.
+     * @param error log replication error
+     * @param snapshotSyncId Identifier of the event that was interrupted on an error
      */
-    boolean complete(UUID snapshotSyncId);
-    // TODO (Anny) Optimize? Resend complete message n times, before failing?...
+    void onError(LogReplicationError error, UUID snapshotSyncId);
 
+    /*
+     -------------------- LOG ENTRY SYNC METHODS ----------------------
+     */
     /**
      * Application callback on next available message for transmission to remote site during log entry sync.
      *
@@ -63,15 +71,6 @@ public interface DataSender {
      * Application callback on error during snapshot sync.
      *
      * @param error log replication error
-     * @param snapshotSyncId Identifier of the event that was interrupted on an error
-     */
-    void onError(LogReplicationError error, UUID snapshotSyncId);
-
-    /**
-     * Application callback on error during snapshot sync.
-     *
-     * @param error log replication error
      */
     void onError(LogReplicationError error);
-
 }
