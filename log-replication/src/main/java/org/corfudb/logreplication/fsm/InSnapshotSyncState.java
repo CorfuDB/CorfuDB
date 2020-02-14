@@ -4,7 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.transmit.SnapshotTransmitter;
+import org.corfudb.logreplication.send.SnapshotSender;
 
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -31,14 +31,14 @@ public class InSnapshotSyncState implements LogReplicationState {
     private UUID transitionEventId;
 
     /*
-     Read and transmit a snapshot of the data-store.
+     Read and send a snapshot of the data-store.
      */
     @Getter
     @VisibleForTesting
-    private SnapshotTransmitter snapshotTransmitter;
+    private SnapshotSender snapshotSender;
 
     /*
-     A future on the transmit, in case we need to cancel the ongoing snapshot sync.
+     A future on the send, in case we need to cancel the ongoing snapshot sync.
      */
     private Future<?> transmitFuture;
 
@@ -46,11 +46,11 @@ public class InSnapshotSyncState implements LogReplicationState {
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
-     * @param snapshotTransmitter snapshot sync transmit (read and send)
+     * @param snapshotSender snapshot sync send (read and send)
      */
-    public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotTransmitter snapshotTransmitter) {
+    public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotSender snapshotSender) {
         this.fsm = logReplicationFSM;
-        this.snapshotTransmitter = snapshotTransmitter;
+        this.snapshotSender = snapshotSender;
     }
 
     @Override
@@ -65,11 +65,11 @@ public class InSnapshotSyncState implements LogReplicationState {
                 /*
                  Set the id of the new snapshot sync request causing the transition.
 
-                 This will be taken onEntry of this state to initiate a snapshot transmit
+                 This will be taken onEntry of this state to initiate a snapshot send
                  for this given request.
                  */
                 setTransitionEventId(event.getEventID());
-                snapshotTransmitter.reset();
+                snapshotSender.reset();
                 return this;
             case SNAPSHOT_SYNC_CONTINUE:
                 /*
@@ -127,7 +127,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                  return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 /*
-                  Cancel snapshot transmit if still in progress.
+                  Cancel snapshot send if still in progress.
                  */
                 System.out.println("ERROR STATE");
                 cancelSnapshotSync("replication terminated.");
@@ -144,16 +144,16 @@ public class InSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         try {
             /*
-             If the transition is to itself, the snapshot sync is continuing, no need to reset the transmit.
+             If the transition is to itself, the snapshot sync is continuing, no need to reset the send.
              */
             if (from != this) {
-                snapshotTransmitter.reset();
+                snapshotSender.reset();
             }
 
             /*
-             Start transmit of snapshot sync
+             Start send of snapshot sync
              */
-            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotTransmitter.transmit(transitionEventId));
+            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.transmit(transitionEventId));
 
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
@@ -172,7 +172,7 @@ public class InSnapshotSyncState implements LogReplicationState {
      * @return True, if the task was successfully canceled. False, otherwise
      */
     private void cancelSnapshotSync(String cancelCause) {
-        snapshotTransmitter.stop();
+        snapshotSender.stop();
         if (!transmitFuture.isDone()) {
             try {
                 transmitFuture.get();
