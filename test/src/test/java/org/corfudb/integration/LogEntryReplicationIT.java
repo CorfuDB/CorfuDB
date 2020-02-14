@@ -35,7 +35,7 @@ public class LogEntryReplicationIT extends AbstractIT {
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
     static private final int NUM_STREAMS = 2;
-    static private final int NUM_TRANSACTIONS = 100;
+    static private final int NUM_TRANSACTIONS = 2;
 
     Process server1;
     Process server2;
@@ -152,19 +152,16 @@ public class LogEntryReplicationIT extends AbstractIT {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
-            assertThat(hashMap.keySet().containsAll(table.keySet()));
-            assertThat(table.keySet().containsAll(hashMap.keySet()));
-            if (table.keySet().size() != mapKeys.keySet().size()) {
-                System.out.println("**********table size " + table.keySet().size() +
-                        " map size " + mapKeys.keySet().size());
-            }
-
-            for (Long key : mapKeys.keySet()) {
-                System.out.println(" table " + name + " key " + key + " val " + table.get(key));
-                assertThat(table.get(key) == mapKeys.get(key));
-            }
             System.out.println("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
+
+            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
+            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
+            assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
+
+            for (Long key : mapKeys.keySet()) {
+                assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
+            }
         }
     }
 
@@ -222,6 +219,7 @@ public class LogEntryReplicationIT extends AbstractIT {
 
     void writeLogMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
+
         LogEntryWriter writer = new LogEntryWriter(rt, config);
 
         if (msgQ.isEmpty()) {
@@ -259,14 +257,14 @@ public class LogEntryReplicationIT extends AbstractIT {
         //read snapshot from srcServer and put msgs into Queue
         readLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
 
-        long dstEntries = msgQ.size()*srcHashMap.keySet().size();
+        long dstEntries = msgQ.size();
         long dstPreTail = dstDataRuntime.getAddressSpaceView().getLogTail();
 
         //play messages at dst server
         writeLogMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
 
         long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;
-        assertThat(diff == dstEntries);
+        assertThat(diff).isEqualTo(dstEntries);
         printTails("after writing to server2");
 
         //verify data with hashtable
