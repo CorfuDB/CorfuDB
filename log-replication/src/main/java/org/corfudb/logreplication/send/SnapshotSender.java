@@ -12,6 +12,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Collections;
 import java.util.UUID;
 
 /**
@@ -93,7 +94,7 @@ public class SnapshotSender {
 
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
                     // Send message to dataSender (application)
-                    if (!dataSender.send(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
+                    if (!dataSender.send(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotReadMessage.isEndRead())) {
                         // TODO: Optimize (back-off) retry on the failed send.
                         log.error("DataSender did not acknowledge next sent message(s). Notify error.");
                         snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
@@ -122,6 +123,7 @@ public class SnapshotSender {
                         new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
         } else {
+            dataSender.send(Collections.emptyList(), snapshotSyncEventId, true);
             snapshotSyncComplete(snapshotSyncEventId);
         }
     }
@@ -129,8 +131,6 @@ public class SnapshotSender {
     private void snapshotSyncComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
-        dataSender.complete(snapshotSyncEventId);
-
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
                 new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
     }

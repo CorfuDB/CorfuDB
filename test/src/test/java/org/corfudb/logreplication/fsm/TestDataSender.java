@@ -12,7 +12,7 @@ import java.util.UUID;
 
 
 /**
- * Test Implementation of Snapshot Listener
+ * Test Implementation of Snapshot Data Sender
  */
 public class TestDataSender implements DataSender {
 
@@ -26,7 +26,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean send(DataMessage message, UUID snapshotSyncId) {
+    public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
         if (message != null && message.getData().length != 0) {
             snapshotQueue.add(message);
             return true;
@@ -36,7 +36,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean send(List<DataMessage> messages, UUID snapshotSyncId) {
+    public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
         if (messages != null && !messages.isEmpty()) {
             // Add all received messages to the queue
             messages.forEach(msg -> snapshotQueue.add(msg));
@@ -66,9 +66,6 @@ public class TestDataSender implements DataSender {
 
         return false;
     }
-
-    @Override
-    public boolean complete(UUID snapshotSyncId) { return true; }
 
     @Override
     public void onError(LogReplicationError error, UUID snapshotSyncId) {}

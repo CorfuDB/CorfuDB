@@ -12,12 +12,12 @@ import java.util.UUID;
  */
 public class EmptyDataSender implements DataSender {
     @Override
-    public boolean send(DataMessage message, UUID snapshotSyncId) {
+    public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
         return true;
     }
 
     @Override
-    public boolean send(List<DataMessage> messages, UUID snapshotSyncId) {
+    public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
         return true;
     }
 
@@ -26,9 +26,6 @@ public class EmptyDataSender implements DataSender {
 
     @Override
     public boolean send(List<DataMessage> messages) { return true; }
-
-    @Override
-    public boolean complete(UUID snapshotSyncId) { return true; }
 
     @Override
     public void onError(LogReplicationError error, UUID snapshotSyncId) {}
