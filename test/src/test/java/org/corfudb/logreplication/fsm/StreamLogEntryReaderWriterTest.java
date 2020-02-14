@@ -1,10 +1,11 @@
 package org.corfudb.logreplication.fsm;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.receive.LogEntryWriter;
-import org.corfudb.logreplication.transmit.LogEntryReader;
-import org.corfudb.logreplication.transmit.StreamsLogEntryReader;
+import org.corfudb.logreplication.send.LogEntryReader;
+import org.corfudb.logreplication.send.StreamsLogEntryReader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -36,6 +37,7 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
     HashMap<String, CorfuTable<Long, Long>> tables = new HashMap<>();
     LogEntryReader logEntryReader;
     LogEntryWriter logEntryWriter;
+    DataSender dataSender;
 
     /*
      * the in-memory data for corfutables for verification.
@@ -55,7 +57,8 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
 
         LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(),UUID.randomUUID());
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
-        logEntryWriter = new LogEntryWriter(writerRuntime, config);
+        dataSender = new TestDataSender();
+        logEntryWriter = new LogEntryWriter(writerRuntime, dataSender, config);
     }
 
     void openStreams(CorfuRuntime rt) {
