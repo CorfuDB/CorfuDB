@@ -62,7 +62,7 @@ public class SinkManager implements DataReceiver {
     public void setLogReplicationConfig(LogReplicationConfig config) {
         this.config = config;
         snapshotWriter = new StreamsSnapshotWriter(runtime, config);
-        logEntryWriter = new LogEntryWriter(runtime, dataSender, config);
+        logEntryWriter = new LogEntryWriter(runtime, config);
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
@@ -117,8 +117,17 @@ public class SinkManager implements DataReceiver {
                     this.snapshotWriter.apply(message);
                 } else if (rxState == RxState.LOG_SYNC &&
                     message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE) {
-                    this.logEntryWriter.apply(message);
-                    persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+                    long ackTs = this.logEntryWriter.apply(message);
+                    if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
+                        persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+
+                        MessageMetadata metadata = new MessageMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs, message.getMetadata().getSnapshotTimestamp());
+                        DataMessage ack = new DataMessage(metadata);
+                        dataSender.send(ack);
+
+                        message.getMetadata().setSnapshotTimestamp(ackTs);
+                        dataSender.send(message);
+                    }
                 } else {
                     log.error("it is in the wrong state {}", rxState);
                     throw new ReplicationWriterException("wrong state");
