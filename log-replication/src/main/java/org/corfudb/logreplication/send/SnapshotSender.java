@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.transmit;
+package org.corfudb.logreplication.send;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
@@ -28,7 +28,7 @@ import java.util.UUID;
  *  of CorfuDB.
  */
 @Slf4j
-public class SnapshotTransmitter {
+public class SnapshotSender {
 
     // TODO (probably move to a configuration file)
     public static final int SNAPSHOT_BATCH_SIZE = 5;
@@ -47,8 +47,8 @@ public class SnapshotTransmitter {
 
     private volatile boolean stopSnapshotSync = false;
 
-    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                               ReadProcessor readProcessor,LogReplicationFSM fsm) {
+    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.dataSender = dataSender;
@@ -93,10 +93,10 @@ public class SnapshotTransmitter {
 
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
                     // Send message to dataSender (application)
-                    if (!dataSender.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
+                    if (!dataSender.send(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
                         // TODO: Optimize (back-off) retry on the failed send.
                         log.error("DataSender did not acknowledge next sent message(s). Notify error.");
-                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.LISTENER_ERROR);
+                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
                         cancel = true;
                         break;
                     }
