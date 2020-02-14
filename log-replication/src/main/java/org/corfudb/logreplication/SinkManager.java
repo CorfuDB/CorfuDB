@@ -31,6 +31,7 @@ public class SinkManager implements DataReceiver {
     private DataControl dataControl;
     private LogReplicationConfig config;
     private boolean startSnapshot;
+    private UUID snapshotRequestId;
 
     /**
      * Constructor
@@ -83,14 +84,13 @@ public class SinkManager implements DataReceiver {
         rxState = RxState.LOG_SYNC;
         persistedWriterMetadata.setsrcBaseSnapshotDone();
 
-        // Prepare Snapshot Sync
+        // Prepare Snapshot Sync ACK
         MessageMetadata metadata = new MessageMetadata(MessageType.SNAPSHOT_REPLICATED,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
-                // TODO: extract from DataMessage (sent by the sender)
-                UUID.randomUUID());
+                snapshotRequestId);
 
-        dataSender.send(new DataMessage(metadata));
+        dataSender.send(new DataMessage(metadata), snapshotRequestId, true);
     }
 
     @Override
@@ -105,6 +105,8 @@ public class SinkManager implements DataReceiver {
 
                     // Signal start of snapshot sync to the receive, so data can be cleared.
                     this.snapshotWriter.reset(message.getMetadata().getSnapshotTimestamp());
+
+                    snapshotRequestId = message.getMetadata().getSnapshotRequestId();
 
                     // Reset start snapshot flag / continue on this baseSnapshotTimestamp
                     startSnapshot = false;
