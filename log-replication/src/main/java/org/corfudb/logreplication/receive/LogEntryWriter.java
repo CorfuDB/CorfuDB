@@ -15,15 +15,20 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @NotThreadSafe
 @Slf4j
@@ -52,6 +57,11 @@ public class LogEntryWriter {
         msgQ = new HashMap<>();
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
+
+        streamViewMap = new HashMap<>();
+        for (UUID uuid : streamUUIDs) {
+            streamViewMap.put(uuid, rt.getStreamsView().getUnsafe(uuid));
+        }
     }
 
     /**
@@ -81,16 +91,17 @@ public class LogEntryWriter {
 
         try {
             rt.getObjectsView().TXBegin();
-            TokenResponse tokenResponse = rt.getSequencerView().next((UUID[])(map.keySet().toArray()));
-            MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
             for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
                 for(SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
                     multiObjectSMREntry.addTo(uuid, smrEntry);
                 }
+                streamViewMap.get(uuid).append(multiObjectSMREntry);
             }
-            rt.getAddressSpaceView().write(tokenResponse.getToken(), multiObjectSMREntry);
-
-        } finally {
+        } catch (Exception e) {
+            log.warn("Caught an exception ", e);
+        }
+        finally {
             rt.getObjectsView().TXEnd();
         }
     }
@@ -149,19 +160,16 @@ public class LogEntryWriter {
             return;
         }
 
-        //If the entry is the expecting entry, process it and then process
+        //If the entry is the expecting entry, process it and process
         //the messages in the queue.
         if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
             processMsg(msg);
             lastMsgTs = msg.getMetadata().getTimestamp();
             processQueue();
-            // Send ACK to sender for the set of processed
-            MessageMetadata metadata = new MessageMetadata(MessageType.LOG_ENTRY_REPLICATED, lastMsgTs, srcGlobalSnapshot);
-            DataMessage ack = new DataMessage(metadata);
-            dataSender.send(ack);
+            return;
         }
 
-        //If the entry's ts is larger than the entry processed, put it in queue
+        //If the entry's ts is larger than the entry processed, put it to the queue
         if (msgQ.size() < MAX_MSG_QUE_SIZE) {
             msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
