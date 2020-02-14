@@ -159,7 +159,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testLogReplicationSnapshotTransmitterNoBatch() throws Exception {
-        testSnapshotTransmitter(NUM_ENTRIES);
+        testSnapshotSender(NUM_ENTRIES);
     }
 
     /**
@@ -179,10 +179,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testLogReplicationSnapshotTransmitterBatch() throws Exception {
-        testSnapshotTransmitter(BATCH_SIZE);
+        testSnapshotSender(BATCH_SIZE);
     }
 
-    private void testSnapshotTransmitter(int batchSize) throws Exception {
+    private void testSnapshotSender(int batchSize) throws Exception {
 
         // Initialize State Machine
         initLogReplicationFSM(ReaderImplementation.TEST);
