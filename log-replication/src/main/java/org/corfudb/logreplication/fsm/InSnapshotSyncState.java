@@ -129,7 +129,6 @@ public class InSnapshotSyncState implements LogReplicationState {
                 /*
                   Cancel snapshot send if still in progress.
                  */
-                System.out.println("ERROR STATE");
                 cancelSnapshotSync("replication terminated.");
                 return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
