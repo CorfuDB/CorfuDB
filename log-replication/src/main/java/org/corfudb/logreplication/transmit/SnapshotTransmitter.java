@@ -3,6 +3,7 @@ package org.corfudb.logreplication.transmit;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
@@ -18,12 +19,12 @@ import java.util.UUID;
  *  i.e, reading and sending a snapshot of the data for the requested streams.
  *
  *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
- *  SnapshotListener (the application specific callback for sending data to the remote site).
+ *  DataSender (the application specific callback for sending data to the remote site).
  *
  *  The SnapshotReader has a default implementation based on reads at the stream layer
  *  (no serialization/deserialization) required.
  *
- *  SnapshotListener is implemented by the application, as communication channels between sites are out of the scope
+ *  DataSender is implemented by the application, as communication channels between sites are out of the scope
  *  of CorfuDB.
  */
 @Slf4j
@@ -34,7 +35,7 @@ public class SnapshotTransmitter {
 
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
-    private SnapshotListener snapshotListener;
+    private DataSender dataSender;
     private ReadProcessor readProcessor;
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
@@ -46,11 +47,11 @@ public class SnapshotTransmitter {
 
     private volatile boolean stopSnapshotSync = false;
 
-    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, SnapshotListener snapshotListener,
+    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                                ReadProcessor readProcessor,LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
-        this.snapshotListener = snapshotListener;
+        this.dataSender = dataSender;
         this.readProcessor = readProcessor;
         this.fsm = fsm;
     }
@@ -91,10 +92,10 @@ public class SnapshotTransmitter {
                 }
 
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
-                    // Send message to snapshotListener (application)
-                    if (!snapshotListener.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
+                    // Send message to dataSender (application)
+                    if (!dataSender.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
                         // TODO: Optimize (back-off) retry on the failed send.
-                        log.error("SnapshotListener did not acknowledge next sent message(s). Notify error.");
+                        log.error("DataSender did not acknowledge next sent message(s). Notify error.");
                         snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.LISTENER_ERROR);
                         cancel = true;
                         break;
@@ -128,7 +129,7 @@ public class SnapshotTransmitter {
     private void snapshotSyncComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
-        snapshotListener.complete(snapshotSyncEventId);
+        dataSender.complete(snapshotSyncEventId);
 
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
                 new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
@@ -139,8 +140,8 @@ public class SnapshotTransmitter {
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncEventId)));
 
-        // Report error to the application through the snapshotListener
-        snapshotListener.onError(error, snapshotSyncEventId);
+        // Report error to the application through the dataSender
+        dataSender.onError(error, snapshotSyncEventId);
     }
 
     /**
