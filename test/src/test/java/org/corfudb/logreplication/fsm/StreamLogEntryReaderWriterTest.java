@@ -58,7 +58,7 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
         LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(),UUID.randomUUID());
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
         dataSender = new TestDataSender();
-        logEntryWriter = new LogEntryWriter(writerRuntime, dataSender, config);
+        logEntryWriter = new LogEntryWriter(writerRuntime, config);
     }
 
     void openStreams(CorfuRuntime rt) {
