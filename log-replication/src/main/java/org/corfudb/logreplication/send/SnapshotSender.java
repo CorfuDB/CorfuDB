@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.transmit;
+package org.corfudb.logreplication.send;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
@@ -12,6 +12,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Collections;
 import java.util.UUID;
 
 /**
@@ -28,7 +29,7 @@ import java.util.UUID;
  *  of CorfuDB.
  */
 @Slf4j
-public class SnapshotTransmitter {
+public class SnapshotSender {
 
     // TODO (probably move to a configuration file)
     public static final int SNAPSHOT_BATCH_SIZE = 5;
@@ -47,8 +48,8 @@ public class SnapshotTransmitter {
 
     private volatile boolean stopSnapshotSync = false;
 
-    public SnapshotTransmitter(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                               ReadProcessor readProcessor,LogReplicationFSM fsm) {
+    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.dataSender = dataSender;
@@ -93,10 +94,10 @@ public class SnapshotTransmitter {
 
                 if (!snapshotReadMessage.getMessages().isEmpty()) {
                     // Send message to dataSender (application)
-                    if (!dataSender.onNext(snapshotReadMessage.getMessages(), snapshotSyncEventId)) {
+                    if (!dataSender.send(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotReadMessage.isEndRead())) {
                         // TODO: Optimize (back-off) retry on the failed send.
                         log.error("DataSender did not acknowledge next sent message(s). Notify error.");
-                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.LISTENER_ERROR);
+                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
                         cancel = true;
                         break;
                     }
@@ -122,6 +123,7 @@ public class SnapshotTransmitter {
                         new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
         } else {
+            dataSender.send(Collections.emptyList(), snapshotSyncEventId, true);
             snapshotSyncComplete(snapshotSyncEventId);
         }
     }
@@ -129,8 +131,6 @@ public class SnapshotTransmitter {
     private void snapshotSyncComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
-        dataSender.complete(snapshotSyncEventId);
-
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
                 new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
     }
