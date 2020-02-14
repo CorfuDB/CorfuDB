@@ -69,8 +69,7 @@ public class LogEntrySender {
     /**
      * Read and send incremental updates (log entries)
      */
-    public void transmit() {
-        taskActive = true;
+    public void send() {
         int reads = 0;
 
         while (taskActive && reads < READ_BATCH_SIZE) {
@@ -96,5 +95,12 @@ public class LogEntrySender {
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN));
             }
         }
+    }
+
+    /**
+     * Reset the log entry sender to initial state
+     */
+    public void reset() {
+        taskActive = true;
     }
 }

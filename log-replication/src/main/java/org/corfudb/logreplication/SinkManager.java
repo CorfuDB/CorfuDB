@@ -30,6 +30,7 @@ public class SinkManager implements DataReceiver {
     private DataSender dataSender;
     private DataControl dataControl;
     private LogReplicationConfig config;
+    private boolean startSnapshot;
 
     /**
      * Constructor
@@ -69,18 +70,15 @@ public class SinkManager implements DataReceiver {
     /**
      * Signal the manager a snapshot sync is about to start. This is required to reset previous states.
      */
-    public void snapshotStart(long srcSnapTimestamp) {
+    public void startSnapshotApply() {
         rxState = RxState.SNAPSHOT_SYNC;
-        persistedWriterMetadata.setsrcBaseSnapshotStart(srcSnapTimestamp);
-
-        // Signal start of snapshot sync to the receive, so data can be cleared.
-        this.snapshotWriter.reset(srcSnapTimestamp);
+        startSnapshot = true;
     }
 
     /**
      * The end of snapshot sync
      */
-    public void snapshotDone(UUID snapshotSyncId) {
+    public void completeSnapshotApply() {
         //check if the all the expected message has received
         rxState = RxState.LOG_SYNC;
         persistedWriterMetadata.setsrcBaseSnapshotDone();
@@ -89,7 +87,8 @@ public class SinkManager implements DataReceiver {
         MessageMetadata metadata = new MessageMetadata(MessageType.SNAPSHOT_REPLICATED,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
-                snapshotSyncId);
+                // TODO: extract from DataMessage (sent by the sender)
+                UUID.randomUUID());
 
         dataSender.send(new DataMessage(metadata));
     }
@@ -100,6 +99,17 @@ public class SinkManager implements DataReceiver {
         // Buffer data (out of order) and apply
         if (config != null) {
             try {
+                if (startSnapshot && rxState == RxState.SNAPSHOT_SYNC) {
+                    // If we are just starting, initialize
+                    persistedWriterMetadata.setsrcBaseSnapshotStart(message.getMetadata().getSnapshotTimestamp());
+
+                    // Signal start of snapshot sync to the receive, so data can be cleared.
+                    this.snapshotWriter.reset(message.getMetadata().getSnapshotTimestamp());
+
+                    // Reset start snapshot flag / continue on this baseSnapshotTimestamp
+                    startSnapshot = false;
+                }
+
                 if (rxState == RxState.SNAPSHOT_SYNC &&
                         message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE) {
                     this.snapshotWriter.apply(message);
