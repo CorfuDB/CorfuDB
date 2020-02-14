@@ -23,9 +23,9 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
-    static private final int NUM_KEYS = 10;
-    static private final int NUM_STREAMS = 4;
-    static private final int NUM_TRANS = 1000;
+    static private final int NUM_KEYS = 2;
+    static private final int NUM_STREAMS = 1;
+    static private final int NUM_TRANS = 2;
 
     public static  ExecutorService executorService = Executors.newFixedThreadPool(1);
 
@@ -160,8 +160,7 @@ public class StreamLogEntryReaderWriterTest extends AbstractViewTest {
     public void test() {
         setup();
         openStreams(dataRuntime);
-        generateData(NUM_KEYS);
-
+        //generateData(NUM_KEYS);
         generateTransactions();
 
         startReader();

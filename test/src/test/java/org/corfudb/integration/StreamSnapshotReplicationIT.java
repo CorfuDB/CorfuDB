@@ -253,7 +253,6 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
         verifyData(dstTables, dstHashMap);
         verifyData(dstTestTables, dstHashMap);
         return;
-
     }
 
     /**
