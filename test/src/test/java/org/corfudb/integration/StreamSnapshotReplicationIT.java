@@ -7,11 +7,14 @@ import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.logreplication.transmit.SnapshotReadMessage;
 import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -24,7 +27,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Start two servers, one as the src, the other as the dst.
@@ -37,7 +40,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRITER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
-    static private final int NUM_KEYS = 10;
+    static private final int NUM_KEYS = 100;
     static private final int NUM_STREAMS = 1;
 
     Process server1;
@@ -54,7 +57,6 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
 
     // Connect with server2 to verify data
     CorfuRuntime dstDataRuntime = null;
-
 
     Random random = new Random();
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
@@ -151,17 +153,23 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
         }
     }
 
-    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap){
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
-            //assertThat(hashMap.keySet().containsAll(table.keySet()));
-            //assertThat(table.keySet().containsAll(hashMap.keySet()));
+            assertThat(hashMap.keySet().containsAll(table.keySet()));
+            assertThat(table.keySet().containsAll(hashMap.keySet()));
+            if (table.keySet().size() != mapKeys.keySet().size()) {
+                System.out.println("**********table size " + table.keySet().size() +
+                        " map size " + mapKeys.keySet().size());
+            }
+
             for (Long key : mapKeys.keySet()) {
                 System.out.println(" table key " + key + " val " + table.get(key));
                 assertThat(table.get(key) == mapKeys.get(key));
             }
-            System.out.println("table " + name + " key size " + table.keySet().size() + " hashMap size " + mapKeys.size());
+            System.out.println("table " + name + " key size " + table.keySet().size() +
+                    " hashMap size " + mapKeys.size());
         }
     }
 
@@ -215,7 +223,8 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
         }
     }
 
-    void printTails() {
+    void printTails(String tag) {
+        System.out.println("\n" + tag);
         System.out.println("src dataTail " + srcDataRuntime.getAddressSpaceView().getLogTail() + " readerTail " + readerRuntime.getAddressSpaceView().getLogTail());
         System.out.println("dst dataTail " + dstDataRuntime.getAddressSpaceView().getLogTail() + " writerTail " + writerRuntime.getAddressSpaceView().getLogTail());
     }
@@ -245,8 +254,14 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
 
     }
 
+    /**
+     * Write to a corfu table and read SMRntries with streamview,
+     * redirect the SMRentries to the second corfu server, and verify
+     * the second corfu server contains the correct <key, value> pairs
+     * @throws Exception
+     */
     @Test
-    public void testSnapTransfer() throws IOException {
+    public void testWriteSMREntries() throws Exception {
         // setup environment
         System.out.println("\ntest start");
         setupEnv();
@@ -255,7 +270,41 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
         generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
         verifyData(srcTables, srcHashMap);
 
-        printTails();
+        printTails("after writing to server1");
+        //read streams as SMR entries
+        StreamOptions options = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+
+        IStreamView srcSV = srcTestRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID("test0"), options);
+        List<ILogData> dataList = srcSV.remaining();
+
+        IStreamView dstSV = dstTestRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID("test0"), options);
+        for (ILogData data : dataList) {
+            OpaqueEntry opaqueEntry = OpaqueEntry.unpack(data);
+            for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                for (SMREntry entry : opaqueEntry.getEntries().get(uuid)) {
+                    dstSV.append(entry);
+                }
+            }
+        }
+
+        printTails("after writing to dst");
+        openStreams(dstTables, writerRuntime);
+        verifyData(dstTables, srcHashMap);
+    }
+
+    @Test
+    public void testSnapTransfer() throws IOException {
+        // setup environment
+        System.out.println("\ntest start ok");
+        setupEnv();
+
+        openStreams(srcTables, srcDataRuntime);
+        generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+        verifyData(srcTables, srcHashMap);
+
+        printTails("after writing to server1");
 
         //read snapshot from srcServer and put msgs into Queue
         readMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
@@ -268,15 +317,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
 
         long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;
         assertThat(diff == dstEntries);
-        printTails();
-
-        for (String name : srcHashMap.keySet()) {
-            IStreamView sv = dstTestRuntime.getStreamsView().get(CorfuRuntime.getStreamID(name));
-            List<ILogData> entries = sv.remaining();
-            for (ILogData entry : entries) {
-                System.out.println("data " + entry.getLogEntry(dstTestRuntime));
-            }
-        }
+        printTails("after writing to server2");
 
         //verify data with hashtable
         openStreams(dstTables, dstDataRuntime);

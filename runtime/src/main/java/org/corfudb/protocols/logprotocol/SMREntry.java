@@ -116,6 +116,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
             if (opaque) {
                 byte[] argBytes = new byte[len];
+                objBuf.readBytes(argBytes);
                 arguments[arg] = argBytes;
             } else {
                 arguments[arg] = serializerType.deserialize(objBuf, rt);
