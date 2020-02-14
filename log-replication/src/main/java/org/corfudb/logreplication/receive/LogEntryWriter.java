@@ -18,6 +18,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +30,7 @@ import java.util.UUID;
  * Process TxMessage that contains transaction logs for registered streams.
  */
 public class LogEntryWriter {
-    private List<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
+    private Set<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the streamview.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
@@ -40,6 +41,8 @@ public class LogEntryWriter {
     public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         Set<String> streams = config.getStreamsToReplicate();
+        streamUUIDs = new HashSet<>();
+
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
