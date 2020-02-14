@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.transmit.LogEntryTransmitter;
+import org.corfudb.logreplication.send.LogEntrySender;
 
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -22,10 +22,10 @@ public class InLogEntrySyncState implements LogReplicationState {
     /*
      * Log Entry Transmitter, used to read and send incremental updates.
      */
-    private LogEntryTransmitter logEntryTransmitter;
+    private LogEntrySender logEntrySender;
 
     /*
-     * A future on the log entry transmit, transmit call.
+     * A future on the log entry send, send call.
      */
     private Future<?> logEntrySyncFuture;
 
@@ -39,11 +39,11 @@ public class InLogEntrySyncState implements LogReplicationState {
      * Constructor
      *
      * @param logReplicationFSM log replication finite state machine
-     * @param logEntryTransmitter instance that will manage reading and sending log data between sites.
+     * @param logEntrySender instance that will manage reading and sending log data between sites.
      */
-    public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntryTransmitter logEntryTransmitter) {
+    public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntrySender logEntrySender) {
         this.fsm = logReplicationFSM;
-        this.logEntryTransmitter = logEntryTransmitter;
+        this.logEntrySender = logEntrySender;
     }
 
     @Override
@@ -101,7 +101,7 @@ public class InLogEntrySyncState implements LogReplicationState {
         // We can tolerate the last cycle of the sync being executed before stopped,
         // as snapshot sync is triggered by the app which handles separate listeners
         // for log entry sync and snapshot sync (app can handle this)
-        logEntryTransmitter.stop();
+        logEntrySender.stop();
         if (!logEntrySyncFuture.isDone()) {
             try {
                 logEntrySyncFuture.get();
@@ -116,7 +116,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntryTransmitter::transmit);
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntrySender::transmit);
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
         }
