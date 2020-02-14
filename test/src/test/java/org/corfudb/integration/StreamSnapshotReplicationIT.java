@@ -119,7 +119,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT {
         dstDataRuntime.connect();
 
         dstTestRuntime = CorfuRuntime.fromParameters(params);
-        dstTestRuntime.parseConfigurationString(WRTIER_ENDPOINT);
+        dstTestRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstTestRuntime.connect();
     }
 
