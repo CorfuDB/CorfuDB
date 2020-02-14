@@ -13,6 +13,8 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -26,18 +28,28 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private CorfuRuntime rt;
     private final MessageType MSG_TYPE = MessageType.LOG_ENTRY_MESSAGE;
-    private OpaqueStream txStream; //The opaquestream wrapper for the transaction stream.
-    private long globalBaseSnapshot; //The base snapshot the log entry reader starts to poll transaction logs
-    private Set<UUID> streamUUIDs; //The set of uuids for the corresponding streams.
-    private long preMsgTs; //the timestamp of the transaction log that is the previous message
-    private long currentMsgTs; //the timestamp of the transaction log that is the current message
-    private long sequence; //the sequence number of the message based on the globalBaseSnapshot
+    // the set of uuids for the corresponding streams.
+    private Set<UUID> streamUUIDs;
+
+    // the opaquestream wrapper for the transaction stream.
+    private OpaqueStream txStream;
+    // the iterator over txStream;
+    private Iterator iterator;
+
+    // the base snapshot the log entry reader starts to poll transaction logs
+    private long globalBaseSnapshot;
+    // timestamp of the transaction log that is the previous message
+    private long preMsgTs;
+    // the timestamp of the transaction log that is the current message
+    private long currentMsgTs;
+    // the sequence number of the message based on the globalBaseSnapshot
+    private long sequence;
 
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         Set<String> streams = config.getStreamsToReplicate();
-
+        streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
@@ -80,10 +92,24 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         long timestamp = Math.max(snapshot, ackTimestamp);
         globalBaseSnapshot = snapshot;
-        preMsgTs = timestamp;
-        txStream.seek(timestamp + 1);
+        preMsgTs = snapshot;
+        txStream.seek(ackTimestamp + 1);
         sequence = 0;
     }
+
+    boolean hasNext() {
+        if (iterator == null || !iterator.hasNext()) {
+            iterator = txStream.streamUpTo(rt.getAddressSpaceView().getLogTail()).iterator();
+        }
+        return iterator.hasNext();
+    }
+
+    OpaqueEntry nextEntry() {
+        if (!hasNext())
+            return null;
+        return (OpaqueEntry)iterator.next();
+    }
+
 
     @Override
     public DataMessage read() throws TrimmedException, ReplicationReaderException {
