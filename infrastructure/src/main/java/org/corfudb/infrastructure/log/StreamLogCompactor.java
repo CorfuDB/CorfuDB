@@ -157,10 +157,13 @@ public class StreamLogCompactor {
             startTime = System.currentTimeMillis();
             // This lock is need as garbage segment can be concurrently written while compacting.
             // But the lock should not take long time as garbage segment is small (several MB).
-            try (AutoCloseableLock ignored = GarbageLogSegment.getSegmentLock().acquireWriteLock(ordinal)) {
+            inputGarbageSegment.getSegmentLock().lock();
+            try {
                 compactGarbageSegment(inputGarbageSegment, outputGarbageSegment,
                         compactionFeedback.garbageEntriesToPrune);
                 segmentManager.remapCompactedSegment(inputGarbageSegment, outputGarbageSegment);
+            } finally {
+                inputGarbageSegment.getSegmentLock().unlock();
             }
 
             // Close input and output garbage segment channels.

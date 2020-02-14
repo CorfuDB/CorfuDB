@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.StampedLock;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
@@ -31,10 +33,10 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 @Slf4j
 public class GarbageLogSegment extends AbstractLogSegment {
 
-    // A lock for all GarbageLogSegment instances, which is required by compactor
-    // in case this segment is being written while compaction is on going.
+    // A lock for this instances, which is required by compactor in case
+    // this segment is being written while compaction is on going.
     @Getter
-    static final MultiReadWriteLock segmentLock = new MultiReadWriteLock();
+    private final ReentrantLock segmentLock = new ReentrantLock();
 
     @Getter
     @Setter
@@ -66,26 +68,26 @@ public class GarbageLogSegment extends AbstractLogSegment {
      */
     @Override
     public void append(long address, LogData entry) {
-        try (AutoCloseableLock ignored = segmentLock.acquireWriteLock(ordinal)) {
-            SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
-            SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
+        SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
+        SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
 
-            // If no new garbage entry, don't append to garbage log file.
-            if (uniqueGarbageEntry.isEmpty()) {
-                return;
-            }
+        // If no new garbage entry, don't append to garbage log file.
+        if (uniqueGarbageEntry.isEmpty()) {
+            return;
+        }
 
-            // If there are duplicates in the garbage entry to append, create a new
-            // one with only the unique parts.
-            if (uniqueGarbageEntry.getGarbageRecordCount() < garbageEntry.getGarbageRecordCount()) {
-                entry.resetPayload(uniqueGarbageEntry);
-            }
+        // If there are duplicates in the garbage entry to append, create a new
+        // one with only the unique parts.
+        if (uniqueGarbageEntry.getGarbageRecordCount() < garbageEntry.getGarbageRecordCount()) {
+            entry.resetPayload(uniqueGarbageEntry);
+        }
 
+        segmentLock.lock();
+        try {
             writeRecord(address, entry);
             mergeGarbageEntry(address, uniqueGarbageEntry);
             compactionMetaData.updateGarbageSize(Collections.singletonList(uniqueGarbageEntry));
             log.trace("append[{}]: Written one garbage entry to disk.", address);
-
         } catch (ClosedChannelException cce) {
             log.warn("append[{}]: Segment channel closed. Segment: {}, file: {}",
                     entry, ordinal, filePath);
@@ -94,6 +96,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
             log.error("append[{}]: IOException when writing a garbage entry.", address, ioe);
             throw new RuntimeException(ioe);
         } finally {
+            segmentLock.unlock();
             release();
         }
     }
@@ -105,38 +108,38 @@ public class GarbageLogSegment extends AbstractLogSegment {
      */
     @Override
     public void append(List<LogData> entries) {
+        if (entries.isEmpty()) {
+            return;
+        }
+
+        Map<Long, SMRGarbageEntry> uniqueGarbageEntries = new HashMap<>();
+        List<LogData> uniqueGarbageLogData = new ArrayList<>();
+
+        for (LogData entry : entries) {
+            long address = entry.getGlobalAddress();
+            SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
+            SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
+
+            // If no new garbage info, don't append to garbage log file.
+            if (uniqueGarbageEntry.isEmpty()) {
+                continue;
+            }
+
+            // If there are duplicates in the garbage entry to append, create a new
+            // one with only the unique parts.
+            if (uniqueGarbageEntry.getGarbageRecordCount() < garbageEntry.getGarbageRecordCount()) {
+                entry = new LogData(DataType.GARBAGE, uniqueGarbageEntry);
+            }
+
+            uniqueGarbageEntries.put(address, uniqueGarbageEntry);
+            uniqueGarbageLogData.add(entry);
+        }
+
+        segmentLock.lock();
         try {
-            if (entries.isEmpty()) {
-                return;
-            }
-
-            Map<Long, SMRGarbageEntry> uniqueGarbageEntries = new HashMap<>();
-            List<LogData> uniqueGarbageLogData = new ArrayList<>();
-
-            for (LogData entry : entries) {
-                long address = entry.getGlobalAddress();
-                SMRGarbageEntry garbageEntry = (SMRGarbageEntry) entry.getPayload(null);
-                SMRGarbageEntry uniqueGarbageEntry = dedupGarbageEntry(address, garbageEntry);
-
-                // If no new garbage info, don't append to garbage log file.
-                if (uniqueGarbageEntry.isEmpty()) {
-                    continue;
-                }
-
-                // If there are duplicates in the garbage entry to append, create a new
-                // one with only the unique parts.
-                if (uniqueGarbageEntry.getGarbageRecordCount() < garbageEntry.getGarbageRecordCount()) {
-                    entry = new LogData(DataType.GARBAGE, uniqueGarbageEntry);
-                }
-
-                uniqueGarbageEntries.put(address, uniqueGarbageEntry);
-                uniqueGarbageLogData.add(entry);
-            }
-
             writeRecords(uniqueGarbageLogData);
             uniqueGarbageEntries.forEach(this::mergeGarbageEntry);
             compactionMetaData.updateGarbageSize(uniqueGarbageEntries.values());
-
         } catch (ClosedChannelException cce) {
             log.warn("append: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
             throw new ClosedSegmentException(cce);
@@ -144,6 +147,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
             log.error("append: IOException when writing entries: {}", entries, ioe);
             throw new RuntimeException(ioe);
         } finally {
+            segmentLock.unlock();
             release();
         }
     }
