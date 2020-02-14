@@ -417,7 +417,7 @@ public class ManagementServer extends AbstractServer {
      * @return node state
      */
     private NodeState buildDefaultNodeState() {
-        log.info("Management server: {}, not ready yet, return default NodeState, current cluster view: {}",
+        log.debug("Management server: {}, not ready yet, return default NodeState, current cluster view: {}",
                 serverContext.getLocalEndpoint(), clusterContext.getClusterView());
 
         long epoch = Layout.INVALID_EPOCH;

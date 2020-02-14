@@ -135,6 +135,7 @@ public class AutoCommitService implements ManagementService {
                     long commitStart = committedTail + 1;
                     long commitEnd = Math.min(committedTail + COMMIT_BATCH_SIZE, lastLogTail);
                     getCorfuRuntime().getAddressSpaceView().commit(commitStart, commitEnd);
+                    log.info("runAutoCommit: trying to commit [{}, {}].", committedTail + 1, lastLogTail);
                     log.trace("runAutoCommit: successfully committed batch [{}, {}]", committedTail, commitEnd);
                     committedTail = commitEnd;
                 }

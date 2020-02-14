@@ -105,6 +105,10 @@ public class StatsCollector {
      *
      * runtime exceptions
 
+     os.detected.name: linux
+     [INFO] os.detected.arch: x86_64
+     [INFO] os.detected.version: 4.15
+     [INFO] os.detected.version.major: 4
 
      *
      * flush on jvm exit?
@@ -143,7 +147,7 @@ public class StatsCollector {
             }
         };
 
-        statsLogger.scheduleAtFixedRate(task, 60, 60, TimeUnit.SECONDS);
+        statsLogger.scheduleAtFixedRate(task, 30, 30, TimeUnit.SECONDS);
     }
 
 
@@ -194,6 +198,7 @@ public class StatsCollector {
         sb.append("75pct ").append(histogram.get75thPercentile()).append(" ");
         sb.append("95pct ").append(histogram.get95thPercentile()).append(" ");
         sb.append("99pct ").append(histogram.get99thPercentile()).append(" ");
+        sb.append("cnt ").append(histogram.getCount()).append(" ");
         return sb.toString();
     }
 

@@ -167,7 +167,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         syncLatency = logStats.createHistogram("segment_sync");
         compactLatency = logStats.createHistogram("prefix_compact");
         openSegments = () -> writeChannels.size();
-        logStats.addGauge("open_segments", () -> openSegments);
+        logStats.addGauge("open_segments", openSegments);
     }
 
     private long getStartingSegment() {

@@ -500,6 +500,7 @@ public class SequencerServer extends AbstractServer {
 
             default:
                 //TODO(Maithem) Fail request / log error
+                rawTokenAllocations.inc();
                 handleAllocation(msg, ctx, r);
                 return;
         }
