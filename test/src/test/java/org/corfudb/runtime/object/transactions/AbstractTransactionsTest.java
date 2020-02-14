@@ -18,6 +18,7 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
 
         ServerContextBuilder serverContextBuilder = new ServerContextBuilder()
                 .setMemory(false)
+                .setNoSync(true)
                 .setLogPath(PARAMETERS.TEST_TEMP_DIR)
                 .setCompactionPolicyType("GARBAGE_SIZE_FIRST")
                 .setSegmentGarbageRatioThreshold("0")

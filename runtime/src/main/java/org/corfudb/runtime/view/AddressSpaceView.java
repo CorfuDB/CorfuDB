@@ -72,6 +72,7 @@ public class AddressSpaceView extends AbstractView {
 
     private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
+    private final static int GARBAGE_WRITE_RETRY = 3;
 
     /**
      * A cache for read results.
@@ -227,9 +228,11 @@ public class AddressSpaceView extends AbstractView {
         LogUnitClient client = runtimeLayout.getLogUnitClient(logUnitServer);
         garbageEntries.forEach(garbageEntry -> garbageEntry.setId(runtime.getParameters().getClientId()));
 
-        final int numRetries = 3;
+        int numRetries = 0;
 
-        for (int x = 0; x < numRetries; x++) {
+        while (true) {
+            // WrongEpochException should be thrown without retry. Upper layer
+            // will use layoutHelper to retry on WrongEpochException.
             try {
                 CFUtils.getUninterruptibly(client.writeGarbageEntries(garbageEntries),
                         NetworkException.class, TimeoutException.class, WrongEpochException.class);
@@ -237,24 +240,14 @@ public class AddressSpaceView extends AbstractView {
             } catch (NetworkException | TimeoutException e) {
                 log.warn("writeGarbageToLogUnit: accessing LogUnit {} encounters a network error. " +
                                 "Invalidate layout for this client and retry, attempt: {}/{}",
-                        logUnitServer, x + 1, numRetries, e);
+                        logUnitServer, numRetries + 1, GARBAGE_WRITE_RETRY, e);
                 Duration retryRate = runtime.getParameters().getConnectionRetryRate();
                 Sleep.sleepUninterruptibly(retryRate);
-            } catch (WrongEpochException wee) {
-                long serverEpoch = wee.getCorrectEpoch();
-                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                log.warn("writeGarbageToLogUnit: wrongEpochException, runtime is in epoch {}, " +
-                                "while server is in epoch {}. Invalidate layout for this client and retry, attempt: " +
-                                "{}/{}", runtimeEpoch, serverEpoch, x + 1, numRetries);
-                runtime.invalidateLayout();
+                if (numRetries++ >= GARBAGE_WRITE_RETRY) {
+                    throw e;
+                }
             }
         }
-
-        String errorMsg = String.format("Writing garbage to %s fails after %d attempts",
-                logUnitServer, numRetries);
-
-        log.warn(errorMsg);
-        throw new RetryExhaustedException(errorMsg);
     }
 
     /**

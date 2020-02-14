@@ -364,11 +364,9 @@ public class SegmentManager {
 
         segmentCache.asMap().compute(ordinal, (ord, segment) -> {
             if (segment != null) {
-                // Close the segment when it is not referenced. We don not need to force
-                // close it because writers cannot write anything new to the segment as it
-                // is consolidated before it could be compacted and readers are allowed to
-                // read from un-compacted segment.
-                segment.close(false);
+                // Close segment to fail the on-going operations with
+                // ClosedSegmentException and they will be retried.
+                segment.close(true);
             }
 
             Path oldPath = Paths.get(oldSegment.getFilePath());
