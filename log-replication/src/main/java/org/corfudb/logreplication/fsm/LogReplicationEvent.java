@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.Data;
-import org.corfudb.logreplication.transmit.LogReplicationEventMetadata;
+import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 
 import java.util.UUID;
 
@@ -21,7 +21,7 @@ public class LogReplicationEvent {
     public enum LogReplicationEventType {
         REPLICATION_START,          // External event which signals start of log replication process
         REPLICATION_STOP,           // External event which signals stop of log replication process
-        SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot transmit (full-sync)
+        SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot send (full-sync)
         SNAPSHOT_SYNC_CONTINUE,     // Internal event to continue snapshot sync (broken to accommodate multi-site
                                     // replication for a shared thread pool)
         SNAPSHOT_SYNC_COMPLETE,     // Internal event which signals snapshot sync has been completed
