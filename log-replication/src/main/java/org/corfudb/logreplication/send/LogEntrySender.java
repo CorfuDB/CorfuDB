@@ -1,5 +1,6 @@
-package org.corfudb.logreplication.transmit;
+package org.corfudb.logreplication.send;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
@@ -13,7 +14,8 @@ import org.corfudb.runtime.CorfuRuntime;
  * It reads log entries from the datastore through the LogEntryReader, and sends them
  * through the LogEntryListener (the application specific callback).
  */
-public class LogEntryTransmitter {
+@Slf4j
+public class LogEntrySender {
 
     private static final int READ_BATCH_SIZE = 5;
     /*
@@ -41,7 +43,7 @@ public class LogEntryTransmitter {
     private volatile boolean taskActive = false;
 
     /**
-     * Stop the transmit for Log Entry Sync
+     * Stop the send for Log Entry Sync
      */
     public void stop() {
         taskActive = false;
@@ -55,8 +57,8 @@ public class LogEntryTransmitter {
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      */
-    public LogEntryTransmitter(CorfuRuntime runtime, LogEntryReader logEntryReader, DataSender dataSender,
-                               ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
+    public LogEntrySender(CorfuRuntime runtime, LogEntryReader logEntryReader, DataSender dataSender,
+                          ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
         this.runtime = runtime;
         this.logEntryReader = logEntryReader;
         this.dataSender = dataSender;
@@ -67,8 +69,7 @@ public class LogEntryTransmitter {
     /**
      * Read and send incremental updates (log entries)
      */
-    public void transmit() {
-        taskActive = true;
+    public void send() {
         int reads = 0;
 
         while (taskActive && reads < READ_BATCH_SIZE) {
@@ -78,7 +79,7 @@ public class LogEntryTransmitter {
             try {
                 message = logEntryReader.read();
                 // readProcessor.process(message);
-                if (dataSender.onNext(message)) {
+                if (dataSender.send(message)) {
                     // Write meta-data
                     reads++;
                 } else {
@@ -88,11 +89,18 @@ public class LogEntryTransmitter {
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
             } catch (Exception e) {
-                System.out.println(e);
+                log.error("Caught exception at LogEntrySender", e);
                 // Unrecoverable error, noisy streams found in transaction stream (streams of interest and others not
                 // intended for replication). Shutdown.
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN));
             }
         }
+    }
+
+    /**
+     * Reset the log entry sender to initial state
+     */
+    public void reset() {
+        taskActive = true;
     }
 }

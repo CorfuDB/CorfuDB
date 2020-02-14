@@ -2,7 +2,7 @@ package org.corfudb.logreplication.fsm;
 
 import lombok.Getter;
 import org.corfudb.logreplication.DataSender;
-import org.corfudb.logreplication.transmit.LogReplicationError;
+import org.corfudb.logreplication.send.LogReplicationError;
 import org.corfudb.logreplication.message.DataMessage;
 
 import java.util.LinkedList;
@@ -12,7 +12,7 @@ import java.util.UUID;
 
 
 /**
- * Test Implementation of Snapshot Listener
+ * Test Implementation of Snapshot Data Sender
  */
 public class TestDataSender implements DataSender {
 
@@ -26,7 +26,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean onNext(DataMessage message, UUID snapshotSyncId) {
+    public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
         if (message != null && message.getData().length != 0) {
             snapshotQueue.add(message);
             return true;
@@ -36,7 +36,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean onNext(List<DataMessage> messages, UUID snapshotSyncId) {
+    public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
         if (messages != null && !messages.isEmpty()) {
             // Add all received messages to the queue
             messages.forEach(msg -> snapshotQueue.add(msg));
@@ -47,7 +47,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean onNext(DataMessage message) {
+    public boolean send(DataMessage message) {
         if (message != null && message.getData() != null) {
             logEntryQueue.add(message);
             return true;
@@ -57,7 +57,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean onNext(List<DataMessage> messages) {
+    public boolean send(List<DataMessage> messages) {
         if (messages != null && !messages.isEmpty()) {
             // Add all received messages to the queue
             messages.forEach(msg -> logEntryQueue.add(msg));
@@ -68,10 +68,8 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean complete(UUID snapshotSyncId) { return true; }
+    public void onError(LogReplicationError error, UUID snapshotSyncId) {}
 
     @Override
-    public void onError(LogReplicationError error, UUID snapshotSyncId) {
-
-    }
+    public void onError(LogReplicationError error) {}
 }

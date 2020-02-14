@@ -7,8 +7,9 @@ import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.transmit.LogReplicationEventMetadata;
-import org.corfudb.logreplication.transmit.ReadProcessor;
+import org.corfudb.logreplication.message.MessageType;
+import org.corfudb.logreplication.send.LogReplicationEventMetadata;
+import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
@@ -18,12 +19,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * A class that represents the entry point to initiate log replication on the transmit side.
+ * This class represents the Log Replication Manager at the source.
+ *
+ * It is the entry point for log replication at the sender.
+ *
  **/
 @Data
 @Slf4j
-public class ReplicationSourceManager implements DataReceiver {
+public class SourceManager implements DataReceiver {
 
+    /*
+     *
+     */
     private static final int DEFAULT_FSM_WORKER_THREADS = 1;
 
     /*
@@ -32,34 +39,37 @@ public class ReplicationSourceManager implements DataReceiver {
     private final LogReplicationFSM logReplicationFSM;
 
     /**
-     * Constructor ReplicationSourceManager (default)
+     * Constructor Source (default)
      *
      * @param runtime Corfu Runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      * @param config Log Replication Configuration
      */
-    public ReplicationSourceManager(CorfuRuntime runtime,
-                                    DataSender dataSender,
-                                    LogReplicationConfig config) {
+    public SourceManager(CorfuRuntime runtime,
+                         DataSender dataSender,
+                         DataControl dataControl,
+                         LogReplicationConfig config) {
 
         this(runtime, dataSender, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
     /**
-     * Constructor ReplicationSourceManager (default)
+     * Constructor Source (default)
      *
      * @param runtime Corfu Runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
+     * @
      * @param readProcessor implementation for reads processor (data transformation)
      * @param config Log Replication Configuration
      */
-    public ReplicationSourceManager(CorfuRuntime runtime,
-                                    DataSender dataSender,
-                                    ReadProcessor readProcessor,
-                                    LogReplicationConfig config) {
+    public SourceManager(CorfuRuntime runtime,
+                         DataSender dataSender,
+                         DataControl dataControl,
+                         ReadProcessor readProcessor,
+                         LogReplicationConfig config) {
 
         // Default to single dedicated thread for state machine workers (perform state tasks)
 
@@ -69,7 +79,7 @@ public class ReplicationSourceManager implements DataReceiver {
     }
 
     /**
-     * Constructor ReplicationSourceManager to provide ExecutorServices for FSM
+     * Constructor Source to provide ExecutorServices for FSM
      *
      * For multi-site log replication multiple managers can share a common thread pool.
      *
@@ -79,15 +89,15 @@ public class ReplicationSourceManager implements DataReceiver {
      * @param config Log Replication Configuration
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
-    public ReplicationSourceManager(CorfuRuntime runtime,
-                                    DataSender dataSender,
-                                    LogReplicationConfig config,
-                                    ExecutorService logReplicationFSMWorkers) {
+    public SourceManager(CorfuRuntime runtime,
+                         DataSender dataSender,
+                         LogReplicationConfig config,
+                         ExecutorService logReplicationFSMWorkers) {
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, logReplicationFSMWorkers);
     }
 
     /**
-     * Constructor ReplicationSourceManager to provide ExecutorServices for FSM
+     * Constructor Source to provide ExecutorServices for FSM
      *
      * For multi-site log replication multiple managers can share a common thread pool.
      *
@@ -98,11 +108,11 @@ public class ReplicationSourceManager implements DataReceiver {
      * @param config Log Replication Configuration
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
-    public ReplicationSourceManager(CorfuRuntime runtime,
-                                    DataSender dataSender,
-                                    ReadProcessor readProcessor,
-                                    LogReplicationConfig config,
-                                    ExecutorService logReplicationFSMWorkers) {
+    public SourceManager(CorfuRuntime runtime,
+                         DataSender dataSender,
+                         ReadProcessor readProcessor,
+                         LogReplicationConfig config,
+                         ExecutorService logReplicationFSMWorkers) {
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, readProcessor,
                 logReplicationFSMWorkers);
     }
@@ -141,7 +151,7 @@ public class ReplicationSourceManager implements DataReceiver {
     }
 
     /**
-     * Signal to cancel snapshot transmit.
+     * Signal to cancel snapshot send.
      *
      * @param snapshotSyncId identifier of the snapshot sync task to cancel.
      */
@@ -157,40 +167,28 @@ public class ReplicationSourceManager implements DataReceiver {
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
      */
     public void shutdown() {
-        System.out.println("Explicit shutdown");
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
     }
 
     @Override
     public void receive(DataMessage message) {
-
+        // Process ACKs from Application, for both, log entry and snapshot sync.
+        if(message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
+            log.debug("Log entry sync ACK received on timestamp {}", message.getMetadata().getTimestamp());
+            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
+                new LogReplicationEventMetadata(message.getMetadata().getTimestamp())));
+        } else if (message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
+            log.debug("Snapshot sync ACK received on base timestamp {}", message.getMetadata().getSnapshotTimestamp());
+            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
+                    new LogReplicationEventMetadata(message.getMetadata().getSnapshotRequestId())));
+        } else {
+            log.debug("Received data message of type {} not an ACK", message.getMetadata().getMessageMetadataType());
+        }
     }
 
     @Override
     public void receive(List<DataMessage> messages) {
-
+        messages.forEach(message -> receive(message));
     }
-
-//    /**
-//     * TODO add comment
-//     *
-//     * @param requestId unique identifier for the snapshot sync request
-//     */
-//    public void snapshotReplicated(UUID requestId) {
-//        // Enqueue event into Log Replication FSM
-//        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
-//                new LogReplicationEventMetadata(requestId)));
-//    }
-//
-//    /**
-//     * Process ack from replication receive side.
-//     *
-//     * @param timestamp
-//     */
-//    public void logEntryReplicated(long timestamp) {
-//        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-//                new LogReplicationEventMetadata(timestamp)));
-//    }
-
 }

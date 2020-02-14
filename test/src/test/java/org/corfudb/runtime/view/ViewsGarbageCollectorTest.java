@@ -41,7 +41,7 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
         final int numWrites = 100;
 
-        //TODO(Maithem): transmit garbage from other clients
+        //TODO(Maithem): send garbage from other clients
         for (int x = 0; x < numWrites; x++) {
             table.put(String.valueOf(x), String.valueOf(x));
         }

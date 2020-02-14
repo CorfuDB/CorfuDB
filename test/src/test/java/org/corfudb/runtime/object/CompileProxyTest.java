@@ -118,11 +118,11 @@ public class CompileProxyTest extends AbstractViewTest {
 
         int beforeSync, afterSync;
 
-        // before transmit'ing the in-memory object, the in-memory copy does not get updated
+        // before send'ing the in-memory object, the in-memory copy does not get updated
         assertThat(beforeSync = proxy_CORFUSMR.getUnderlyingObject().getObject().getValue())
                 .isEqualTo(INITIAL);
 
-        // transmit with the stream entry by entry
+        // send with the stream entry by entry
         for (int timestamp = 1; timestamp <= concurrency; timestamp++) {
             proxy_CORFUSMR.getUnderlyingObject()
                     .syncObjectUnsafe(timestamp);
@@ -263,7 +263,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 lastUpdateStreamPosition.incrementAndGet(); // advance the expected stream position
 
             } else {
-                // before transmit'ing the in-memory object, the in-memory copy does not get updated
+                // before send'ing the in-memory object, the in-memory copy does not get updated
                 // check that the in-memory copy is only as up-to-date as the latest 'get()'
                 assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getValue())
                         .isEqualTo(lastRead.get());
@@ -421,7 +421,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // initialization
         sharedCorfuCompound.set(sharedCorfuCompound.new Inner("E" + 0, "F" + 0), 0);
 
-        // invoke some accessor to transmit the in-memory object
+        // invoke some accessor to send the in-memory object
         // return value is ignored
         sharedCorfuCompound.getID();
 
@@ -434,7 +434,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // step 2: check the unsync'ed in-memory object state
         addTestStep((ignored_task_num) -> {
-            // before transmit'ing the in-memory object, the in-memory copy does not get updated
+            // before send'ing the in-memory object, the in-memory copy does not get updated
             assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getUser().getFirstName())
                     .startsWith("E");
             assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getUser().getLastName())

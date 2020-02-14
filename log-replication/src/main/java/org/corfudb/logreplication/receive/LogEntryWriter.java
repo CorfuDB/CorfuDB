@@ -2,6 +2,7 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.MessageMetadata;
 
 import org.corfudb.logreplication.message.MessageType;
@@ -37,9 +38,11 @@ public class LogEntryWriter {
     long lastMsgTs; //the timestamp of the last message processed.
     private HashMap<Long, DataMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
     private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
+    private DataSender dataSender;
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
+    public LogEntryWriter(CorfuRuntime rt, DataSender dataSender, LogReplicationConfig config) {
         this.rt = rt;
+        this.dataSender = dataSender;
         Set<String> streams = config.getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
 
@@ -152,6 +155,10 @@ public class LogEntryWriter {
             processMsg(msg);
             lastMsgTs = msg.getMetadata().getTimestamp();
             processQueue();
+            // Send ACK to sender for the set of processed
+            MessageMetadata metadata = new MessageMetadata(MessageType.LOG_ENTRY_REPLICATED, lastMsgTs, srcGlobalSnapshot);
+            DataMessage ack = new DataMessage(metadata);
+            dataSender.send(ack);
         }
 
         //If the entry's ts is larger than the entry processed, put it in queue
@@ -162,7 +169,8 @@ public class LogEntryWriter {
         }
     }
 
-    /*
+    /**
+     *
      */
     public void setTimestamp(long snapshot, long ackTimestamp) {
         srcGlobalSnapshot = snapshot;

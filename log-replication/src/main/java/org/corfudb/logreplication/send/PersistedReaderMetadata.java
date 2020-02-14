@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.transmit;
+package org.corfudb.logreplication.send;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Data;
@@ -25,8 +25,8 @@ public class PersistedReaderMetadata {
     //private final String LAST_SENT_SNAP_TS = "lastSentBaseSnapshotTimeStamp";
     //private final String LAST_ACK_SNAP_TS = "lastAckedTimeStamp";
 
-    private long lastSentBaseSnapshotTimestamp; //used by fullsync transmit
-    private long lastAckedTimestamp; //used by fullsync transmit
+    private long lastSentBaseSnapshotTimestamp; //used by fullsync send
+    private long lastAckedTimestamp; //used by fullsync send
 
     private CorfuTable<String, Long> readerMetaDataTable;
 

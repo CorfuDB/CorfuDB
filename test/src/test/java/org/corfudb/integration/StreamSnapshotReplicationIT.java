@@ -5,11 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
-import org.corfudb.logreplication.transmit.SnapshotReadMessage;
-import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
+
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+
+import org.corfudb.logreplication.send.SnapshotReadMessage;
+import org.corfudb.logreplication.send.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;

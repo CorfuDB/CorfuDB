@@ -2,11 +2,12 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.DataControl;
+import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.MessageMetadata;
 
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.logreplication.message.DataMessage;
 
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -36,6 +37,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private Set<UUID> streamsDone;
     private long recvSeq;
+
     // The sequence number of the message, it has received.
     // It is expecting the message in order of the sequence.
 

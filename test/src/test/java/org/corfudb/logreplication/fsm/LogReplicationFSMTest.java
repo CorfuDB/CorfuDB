@@ -5,12 +5,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.DataSender;
-import org.corfudb.logreplication.transmit.DefaultReadProcessor;
-import org.corfudb.logreplication.transmit.LogEntryReader;
-import org.corfudb.logreplication.transmit.LogReplicationEventMetadata;
-import org.corfudb.logreplication.transmit.SnapshotReader;
-import org.corfudb.logreplication.transmit.SnapshotTransmitter;
-import org.corfudb.logreplication.transmit.StreamsSnapshotReader;
+import org.corfudb.logreplication.send.DefaultReadProcessor;
+import org.corfudb.logreplication.send.LogEntryReader;
+import org.corfudb.logreplication.send.LogReplicationEventMetadata;
+import org.corfudb.logreplication.send.SnapshotReader;
+import org.corfudb.logreplication.send.SnapshotSender;
+import org.corfudb.logreplication.send.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -58,23 +58,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogEntryReader logEntryReader;
-    private LogReplicationConfig logReplicationConfig;
 
     @Before
     public void setRuntime() {
         runtime = getDefaultRuntime();
         runtime.getParameters().setCodecType(Codec.Type.NONE.toString());
-
-        initialize();
-    }
-
-    private void initialize() {
-        // Test configuration shared with Readers and Listeners for testing purposes
-
-
-        // The dummy implementation of our test snapshot/log entry reader does not look into streams,
-        // it works at the address layer, for this reason we can provide an empty set as the streams to replicate.
-        logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME), UUID.randomUUID());
     }
 
     /**
@@ -156,7 +144,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
 
     /**
-     * Test SnapshotTransmitter through dummy implementations of the SnapshotReader and DataSender.
+     * Test SnapshotSender through dummy implementations of the SnapshotReader and DataSender.
      *
      * (1) Initiate the Log Replication State Machine (which defaults to the INITIALIZED State)
      * (2) Write NUM_ENTRIES to the database in a consecutive address space for a given stream.
@@ -171,11 +159,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testLogReplicationSnapshotTransmitterNoBatch() throws Exception {
-        testSnapshotTransmitter(NUM_ENTRIES);
+        testSnapshotSender(NUM_ENTRIES);
     }
 
     /**
-     * Test SnapshotTransmitter through dummy implementations of the SnapshotReader and DataSender.
+     * Test SnapshotSender through dummy implementations of the SnapshotReader and DataSender.
      *
      * (1) Initiate the Log Replication State Machine (which defaults to the INITIALIZED State)
      * (2) Write NUM_ENTRIES to the database in a consecutive address space for a given stream.
@@ -191,10 +179,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Test
     public void testLogReplicationSnapshotTransmitterBatch() throws Exception {
-        testSnapshotTransmitter(BATCH_SIZE);
+        testSnapshotSender(BATCH_SIZE);
     }
 
-    private void testSnapshotTransmitter(int batchSize) throws Exception {
+    private void testSnapshotSender(int batchSize) throws Exception {
 
         // Initialize State Machine
         initLogReplicationFSM(ReaderImplementation.TEST);
@@ -317,7 +305,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        for (int i = 0; i<LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY*SnapshotTransmitter.SNAPSHOT_BATCH_SIZE); i++) {
+        for (int i = 0; i<LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE); i++) {
             transitionAvailable.acquire();
         }
 
@@ -439,7 +427,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         if (observeSnapshotSync) {
             snapshotMessageCounterObservable = ((InSnapshotSyncState) fsm.getStates()
-                    .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotTransmitter().getObservedCounter();
+                    .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
             snapshotMessageCounterObservable.addObserver(this);
         }
     }

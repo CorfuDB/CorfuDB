@@ -43,8 +43,9 @@ public class PersistedWriterMetadata {
     }
 
     public void setsrcBaseSnapshotDone() {
-        long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapDone);
+        long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart);
         writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapDone.getVal(), ts);
+        lastSrcBaseSnapshotTimestamp = ts;
         lastProcessedLogTimestamp = ts;
     }
 

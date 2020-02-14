@@ -1,6 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.transmit.LogEntryReader;
+import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.message.DataMessage;
 
 /**

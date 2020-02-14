@@ -28,7 +28,7 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
             case REPLICATION_SHUTDOWN:
                 return fsm.getStates().get(LogReplicationStateType.STOPPED);
             default: {
-                log.warn("Unexpected log replication event {} when in require snapshot transmit state.", event.getType());
+                log.warn("Unexpected log replication event {} when in require snapshot send state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
