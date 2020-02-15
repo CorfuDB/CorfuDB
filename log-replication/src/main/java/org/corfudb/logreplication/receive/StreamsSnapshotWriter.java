@@ -2,8 +2,6 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataControl;
-import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.MessageMetadata;
 
 import org.corfudb.logreplication.message.MessageType;
@@ -13,11 +11,11 @@ import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
-import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.lang.reflect.Array;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,19 +55,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * TODO: replace with stream API
      */
     void clearTables() {
-        /*for (UUID streamID : streamViewMap.keySet()) {
-            CorfuTable<String, String> corfuTable = rt.getObjectsView()
-                    .build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
-                    .setStreamID(streamID)
-                    .open();
-            corfuTable.clear();
-            corfuTable.close();
-        }*/
-
         for (IStreamView sv : streamViewMap.values()) {
-            SMREntry entry = new SMREntry("clear", null, null);
+            //maxi: just put dummy args and serilizer, may ask Maithem for correctness.
+            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
             sv.append(entry);
         }
     }
@@ -89,13 +77,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     /**
-     *
+     * Reset snapshot writer state.
+     * @param snapshot
      */
     public void reset(long snapshot) {
        srcGlobalSnapshot = snapshot;
        recvSeq = 0;
        streamsDone = new HashSet<>();
-       //clearTables();
+       clearTables();
     }
 
     /**
