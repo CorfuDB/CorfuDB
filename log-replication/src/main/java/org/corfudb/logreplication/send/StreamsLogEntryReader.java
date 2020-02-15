@@ -105,7 +105,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
             }
             DataMessage txMessage = generateMessage(opaqueEntry);
             return txMessage;
-            //callback to send message
         }
 
         //TODO: this I added so it compiles (fix)
