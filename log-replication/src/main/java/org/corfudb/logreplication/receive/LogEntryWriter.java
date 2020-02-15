@@ -2,7 +2,6 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.MessageMetadata;
 
 import org.corfudb.logreplication.message.MessageType;
@@ -12,23 +11,17 @@ import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @NotThreadSafe
 @Slf4j
@@ -135,6 +128,7 @@ public class LogEntryWriter {
     /**
      * Apply message generate by log entry reader and will apply at the destination corfu cluster.
      * @param msg
+     * @return long: the last processed message timestamp if apply processing any messages.
      * @throws ReplicationWriterException
      */
     public long apply(DataMessage msg) throws ReplicationWriterException {

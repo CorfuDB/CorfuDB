@@ -2,13 +2,16 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.receive.LogEntryWriter;
-import org.corfudb.logreplication.send.LogEntryReader;
-import org.corfudb.logreplication.send.LogReplicationError;
+import org.corfudb.logreplication.receive.PersistedWriterMetadata;
+import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
+import org.corfudb.logreplication.send.SnapshotReadMessage;
 import org.corfudb.logreplication.send.StreamsLogEntryReader;
+import org.corfudb.logreplication.send.StreamsSnapshotReader;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -32,11 +35,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
-public class LogEntryReplicationIT extends AbstractIT {
+public class StreamsReplicationIT extends AbstractIT {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
-
+    static private final int START_VAL = 11;
+    static private final int NUM_KEYS = 2;
     static private final int NUM_STREAMS = 2;
     static private final int NUM_TRANSACTIONS = 2;
 
@@ -119,7 +123,7 @@ public class LogEntryReplicationIT extends AbstractIT {
         dstTestRuntime.setTransactionLogging(true).connect();
     }
 
-    void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
+    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
         for (int i = 0; i < NUM_STREAMS; i++) {
             String name = "test" + Integer.toString(i);
 
@@ -134,13 +138,27 @@ public class LogEntryReplicationIT extends AbstractIT {
         }
     }
 
+    public static void generateData(HashMap<String, CorfuTable<Long, Long>> tables,
+                      HashMap<String, HashMap<Long, Long>> hashMap,
+                      int numKeys, CorfuRuntime rt, long startval) {
+        for (int i = 0; i < numKeys; i++) {
+            for (String name : tables.keySet()) {
+                hashMap.putIfAbsent(name, new HashMap<>());
+                long key = i + startval;
+                tables.get(name).put(key, key);
+                log.trace("tail " + rt.getAddressSpaceView().getLogTail() + " seq " + rt.getSequencerView().query().getSequence());
+                hashMap.get(name).put(key, key);
+            }
+        }
+    }
+
     //Generate data with transactions and the same time push the data to the hashtable
-    void generateTransactions(HashMap<String, CorfuTable<Long, Long>> tables,
+    public static void generateTransactions(HashMap<String, CorfuTable<Long, Long>> tables,
                       HashMap<String, HashMap<Long, Long>> hashMap,
                       int numT, CorfuRuntime rt, long startval) {
         for (int i = 0; i < numT; i++) {
             rt.getObjectsView().TXBegin();
-            for (String name : srcTables.keySet()) {
+            for (String name : tables.keySet()) {
                 hashMap.putIfAbsent(name, new HashMap<>());
                 long key = i + startval;
                 tables.get(name).put(key, key);
@@ -151,7 +169,8 @@ public class LogEntryReplicationIT extends AbstractIT {
         }
     }
 
-    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    public static void verifyData(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+        System.out.println("\n" + tag);
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
@@ -164,20 +183,21 @@ public class LogEntryReplicationIT extends AbstractIT {
 
             for (Long key : mapKeys.keySet()) {
                 assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
+                System.out.println("tableKey " + table.get(key) + " mapKey " + mapKeys.get(key));
             }
         }
     }
 
-    void verifyNoData(HashMap<String, CorfuTable<Long, Long>> tables) {
+    public static void verifyNoData(HashMap<String, CorfuTable<Long, Long>> tables) {
         for (CorfuTable table : tables.values()) {
-            assertThat(table.keySet().isEmpty());
+            assertThat(table.keySet().isEmpty()).isTrue();
         }
     }
 
     /**
      * enforce checkpoint entries at the streams.
      */
-    void ckStreams(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
+    public static void ckStreams(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
         for (CorfuTable map : tables.values()) {
             mcw1.addMap(map);
@@ -203,10 +223,9 @@ public class LogEntryReplicationIT extends AbstractIT {
         }
     }
 
-    void readLogMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
+    public static void readLogEntryMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
-
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {
@@ -220,7 +239,7 @@ public class LogEntryReplicationIT extends AbstractIT {
         }
     }
 
-    void writeLogMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
+    public static void writeLogEntryMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
 
         LogEntryWriter writer = new LogEntryWriter(rt, config);
@@ -230,18 +249,169 @@ public class LogEntryReplicationIT extends AbstractIT {
         }
 
         DataMessage data = msgQ.get(0);
-        writer.setTimestamp(data.metadata.getSnapshotTimestamp(), Address.NON_ADDRESS);
+        //writer.setTimestamp(data.metadata.getSnapshotTimestamp(), Address.NON_ADDRESS);
 
         for (DataMessage msg : msgQ) {
             writer.apply(msg);
         }
     }
 
-    void printTails(String tag) {
-        System.out.println("\n" + tag);
-        System.out.println("src dataTail " + srcDataRuntime.getAddressSpaceView().getLogTail() + " readerTail " + readerRuntime.getAddressSpaceView().getLogTail());
-        System.out.println("dst dataTail " + dstDataRuntime.getAddressSpaceView().getLogTail() + " writerTail " + writerRuntime.getAddressSpaceView().getLogTail());
+    public static void clearTables(HashMap<String, CorfuTable<Long, Long>> tables) {
+        for (CorfuTable<Long, Long> table : tables.values()) {
+            table.clear();
+        }
     }
+
+    public static void printTails(String tag, CorfuRuntime rt0, CorfuRuntime rt1) {
+        System.out.println("\n" + tag);
+        System.out.println("src dataTail " + rt0.getAddressSpaceView().getLogTail());
+        System.out.println("dst dataTail " + rt1.getAddressSpaceView().getLogTail());
+
+    }
+
+    @Test
+    public void testTwoServersCanUp () throws IOException {
+        System.out.println("\ntest start");
+        setupEnv();
+
+        openStreams(srcTables, srcDataRuntime);
+        openStreams(srcTestTables, srcTestRuntime);
+        openStreams(dstTables, dstDataRuntime);
+        openStreams(dstTestTables, dstTestRuntime);
+
+        // generate data at server1
+        generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        // generate data at server2
+        generateData(dstTables, dstHashMap, NUM_KEYS, dstDataRuntime, NUM_KEYS*2);
+
+        verifyData("srctables", srcTables, srcHashMap);
+        verifyData("srcTestTables", srcTestTables, srcHashMap);
+
+        verifyData("dstTables", dstTables, dstHashMap);
+        verifyData("dstTestTables", dstTestTables, dstHashMap);
+        return;
+    }
+
+    public static void readSnapLogMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
+        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
+
+        reader.reset(rt.getAddressSpaceView().getLogTail());
+        while (true) {
+            SnapshotReadMessage snapshotReadMessage = reader.read();
+            msgQ.addAll(snapshotReadMessage.getMessages());
+            if (snapshotReadMessage.isEndRead()) {
+                break;
+            }
+        }
+    }
+
+    public static void writeSnapLogMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
+        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config);
+
+        if (msgQ.isEmpty()) {
+            System.out.println("msgQ is empty");
+        }
+        writer.reset(msgQ.get(0).metadata.getSnapshotTimestamp());
+
+        for (DataMessage msg : msgQ) {
+            writer.apply(msg);
+        }
+    }
+
+
+    /**
+     * Write to a corfu table and read SMRntries with streamview,
+     * redirect the SMRentries to the second corfu server, and verify
+     * the second corfu server contains the correct <key, value> pairs
+     * @throws Exception
+     */
+    @Test
+    public void testWriteSMREntries() throws Exception {
+        // setup environment
+        System.out.println("\ntest start");
+        setupEnv();
+
+        openStreams(srcTables, srcDataRuntime);
+        generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+        verifyData("after writing to server1", srcTables, srcHashMap);
+        printTails("after writing to server1", srcDataRuntime, dstDataRuntime);
+
+        //read streams as SMR entries
+        StreamOptions options = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+
+        for (String name : srcHashMap.keySet()) {
+            IStreamView srcSV = srcTestRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID(name), options);
+            IStreamView dstSV = dstTestRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID(name), options);
+
+            List<ILogData> dataList = srcSV.remaining();
+            for (ILogData data : dataList) {
+                OpaqueEntry opaqueEntry = OpaqueEntry.unpack(data);
+                for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                    for (SMREntry entry : opaqueEntry.getEntries().get(uuid)) {
+                        dstSV.append(entry);
+                    }
+                }
+            }
+        }
+
+        printTails("after writing to dst", srcDataRuntime, dstDataRuntime);
+        openStreams(dstTables, writerRuntime);
+        verifyData("after writing to dst", dstTables, srcHashMap);
+    }
+
+    @Test
+    public void testPersistentTable() throws IOException {
+        setupEnv();
+        try {
+            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, UUID.randomUUID());
+            meta.getLastProcessedLogTimestamp();
+        } catch (Exception e) {
+            e.getStackTrace();
+            throw e;
+        }
+    }
+
+    @Test
+    public void testSnapTransfer() throws Exception {
+        // setup environment
+        System.out.println("\ntest start ok");
+        setupEnv();
+
+        openStreams(srcTables, srcDataRuntime);
+        generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, START_VAL);
+        verifyData("after writing to src", srcTables, srcHashMap);
+
+        //generate dump data at dst
+        openStreams(dstTables, dstDataRuntime);
+        generateData(dstTables, dstHashMap, NUM_KEYS, dstDataRuntime, START_VAL + NUM_KEYS);
+        verifyData("after writing to dst", dstTables, dstHashMap);
+
+        printTails("after writing to server1", srcDataRuntime, dstDataRuntime);
+
+        //read snapshot from srcServer and put msgs into Queue
+        readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+
+        long dstEntries = msgQ.size()*srcHashMap.keySet().size();
+        long dstPreTail = dstDataRuntime.getAddressSpaceView().getLogTail();
+
+        //play messages at dst server
+        writeSnapLogMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
+
+        long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;
+        assertThat(diff == dstEntries);
+        printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
+
+        //verify data with hashtable
+        openStreams(dstTables, dstDataRuntime);
+        verifyData("after snap write at dst", dstTables, srcHashMap);
+        System.out.println("test done");
+    }
+
 
     @Test
     public void testLogEntryTransfer() throws IOException {
@@ -251,28 +421,28 @@ public class LogEntryReplicationIT extends AbstractIT {
 
         openStreams(srcTables, srcDataRuntime);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
-        verifyData(srcTables, srcHashMap);
+        verifyData("after writing to src", srcTables, srcHashMap);
 
-        printTails("after writing to server1");
+        printTails("after writing to server1", srcDataRuntime, dstDataRuntime);
 
         verifyTxStream(srcTestRuntime);
 
         //read snapshot from srcServer and put msgs into Queue
-        readLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+        readLogEntryMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
 
         long dstEntries = msgQ.size();
         long dstPreTail = dstDataRuntime.getAddressSpaceView().getLogTail();
 
         //play messages at dst server
-        writeLogMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
+        writeLogEntryMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
 
         long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;
         assertThat(diff).isEqualTo(dstEntries);
-        printTails("after writing to server2");
+        printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
 
         //verify data with hashtable
         openStreams(dstTables, dstDataRuntime);
-        verifyData(dstTables, srcHashMap);
+        verifyData("after log writing at dst", dstTables, srcHashMap);
         System.out.println("test done");
     }
 }
