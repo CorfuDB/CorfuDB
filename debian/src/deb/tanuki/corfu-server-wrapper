@@ -38,6 +38,11 @@ CONVERGED_APP_SYMLINK="../conf/corfu-server-wrapper_converged_app_additional.con
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
 ADDITIONAL_CONVERGED_APP_CONF_24GB="../conf/corfu-server-wrapper_converged_app_24gb.conf"
 
+# Determine the absolute path to successfully
+# delete the converged appliance conf file
+SCRIPTPATH=$(readlink -f $0)
+SCRIPTBASE=`dirname $SCRIPTPATH`
+
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
 
 # If it's not the converged appliance (manager, policy manager, and controller)
@@ -45,10 +50,6 @@ NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
 # converged appliance related configuration
 if ( [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ] \
   && [ "$NODE_TYPE" != "global-manager" ] ); then
-    # Determine the absolute path to successfully
-    # delete the converged appliance conf file
-    SCRIPTPATH=$(readlink -f $0)
-    SCRIPTBASE=`dirname $SCRIPTPATH`
     rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF"
     rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF_24GB"
 else
