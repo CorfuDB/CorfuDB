@@ -125,11 +125,10 @@ public class SinkManager implements DataReceiver {
                         DataMessage ack = new DataMessage(metadata);
                         dataSender.send(ack);
 
-                        message.getMetadata().setSnapshotTimestamp(ackTs);
                         dataSender.send(message);
                     }
                 } else {
-                    log.error("it is in the wrong state {}", rxState);
+                    log.error("it is in the wrong state {}", rxState + " messageType: " + message.getMetadata().getMessageMetadataType());
                     throw new ReplicationWriterException("wrong state");
                 }
             } catch (ReplicationWriterException e) {

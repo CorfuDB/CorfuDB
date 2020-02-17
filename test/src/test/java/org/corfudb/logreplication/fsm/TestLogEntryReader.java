@@ -16,4 +16,9 @@ public class TestLogEntryReader implements LogEntryReader {
     public DataMessage read() {
         return new DataMessage();
     }
+
+    @Override
+    public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
+        // Read everything from start
+    }
 }

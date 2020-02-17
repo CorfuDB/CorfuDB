@@ -33,7 +33,7 @@ public class LogEntryWriter {
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the streamview.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
-    long lastMsgTs; //the timestamp of the last message processed.
+    private long lastMsgTs; //the timestamp of the last message processed.
     private HashMap<Long, DataMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
     private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
 
@@ -132,6 +132,7 @@ public class LogEntryWriter {
      * @throws ReplicationWriterException
      */
     public long apply(DataMessage msg) throws ReplicationWriterException {
+
         verifyMetadata(msg.getMetadata());
 
         // Ignore the out of date messages
