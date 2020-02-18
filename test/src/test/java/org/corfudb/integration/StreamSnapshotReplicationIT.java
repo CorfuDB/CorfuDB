@@ -560,6 +560,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         // If expected value, release semaphore / unblock the wait
         // TODO (ANNY): NOT ENOUGH ONE SAME REQUEST IS SENT MULTIPLE TIMES BECAUSE NO ACK IS RECEIVED
         if (expectedAckMessages == value) {
+            System.out.println("Expected Messages value: " + value);
             blockUntilExpectedValueReached.release();
         }
     }
