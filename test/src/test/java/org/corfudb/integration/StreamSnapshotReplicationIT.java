@@ -2,15 +2,12 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataControl;
-import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 
-import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -32,7 +29,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Random;
@@ -418,30 +414,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         verifyNoData(dstTables);
 
         // Start Snapshot Sync (through Source Manager)
-        LogReplicationConfig config = new LogReplicationConfig(srcTables.keySet(), REMOTE_SITE_ID);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(SOURCE_ENDPOINT, DESTINATION_ENDPOINT, config);
-        DefaultDataControl sourceDataControl = new DefaultDataControl(true);
-        SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
-
-        // Set Log Replication Source Manager so we can emulate the channel for data & control messages
-        sourceDataSender.setSourceManager(logReplicationSourceManager);
-        sourceDataControl.setSourceManager(logReplicationSourceManager);
-
-        // Observe ACKs on SourceManager, to assess when snapshot sync is completed
-        expectedAckMessages = 1; // We only expect one message, related to the snapshot sync complete
-        ackMessages = logReplicationSourceManager.getAckMessages();
-        ackMessages.addObserver(this);
-
-        // Acquire semaphore for the first time
-        blockUntilExpectedValueReached.acquire();
-
-        // Start Snapshot Sync
-        System.out.println("****** Start Snapshot Sync");
-        logReplicationSourceManager.startSnapshotSync();
-
-        // Block until the snapshot sync completes == one ACK is received by the source manager
-        System.out.println("****** Wait until snapshot sync completes and ACK is received");
-        blockUntilExpectedValueReached.acquire();
+        SourceManager logReplicationSourceManager = startSnapshotSync(srcTables.keySet());
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -523,8 +496,19 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         System.out.println("****** Verify No Data in Destination Site");
         verifyNoData(dstTables);
 
+        // Start Snapshot Sync
+        startSnapshotSync(crossTables);
+
+        // Verify Data on Destination site
+        System.out.println("****** Verify Data on Destination");
+        // Because t2 should not have been replicated remove from expected list
+        srcHashMap.get(t2).clear();
+        verifyData(dstTables, srcHashMap);
+    }
+
+    private SourceManager startSnapshotSync(Set<String> tablesToReplicate) throws Exception {
         // Start Snapshot Sync (through Source Manager)
-        LogReplicationConfig config = new LogReplicationConfig(crossTables, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
         SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(SOURCE_ENDPOINT, DESTINATION_ENDPOINT, config);
         DefaultDataControl sourceDataControl = new DefaultDataControl(true);
         SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
@@ -549,12 +533,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         System.out.println("****** Wait until snapshot sync completes and ACK is received");
         blockUntilExpectedValueReached.acquire();
 
-        // Verify Data on Destination site
-        System.out.println("****** Verify Data on Destination");
-
-        // Because t2 should not have been replicated remove from expected list
-        srcHashMap.get(t2).clear();
-        verifyData(dstTables, srcHashMap);
+        return logReplicationSourceManager;
     }
 
     /**

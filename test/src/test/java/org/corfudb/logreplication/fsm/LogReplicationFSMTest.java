@@ -100,10 +100,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         // Transition #4: Snapshot Sync Complete
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId);
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, false);
 
         // Transition #5: Stop Replication
-        transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED);
+        // Next transition might not be to INITIALIZED, as IN_LOG_ENTRY_SYNC state might have enqueued
+        // a continuation before the stop is enqueued.
+        transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED, true);
     }
 
     /**
@@ -134,12 +136,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Transition #2: Trimmed Exception on Log Entry Sync for an invalid event id, this should not be taken as
         // a valid trimmed exception for the current state, hence it remains in the same state
-        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_LOG_ENTRY_SYNC, UUID.randomUUID());
+        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_LOG_ENTRY_SYNC, UUID.randomUUID(), false);
 
         // Transition #3: Trimmed Exception
         // Because this is an internal state, we need to capture the actual event id internally generated
         UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionEventId();
-        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID);
+        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID, false);
     }
 
     private void insertDelay(int timeMilliseconds) throws InterruptedException {
@@ -445,7 +447,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     private UUID transition(LogReplicationEventType eventType,
                             LogReplicationStateType expectedState,
-                            UUID eventId)
+                            UUID eventId, boolean waitUntilExpected)
             throws InterruptedException {
 
         System.out.println("Insert event: " + eventType);
@@ -463,6 +465,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         fsm.input(event);
 
         transitionAvailable.acquire();
+
+        // Wait until the expected state
+        while (waitUntilExpected) {
+            if (fsm.getState().getType() == expectedState) {
+                return event.getEventID();
+            } else {
+                transitionAvailable.acquire();
+            }
+        }
 
         assertThat(fsm.getState().getType()).isEqualTo(expectedState);
 
@@ -482,8 +493,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      * @throws InterruptedException
      */
     private UUID transition(LogReplicationEventType eventType,
+                            LogReplicationStateType expectedState, boolean waitUntilExpected) throws InterruptedException {
+        return transition(eventType, expectedState, null, waitUntilExpected);
+    }
+
+    private UUID transition(LogReplicationEventType eventType,
                             LogReplicationStateType expectedState) throws InterruptedException {
-        return transition(eventType, expectedState, null);
+        return transition(eventType, expectedState, null, false);
     }
 
     /**
