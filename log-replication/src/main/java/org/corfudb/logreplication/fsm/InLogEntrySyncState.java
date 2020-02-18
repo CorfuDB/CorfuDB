@@ -119,8 +119,9 @@ public class InLogEntrySyncState implements LogReplicationState {
             // Reset before start sending data.
             // We need the reset to occur on the consumer thread to avoid
             // race conditions with any cancel processed as the next incoming event.
-            logEntrySender.reset();
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntrySender::send);
+            logEntrySender.reset(fsm.persistedReaderMetadata);
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
+
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
         }

@@ -1,17 +1,21 @@
 package org.corfudb.logreplication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
+import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,7 +33,7 @@ import java.util.concurrent.Executors;
 public class SourceManager implements DataReceiver {
 
     /*
-     *
+     * Default number of Log Replication State Machine Worker Threads
      */
     private static final int DEFAULT_FSM_WORKER_THREADS = 1;
 
@@ -37,6 +41,14 @@ public class SourceManager implements DataReceiver {
      *  Log Replication State Machine
      */
     private final LogReplicationFSM logReplicationFSM;
+
+    @VisibleForTesting
+    private Roaring64NavigableMap acksReceived = new Roaring64NavigableMap();
+
+
+    @VisibleForTesting
+    @Getter
+    private ObservableValue ackMessages = new ObservableValue(acksReceived.getIntCardinality());
 
     /**
      * Constructor Source (default)
@@ -72,8 +84,6 @@ public class SourceManager implements DataReceiver {
                          LogReplicationConfig config) {
 
         // Default to single dedicated thread for state machine workers (perform state tasks)
-
-        // Default to single dedicated thread for state machine consumer (poll of the event queue)
         this(runtime, dataSender, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
@@ -173,15 +183,20 @@ public class SourceManager implements DataReceiver {
 
     @Override
     public void receive(DataMessage message) {
+
+        // TODO (Anny): this needs to change, it's only there for testing purposes but we should optimize
+        acksReceived.addLong(message.getMetadata().getTimestamp());
+        ackMessages.setValue(acksReceived.getIntCardinality());
+
         // Process ACKs from Application, for both, log entry and snapshot sync.
         if(message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
             log.debug("Log entry sync ACK received on timestamp {}", message.getMetadata().getTimestamp());
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
                 new LogReplicationEventMetadata(message.getMetadata().getTimestamp())));
-        } else if (message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
+        } else if (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
             log.debug("Snapshot sync ACK received on base timestamp {}", message.getMetadata().getSnapshotTimestamp());
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
-                    new LogReplicationEventMetadata(message.getMetadata().getSnapshotRequestId())));
+                    new LogReplicationEventMetadata(message.getMetadata().getSnapshotRequestId(), message.getMetadata().getTimestamp())));
         } else {
             log.debug("Received data message of type {} not an ACK", message.getMetadata().getMessageMetadataType());
         }
