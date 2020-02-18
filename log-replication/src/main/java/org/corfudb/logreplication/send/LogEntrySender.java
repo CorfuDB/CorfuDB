@@ -73,6 +73,7 @@ public class LogEntrySender {
      */
     public void send(UUID logEntrySyncEventId) {
         int reads = 0;
+        taskActive = true;
 
         while (taskActive && reads < READ_BATCH_SIZE) {
             DataMessage message;
