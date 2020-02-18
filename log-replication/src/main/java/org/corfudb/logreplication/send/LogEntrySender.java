@@ -7,6 +7,8 @@ import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.UUID;
+
 /**
  * This class is responsible of managing the transmission of log entries,
  * i.e, reading and sending incremental updates to a remote site.
@@ -17,7 +19,7 @@ import org.corfudb.runtime.CorfuRuntime;
 @Slf4j
 public class LogEntrySender {
 
-    private static final int READ_BATCH_SIZE = 5;
+    public static final int READ_BATCH_SIZE = 5;
     /*
      * Corfu Runtime
      */
@@ -69,7 +71,7 @@ public class LogEntrySender {
     /**
      * Read and send incremental updates (log entries)
      */
-    public void send() {
+    public void send(UUID logEntrySyncEventId) {
         int reads = 0;
 
         while (taskActive && reads < READ_BATCH_SIZE) {
@@ -79,10 +81,16 @@ public class LogEntrySender {
             try {
                 message = logEntryReader.read();
                 // readProcessor.process(message);
-                if (dataSender.send(message)) {
+                if (message != null && dataSender.send(message)) {
                     // Write meta-data
                     reads++;
                 } else {
+                    if (message == null) {
+                        // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
+                        // take over the shared thread pool of the state machine
+                        taskActive = false;
+                        break;
+                    }
                     // ??
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):
@@ -95,12 +103,16 @@ public class LogEntrySender {
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN));
             }
         }
+
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
+                new LogReplicationEventMetadata(logEntrySyncEventId)));
     }
 
     /**
      * Reset the log entry sender to initial state
      */
-    public void reset() {
+    public void reset(PersistedReaderMetadata readerMetadata) {
         taskActive = true;
+        logEntryReader.reset(readerMetadata.getLastSentBaseSnapshotTimestamp(), readerMetadata.getLastAckedTimestamp());
     }
 }
