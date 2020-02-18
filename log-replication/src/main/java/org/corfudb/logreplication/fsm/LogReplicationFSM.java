@@ -261,7 +261,7 @@ public class LogReplicationFSM {
             // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
-
+            
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 // TODO (Anny): Verify it's for the same request, as that request could've been canceled and was received later
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
@@ -272,8 +272,7 @@ public class LogReplicationFSM {
                     // Verify it's for the same request, as that request could've been canceled and was received later
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC && state.getTransitionEventId()
                             == event.getMetadata().getRequestId()) {
-                        // Retrieve the base snapshot timestamp associated to this snapshot sync request from the
-                        // send
+                        // Retrieve the base snapshot timestamp associated to this snapshot sync request from the send
                         persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(event.getMetadata().getSyncTimestamp());
                     }
                 }
