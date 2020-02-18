@@ -169,6 +169,7 @@ public class LogReplicationFSM {
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
+        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
 
         logReplicationFSMConsumer.submit(this::consume);
     }
@@ -185,7 +186,8 @@ public class LogReplicationFSM {
      */
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                             LogEntryReader logEntryReader, ReadProcessor readProcessor, ExecutorService workers) {
+                             LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
+                             ExecutorService workers) {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
@@ -202,6 +204,7 @@ public class LogReplicationFSM {
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
+        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
 
         logReplicationFSMConsumer.submit(this::consume);
     }
@@ -260,9 +263,8 @@ public class LogReplicationFSM {
             LogReplicationEvent event = eventQueue.take();
 
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
-                // Verify it's for the same request, as that request could've been canceled and was received later
-                if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC && state.getTransitionEventId()
-                        == event.getMetadata().getRequestId()) {
+                // TODO (Anny): Verify it's for the same request, as that request could've been canceled and was received later
+                if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
                     persistedReaderMetadata.setLastAckedTimestamp(event.getMetadata().getSyncTimestamp());
                 }
             } else {
@@ -272,8 +274,7 @@ public class LogReplicationFSM {
                             == event.getMetadata().getRequestId()) {
                         // Retrieve the base snapshot timestamp associated to this snapshot sync request from the
                         // send
-                        persistedReaderMetadata.setLastAckedTimestamp(((InSnapshotSyncState)state)
-                                .getSnapshotSender().getBaseSnapshotTimestamp());
+                        persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(event.getMetadata().getSyncTimestamp());
                     }
                 }
 
