@@ -90,14 +90,13 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        txStream.seek(preMsgTs + 1);
+        txStream.seek(preMsgTs);
         sequence = 0;
     }
 
     @Override
     public DataMessage read() throws TrimmedException, ReplicationReaderException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
-        
         while(txStream.hasNext()) {
             OpaqueEntry opaqueEntry = txStream.next();
             if (!shouldProcess(opaqueEntry)) {
@@ -109,6 +108,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         //TODO: this I added so it compiles (fix)
         return null;
+    }
+
+    @Override
+    public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
+        setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
     }
 
     /**
