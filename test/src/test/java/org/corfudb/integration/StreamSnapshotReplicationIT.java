@@ -28,8 +28,11 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Random;
@@ -51,6 +54,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
     static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
     static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+    static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 100;
     static private final int NUM_STREAMS = 1;
@@ -145,9 +149,9 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         dstTestRuntime.connect();
     }
 
-    void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
-        for (int i = 0; i < NUM_STREAMS; i++) {
-            String name = "test" + i;
+    void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int numStreams) {
+        for (int i = 0; i < numStreams; i++) {
+            String name = TABLE_PREFIX + i;
 
             CorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
@@ -189,6 +193,24 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
                 hashMap.get(name).put(key, key);
                 rt.getObjectsView().TXEnd();
             }
+        }
+    }
+
+
+    // Generate data and the same time push the data to the hashtable
+    void generateTransactionsCrossTables(HashMap<String, CorfuTable<Long, Long>> tables,
+                                         Set<String> tablesCrossTxs,
+                                         HashMap<String, HashMap<Long, Long>> hashMap,
+                                         int numKeys, CorfuRuntime rt, long startval) {
+        for (int i = 0; i < numKeys; i++) {
+            rt.getObjectsView().TXBegin();
+            for (String name : tablesCrossTxs) {
+                hashMap.putIfAbsent(name, new HashMap<>());
+                long key = i + startval;
+                tables.get(name).put(key, key);
+                hashMap.get(name).put(key, key);
+            }
+            rt.getObjectsView().TXEnd();
         }
     }
 
@@ -271,10 +293,10 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         System.out.println("\ntest start");
         setupEnv();
 
-        openStreams(srcTables, srcDataRuntime);
-        openStreams(srcTestTables, srcTestRuntime);
-        openStreams(dstTables, dstDataRuntime);
-        openStreams(dstTestTables, dstTestRuntime);
+        openStreams(srcTables, srcDataRuntime, NUM_STREAMS);
+        openStreams(srcTestTables, srcTestRuntime, NUM_STREAMS);
+        openStreams(dstTables, dstDataRuntime ,NUM_STREAMS);
+        openStreams(dstTestTables, dstTestRuntime, NUM_STREAMS);
 
         // generate data at sourceServer
         generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
@@ -303,7 +325,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         System.out.println("\ntest start");
         setupEnv();
 
-        openStreams(srcTables, srcDataRuntime);
+        openStreams(srcTables, srcDataRuntime, NUM_STREAMS);
         generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
         verifyData(srcTables, srcHashMap);
 
@@ -327,7 +349,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         }
 
         printTails("after writing to dst");
-        openStreams(dstTables, writerRuntime);
+        openStreams(dstTables, writerRuntime, NUM_STREAMS);
         verifyData(dstTables, srcHashMap);
     }
 
@@ -337,7 +359,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         System.out.println("\ntest start ok");
         setupEnv();
 
-        openStreams(srcTables, srcDataRuntime);
+        openStreams(srcTables, srcDataRuntime, NUM_STREAMS);
         generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
         verifyData(srcTables, srcHashMap);
 
@@ -357,7 +379,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         printTails("after writing to destinationServer");
 
         //verify data with hashtable
-        openStreams(dstTables, dstDataRuntime);
+        openStreams(dstTables, dstDataRuntime, NUM_STREAMS);
         verifyData(dstTables, srcHashMap);
         System.out.println("test done");
     }
@@ -382,7 +404,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         setupEnv();
 
         // Open streams in source Corfu
-        openStreams(srcTables, srcDataRuntime);
+        openStreams(srcTables, srcDataRuntime, NUM_STREAMS);
 
         // Write data into Source Tables
         generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
@@ -392,7 +414,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         verifyData(srcTables, srcHashMap);
 
         // Before initiating log replication, verify these tables have no actual data in the destination node.
-        openStreams(dstTables, dstDataRuntime);
+        openStreams(dstTables, dstDataRuntime, NUM_STREAMS);
         System.out.println("****** Verify No Data in Destination Site");
         verifyNoData(dstTables);
 
@@ -447,6 +469,92 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
 
         // Verify Data at Destination
         System.out.println("****** Verify Destination Data for log entry (incremental updates)");
+        verifyData(dstTables, srcHashMap);
+    }
+
+    /**
+     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T1 and T2 are replicated.
+     * We write following this pattern:
+     *
+     * - Write transactions across T0 and T1.
+     * - Write individual transactions for T0 and T1
+     * - Write transactions to T2 but do not replicate.
+     *
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSnapshotSyncCrossTables() throws Exception {
+
+        final String t0 = TABLE_PREFIX + 0;
+        final String t1 = TABLE_PREFIX + 1;
+        final String t2 = TABLE_PREFIX + 2;
+
+
+        // Setup two separate Corfu Servers: source (primary) and destination (standby)
+        setupEnv();
+
+        // Open streams in source Corfu
+        int totalStreams = 3; // test0, test1, test2 (open stream tables)
+        openStreams(srcTables, srcDataRuntime, totalStreams);
+
+        // Write data in transaction to t0 and t1
+        Set<String> crossTables = new HashSet<>();
+        crossTables.add(t0);
+        crossTables.add(t1);
+        generateTransactionsCrossTables(srcTables, crossTables, srcHashMap, NUM_KEYS, srcDataRuntime, 0);
+
+        // Write data to t0
+        generateTransactionsCrossTables(srcTables, Collections.singleton(t0), srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        // Write data to t1
+        generateTransactionsCrossTables(srcTables, Collections.singleton(t1), srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        // Write data to t2
+        generateTransactionsCrossTables(srcTables, Collections.singleton(t2), srcHashMap, NUM_KEYS, srcDataRuntime, 0);
+
+        // Write data across t0 and t1
+        generateTransactionsCrossTables(srcTables, crossTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS*2);
+
+        // Verify data just written against in-memory copy
+        verifyData(srcTables, srcHashMap);
+
+        // Before initiating log replication, verify these tables have no actual data in the destination node.
+        openStreams(dstTables, dstDataRuntime, totalStreams);
+        System.out.println("****** Verify No Data in Destination Site");
+        verifyNoData(dstTables);
+
+        // Start Snapshot Sync (through Source Manager)
+        LogReplicationConfig config = new LogReplicationConfig(crossTables, REMOTE_SITE_ID);
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(SOURCE_ENDPOINT, DESTINATION_ENDPOINT, config);
+        DefaultDataControl sourceDataControl = new DefaultDataControl(true);
+        SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
+
+        // Set Log Replication Source Manager so we can emulate the channel for data & control messages
+        sourceDataSender.setSourceManager(logReplicationSourceManager);
+        sourceDataControl.setSourceManager(logReplicationSourceManager);
+
+        // Observe ACKs on SourceManager, to assess when snapshot sync is completed
+        expectedAckMessages = 1; // We only expect one message, related to the snapshot sync complete
+        ackMessages = logReplicationSourceManager.getAckMessages();
+        ackMessages.addObserver(this);
+
+        // Acquire semaphore for the first time
+        blockUntilExpectedValueReached.acquire();
+
+        // Start Snapshot Sync
+        System.out.println("****** Start Snapshot Sync");
+        logReplicationSourceManager.startSnapshotSync();
+
+        // Block until the snapshot sync completes == one ACK is received by the source manager
+        System.out.println("****** Wait until snapshot sync completes and ACK is received");
+        blockUntilExpectedValueReached.acquire();
+
+        // Verify Data on Destination site
+        System.out.println("****** Verify Data on Destination");
+
+        // Because t2 should not have been replicated remove from expected list
+        srcHashMap.get(t2).clear();
         verifyData(dstTables, srcHashMap);
     }
 
