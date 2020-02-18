@@ -23,18 +23,17 @@ import java.util.stream.Stream;
 @RunWith(Parameterized.class)
 public class CompressionTest extends AbstractViewTest {
 
-    private String codec;
+    private Codec.Type codec;
     private final byte[] DEFAULT_PAYLOAD = "payload".getBytes();
 
-    public CompressionTest(String codecType) {
+    public CompressionTest(Codec.Type codecType) {
         this.codec = codecType;
     }
 
     // Static method that generates and returns test data (automatically test for all codec's supported)
     @Parameterized.Parameters
-    public static Collection input() {
+    public static Collection<Codec.Type> input() {
         return Stream.of(Codec.Type.values())
-                .map(Codec.Type::name)
                 .collect(Collectors.toList());
     }
 
@@ -44,7 +43,7 @@ public class CompressionTest extends AbstractViewTest {
         addSingleServer(SERVERS.PORT_0);
     }
 
-    private CorfuRuntime getRuntimeWithCodec(String codecType) {
+    private CorfuRuntime getRuntimeWithCodec(Codec.Type codecType) {
         // Instantiate Runtime Client with the given encoder/decoder
         CorfuRuntime rt = getDefaultRuntime();
         rt.getParameters().setCodecType(codecType);
@@ -70,10 +69,8 @@ public class CompressionTest extends AbstractViewTest {
                 .getPayload(rt);
     }
 
-    private List<String> getReadersCodec(String codec) {
+    private List<Codec.Type> getReadersCodec(Codec.Type codec) {
         return Stream.of(Codec.Type.values())
-                .map(Codec.Type::name)
-                .filter(type -> type != codec)
                 .collect(Collectors.toList());
     }
 
@@ -102,10 +99,10 @@ public class CompressionTest extends AbstractViewTest {
         long address = writeDefaultPayload(rt);
 
         // Get all codec's different from the one used for the write
-        List<String> codecs = getReadersCodec(codec);
+        List<Codec.Type> codecs = getReadersCodec(codec);
 
         // Read data from runtime's with different codec's to verify data is retrieved correctly.
-        for (String readerCodec : codecs) {
+        for (Codec.Type readerCodec : codecs) {
             CorfuRuntime readerRt = getRuntimeWithCodec(readerCodec);
             assertThat(read(readerRt, address)).isEqualTo(DEFAULT_PAYLOAD);
         }
@@ -120,7 +117,7 @@ public class CompressionTest extends AbstractViewTest {
         List<Long> addresses = new ArrayList<>();
 
         input().stream().forEach(codecType -> {
-            CorfuRuntime rt = getRuntimeWithCodec(codecType.toString());
+            CorfuRuntime rt = getRuntimeWithCodec(codecType);
             addresses.add(writeDefaultPayload(rt));
         });
 

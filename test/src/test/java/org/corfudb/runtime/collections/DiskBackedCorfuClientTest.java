@@ -300,6 +300,18 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     }
 
     /**
+     * Transactional property based test that does puts followed by gets and removes.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void mapKeySet(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final CorfuTable<String, String> table = setupTable()) {
+            executeTx(() -> intended.forEach(value -> table.put(value, value)));
+            Assertions.assertEquals(table.keySet(), intended);
+        }
+    }
+
+    /**
      * Non-transactional property based test that does inserts followed by removes.
      */
     @Property(tries = NUM_OF_TRIES)
