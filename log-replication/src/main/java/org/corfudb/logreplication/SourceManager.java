@@ -15,7 +15,6 @@ import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,12 +42,11 @@ public class SourceManager implements DataReceiver {
     private final LogReplicationFSM logReplicationFSM;
 
     @VisibleForTesting
-    private Roaring64NavigableMap acksReceived = new Roaring64NavigableMap();
-
+    private int countACKs = 0;
 
     @VisibleForTesting
     @Getter
-    private ObservableValue ackMessages = new ObservableValue(acksReceived.getIntCardinality());
+    private ObservableValue ackMessages = new ObservableValue(countACKs);
 
     /**
      * Constructor Source (default)
@@ -184,9 +182,8 @@ public class SourceManager implements DataReceiver {
     @Override
     public void receive(DataMessage message) {
 
-        // TODO (Anny): this needs to change, it's only there for testing purposes but we should optimize
-        acksReceived.addLong(message.getMetadata().getTimestamp());
-        ackMessages.setValue(acksReceived.getIntCardinality());
+        countACKs++;
+        ackMessages.setValue(countACKs);
 
         // Process ACKs from Application, for both, log entry and snapshot sync.
         if(message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {

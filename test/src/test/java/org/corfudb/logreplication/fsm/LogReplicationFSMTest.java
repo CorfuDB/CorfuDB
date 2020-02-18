@@ -11,13 +11,11 @@ import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.SnapshotReader;
 import org.corfudb.logreplication.send.SnapshotSender;
 import org.corfudb.logreplication.send.StreamsSnapshotReader;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Address;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -141,7 +139,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #3: Trimmed Exception
         // Because this is an internal state, we need to capture the actual event id internally generated
         UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionEventId();
-        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID, false);
+        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID, true);
     }
 
     private void insertDelay(int timeMilliseconds) throws InterruptedException {
@@ -350,15 +348,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private void writeToStream() {
         UUID streamA = UUID.nameUUIDFromBytes(TEST_STREAM_NAME.getBytes());
 
-        final long epoch = runtime.getLayoutView().getLayout().getEpoch();
-
         // Write
-        long backpointer = Address.NO_BACKPOINTER;
         for (int i=0; i<NUM_ENTRIES; i++) {
-            runtime.getAddressSpaceView().write(new TokenResponse(new Token(epoch, i),
-                            Collections.singletonMap(streamA, backpointer)),
-                    String.format(PAYLOAD_FORMAT, i).getBytes());
-            backpointer = i;
+            TokenResponse response = runtime.getSequencerView().next(streamA);
+            runtime.getAddressSpaceView().write(response, String.format(PAYLOAD_FORMAT, i).getBytes());
         }
 
         // Read to verify data is there
@@ -514,6 +507,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         } else if (obs == snapshotMessageCounterObservable) {
             if (limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
+                System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
+
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }
