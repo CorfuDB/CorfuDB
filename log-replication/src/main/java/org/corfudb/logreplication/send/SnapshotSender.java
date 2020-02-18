@@ -8,11 +8,13 @@ import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableValue;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -93,20 +95,20 @@ public class SnapshotSender {
                     break;
                 }
 
-                if (!snapshotReadMessage.getMessages().isEmpty()) {
-                    // Send message to dataSender (application)
-                    if (!dataSender.send(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotReadMessage.isEndRead())) {
-                        // TODO: Optimize (back-off) retry on the failed send.
-                        log.error("DataSender did not acknowledge next sent message(s). Notify error.");
-                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
-                        cancel = true;
-                        break;
-                    }
-
-                    messagesSent++;
-                    observedCounter.setValue(messagesSent);
-                }
+                // messages may be empty, send regardless.
+                List<DataMessage> messages = snapshotReadMessage.getMessages();
                 endRead = snapshotReadMessage.isEndRead();
+                // Send message to dataSender (application)
+                if (!dataSender.send(messages, snapshotSyncEventId, endRead)) {
+                    // TODO: Optimize (back-off) retry on the failed send.
+                    log.error("DataSender did not acknowledge next sent message(s). Notify error.");
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
+                    cancel = true;
+                    break;
+                }
+
+                messagesSent++;
+                observedCounter.setValue(messagesSent);
             }
 
             if (endRead) {
