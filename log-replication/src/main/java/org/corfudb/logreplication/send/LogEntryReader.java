@@ -10,4 +10,6 @@ import org.corfudb.logreplication.message.DataMessage;
 public interface LogEntryReader {
 
     DataMessage read();
+
+    void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
 }
