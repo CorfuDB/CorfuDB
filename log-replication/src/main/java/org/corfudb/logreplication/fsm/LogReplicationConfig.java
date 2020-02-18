@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.Data;
+import lombok.NonNull;
 
 import java.util.Set;
 import java.util.UUID;
@@ -33,7 +34,7 @@ public class LogReplicationConfig {
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      * @param remoteSiteID Unique identifier of the remote/destination site.
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, UUID remoteSiteID) {
+    public LogReplicationConfig(Set<String> streamsToReplicate, @NonNull UUID remoteSiteID) {
         this.streamsToReplicate = streamsToReplicate;
         this.remoteSiteID = remoteSiteID;
     }

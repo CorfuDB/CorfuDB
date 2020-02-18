@@ -1,12 +1,15 @@
 package org.corfudb.logreplication.fsm;
 
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.MessageMetadata;
+import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.send.SnapshotReadMessage;
 import org.corfudb.logreplication.send.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Dummy implementation of snapshot reader for testing purposes.
@@ -37,6 +40,9 @@ public class TestSnapshotReader implements SnapshotReader {
         // Read numEntries in consecutive address space and add to messages to return
         for (int i=index; (i<(index+config.getBatchSize()) && index<config.getNumEntries()) ; i++) {
             Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
+            // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
+            // and overwrite it in the TestDataSender with the correct one, before sending the message out
+            MessageMetadata metadata = new MessageMetadata(MessageType.SNAPSHOT_MESSAGE, i, config.getNumEntries(), UUID.randomUUID());
             messages.add(new DataMessage((byte[])data));
             globalIndex++;
         }

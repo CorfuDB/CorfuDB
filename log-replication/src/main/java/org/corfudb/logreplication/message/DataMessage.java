@@ -21,7 +21,12 @@ public class DataMessage {
 
     @VisibleForTesting
     public DataMessage(byte[] data) {
-        this.data = data;
+        this(data, new MessageMetadata());
+    }
+
+    public DataMessage(byte[] data, MessageMetadata metadata) {
+       this.data = data;
+       this.metadata = metadata;
     }
 
     public DataMessage(MessageMetadata metadata) {

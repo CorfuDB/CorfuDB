@@ -27,6 +27,7 @@ public class TestDataSender implements DataSender {
 
     @Override
     public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
+        message.getMetadata().setSnapshotRequestId(snapshotSyncId);
         if (message != null && message.getData().length != 0) {
             snapshotQueue.add(message);
             return true;
@@ -39,7 +40,7 @@ public class TestDataSender implements DataSender {
     public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
         if (messages != null && !messages.isEmpty()) {
             // Add all received messages to the queue
-            messages.forEach(msg -> snapshotQueue.add(msg));
+            messages.forEach(msg -> send(msg, snapshotSyncId, completed));
             return true;
         }
 

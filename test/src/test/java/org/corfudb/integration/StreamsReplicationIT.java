@@ -227,6 +227,7 @@ public class StreamsReplicationIT extends AbstractIT {
     public static void readLogEntryMsgs(List<DataMessage> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
+
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {

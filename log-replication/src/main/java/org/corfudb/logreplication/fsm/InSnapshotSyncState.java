@@ -164,6 +164,10 @@ public class InSnapshotSyncState implements LogReplicationState {
         this.transitionEventId = eventId;
     }
 
+    @Override
+    public UUID getTransitionEventId() { return transitionEventId; }
+
+
     /**
      * Force interruption of the ongoing snapshot sync task.
      *

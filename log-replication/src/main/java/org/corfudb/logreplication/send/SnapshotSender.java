@@ -8,11 +8,13 @@ import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableValue;
+import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -64,11 +66,12 @@ public class SnapshotSender {
      */
     public void transmit(UUID snapshotSyncEventId) {
 
+        log.debug("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId, baseSnapshotTimestamp);
+
         boolean endRead = false;    // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;
         SnapshotReadMessage snapshotReadMessage;
-
 
         // Skip if no data is present in the log
         if (Address.isAddress(baseSnapshotTimestamp)) {
@@ -92,20 +95,20 @@ public class SnapshotSender {
                     break;
                 }
 
-                if (!snapshotReadMessage.getMessages().isEmpty()) {
-                    // Send message to dataSender (application)
-                    if (!dataSender.send(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotReadMessage.isEndRead())) {
-                        // TODO: Optimize (back-off) retry on the failed send.
-                        log.error("DataSender did not acknowledge next sent message(s). Notify error.");
-                        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
-                        cancel = true;
-                        break;
-                    }
-
-                    messagesSent++;
-                    observedCounter.setValue(messagesSent);
-                }
+                // messages may be empty, send regardless.
+                List<DataMessage> messages = snapshotReadMessage.getMessages();
                 endRead = snapshotReadMessage.isEndRead();
+                // Send message to dataSender (application)
+                if (!dataSender.send(messages, snapshotSyncEventId, endRead)) {
+                    // TODO: Optimize (back-off) retry on the failed send.
+                    log.error("DataSender did not acknowledge next sent message(s). Notify error.");
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
+                    cancel = true;
+                    break;
+                }
+
+                messagesSent++;
+                observedCounter.setValue(messagesSent);
             }
 
             if (endRead) {
@@ -115,6 +118,7 @@ public class SnapshotSender {
             } else if (!cancel) {
                 // Terminated due to number of batch messages being sent. This snapshot sync needs to
                 // continue.
+                log.debug("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
 
                 // Note: Snapshot Sync is not performed continuous as for the case of multi-site replication
                 // the shared thread pool could be lower than the number of sites, so we assign resources in
@@ -123,6 +127,7 @@ public class SnapshotSender {
                         new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
         } else {
+            log.info("Snapshot sync completed for {} as there is not data in the log.", snapshotSyncEventId);
             dataSender.send(Collections.emptyList(), snapshotSyncEventId, true);
             snapshotSyncComplete(snapshotSyncEventId);
         }

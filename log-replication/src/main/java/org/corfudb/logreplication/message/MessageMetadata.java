@@ -38,6 +38,10 @@ public class MessageMetadata {
 
     private long snapshotSyncSeqNum; //used by snapshot fullsync stream only, zero means the start of the stream.
 
+    public MessageMetadata() {
+
+    }
+
     public MessageMetadata(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
         this(type, entryTimeStamp, snapshotTimestamp);
         this.previousTimestamp = previousEntryTimestamp;

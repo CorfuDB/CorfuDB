@@ -7,6 +7,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -22,7 +23,7 @@ public class PersistedWriterMetadata {
     @Getter
     private long lastProcessedLogTimestamp;
 
-    private CorfuTable<String, Long> writerMetaDataTable;
+    private Map<String, Long> writerMetaDataTable;
 
     public PersistedWriterMetadata(CorfuRuntime rt, UUID dst) {
         writerMetaDataTable = rt.getObjectsView()
@@ -32,6 +33,7 @@ public class PersistedWriterMetadata {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
+
         lastSrcBaseSnapshotTimestamp = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastSnapDone, Address.NON_ADDRESS);
         lastProcessedLogTimestamp = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastLogProcessed, Address.NON_ADDRESS);
     }
@@ -41,7 +43,7 @@ public class PersistedWriterMetadata {
     }
 
     public void setsrcBaseSnapshotDone() {
-        long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart);
+        long ts = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastSnapStart, Address.NON_EXIST);
         writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapDone.getVal(), ts);
         lastSrcBaseSnapshotTimestamp = ts;
         lastProcessedLogTimestamp = ts;
