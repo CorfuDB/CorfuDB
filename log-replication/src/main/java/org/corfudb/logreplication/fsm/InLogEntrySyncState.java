@@ -116,10 +116,13 @@ public class InLogEntrySyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // Execute snapshot transaction for every table to be replicated
         try {
-            // Reset before start sending data.
-            // We need the reset to occur on the consumer thread to avoid
-            // race conditions with any cancel processed as the next incoming event.
-            logEntrySender.reset(fsm.persistedReaderMetadata);
+            // Reset before start sending log entry data, only when we're coming
+            // from snapshot sync, this way we will seek the stream up to the base snapshot
+            // address and send incremental updates from this point onwards.
+            if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC) {
+                logEntrySender.reset(fsm.persistedReaderMetadata);
+            }
+
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {
