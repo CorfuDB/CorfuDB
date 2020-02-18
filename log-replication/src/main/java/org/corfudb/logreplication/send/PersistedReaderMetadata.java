@@ -40,18 +40,17 @@ public class PersistedReaderMetadata {
         readerMetaDataTable = rt.getObjectsView()
                 .build()
                 .setStreamName(TABLE_PREFIX_NAME + dst.toString())
-                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
-                })
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {})
                 .setSerializer(Serializers.JSON)
                 .open();
     }
 
     /**
-     * Set the snapshot fullsync timestamp when a snapshot read is done.
+     * Set the snapshot sync timestamp when a snapshot read is done.
      * @param ts
      */
     public void setLastSentBaseSnapshotTimestamp(long ts) {
-        readerMetaDataTable.put(PersistedMetaDatayType.LastSnapSync.getVal(), ts);
+        readerMetaDataTable.put(PersistedMetaDataType.LastSnapSync.getVal(), ts);
         lastSentBaseSnapshotTimestamp = ts;
     }
 
@@ -61,17 +60,17 @@ public class PersistedReaderMetadata {
      * @param ts
      */
     public void setLastAckedTimestamp(long ts) {
-        readerMetaDataTable.put(PersistedMetaDatayType.LastLogSync.getVal(), ts);
+        readerMetaDataTable.put(PersistedMetaDataType.LastLogSync.getVal(), ts);
         lastAckedTimestamp = ts;
     }
 
-    private enum PersistedMetaDatayType {
+    private enum PersistedMetaDataType {
         LastSnapSync ("lastSnapSync"),
         LastLogSync ("lastLogSync");
 
         @Getter
         String val;
-        PersistedMetaDatayType(String newVal) {
+        PersistedMetaDataType(String newVal) {
             val = newVal;
         }
     }
