@@ -42,6 +42,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String PAYLOAD_FORMAT = "hello world %s";
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
+    private static final int WAIT_TIME = 1000;
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -124,13 +125,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
 
         // Transition #1: Snapshot Sync Request
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        // Since there is no data in Corfu, it will automatically COMPLETE and transition to IN_LOG_ENTRY_SYNC
-        transitionAvailable.acquire();
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-
-        // TODO: CHANGE TRIMMED EXCEPTION, CANCEL_SYNC
+        // A SYNC_CANCEL due to a trimmed exception, is an internal event generated during read in the log entry or
+        // snapshot sync state, to ensure it is triggered during the state, and not before the task is
+        // actually started on the worker thread, let's insert a delay.
+        insertDelay(WAIT_TIME);
 
         // Transition #2: Trimmed Exception on Log Entry Sync for an invalid event id, this should not be taken as
         // a valid trimmed exception for the current state, hence it remains in the same state
@@ -142,6 +142,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID);
     }
 
+    private void insertDelay(int timeMilliseconds) throws InterruptedException {
+        Thread.sleep(timeMilliseconds);
+    }
 
     /**
      * Test SnapshotSender through dummy implementations of the SnapshotReader and DataSender.
@@ -387,7 +390,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         logEntryReader = new TestLogEntryReader();
         dataSender = new TestDataSender();
 
-
         switch(readerImpl) {
             case EMPTY:
                 // Empty implementations of reader and listener - used for testing transitions
@@ -421,11 +423,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader, new DefaultReadProcessor(runtime),
+                new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID()),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
 
         if (observeSnapshotSync) {
+            System.out.println("Observe snapshot sync");
             snapshotMessageCounterObservable = ((InSnapshotSyncState) fsm.getStates()
                     .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
             snapshotMessageCounterObservable.addObserver(this);
@@ -443,6 +447,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                             LogReplicationStateType expectedState,
                             UUID eventId)
             throws InterruptedException {
+
+        System.out.println("Insert event: " + eventType);
 
         LogReplicationEvent event;
 
