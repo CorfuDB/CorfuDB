@@ -3,7 +3,8 @@ package org.corfudb.logreplication;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.MessageMetadata;
+import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.receive.LogEntryWriter;
 import org.corfudb.logreplication.receive.PersistedWriterMetadata;
@@ -61,7 +62,7 @@ public class SinkManager implements DataReceiver {
      */
     public SinkManager(CorfuRuntime rt, DataSender dataSender, DataControl dataControl) {
         this.runtime = rt;
-        this.rxState = RxState.IDLE_STATE;
+        this.rxState = RxState.LOG_SYNC;
         this.dataSender = dataSender;
         this.dataControl = dataControl;
     }
@@ -92,56 +93,52 @@ public class SinkManager implements DataReceiver {
         persistedWriterMetadata.setsrcBaseSnapshotDone();
 
         // Prepare Snapshot Sync ACK
-        MessageMetadata metadata = new MessageMetadata(MessageType.SNAPSHOT_REPLICATED,
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_REPLICATED,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 snapshotRequestId);
 
-        dataSender.send(new DataMessage(metadata), snapshotRequestId, true);
+        dataSender.send(DataMessage.generateAck(metadata), snapshotRequestId, true);
     }
 
     @Override
-    public void receive(DataMessage message) {
+    public void receive(DataMessage dataMessage) {
         // @maxi, how do we distinguish log entry apply from snapshot apply?
         // Buffer data (out of order) and apply
+
         if (config != null) {
             try {
-                if (startSnapshot && rxState == RxState.SNAPSHOT_SYNC) {
-                    // If we are just starting, initialize
-                    persistedWriterMetadata.setsrcBaseSnapshotStart(message.getMetadata().getSnapshotTimestamp());
+                // Convert DataMessage to Corfu Internal Message
+                LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
 
-                    // Signal start of snapshot sync to the receive, so data can be cleared.
-                    this.snapshotWriter.reset(message.getMetadata().getSnapshotTimestamp());
 
-                    snapshotRequestId = message.getMetadata().getSnapshotRequestId();
+                if (!receivedValidMessage(message)) {
+                    // Invalid message // Drop the message
+                    log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
+                            message.getMetadata().getMessageMetadataType()); } else {
+                    if (rxState == RxState.SNAPSHOT_SYNC) {
+                        // If the snapshot sync has just started, initialize snapshot sync metadata
+                        if (startSnapshot) {
+                            initializeSnapshotSync(message);
+                        }
 
-                    // Reset start snapshot flag / continue on this baseSnapshotTimestamp
-                    startSnapshot = false;
-                }
+                        // Apply snapshot sync message
+                        snapshotWriter.apply(message);
 
-                if (rxState == RxState.SNAPSHOT_SYNC &&
-                        message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE) {
-                    this.snapshotWriter.apply(message);
-                } else if (rxState == RxState.LOG_SYNC &&
-                    message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE) {
-                    long ackTs = this.logEntryWriter.apply(message);
-                    long currentTime = java.lang.System.currentTimeMillis();
-                    msgCnt++;
-                    if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp() && currentTime - lastAckTime >= ACK_PERIOD || msgCnt == ACK_CNT) {
-                        persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+                    } else if (rxState == RxState.LOG_SYNC) {
+                        // Apply log entry sync message
+                        long ackTs = logEntryWriter.apply(message);
 
-                        // Prepare ACK message for Log Entry Sync
-                        // TODO: this will be changed to be sent every T seconds instead on every apply
-                        MessageMetadata metadata = new MessageMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
-                                message.getMetadata().getSnapshotTimestamp());
-                        DataMessage ack = new DataMessage(metadata);
-                        dataSender.send(ack);
-                        lastAckTime = java.lang.System.currentTimeMillis();
-                        currentTime = lastAckTime;
+                        if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
+                            persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+
+                            // TODO: this will be changed to be sent every T seconds instead on every apply
+                            // Prepare ACK message for Log Entry Sync
+                            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
+                                    message.getMetadata().getSnapshotTimestamp());
+                            dataSender.send(DataMessage.generateAck(metadata));
+                        }
                     }
-                } else {
-                    log.error("it is in the wrong state {}", rxState + " messageType: " + message.getMetadata().getMessageMetadataType());
-                    throw new ReplicationWriterException("wrong state");
                 }
             } catch (ReplicationWriterException e) {
                 log.error("Get an exception: ", e);
@@ -149,8 +146,27 @@ public class SinkManager implements DataReceiver {
                 log.info("Requested Snapshot Sync.");
             }
         } else {
-            log.warn("Set LogReplicationConfig for Sync");
+            log.error("Required LogReplicationConfig for Sink Manager.");
         }
+    }
+
+    private void initializeSnapshotSync(LogReplicationEntry entry) {
+        // If we are just starting snapshot sync, initialize base snapshot start
+        persistedWriterMetadata.setsrcBaseSnapshotStart(entry.getMetadata().getSnapshotTimestamp());
+
+        // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
+        snapshotWriter.reset(entry.getMetadata().getSnapshotTimestamp());
+
+        // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
+        snapshotRequestId = entry.getMetadata().getSnapshotRequestId();
+
+        // Reset start snapshot flag / continue on this baseSnapshotTimestamp
+        startSnapshot = false;
+    }
+
+    private boolean receivedValidMessage(LogReplicationEntry message) {
+        return rxState == RxState.SNAPSHOT_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE
+                || rxState == RxState.LOG_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
     @Override
@@ -162,8 +178,7 @@ public class SinkManager implements DataReceiver {
     }
 
     enum RxState {
-        IDLE_STATE,
         SNAPSHOT_SYNC,
         LOG_SYNC
-    };
+    }
 }
