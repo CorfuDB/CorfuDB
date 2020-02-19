@@ -33,8 +33,6 @@ public class TestDataSender implements DataSender {
         LogReplicationEntry entry = LogReplicationEntry.deserialize(message.getData());
         entry.getMetadata().setSnapshotRequestId(snapshotSyncId);
 
-
-
         if (entry.getPayload().length != 0) {
             snapshotQueue.add(entry);
             return true;
