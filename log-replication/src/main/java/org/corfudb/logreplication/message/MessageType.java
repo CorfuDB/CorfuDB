@@ -20,7 +20,7 @@ public enum MessageType {
                 return messageType;
             }
         }
-        throw new IllegalArgumentException("wrong value");
+        throw new IllegalArgumentException("wrong value " + newVal);
     }
 
 }
