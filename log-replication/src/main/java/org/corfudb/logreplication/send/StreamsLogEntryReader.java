@@ -61,7 +61,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         OpaqueEntry.serialize(buf, entry);
 
         currentMsgTs = entry.getVersion();
-        DataMessage txMessage = new DataMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
+        DataMessage txMessage = new DataMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, entry);
         preMsgTs = currentMsgTs;
         sequence++;
         return  txMessage;
