@@ -108,7 +108,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             throw new ReplicationWriterException("Message is out of order");
         }
 
-        message.setData(message.getData());
+        //message.setData(message.getData());
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(message.getData()));
 
         if (opaqueEntry.getEntries().keySet().size() != 1) {
