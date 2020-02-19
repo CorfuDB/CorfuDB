@@ -40,7 +40,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String PAYLOAD_FORMAT = "hello world %s";
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
-    private static final int WAIT_TIME = 1000;
+    private static final int WAIT_TIME = 100;
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -199,10 +199,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
-        // Transition #1: Replication Start
-        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-
-        // Transition #2: Snapshot Sync Request
+        // Transition #1: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         // Block until the snapshot sync completes and next transition occurs.

@@ -1,7 +1,9 @@
 package org.corfudb.logreplication.fsm;
 
+import lombok.Data;
 import lombok.Getter;
 import org.corfudb.logreplication.DataSender;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.LogReplicationError;
 import org.corfudb.logreplication.message.DataMessage;
 
@@ -27,7 +29,11 @@ public class TestDataSender implements DataSender {
 
     @Override
     public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
-        message.getMetadata().setSnapshotRequestId(snapshotSyncId);
+        // Hack to bypass and write the snapshotSyncId
+        LogReplicationEntry entry = LogReplicationEntry.deserialize(message.getData());
+        entry.getMetadata().setSnapshotRequestId(snapshotSyncId);
+        message = new DataMessage(entry.serialize());
+
         if (message != null && message.getData().length != 0) {
             snapshotQueue.add(message);
             return true;

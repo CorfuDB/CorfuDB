@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * This class represents all configuration parameters required for Log Replication.
+ * This class represents the configuration parameters required for Log Replication.
  */
 @Data
 public class LogReplicationConfig {
@@ -25,7 +25,7 @@ public class LogReplicationConfig {
     /*
      * Unique identifier of the remote/destination site ID.
      */
-    // TODO: Tuple? <APP_ID, DEST_CLUSTER_ID> ?
+    // TODO: Tuple? <APP_ID, DEST_CLUSTER_ID>?, what if we have a SourceManager per namespace to the same remote site?
     private UUID remoteSiteID;
 
     /**
