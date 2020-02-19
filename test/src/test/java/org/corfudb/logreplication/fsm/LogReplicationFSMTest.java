@@ -3,8 +3,8 @@ package org.corfudb.logreplication.fsm;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.DataSender;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
@@ -40,7 +40,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String PAYLOAD_FORMAT = "hello world %s";
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
-    private static final int WAIT_TIME = 1000;
+    private static final int WAIT_TIME = 100;
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -199,10 +199,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
-        // Transition #1: Replication Start
-        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-
-        // Transition #2: Snapshot Sync Request
+        // Transition #1: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         // Block until the snapshot sync completes and next transition occurs.
@@ -210,12 +207,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<DataMessage> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
         for (int i=0; i<NUM_ENTRIES; i++) {
-            assertThat(listenerQueue.poll().getData())
+            assertThat(listenerQueue.poll().getPayload())
                     .isEqualTo( String.format("hello world %s", i).getBytes());
         }
     }
@@ -272,12 +269,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<DataMessage> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
         for (int i=0; i<NUM_ENTRIES; i++) {
-            assertThat(listenerQueue.poll().getData())
+            assertThat(listenerQueue.poll().getPayload())
                     .isEqualTo( String.format("hello world %s", i).getBytes());
         }
     }
@@ -314,7 +311,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<DataMessage> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY);
 
