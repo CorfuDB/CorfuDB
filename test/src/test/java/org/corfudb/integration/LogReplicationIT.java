@@ -44,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Copy snapshot data rom src to dst
  */
 @Slf4j
-public class StreamSnapshotReplicationIT extends AbstractIT implements Observer {
+public class LogReplicationIT extends AbstractIT implements Observer {
 
     static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -56,6 +56,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
     static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 1;
     static private final int TOTAL_STREAM_COUNT = 3;
+    static private final int WRITE_CYCLES = 4;
 
     Process sourceServer;
     Process destinationServer;
@@ -318,7 +319,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
      */
     @Test
     public void testWriteSMREntries() throws Exception {
-        // setup environment
+        // Setup Environment
         System.out.println("\ntest start");
         setupEnv();
 
@@ -327,7 +328,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         verifyData(srcTables, srcHashMap);
 
         printTails("after writing to sourceServer");
-        //read streams as SMR entries
+        // Read streams as SMR entries
         StreamOptions options = StreamOptions.builder()
                 .cacheEntries(false)
                 .build();
@@ -536,6 +537,12 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         assertThatThrownBy(() -> startSnapshotSync(new HashSet<>())).isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * Test Log Entry Sync, when transactions are performed across valid tables
+     * (i.e., all tables are set to be replicated).
+     *
+     * @throws Exception
+     */
     @Test
     public void testLogEntrySyncValidCrossTables() throws Exception {
         // Write data in transaction to t0 and t1
@@ -543,10 +550,11 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         crossTables.add(t0);
         crossTables.add(t1);
 
+        // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
         testSnapshotSyncCrossTables(crossTables);
 
         // Start Log Entry Sync
-        expectedAckMessages =  NUM_KEYS;
+        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
         startLogEntrySync(crossTables);
 
         // Verify Data on Destination site
@@ -558,6 +566,45 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         verifyData(dstTables, srcHashMap);
     }
 
+    /**
+     * Test Log Entry Sync, when transactions are performed across invalid tables
+     * (i.e., NOT all tables in the transaction are set to be replicated).
+     *
+     * This test should fail log replication completely as we do not support
+     * transactions across federated and non-federated tables.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLogEntrySyncInvalidCrossTables() throws Exception {
+//        // TODO (ANNY) Finish this test
+//        // Write data in transaction to t0, t1 (tables to be replicated) and also include a non-replicated
+//        // table
+//        Set<String> crossTables = new HashSet<>();
+//        crossTables.add(t0);
+//        crossTables.add(t1);
+//        crossTables.add(t2);
+//
+//        // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
+//        testSnapshotSyncCrossTables(crossTables);
+//
+//        Set<String> replicateTables = new HashSet<>();
+//        replicateTables.add(t0);
+//        replicateTables.add(t1);
+//
+//        // Start Log Entry Sync
+//        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
+//        // TODO: we need to block until the error is received and verify the state machine is shutdown
+//        startLogEntrySync(replicateTables);
+//
+//        // Verify Data on Destination site
+//        System.out.println("****** Verify Data on Destination");
+//        // Because t2 is not specified as a replicated table, we should not see it on the destination
+//        srcHashMap.get(t2).clear();
+//
+//        // Verify Destination
+//        verifyData(dstTables, srcHashMap);
+    }
 
     private void testSnapshotSyncCrossTables(Set<String> crossTableTransactions) throws Exception {
         // Setup two separate Corfu Servers: source (primary) and destination (standby)
@@ -594,7 +641,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
     private SourceManager startSnapshotSync(Set<String> tablesToReplicate) throws Exception {
         // Start Snapshot Sync (through Source Manager)
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(SOURCE_ENDPOINT, DESTINATION_ENDPOINT, config);
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config);
         DefaultDataControl sourceDataControl = new DefaultDataControl(true);
         SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
 
@@ -624,7 +671,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
     private void startLogEntrySync(Set<String> tablesToReplicate) throws Exception {
         // Start Snapshot Sync (through Source Manager)
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(SOURCE_ENDPOINT, DESTINATION_ENDPOINT, config);
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config);
         DefaultDataControl sourceDataControl = new DefaultDataControl(true);
         SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
 
@@ -643,12 +690,10 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         System.out.println("****** Start Log Entry Sync");
         logReplicationSourceManager.startReplication();
 
-        // Block until the snapshot sync completes == one ACK is received by the source manager
+        // Block until the snapshot sync completes == one ACK is received by the source manager or an error occurs
         System.out.println("****** Wait until log entry sync completes and ACK is received");
         blockUntilExpectedValueReached.acquire();
     }
-
-
 
     /**
      * This test attempts to perform a snapshot sync, but the log is trimmed in the middle of the process.
@@ -672,7 +717,6 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
 
     private void verifyExpectedValue(int value) {
         // If expected value, release semaphore / unblock the wait
-        // TODO (ANNY): NOT ENOUGH ONE SAME REQUEST IS SENT MULTIPLE TIMES BECAUSE NO ACK IS RECEIVED
         if (expectedAckMessages == value) {
             System.out.println("Expected Messages value: " + value);
             blockUntilExpectedValueReached.release();
