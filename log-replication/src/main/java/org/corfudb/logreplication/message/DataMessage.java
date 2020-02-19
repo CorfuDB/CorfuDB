@@ -17,36 +17,34 @@ import java.util.UUID;
 @Data
 public class DataMessage {
 
+    @Setter
+    private byte[] data;
+
     @Getter
     public MessageMetadata metadata;
 
-    @Setter
-    private byte[] data;
+    private OpaqueEntry opaqueEntry;
 
     public DataMessage() {}
 
     @VisibleForTesting
     public DataMessage(byte[] data) {
-        this(data, new MessageMetadata());
-    }
-
-    public DataMessage(byte[] data, MessageMetadata metadata) {
-       this.data = data;
-       this.metadata = metadata;
+        this.data = data;
+        deserialize(data);
     }
 
     public DataMessage(MessageMetadata metadata) {
         this.metadata = metadata;
     }
 
-    public DataMessage(MessageType type, long entryTS, long preTS, long snapshot, long sequence, byte[] data) {
-        metadata = new MessageMetadata(type, entryTS, preTS, snapshot, sequence);
-        this.data = data;
-    }
-
     public DataMessage(MessageType type, long entryTS, long preTS, long snapshot, long sequence,
                        OpaqueEntry opaqueEntry) {
-        metadata = new MessageMetadata(type, entryTS, preTS, snapshot, sequence);
+        this.metadata = new MessageMetadata(type, entryTS, preTS, snapshot, sequence);
+        this.opaqueEntry = opaqueEntry;
+        this.data = serialize();
+    }
+
+    public byte[] serialize() {
         ByteBuf buf = Unpooled.buffer();
         buf.writeInt(metadata.getMessageMetadataType().getVal());
         buf.writeLong(metadata.getPreviousTimestamp());
@@ -62,11 +60,10 @@ public class DataMessage {
 
         buf.writeInt(size);
         buf.writeBytes(opaqueBuf.array());
-        this.data = buf.array();
+        return buf.array();
     }
 
-    public void setData(byte[] data) {
-
+    public void deserialize(byte[] data) {
         MessageMetadata metadata = new MessageMetadata();
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
 
@@ -84,6 +81,11 @@ public class DataMessage {
         int size = byteBuf.readInt();
         ByteBuf dataBuf = Unpooled.buffer();
         byteBuf.readBytes(dataBuf, size);
-        this.data = dataBuf.array();
+        opaqueEntry = OpaqueEntry.deserialize(dataBuf);
+    }
+
+    public void setData(byte[] data) {
+        this.data = data;
+        deserialize(data);
     }
 }
