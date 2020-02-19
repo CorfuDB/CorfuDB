@@ -13,6 +13,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;

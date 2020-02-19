@@ -9,6 +9,7 @@ import org.corfudb.logreplication.receive.LogEntryWriter;
 import org.corfudb.logreplication.receive.PersistedWriterMetadata;
 import org.corfudb.logreplication.receive.ReplicationWriterException;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
+import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;
@@ -22,6 +23,9 @@ import java.util.UUID;
  * */
 @Slf4j
 public class SinkManager implements DataReceiver {
+    private static int ACK_PERIOD = LogEntrySender.ENTRY_RESENT_TIMER/5;
+    private static int ACK_CNT = LogEntrySender.READ_BATCH_SIZE/5;
+
     private CorfuRuntime runtime;
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
@@ -32,6 +36,9 @@ public class SinkManager implements DataReceiver {
     private LogReplicationConfig config;
     private boolean startSnapshot;
     private UUID snapshotRequestId;
+    private long lastAckTime;
+    private long currentTime;
+    private long msgCnt;
 
     /**
      * Constructor
@@ -118,7 +125,7 @@ public class SinkManager implements DataReceiver {
                 } else if (rxState == RxState.LOG_SYNC &&
                     message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE) {
                     long ackTs = this.logEntryWriter.apply(message);
-                    if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
+                    if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp() && currentTime - lastAckTime >= ACK_PERIOD || msgCnt == ACK_CNT) {
                         persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
 
                         // Prepare ACK message for Log Entry Sync
@@ -127,6 +134,8 @@ public class SinkManager implements DataReceiver {
                                 message.getMetadata().getSnapshotTimestamp());
                         DataMessage ack = new DataMessage(metadata);
                         dataSender.send(ack);
+                        lastAckTime = java.lang.System.currentTimeMillis();
+                        currentTime = lastAckTime;
                     }
                 } else {
                     log.error("it is in the wrong state {}", rxState + " messageType: " + message.getMetadata().getMessageMetadataType());
@@ -144,6 +153,7 @@ public class SinkManager implements DataReceiver {
 
     @Override
     public void receive(List<DataMessage> messages) {
+        LogEntrySender.DefaultTimer timer = new LogEntrySender.DefaultTimer();
         for (DataMessage msg : messages) {
             receive(msg);
         }

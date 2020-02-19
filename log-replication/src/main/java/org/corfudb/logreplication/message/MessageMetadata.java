@@ -48,6 +48,8 @@ public class MessageMetadata {
         this.snapshotSyncSeqNum = sequence;
     }
 
+    public MessageMetadata() { }
+
     // Constructor for log entry ACK
     public MessageMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp) {
         this.messageMetadataType = type;
