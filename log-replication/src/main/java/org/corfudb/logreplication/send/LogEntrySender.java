@@ -94,7 +94,8 @@ public class LogEntrySender {
             // if the entry is timecout, resend it
             if (entry.timeout(timer)) {
                 if (entry.retry >= MAX_TRY) {
-                    //backoff to full sync
+                    log.warn("Entry {} data {}has been resent max times.", entry, entry.data);
+                    throw new ReplicationReaderException("Entry has");
                 }
 
                 entry.retry(timer++);
