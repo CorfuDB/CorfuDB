@@ -44,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Copy snapshot data rom src to dst
  */
 @Slf4j
-public class StreamSnapshotReplicationIT extends AbstractIT implements Observer {
+public class LogReplicationIT extends AbstractIT implements Observer {
 
     static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
