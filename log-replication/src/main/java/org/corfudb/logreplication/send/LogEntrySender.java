@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.send;
 
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
@@ -7,6 +8,7 @@ import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.ArrayList;
 import java.util.UUID;
 
 /**
@@ -18,8 +20,19 @@ import java.util.UUID;
  */
 @Slf4j
 public class LogEntrySender {
-
     public static final int READ_BATCH_SIZE = 5;
+
+    /*
+     * The timer to resend an entry. This is the roundtrip time between sender/receiver.
+     */
+    public static final int ENTRY_RESENT_TIMER = 500;
+
+
+    /*
+     * The max number of retry for sending an entry.
+     */
+    public static final int MAX_TRY = 5;
+
     /*
      * Corfu Runtime
      */
@@ -34,6 +47,11 @@ public class LogEntrySender {
      * Log Entry Listener, application callback to send out reads.
      */
     private DataSender dataSender;
+
+    /*
+     * The log entry has been sent to the receiver but hasn't ACKed yet.
+     */
+    DataMessageQueue pendingEntries;
 
     /*
      * Log Replication FSM (to insert internal events)
@@ -66,25 +84,47 @@ public class LogEntrySender {
         this.dataSender = dataSender;
         this.readProcessor = readProcessor;
         this.logReplicationFSM = logReplicationFSM;
+        this.pendingEntries = new DataMessageQueue(READ_BATCH_SIZE);
+    }
+
+    void resend(long timer) {
+        for (int i = 0; i < pendingEntries.list.size() && taskActive; i++) {
+            DataMessageEntry entry  = pendingEntries.list.get(i);
+
+            // if the entry is timecout, resend it
+            if (entry.timeout(timer)) {
+                if (entry.retry >= MAX_TRY) {
+                    //backoff to full sync
+                }
+
+                entry.retry(timer++);
+                dataSender.send(entry.data);
+            }
+        }
     }
 
     /**
      * Read and send incremental updates (log entries)
      */
     public void send(UUID logEntrySyncEventId) {
-        int reads = 0;
+        DefaultTimer timer = new DefaultTimer();
         taskActive = true;
 
-        while (taskActive && reads < READ_BATCH_SIZE) {
+        // If there are pending entries, resend them.
+        if (!pendingEntries.list.isEmpty()) {
+            resend(timer.getCurrentTime());
+        }
+
+        while (taskActive && pendingEntries.list.size() < READ_BATCH_SIZE) {
             DataMessage message;
 
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read();
                 // readProcessor.process(message);
-                if (message != null && dataSender.send(message)) {
-                    // Write meta-data
-                    reads++;
+                if (message != null) {
+                    pendingEntries.append(message, timer.getCurrentTime());
+                    dataSender.send(message);
                 } else {
                     if (message == null) {
                         // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -115,5 +155,86 @@ public class LogEntrySender {
     public void reset(PersistedReaderMetadata readerMetadata) {
         taskActive = true;
         logEntryReader.reset(readerMetadata.getLastSentBaseSnapshotTimestamp(), readerMetadata.getLastAckedTimestamp());
+    }
+
+    /**
+     * Update the last ackTimestamp and evict all entries whose timestamp is less or equal to the ackTimestamp
+     * @param ackTimestamp
+     */
+    public void update(Long ackTimestamp) {
+        pendingEntries.evictAll(ackTimestamp);
+    }
+
+    /**
+     * The element kept in the sliding windown to remember the log entries sent over but hasn't been acknowledged by the
+     * receiver and we use the time to decide when a re-send is necessary.
+     */
+    @Data
+    public static class DataMessageEntry {
+        // The address of the log entry
+        DataMessage data;
+
+        // The first time the log entry is sent over
+        long time;
+
+        // The number of retries for this entry
+        int retry;
+
+        public DataMessageEntry(DataMessage data, long time) {
+            this.data = data;
+            this.time = time;
+            this.retry = 0;
+        }
+
+        boolean timeout(long currentTimer) {
+            return  (currentTimer - this.time) > ENTRY_RESENT_TIMER;
+        }
+
+        void retry(long time) {
+            this.time = time;
+            retry++;
+        }
+    }
+
+    /**
+     * The sliding window to record the pending entries that have sent to the receiver but hasn't got an ACK yet.
+     * The alternative is to remember the address only and reset the stream head to rereading the data if the queue size
+     * is quite big.
+     */
+    public static class DataMessageQueue {
+
+        int size;
+        ArrayList<DataMessageEntry> list;
+
+        public DataMessageQueue(int size) {
+            this.size = size;
+            list = new ArrayList<>();
+        }
+
+        void evictAll(long address) {
+            list.removeIf(a->(a.data.getMetadata().getTimestamp() <= address));
+        }
+
+        void append(DataMessage data, long timer) {
+            DataMessageEntry entry = new DataMessageEntry(data, timer);
+            list.add(entry);
+        }
+    }
+
+    /**
+     * To avoid to call system.currenTime, it is a simple incremental of the time
+     * on each call.
+     */
+    public static class DefaultTimer {
+        public static final long TIME_INCREMEMNT = 10;
+        long currentTime;
+        public DefaultTimer() {
+            currentTime = java.lang.System.currentTimeMillis();
+        }
+
+        long getCurrentTime() {
+            currentTime += TIME_INCREMEMNT;
+            return currentTime;
+        }
     }
 }
