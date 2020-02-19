@@ -9,10 +9,12 @@ import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventTyp
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -96,10 +98,18 @@ public class SnapshotSender {
                 }
 
                 // messages may be empty, send regardless.
-                List<DataMessage> messages = snapshotReadMessage.getMessages();
+                List<LogReplicationEntry> messages = snapshotReadMessage.getMessages();
                 endRead = snapshotReadMessage.isEndRead();
+
+                // Convert Log Replication Entry to DataMessage Format
+                List<DataMessage> dataToSend = new ArrayList<>();
+                for (LogReplicationEntry message : messages) {
+                    DataMessage dataMessage = new DataMessage(message.serialize());
+                    dataToSend.add(dataMessage);
+                }
+
                 // Send message to dataSender (application)
-                if (!dataSender.send(messages, snapshotSyncEventId, endRead)) {
+                if (!dataSender.send(dataToSend, snapshotSyncEventId, endRead)) {
                     // TODO: Optimize (back-off) retry on the failed send.
                     log.error("DataSender did not acknowledge next sent message(s). Notify error.");
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
@@ -169,14 +179,5 @@ public class SnapshotSender {
      */
     public void stop() {
         stopSnapshotSync = true;
-    }
-
-    /**
-     * Retrieve base snapshot timestamp.
-     *
-     * @return base snapshot timestamp
-     */
-    public long getBaseSnapshotTimestamp() {
-        return this.baseSnapshotTimestamp;
     }
 }

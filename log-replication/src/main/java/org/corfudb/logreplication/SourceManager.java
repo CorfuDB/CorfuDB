@@ -10,7 +10,9 @@ import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.message.MessageType;
+import org.corfudb.logreplication.send.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.runtime.CorfuRuntime;
@@ -80,7 +82,6 @@ public class SourceManager implements DataReceiver {
                          DataControl dataControl,
                          ReadProcessor readProcessor,
                          LogReplicationConfig config) {
-
         // Default to single dedicated thread for state machine workers (perform state tasks)
         this(runtime, dataSender, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
@@ -101,7 +102,7 @@ public class SourceManager implements DataReceiver {
                          DataSender dataSender,
                          LogReplicationConfig config,
                          ExecutorService logReplicationFSMWorkers) {
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, logReplicationFSMWorkers);
+        this(runtime, dataSender, new DefaultReadProcessor(runtime), config, logReplicationFSMWorkers);
     }
 
     /**
@@ -121,6 +122,10 @@ public class SourceManager implements DataReceiver {
                          ReadProcessor readProcessor,
                          LogReplicationConfig config,
                          ExecutorService logReplicationFSMWorkers) {
+        if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
+            // Avoid FSM being initialized if there are no streams to replicate
+            throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
+        }
         this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, readProcessor,
                 logReplicationFSMWorkers);
     }
@@ -180,7 +185,10 @@ public class SourceManager implements DataReceiver {
     }
 
     @Override
-    public void receive(DataMessage message) {
+    public void receive(DataMessage dataMessage) {
+
+        // Convert from DataMessage to Corfu Internal (deserialize)
+        LogReplicationEntry message =LogReplicationEntry.deserialize(dataMessage.getData());
 
         countACKs++;
         ackMessages.setValue(countACKs);

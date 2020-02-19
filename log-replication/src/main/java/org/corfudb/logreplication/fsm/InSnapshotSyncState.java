@@ -17,11 +17,14 @@ import java.util.concurrent.Future;
 @Slf4j
 public class InSnapshotSyncState implements LogReplicationState {
 
-    private LogReplicationFSM fsm;
+    /*
+     * Log Replication Finite State Machine Instance
+     */
+    private final LogReplicationFSM fsm;
 
     /*
      Uniquely identifies the event that caused the transition to this state.
-     This identifier is hold in order to send it back to the application on the snapshotListener
+     This identifier is hold in order to send it back to the application through the DataSender
      callback, so it can be correlated to the process that triggered the request.
 
      This is required in the case that a snapshot sync is canceled and another snapshot sync is requested,
@@ -99,6 +102,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 UUID snapshotSyncRequestId = event.getMetadata().getRequestId();
                 /*
                  This is required as in the following sequence of events:
+
                  1. SNAPSHOT_SYNC (ID = 1) EXTERNAL
                  2. SNAPSHOT_CANCEL (ID = 1) EXTERNAL
                  3. SNAPSHOT_SYNC (ID = 2) EXTERNAL

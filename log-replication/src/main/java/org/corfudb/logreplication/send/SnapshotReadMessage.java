@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.send;
 
 import lombok.Data;
-import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 
 import java.util.List;
 
@@ -19,7 +19,7 @@ public class SnapshotReadMessage {
     /*
      * List of messages to send
      */
-    private List<DataMessage> messages;
+    private List<LogReplicationEntry> messages;
 
     /**
      * Constructor
@@ -27,7 +27,7 @@ public class SnapshotReadMessage {
      * @param messages list of messages to send
      * @param endRead True, last read of snapshot sync. False, otherwise.
      */
-    public SnapshotReadMessage(List<DataMessage> messages, boolean endRead) {
+    public SnapshotReadMessage(List<LogReplicationEntry> messages, boolean endRead) {
         this.messages = messages;
         this.endRead = endRead;
 

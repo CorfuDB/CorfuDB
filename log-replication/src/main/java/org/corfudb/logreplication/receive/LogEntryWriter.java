@@ -2,8 +2,9 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.message.MessageMetadata;
 
+import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 
@@ -34,7 +35,7 @@ public class LogEntryWriter {
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
-    private HashMap<Long, DataMessage> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
+    private HashMap<Long, LogReplicationEntry> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
     private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
 
     public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
@@ -61,7 +62,7 @@ public class LogEntryWriter {
      * @param metadata
      * @throws ReplicationWriterException
      */
-    void verifyMetadata(MessageMetadata metadata) throws ReplicationWriterException {
+    void verifyMetadata(LogReplicationEntryMetadata metadata) throws ReplicationWriterException {
         if (metadata.getMessageMetadataType() != MessageType.LOG_ENTRY_MESSAGE) {
             log.error("Wrong message metadata {}, expecting  type {} snapshot {}", metadata,
                     MessageType.LOG_ENTRY_MESSAGE, srcGlobalSnapshot);
@@ -73,8 +74,9 @@ public class LogEntryWriter {
      * Convert message data to an MultiObjectSMREntry and write to log.
      * @param txMessage
      */
-    void processMsg(DataMessage txMessage) {
-        OpaqueEntry opaqueEntry = txMessage.getOpaqueEntry();
+    void processMsg(LogReplicationEntry txMessage) {
+        // Convert from byte[] to OpaqueEntry
+        OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getPayload()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
 
         if (!streamUUIDs.containsAll(map.keySet())) {
@@ -104,7 +106,7 @@ public class LogEntryWriter {
      */
     void processQueue() {
         while (true) {
-            DataMessage txMessage = msgQ.get(lastMsgTs);
+            LogReplicationEntry txMessage = msgQ.get(lastMsgTs);
             if (txMessage == null) {
                 return;
             }
@@ -131,7 +133,7 @@ public class LogEntryWriter {
      * @return long: the last processed message timestamp if apply processing any messages.
      * @throws ReplicationWriterException
      */
-    public long apply(DataMessage msg) throws ReplicationWriterException {
+    public long apply(LogReplicationEntry msg) throws ReplicationWriterException {
 
         verifyMetadata(msg.getMetadata());
 
@@ -149,7 +151,7 @@ public class LogEntryWriter {
             cleanMsgQ(lastMsgTs);
         }
 
-        //we will skip the entries has been processed.
+        // we will skip the entries has been processed.
         if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
             return Address.NON_ADDRESS;
         }

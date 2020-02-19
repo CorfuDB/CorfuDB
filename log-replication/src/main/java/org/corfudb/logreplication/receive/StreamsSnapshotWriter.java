@@ -2,11 +2,11 @@ package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.message.MessageMetadata;
 
+import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.message.DataMessage;
 
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -67,7 +67,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param metadata
      * @return
      */
-    void verifyMetadata(MessageMetadata metadata) throws ReplicationWriterException {
+    void verifyMetadata(LogReplicationEntryMetadata metadata) throws ReplicationWriterException {
         if (metadata.getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE ||
                 metadata.getSnapshotTimestamp() != srcGlobalSnapshot) {
             log.error("snapshot expected {} != recv snapshot {}, metadata {}",
@@ -100,7 +100,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(DataMessage message) {
+    public void apply(LogReplicationEntry message) {
         verifyMetadata(message.getMetadata());
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expecting sequencer {} != recvSeq {}",
@@ -108,8 +108,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             throw new ReplicationWriterException("Message is out of order");
         }
 
-        //message.populateData(message.getData());
-        OpaqueEntry opaqueEntry = message.getOpaqueEntry();
+        byte[] payload = message.getPayload();
+        OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(payload));
 
         if (opaqueEntry.getEntries().keySet().size() != 1) {
             log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
@@ -121,8 +121,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     @Override
-    public void apply(List<DataMessage> messages) throws Exception {
-        for (DataMessage msg : messages) {
+    public void apply(List<LogReplicationEntry> messages) throws Exception {
+        for (LogReplicationEntry msg : messages) {
             apply(msg);
         }
     }

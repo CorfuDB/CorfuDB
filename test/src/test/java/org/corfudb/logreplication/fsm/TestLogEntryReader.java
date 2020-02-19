@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.message.DataMessage;
 
@@ -8,13 +9,11 @@ import org.corfudb.logreplication.message.DataMessage;
  */
 public class TestLogEntryReader implements LogEntryReader {
 
-    public TestLogEntryReader() {
-
-    }
+    public TestLogEntryReader() {}
 
     @Override
-    public DataMessage read() {
-        return new DataMessage();
+    public LogReplicationEntry read() {
+        return null;
     }
 
     @Override

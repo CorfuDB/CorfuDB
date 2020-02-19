@@ -6,6 +6,7 @@ import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ public class LogEntrySender {
     /*
      * The log entry has been sent to the receiver but hasn't ACKed yet.
      */
-    DataMessageQueue pendingEntries;
+    LogReplicationEntryQueue pendingEntries;
 
     /*
      * Log Replication FSM (to insert internal events)
@@ -84,12 +85,12 @@ public class LogEntrySender {
         this.dataSender = dataSender;
         this.readProcessor = readProcessor;
         this.logReplicationFSM = logReplicationFSM;
-        this.pendingEntries = new DataMessageQueue(READ_BATCH_SIZE);
+        this.pendingEntries = new LogReplicationEntryQueue(READ_BATCH_SIZE);
     }
 
     void resend(long timer) {
         for (int i = 0; i < pendingEntries.list.size() && taskActive; i++) {
-            DataMessageEntry entry  = pendingEntries.list.get(i);
+            LogReplicationPendingEntry entry  = pendingEntries.list.get(i);
 
             // if the entry is timecout, resend it
             if (entry.timeout(timer)) {
@@ -99,7 +100,7 @@ public class LogEntrySender {
                 }
 
                 entry.retry(timer++);
-                dataSender.send(entry.data);
+                dataSender.send(new DataMessage(entry.getData().serialize()));
             }
         }
     }
@@ -117,15 +118,16 @@ public class LogEntrySender {
         }
 
         while (taskActive && pendingEntries.list.size() < READ_BATCH_SIZE) {
-            DataMessage message;
+            LogReplicationEntry message;
 
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read();
                 // readProcessor.process(message);
+
                 if (message != null) {
                     pendingEntries.append(message, timer.getCurrentTime());
-                    dataSender.send(message);
+                    dataSender.send(new DataMessage(message.serialize()));
                 } else {
                     if (message == null) {
                         // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -171,9 +173,9 @@ public class LogEntrySender {
      * receiver and we use the time to decide when a re-send is necessary.
      */
     @Data
-    public static class DataMessageEntry {
+    public static class LogReplicationPendingEntry {
         // The address of the log entry
-        DataMessage data;
+        LogReplicationEntry data;
 
         // The first time the log entry is sent over
         long time;
@@ -181,7 +183,7 @@ public class LogEntrySender {
         // The number of retries for this entry
         int retry;
 
-        public DataMessageEntry(DataMessage data, long time) {
+        public LogReplicationPendingEntry(LogReplicationEntry data, long time) {
             this.data = data;
             this.time = time;
             this.retry = 0;
@@ -202,12 +204,12 @@ public class LogEntrySender {
      * The alternative is to remember the address only and reset the stream head to rereading the data if the queue size
      * is quite big.
      */
-    public static class DataMessageQueue {
+    public static class LogReplicationEntryQueue {
 
         int size;
-        ArrayList<DataMessageEntry> list;
+        ArrayList<LogReplicationPendingEntry> list;
 
-        public DataMessageQueue(int size) {
+        public LogReplicationEntryQueue(int size) {
             this.size = size;
             list = new ArrayList<>();
         }
@@ -216,8 +218,8 @@ public class LogEntrySender {
             list.removeIf(a->(a.data.getMetadata().getTimestamp() <= address));
         }
 
-        void append(DataMessage data, long timer) {
-            DataMessageEntry entry = new DataMessageEntry(data, timer);
+        void append(LogReplicationEntry data, long timer) {
+            LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data, timer);
             list.add(entry);
         }
     }

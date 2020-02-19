@@ -5,11 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * This class represents the Init state of the Log Replication State Machine.
  *
- * On FSM start this is the default state, there are two events that enable transitions:
+ * On FSM start this is the default state, there are three events that cause transitions from this state:
  *
- * (1) SNAPSHOT_SYNC_REQUEST: external event (application driven) indicating to start full sync at a given snapshot.
+ * (1) SNAPSHOT_SYNC_REQUEST: external event (application driven) indicating to start full sync.
  * (2) REPLICATION_START: external event (application driven) indicating that connectivity to remote site has been
- *                        established and the replication can start.
+ *                        established and the replication can start, this enters into log entry sync.
+ * (3) REPLICATION_SHUTDOWN: completely stop/terminate log replication.
  */
 @Slf4j
 public class InitializedState implements LogReplicationState {
@@ -17,7 +18,7 @@ public class InitializedState implements LogReplicationState {
     /*
      * Log Replication Finite State Machine Instance
      */
-    private LogReplicationFSM fsm;
+    private final LogReplicationFSM fsm;
 
     /**
      * Constructor

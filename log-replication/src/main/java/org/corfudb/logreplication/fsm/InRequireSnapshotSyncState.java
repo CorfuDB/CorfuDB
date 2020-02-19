@@ -10,7 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InRequireSnapshotSyncState implements LogReplicationState {
 
-    LogReplicationFSM fsm;
+    /*
+     * Log Replication Finite State Machine Instance
+     */
+    private final LogReplicationFSM fsm;
 
     public InRequireSnapshotSyncState(LogReplicationFSM logReplicationFSM) {
         this.fsm = logReplicationFSM;
@@ -38,11 +41,6 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         // TODO: since a SNAPSHOT_SYNC_REQUEST is the only event that can take us out of this state,
         //  we need a scheduler to re-notify the remote site of the error, in case the request was lost.
-    }
-
-    @Override
-    public void onExit(LogReplicationState to) {
-
     }
 
     @Override

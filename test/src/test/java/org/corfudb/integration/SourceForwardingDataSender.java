@@ -58,7 +58,6 @@ public class SourceForwardingDataSender implements DataSender {
         channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
 
         if (completed) {
-            System.out.println("Complete Snapshot Apply");
             channelExecutorWorkers.execute(() -> destinationLogReplicationManager.completeSnapshotApply());
         }
         return completed;

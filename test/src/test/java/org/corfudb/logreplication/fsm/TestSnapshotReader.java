@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.MessageMetadata;
+import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.send.SnapshotReadMessage;
 import org.corfudb.logreplication.send.SnapshotReader;
@@ -33,7 +33,7 @@ public class TestSnapshotReader implements SnapshotReader {
     @Override
     public SnapshotReadMessage read() {
         // Connect to endpoint
-        List<DataMessage> messages = new ArrayList<>();
+        List<LogReplicationEntry> messages = new ArrayList<>();
 
         int index = globalIndex;
 
@@ -42,8 +42,9 @@ public class TestSnapshotReader implements SnapshotReader {
             Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
             // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
             // and overwrite it in the TestDataSender with the correct one, before sending the message out
-            MessageMetadata metadata = new MessageMetadata(MessageType.SNAPSHOT_MESSAGE, i, config.getNumEntries(), UUID.randomUUID());
-            messages.add(new DataMessage((byte[])data));
+            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE,
+                    i, config.getNumEntries(), UUID.randomUUID());
+            messages.add(new LogReplicationEntry(metadata, (byte[])data));
             globalIndex++;
         }
 

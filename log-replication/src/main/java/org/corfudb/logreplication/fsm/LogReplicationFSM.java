@@ -9,7 +9,6 @@ import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.logreplication.send.PersistedReaderMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
-import org.corfudb.logreplication.send.DefaultReadProcessor;
 import org.corfudb.logreplication.send.SnapshotReader;
 import org.corfudb.logreplication.send.SnapshotSender;
 import org.corfudb.logreplication.send.StreamsLogEntryReader;
@@ -50,7 +49,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *  - replication_stop
  *  - snapshot_sync_request
  *  - snapshot_sync_complete
- *  - trimmed_exception
+ *  - sync_cancel
  *  - replication_shutdown
  *
  *
@@ -94,19 +93,19 @@ public class LogReplicationFSM {
     private LogReplicationState state;
 
     /**
-     * Map of all Log Replication FSM States
+     * Map of all Log Replication FSM States (reuse single instance for each state)
      */
     @Getter
     private Map<LogReplicationStateType, LogReplicationState> states = new HashMap<>();
 
     /**
-     * Executor service for FSM state tasks
+     * Executor service for FSM state tasks (it can be shared across several LogReplicationFSMs)
      */
     @Getter
     private ExecutorService logReplicationFSMWorkers;
 
     /**
-     * Executor service for FSM state tasks
+     * Executor service for FSM event queue consume
      */
     @Getter
     private ExecutorService logReplicationFSMConsumer;
@@ -119,28 +118,14 @@ public class LogReplicationFSM {
     /**
      * An observable object on the number of transitions of this state machine (for testing & visibility)
      */
+    @VisibleForTesting
     @Getter
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * Metadata to persist in the Transmitter
+     * Metadata to persist in the Sender
      */
     PersistedReaderMetadata persistedReaderMetadata;
-
-    /**
-     * Constructor for LogReplicationFSM, using default read processor.
-     *
-     * @param runtime Corfu Runtime
-     * @param config log replication configuration
-     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
-     *                   the application callback for data transmission
-     * @param workers FSM executor service for state tasks
-     */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
-                             ExecutorService workers) {
-
-        this(runtime, config, dataSender, new DefaultReadProcessor(runtime), workers);
-    }
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -154,28 +139,14 @@ public class LogReplicationFSM {
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers) {
-        // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
-        // through the callbacks provided by the application
-        SnapshotReader defaultSnapshotReader = new StreamsSnapshotReader(runtime, config);
-        LogEntryReader defaultLogEntryReader = new StreamsLogEntryReader(runtime, config);
-
-        SnapshotSender snapshotSender = new SnapshotSender(runtime, defaultSnapshotReader,
-                dataSender, readProcessor, this);
-        LogEntrySender logEntrySender = new LogEntrySender(runtime, defaultLogEntryReader,
-                dataSender, readProcessor, this);
-
-        initializeStates(snapshotSender, logEntrySender);
-        this.state = states.get(LogReplicationStateType.INITIALIZED);
-        this.logReplicationFSMWorkers = workers;
-        this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
-        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
-
-        logReplicationFSMConsumer.submit(this::consume);
+        // Use stream-based readers for snapshot and log entry sync reads
+        this(runtime, new StreamsSnapshotReader(runtime, config), dataSender, new StreamsLogEntryReader(runtime, config),
+                readProcessor, config, workers);
     }
 
     /**
-     * Constructor for LogReplicationFSM, custom readers.
+     * Constructor for LogReplicationFSM, custom readers (as it is not expected to have custom
+     * readers, this is used for FSM testing purposes only).
      *
      * @param runtime Corfu Runtime
      * @param snapshotReader snapshot reader implementation
@@ -191,15 +162,12 @@ public class LogReplicationFSM {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
-        SnapshotSender snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender,
-                readProcessor, this);
-        LogEntrySender logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender,
-                readProcessor, this);
+        SnapshotSender snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, this);
+        LogEntrySender logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender);
 
-        // Set INITIALIZED as the initial state
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
