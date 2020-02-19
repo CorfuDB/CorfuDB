@@ -220,13 +220,13 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
             System.out.println("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
 
-//            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
-//            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
-//            assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
+            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
+            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
+            assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
 
-//            for (Long key : mapKeys.keySet()) {
-//                assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
-//            }
+            for (Long key : mapKeys.keySet()) {
+                assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
+            }
         }
     }
 
