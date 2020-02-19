@@ -17,10 +17,10 @@ public class InLogEntrySyncState implements LogReplicationState {
     /*
      * Log Replication State Machine, used to insert internal events into the queue.
      */
-    private LogReplicationFSM fsm;
+    private final LogReplicationFSM fsm;
 
     /*
-     * Log Entry Transmitter, used to read and send incremental updates.
+     * Log Entry Sender, used to read and send incremental updates.
      */
     private LogEntrySender logEntrySender;
 
@@ -117,9 +117,9 @@ public class InLogEntrySyncState implements LogReplicationState {
         // Execute snapshot transaction for every table to be replicated
         try {
             // Reset before start sending log entry data, only when we're coming
-            // from snapshot sync, this way we will seek the stream up to the base snapshot
+            // from snapshot sync or initialized state, this way we will seek the stream up to the base snapshot
             // address and send incremental updates from this point onwards.
-            if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC) {
+            if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC || from.getType() == LogReplicationStateType.INITIALIZED) {
                 logEntrySender.reset(fsm.persistedReaderMetadata);
             }
 

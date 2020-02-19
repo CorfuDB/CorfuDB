@@ -54,6 +54,8 @@ public class OpaqueEntry {
                 smrEntry.serialize(buf);
             }
         }
+        int wIdx = buf.writerIndex();
+        buf.capacity(wIdx);
     }
 
     public static OpaqueEntry deserialize(ByteBuf buf) {

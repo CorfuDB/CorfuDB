@@ -3,6 +3,7 @@ package org.corfudb.logreplication.send;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.message.DataMessage;
@@ -89,8 +90,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param entries
      * @return
      */
-    DataMessage generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
-        ByteBuf buf = Unpooled.buffer();
+    LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
         currentMsgTs = stream.maxVersion;
         OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
         if (!stream.iterator.hasNext()) {
@@ -98,11 +98,15 @@ public class StreamsSnapshotReader implements SnapshotReader {
             currentMsgTs = globalSnapshot;
         }
 
-        DataMessage txMsg = new DataMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, opaqueEntry);
+        ByteBuf buf = Unpooled.buffer();
+        OpaqueEntry.serialize(buf, opaqueEntry);
+
+        LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, currentMsgTs,
+                preMsgTs, globalSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
-        return  txMsg;
+        return txMsg;
     }
 
     /**
@@ -134,9 +138,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    DataMessage read(OpaqueStreamIterator stream) {
+    LogReplicationEntry read(OpaqueStreamIterator stream) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
-        DataMessage txMsg = generateMessage(stream, entries);
+        LogReplicationEntry txMsg = generateMessage(stream, entries);
         log.info("Successfully pass a stream {} for globalSnapshot {}", stream.name, globalSnapshot);
         return txMsg;
     }
