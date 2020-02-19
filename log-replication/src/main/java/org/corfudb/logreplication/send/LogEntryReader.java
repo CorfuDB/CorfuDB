@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.send;
 
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 
 /**
  * An Interface for Log Entry Reader
@@ -9,7 +10,7 @@ import org.corfudb.logreplication.message.DataMessage;
  */
 public interface LogEntryReader {
 
-    DataMessage read();
+    LogReplicationEntry read();
 
     void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
 }
