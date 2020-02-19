@@ -92,13 +92,13 @@ public class StreamsSnapshotReader implements SnapshotReader {
     DataMessage generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
         ByteBuf buf = Unpooled.buffer();
         currentMsgTs = stream.maxVersion;
-        OpaqueEntry.serialize(buf, generateOpaqueEntry(currentMsgTs, stream.uuid, entries));
+        OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
         if (!stream.iterator.hasNext()) {
             //mark the end of the current stream.
             currentMsgTs = globalSnapshot;
         }
 
-        DataMessage txMsg = new DataMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, buf.array());
+        DataMessage txMsg = new DataMessage(MessageType.SNAPSHOT_MESSAGE, currentMsgTs, preMsgTs, globalSnapshot, sequence, opaqueEntry);
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());

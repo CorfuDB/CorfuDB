@@ -123,6 +123,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 logEntrySender.reset(fsm.persistedReaderMetadata);
             }
 
+            logEntrySender.update(fsm.persistedReaderMetadata.getLastAckedTimestamp());
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {

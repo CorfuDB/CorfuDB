@@ -13,6 +13,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -61,7 +62,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         OpaqueEntry.serialize(buf, entry);
 
         currentMsgTs = entry.getVersion();
-        DataMessage txMessage = new DataMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
+        DataMessage txMessage = new DataMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, entry);
         preMsgTs = currentMsgTs;
         sequence++;
         return  txMessage;
@@ -90,7 +91,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        txStream.seek(preMsgTs);
+        txStream.seek(preMsgTs + 1);
         sequence = 0;
     }
 
