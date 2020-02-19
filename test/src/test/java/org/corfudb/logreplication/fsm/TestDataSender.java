@@ -19,7 +19,7 @@ import java.util.UUID;
 public class TestDataSender implements DataSender {
 
     @Getter
-    private Queue<DataMessage> snapshotQueue = new LinkedList<>();
+    private Queue<LogReplicationEntry> snapshotQueue = new LinkedList<>();
 
     @Getter
     private Queue<DataMessage> logEntryQueue = new LinkedList<>();
@@ -32,10 +32,11 @@ public class TestDataSender implements DataSender {
         // Hack to bypass and write the snapshotSyncId
         LogReplicationEntry entry = LogReplicationEntry.deserialize(message.getData());
         entry.getMetadata().setSnapshotRequestId(snapshotSyncId);
-        message = new DataMessage(entry.serialize());
 
-        if (message != null && message.getData().length != 0) {
-            snapshotQueue.add(message);
+
+
+        if (entry.getPayload().length != 0) {
+            snapshotQueue.add(entry);
             return true;
         }
 

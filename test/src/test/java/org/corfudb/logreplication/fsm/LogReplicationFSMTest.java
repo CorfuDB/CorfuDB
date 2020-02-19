@@ -3,8 +3,8 @@ package org.corfudb.logreplication.fsm;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.DataSender;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
@@ -207,12 +207,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<DataMessage> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
         for (int i=0; i<NUM_ENTRIES; i++) {
-            assertThat(listenerQueue.poll().getData())
+            assertThat(listenerQueue.poll().getPayload())
                     .isEqualTo( String.format("hello world %s", i).getBytes());
         }
     }
@@ -269,12 +269,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<DataMessage> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
         for (int i=0; i<NUM_ENTRIES; i++) {
-            assertThat(listenerQueue.poll().getData())
+            assertThat(listenerQueue.poll().getPayload())
                     .isEqualTo( String.format("hello world %s", i).getBytes());
         }
     }
@@ -311,7 +311,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<DataMessage> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY);
 

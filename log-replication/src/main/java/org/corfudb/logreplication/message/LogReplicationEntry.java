@@ -48,7 +48,6 @@ public class LogReplicationEntry {
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
 
         // Deserialize Metadata
-        // TODO (Anny): replace by builder
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
         metadata.setMessageMetadataType(MessageType.fromValue(byteBuf.readInt()));
         metadata.setPreviousTimestamp(byteBuf.readLong());
@@ -60,7 +59,7 @@ public class LogReplicationEntry {
 
         // Deserialize Data
         int size = byteBuf.readInt();
-        ByteBuf dataBuf = Unpooled.buffer();
+        ByteBuf dataBuf = Unpooled.buffer(size);
         byteBuf.readBytes(dataBuf, size);
         byte[] payload = dataBuf.array();
 
