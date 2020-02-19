@@ -74,7 +74,7 @@ public class LogEntryWriter {
      * @param txMessage
      */
     void processMsg(DataMessage txMessage) {
-        OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getData()));
+        OpaqueEntry opaqueEntry = txMessage.getOpaqueEntry();
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
 
         if (!streamUUIDs.containsAll(map.keySet())) {

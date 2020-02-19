@@ -125,6 +125,8 @@ public class SinkManager implements DataReceiver {
                 } else if (rxState == RxState.LOG_SYNC &&
                     message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE) {
                     long ackTs = this.logEntryWriter.apply(message);
+                    long currentTime = java.lang.System.currentTimeMillis();
+                    msgCnt++;
                     if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp() && currentTime - lastAckTime >= ACK_PERIOD || msgCnt == ACK_CNT) {
                         persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
 
