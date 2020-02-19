@@ -3,9 +3,9 @@ package org.corfudb.logreplication.send;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -13,7 +13,6 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -57,12 +56,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
         txStream = new TxOpaqueStream(rt);
     }
 
-    DataMessage generateMessage(OpaqueEntry entry) {
+    LogReplicationEntry generateMessage(OpaqueEntry entry) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
 
         currentMsgTs = entry.getVersion();
-        DataMessage txMessage = new DataMessage(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, entry);
+        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         return  txMessage;
@@ -91,19 +90,23 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        txStream.seek(preMsgTs + 1);
+        // If Log Entry Sync is not based on a snapshot sync (== -1), we don't have to seek
+        // besides we cannot seek to a negative address, as this will throw an error
+        if (preMsgTs > 0) {
+            txStream.seek(preMsgTs);
+        }
         sequence = 0;
     }
 
     @Override
-    public DataMessage read() throws TrimmedException, ReplicationReaderException {
+    public LogReplicationEntry read() throws TrimmedException, ReplicationReaderException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
         while(txStream.hasNext()) {
             OpaqueEntry opaqueEntry = txStream.next();
             if (!shouldProcess(opaqueEntry)) {
                 continue;
             }
-            DataMessage txMessage = generateMessage(opaqueEntry);
+            LogReplicationEntry txMessage = generateMessage(opaqueEntry);
             return txMessage;
         }
 

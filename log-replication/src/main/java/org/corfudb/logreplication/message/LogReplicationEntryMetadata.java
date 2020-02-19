@@ -6,7 +6,7 @@ import org.corfudb.runtime.view.Address;
 import java.util.UUID;
 
 @Data
-public class MessageMetadata {
+public class LogReplicationEntryMetadata {
     /*
      * Used to determine the type of the metadata:
      * - snapshot type for reading/writing the snapshot timestamp,
@@ -39,23 +39,24 @@ public class MessageMetadata {
     private long snapshotSyncSeqNum; //used by snapshot fullsync stream only, zero means the start of the stream.
 
 
-    public MessageMetadata(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
+    public LogReplicationEntryMetadata(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
         this(type, entryTimeStamp, snapshotTimestamp);
         this.previousTimestamp = previousEntryTimestamp;
         this.snapshotSyncSeqNum = sequence;
     }
 
-    public MessageMetadata() { }
+    public LogReplicationEntryMetadata() { }
 
     // Constructor for log entry ACK
-    public MessageMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp) {
+    public LogReplicationEntryMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp) {
         this.messageMetadataType = type;
         this.timestamp = entryTimeStamp;
         this.snapshotTimestamp = snapshotTimestamp;
+        this.snapshotRequestId = new UUID(0,0);
     }
 
     // Constructor used for snapshot sync
-    public MessageMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp, UUID snapshotRequestId) {
+    public LogReplicationEntryMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp, UUID snapshotRequestId) {
         this(type, entryTimeStamp, Address.NON_EXIST, snapshotTimestamp, Address.NON_EXIST);
         this.snapshotRequestId = snapshotRequestId;
     }
