@@ -124,6 +124,12 @@ public class StreamsReplicationIT extends AbstractIT {
         dstTestRuntime.setTransactionLogging(true).connect();
     }
 
+    public static DataMessage deserializeTest(DataMessage msg) {
+        DataMessage newMsg = new DataMessage();
+        newMsg.setData(msg.getData());
+        return newMsg;
+    }
+
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
         for (int i = 0; i < NUM_STREAMS; i++) {
             String name = "test" + Integer.toString(i);
@@ -237,7 +243,9 @@ public class StreamsReplicationIT extends AbstractIT {
                 assertThat(false);
             }
             System.out.println("generate the message " + i);
-            msgQ.add(dataMessage);
+
+            dataMessage.setData(dataMessage.getData());
+            msgQ.add(deserializeTest(dataMessage));
         }
     }
 
@@ -302,7 +310,10 @@ public class StreamsReplicationIT extends AbstractIT {
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
             SnapshotReadMessage snapshotReadMessage = reader.read();
-            msgQ.addAll(snapshotReadMessage.getMessages());
+            for (DataMessage data : snapshotReadMessage.getMessages()) {
+                msgQ.add(deserializeTest(data));
+            }
+
             if (snapshotReadMessage.isEndRead()) {
                 break;
             }
