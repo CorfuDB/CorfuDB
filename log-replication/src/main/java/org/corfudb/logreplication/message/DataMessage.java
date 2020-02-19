@@ -50,12 +50,18 @@ public class DataMessage {
         ByteBuf buf = Unpooled.buffer();
         buf.writeInt(metadata.getMessageMetadataType().getVal());
         buf.writeLong(metadata.getPreviousTimestamp());
-        buf.writeLong(metadata.getSnapshotRequestId().getMostSignificantBits());
-        buf.writeLong(metadata.getSnapshotRequestId().getLeastSignificantBits());
+        //buf.writeLong(metadata.getSnapshotRequestId().getMostSignificantBits());
+        //buf.writeLong(metadata.getSnapshotRequestId().getLeastSignificantBits());
         buf.writeLong(metadata.getSnapshotSyncSeqNum());
         buf.writeLong(metadata.getSnapshotTimestamp());
         buf.writeLong(metadata.getTimestamp());
-        OpaqueEntry.serialize(buf, opaqueEntry);
+
+        ByteBuf opaqueBuf = Unpooled.buffer();
+        OpaqueEntry.serialize(opaqueBuf, opaqueEntry);
+        int size = opaqueBuf.readableBytes();
+
+        buf.writeInt(size);
+        buf.writeBytes(opaqueBuf.array());
         this.data = buf.array();
     }
 
@@ -64,18 +70,20 @@ public class DataMessage {
         MessageMetadata metadata = new MessageMetadata();
         ByteBuf byteBuf = Unpooled.wrappedBuffer(data);
 
-
         metadata.setMessageMetadataType(MessageType.fromValue(byteBuf.readInt()));
         metadata.setPreviousTimestamp(byteBuf.readLong());
 
-        UUID uuid = new UUID(byteBuf.readLong(), byteBuf.readLong());
-        metadata.setSnapshotRequestId(uuid);
+        //UUID uuid = new UUID(byteBuf.readLong(), byteBuf.readLong());
+        //metadata.setSnapshotRequestId(uuid);
 
         metadata.setSnapshotSyncSeqNum(byteBuf.readLong());
         metadata.setSnapshotTimestamp(byteBuf.readLong());
         metadata.setTimestamp(byteBuf.readLong());
-
         this.metadata = metadata;
-        this.data = byteBuf.array();
+
+        int size = byteBuf.readInt();
+        ByteBuf dataBuf = Unpooled.buffer();
+        byteBuf.readBytes(dataBuf, size);
+        this.data = dataBuf.array();
     }
 }
