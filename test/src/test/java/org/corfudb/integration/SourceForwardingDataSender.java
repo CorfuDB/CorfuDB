@@ -1,9 +1,11 @@
 package org.corfudb.integration;
 
+import lombok.Getter;
 import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.SinkManager;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.send.LogReplicationError;
 import org.corfudb.runtime.CorfuRuntime;
@@ -33,7 +35,12 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int receivedMessages = 0;
 
-    public SourceForwardingDataSender(String sourceEndpoint, String destinationEndpoint, LogReplicationConfig config) {
+    private int errorCount = 0;
+
+    @Getter
+    private ObservableValue errors = new ObservableValue(errorCount);
+
+    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
                 .connect();
@@ -70,8 +77,7 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public void onError(LogReplicationError error, UUID snapshotSyncId) {
-        fail("Error received for snapshot sync");
+    public void onError(LogReplicationError error, UUID snapshotSyncId) { fail("Error received for snapshot sync");
     }
 
     /*
@@ -92,7 +98,8 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public void onError(LogReplicationError error) {
-
+        errorCount++;
+        errors.setValue(errorCount);
     }
 
     /*

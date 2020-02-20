@@ -36,7 +36,7 @@ public class SinkManager implements DataReceiver {
     private DataControl dataControl;
     private LogReplicationConfig config;
     private boolean startSnapshot;
-    private UUID snapshotRequestId;
+    private UUID snapshotRequestId = new UUID(0L, 0L);
     private long lastAckTime;
     private long currentTime;
     private long msgCnt;
@@ -105,12 +105,10 @@ public class SinkManager implements DataReceiver {
     public void receive(DataMessage dataMessage) {
         // @maxi, how do we distinguish log entry apply from snapshot apply?
         // Buffer data (out of order) and apply
-
         if (config != null) {
             try {
                 // Convert DataMessage to Corfu Internal Message
                 LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
-
 
                 if (!receivedValidMessage(message)) {
                     // Invalid message // Drop the message

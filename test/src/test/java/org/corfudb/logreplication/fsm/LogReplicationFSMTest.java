@@ -500,11 +500,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         if (obs == transitionObservable)
         {
             transitionAvailable.release();
-            System.out.println("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());
+            // System.out.println("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());
         } else if (obs == snapshotMessageCounterObservable) {
             if (limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
-                System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
+                // System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
 
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }

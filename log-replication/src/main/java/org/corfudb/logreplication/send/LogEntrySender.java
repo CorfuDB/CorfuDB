@@ -142,9 +142,11 @@ public class LogEntrySender {
                 }
             } catch (Exception e) {
                 log.error("Caught exception at LogEntrySender", e);
+                dataSender.onError(LogReplicationError.SENDER_ERROR);
                 // Unrecoverable error, noisy streams found in transaction stream (streams of interest and others not
                 // intended for replication). Shutdown.
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN));
+                return;
             }
         }
 
