@@ -25,21 +25,9 @@ public class ExceptionContextTest extends AbstractViewTest {
     }
 
     @Test
-    public void validateCallerStackTracePresent() throws InterruptedException, ArithmeticException {
-        final ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor((r) -> {
-            Thread t = Executors.defaultThreadFactory().newThread(r);
-            t.setName("exception_context_test_thread");
-            t.setDaemon(true);
-            return t;
-        });
-
-        final CompletableFuture<Integer> future = new CompletableFuture<>();
-        service.submit(() -> {
-            try {
-                throw new DummyCausingException("Dummy causing exception");
-            } catch (DummyCausingException e) {
-                future.completeExceptionally(e);
-            }
+    public void validateCallerStackTracePresent() throws InterruptedException {
+        final CompletableFuture<Void> future = CompletableFuture.supplyAsync(() -> {
+            throw new DummyCausingException("Dummy causing exception");
         });
 
         ExecutionException originalExecutionException = null;
