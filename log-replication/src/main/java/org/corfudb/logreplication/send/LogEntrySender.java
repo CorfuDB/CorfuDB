@@ -8,6 +8,7 @@ import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.UUID;
@@ -24,10 +25,14 @@ public class LogEntrySender {
     public static final int READ_BATCH_SIZE = 1;
 
     /*
+     * for internal timer increasing for each message
+     */
+    public static final long TIME_INCREMEMNT = 50;
+
+    /*
      * The timer to resend an entry. This is the roundtrip time between sender/receiver.
      */
     public static final int ENTRY_RESENT_TIMER = 500;
-
 
     /*
      * The max number of retry for sending an entry.
@@ -53,6 +58,8 @@ public class LogEntrySender {
      * The log entry has been sent to the receiver but hasn't ACKed yet.
      */
     LogReplicationEntryQueue pendingEntries;
+
+    private long ackTs = Address.NON_ADDRESS;
 
     /*
      * Log Replication FSM (to insert internal events)
@@ -91,16 +98,15 @@ public class LogEntrySender {
     void resend(long timer) {
         for (int i = 0; i < pendingEntries.list.size() && taskActive; i++) {
             LogReplicationPendingEntry entry  = pendingEntries.list.get(i);
-
-            // if the entry is timecout, resend it
             if (entry.timeout(timer)) {
                 if (entry.retry >= MAX_TRY) {
-                    log.warn("Entry {} data {}has been resent max times.", entry, entry.data);
-                    throw new ReplicationReaderException("Entry has");
+                    log.warn("Entry {} data {} has been resent max times {}.", entry, entry.data, MAX_TRY);
+                    throw new ReplicationReaderException("has retry max times");
                 }
 
-                entry.retry(timer++);
+                entry.retry(timer + TIME_INCREMEMNT);
                 dataSender.send(new DataMessage(entry.getData().serialize()));
+                log.info("resend message " + entry.getData().metadata.timestamp);
             }
         }
     }
@@ -128,6 +134,7 @@ public class LogEntrySender {
                 if (message != null) {
                     pendingEntries.append(message, timer.getCurrentTime());
                     dataSender.send(new DataMessage(message.serialize()));
+                    log.trace("send message " + message.metadata.timestamp);
                 } else {
                     if (message == null) {
                         // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -167,7 +174,11 @@ public class LogEntrySender {
      * @param ackTimestamp
      */
     public void update(Long ackTimestamp) {
-        pendingEntries.evictAll(ackTimestamp);
+        if (ackTimestamp <= ackTs)
+            return;
+        ackTs = ackTimestamp;
+        pendingEntries.evictAll(ackTs);
+        log.trace("ackTS " + ackTs + " queue size " + pendingEntries.list.size());
     }
 
     /**
@@ -217,6 +228,7 @@ public class LogEntrySender {
         }
 
         void evictAll(long address) {
+            log.trace("evict address " + address);
             list.removeIf(a->(a.data.getMetadata().getTimestamp() <= address));
         }
 
@@ -231,7 +243,6 @@ public class LogEntrySender {
      * on each call.
      */
     public static class DefaultTimer {
-        public static final long TIME_INCREMEMNT = 10;
         long currentTime;
         public DefaultTimer() {
             currentTime = java.lang.System.currentTimeMillis();
