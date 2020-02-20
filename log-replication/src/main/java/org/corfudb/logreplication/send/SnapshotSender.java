@@ -10,6 +10,8 @@ import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
+import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -44,6 +46,8 @@ public class SnapshotSender {
     private ReadProcessor readProcessor;
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
+    // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
+    private boolean startSnapshotSync = true;
 
     @Getter
     @VisibleForTesting
@@ -81,6 +85,7 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             while (messagesSent < SNAPSHOT_BATCH_SIZE && !endRead && !stopSnapshotSync) {
+
                 try {
                     snapshotReadMessage = snapshotReader.read();
                     // Data Transformation / Processing
@@ -103,6 +108,14 @@ public class SnapshotSender {
 
                 // Convert Log Replication Entry to DataMessage Format
                 List<DataMessage> dataToSend = new ArrayList<>();
+
+                // If we are starting a snapshot sync, send a start marker.
+                if (startSnapshotSync) {
+                    DataMessage startDataMessage = getSnapshotStartMessage(snapshotSyncEventId);
+                    dataToSend.add(startDataMessage);
+                    startSnapshotSync = false;
+                }
+
                 for (LogReplicationEntry message : messages) {
                     DataMessage dataMessage = new DataMessage(message.serialize());
                     dataToSend.add(dataMessage);
@@ -138,9 +151,19 @@ public class SnapshotSender {
             }
         } else {
             log.info("Snapshot sync completed for {} as there is not data in the log.", snapshotSyncEventId);
-            dataSender.send(Collections.emptyList(), snapshotSyncEventId, true);
+            // Empty Log Replication Entry no data and only metadata (used as start marker on receiver side
+            // to complete snapshot sync)
+            DataMessage dataMessage = getSnapshotStartMessage(snapshotSyncEventId);
+            dataSender.send(dataMessage, snapshotSyncEventId, true);
             snapshotSyncComplete(snapshotSyncEventId);
         }
+    }
+
+    private DataMessage getSnapshotStartMessage(UUID snapshotSyncEventId) {
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START,
+                Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
+        LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
+        return new DataMessage(emptyEntry.serialize());
     }
 
     private void snapshotSyncComplete(UUID snapshotSyncEventId) {
@@ -172,6 +195,8 @@ public class SnapshotSender {
         snapshotReader.reset(baseSnapshotTimestamp);
 
         stopSnapshotSync = false;
+
+        startSnapshotSync = true;
     }
 
     /**
