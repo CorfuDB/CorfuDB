@@ -608,6 +608,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyData(dstTables, srcHashMap);
     }
 
+
     @Test
     public void testLogEntrySyncValidCrossTablesWithDropMsg() throws Exception {
         // Write data in transaction to t0 and t1
