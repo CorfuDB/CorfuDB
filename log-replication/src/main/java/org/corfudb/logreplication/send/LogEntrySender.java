@@ -21,7 +21,7 @@ import java.util.UUID;
  */
 @Slf4j
 public class LogEntrySender {
-    public static final int READ_BATCH_SIZE = 5;
+    public static final int READ_BATCH_SIZE = 1;
 
     /*
      * The timer to resend an entry. This is the roundtrip time between sender/receiver.
