@@ -176,6 +176,7 @@ public class LogEntryWriter {
             log.info("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
+            System.out.println("The message is out of order and the queue is full, will drop the message  " + msg.getMetadata());
         }
 
         return Address.NON_ADDRESS;
