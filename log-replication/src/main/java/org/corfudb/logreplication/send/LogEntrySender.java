@@ -101,13 +101,12 @@ public class LogEntrySender {
             if (entry.timeout(timer)) {
                 if (entry.retry >= MAX_TRY) {
                     log.warn("Entry {} data {} has been resent max times {}.", entry, entry.data, MAX_TRY);
-                    System.out.println("Entry {} data {}has been resent max times." +  entry + " data " + entry.data);
                     throw new ReplicationReaderException("has retry max times");
                 }
 
                 entry.retry(timer + TIME_INCREMEMNT);
                 dataSender.send(new DataMessage(entry.getData().serialize()));
-                System.out.println("resend message " + entry.getData().metadata.timestamp);
+                log.info("resend message " + entry.getData().metadata.timestamp);
             }
         }
     }
@@ -135,7 +134,7 @@ public class LogEntrySender {
                 if (message != null) {
                     pendingEntries.append(message, timer.getCurrentTime());
                     dataSender.send(new DataMessage(message.serialize()));
-                    System.out.println("send message " + message.metadata.timestamp);
+                    log.trace("send message " + message.metadata.timestamp);
                 } else {
                     if (message == null) {
                         // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -179,7 +178,7 @@ public class LogEntrySender {
             return;
         ackTs = ackTimestamp;
         pendingEntries.evictAll(ackTs);
-        System.out.println("ackTS " + ackTs + " queue size " + pendingEntries.list.size());
+        log.trace("ackTS " + ackTs + " queue size " + pendingEntries.list.size());
     }
 
     /**
@@ -229,7 +228,7 @@ public class LogEntrySender {
         }
 
         void evictAll(long address) {
-            System.out.println("evict address " + address);
+            log.trace("evict address " + address);
             list.removeIf(a->(a.data.getMetadata().getTimestamp() <= address));
         }
 
