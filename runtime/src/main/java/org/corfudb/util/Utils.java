@@ -247,8 +247,8 @@ public class Utils {
      * exception's stack trace. Prevents losing caller context
      *
      * @param throwable the Throwable to extract the causing Throwable from
-     * @return causing Throwable of the input {@code throwable} with the outer throwable's stack trace prepended,
-     *         {@code null} if no causing exception
+     * @return causing Throwable of the input {@code throwable} with the outer throwable's
+     *         stack trace prepended, {@code null} if no causing exception
      */
     public static Throwable extractCauseWithCompleteStacktrace(Throwable throwable) {
         final Throwable cause = throwable.getCause();
@@ -269,7 +269,9 @@ public class Utils {
             // Note: Stacktrace might be immutable
             cause.setStackTrace(entireStackTrace);
         } catch (Exception e) {
-            log.info("Failed to append outer throwable's stacktrace to causing throwable's stack trace", e);
+            log.info("Failed to append outer throwable's stacktrace to "
+                        + "causing throwable's stack trace",
+                     e);
         }
         return cause;
     }

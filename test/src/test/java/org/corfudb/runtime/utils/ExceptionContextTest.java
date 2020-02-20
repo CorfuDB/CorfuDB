@@ -35,9 +35,9 @@ public class ExceptionContextTest extends AbstractViewTest {
 
         final CompletableFuture<Integer> future = new CompletableFuture<>();
         service.submit(() -> {
-            try{
+            try {
                 throw new DummyCausingException("Dummy causing exception");
-            } catch(DummyCausingException e) {
+            } catch (DummyCausingException e) {
                 future.completeExceptionally(e);
             }
         });
@@ -45,42 +45,56 @@ public class ExceptionContextTest extends AbstractViewTest {
         ExecutionException originalExecutionException = null;
         try {
             future.get();
-        } catch(ExecutionException e) {
+        } catch (ExecutionException e) {
             originalExecutionException = e;
         }
-        final StackTraceElement[] causeOriginalStackTrace = originalExecutionException.getCause().getStackTrace();
+        final StackTraceElement[] causeOriginalStackTrace = originalExecutionException
+                                                                .getCause().getStackTrace();
 
         RuntimeException causeFromGetUninterruptibly = null;
         try {
             CFUtils.getUninterruptibly(future, RuntimeException.class);
-        } catch(DummyCausingException e) {
+        } catch (DummyCausingException e) {
             causeFromGetUninterruptibly = e;
         }
-        final List<StackTraceElement> causeFromGetUniterruptiblyStackTrace = Arrays.asList(causeFromGetUninterruptibly.getStackTrace());
+        final List<StackTraceElement> causeFromGetUninterruptiblyStackTrace = Arrays.asList(
+                causeFromGetUninterruptibly.getStackTrace()
+        );
 
-        final int callerContextEndIndex = causeFromGetUniterruptiblyStackTrace.indexOf(
-            new StackTraceElement("Dummy stack frame", "--- End caller context ---", null, -1)
+        final int callerContextEndIndex = causeFromGetUninterruptiblyStackTrace.indexOf(
+                new StackTraceElement("Dummy stack frame", "--- End caller context ---", null, -1)
         );
         assertNotEquals(callerContextEndIndex, -1);
 
         final List<String> expectedStackTraceContents = Arrays.asList(
-            "CompletableFuture.reportGet",
-            "CompletableFuture.get",
-            "CFUtils.getUninterruptibly",
-            "ExceptionContextTest.validateCallerStackTracePresent"
+                "CompletableFuture.reportGet",
+                "CompletableFuture.get",
+                "CFUtils.getUninterruptibly",
+                "ExceptionContextTest.validateCallerStackTracePresent"
         );
 
         expectedStackTraceContents.forEach(contents -> {
             final String className = contents.split("\\.")[0];
             final String methodName = contents.split("\\.")[1];
-            final boolean present = causeFromGetUniterruptiblyStackTrace.subList(0, callerContextEndIndex).stream().anyMatch(stackTraceElement -> {
-                return stackTraceElement.getClassName().endsWith(className) && stackTraceElement.getMethodName().equals(methodName);
-            });
-            assertTrue(present, String.format("Could not find stack trace element for: %s", contents));
+            final boolean present = causeFromGetUninterruptiblyStackTrace
+                                    .subList(0, callerContextEndIndex)
+                                    .stream()
+                                    .anyMatch(stackTraceElement -> {
+                                        return stackTraceElement.getClassName().endsWith(className)
+                                            && stackTraceElement.getMethodName().equals(methodName);
+                                    });
+            assertTrue(
+                    present,
+                    String.format("Could not find expected stack trace element for caller: %s",
+                                  contents)
+            );
         });
 
-        for(int i = 0; i < causeOriginalStackTrace.length; ++i) {
-            assertEquals(causeOriginalStackTrace[i], causeFromGetUniterruptiblyStackTrace.get(callerContextEndIndex + i + 1));
+        for (int i = 0; i < causeOriginalStackTrace.length; ++i) {
+            assertEquals(
+                    causeOriginalStackTrace[i],
+                    causeFromGetUninterruptiblyStackTrace.get(callerContextEndIndex + i + 1)
+            );
         }
     }
 }
