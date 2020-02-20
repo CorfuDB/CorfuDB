@@ -20,8 +20,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SourceForwardingDataSender implements DataSender {
-    private static int NUM_MOD = 2;
-
     // Runtime to remote/destination Corfu Server
     private CorfuRuntime runtime;
 
@@ -45,6 +43,8 @@ public class SourceForwardingDataSender implements DataSender {
     Random random = new Random();
 
     private int firstDrop = 0;
+
+    final static int DROP_INCREMENT = 4;
 
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
@@ -99,7 +99,7 @@ public class SourceForwardingDataSender implements DataSender {
 
         if (logReplicationEntry.metadata.timestamp == firstDrop) {
             System.out.println("******drop log entry " + logReplicationEntry.metadata.timestamp);
-            firstDrop += 4;
+            firstDrop += DROP_INCREMENT;
             return true;
         }
 
