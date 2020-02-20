@@ -4,8 +4,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.CFUtils;
@@ -14,6 +12,7 @@ import org.junit.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ExceptionContextTest extends AbstractViewTest {
@@ -30,21 +29,22 @@ public class ExceptionContextTest extends AbstractViewTest {
             throw new DummyCausingException("Dummy causing exception");
         });
 
-        ExecutionException originalExecutionException = null;
-        try {
-            future.get();
-        } catch (ExecutionException e) {
-            originalExecutionException = e;
-        }
+        final ExecutionException originalExecutionException = assertThrows(
+                ExecutionException.class,
+                () -> {
+                    future.get();
+                }
+         );
         final StackTraceElement[] causeOriginalStackTrace = originalExecutionException
-                                                                .getCause().getStackTrace();
+                                                                .getCause()
+                                                                .getStackTrace();
 
-        RuntimeException causeFromGetUninterruptibly = null;
-        try {
-            CFUtils.getUninterruptibly(future, RuntimeException.class);
-        } catch (DummyCausingException e) {
-            causeFromGetUninterruptibly = e;
-        }
+        final DummyCausingException causeFromGetUninterruptibly = assertThrows(
+                DummyCausingException.class,
+                () -> {
+                    CFUtils.getUninterruptibly(future, RuntimeException.class);
+                }
+         );
         final List<StackTraceElement> causeFromGetUninterruptiblyStackTrace = Arrays.asList(
                 causeFromGetUninterruptibly.getStackTrace()
         );
@@ -60,7 +60,6 @@ public class ExceptionContextTest extends AbstractViewTest {
                 "CFUtils.getUninterruptibly",
                 "ExceptionContextTest.validateCallerStackTracePresent"
         );
-
         expectedStackTraceContents.forEach(contents -> {
             final String className = contents.split("\\.")[0];
             final String methodName = contents.split("\\.")[1];
