@@ -7,12 +7,14 @@ import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.LogReplicationError;
 import org.corfudb.runtime.CorfuRuntime;
 
 import static org.assertj.core.api.Assertions.fail;
 
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,7 +42,9 @@ public class SourceForwardingDataSender implements DataSender {
 
     private boolean ifDropMsg = false;
 
-    private int msgCnt = 0;
+    Random random = new Random();
+
+    private int firstDrop = 0;
 
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
@@ -91,9 +95,14 @@ public class SourceForwardingDataSender implements DataSender {
      */
     @Override
     public boolean send(DataMessage message) {
-        msgCnt ++;
-        if (msgCnt % NUM_MOD == 0)
+        LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(message.getData());
+
+        if (logReplicationEntry.metadata.timestamp == firstDrop) {
+            System.out.println("******drop log entry " + logReplicationEntry.metadata.timestamp);
+            firstDrop += 4;
             return true;
+        }
+
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
         channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
         return true;
