@@ -1,20 +1,18 @@
 package org.corfudb.runtime.view.stream;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+@Slf4j
 public class OpaqueStream {
     /**
      * The stream view backing this adapter.
@@ -51,9 +49,9 @@ public class OpaqueStream {
         byte[] payload = ((LogData) logData).getData();
 
         if (payload == null) {
+            log.debug("payload is null log data {} address {} type {}", logData, logData.getGlobalAddress(), logData.getType());
             throw new IllegalStateException("Payload has been deserialized");
         }
-
 
         return OpaqueEntry.unpack(logData);
     }

@@ -53,7 +53,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
     static final UUID REMOTE_SITE_ID = UUID.randomUUID();
     static final String TABLE_PREFIX = "test";
 
-    static private final int NUM_KEYS = 100;
+    static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 1;
     static private final int TOTAL_STREAM_COUNT = 3;
 
@@ -547,7 +547,7 @@ public class StreamSnapshotReplicationIT extends AbstractIT implements Observer 
         testSnapshotSyncCrossTables(crossTables);
 
         // Start Log Entry Sync
-        expectedAckMessages =  NUM_KEYS*4;
+        expectedAckMessages =  NUM_KEYS;
         startLogEntrySync(crossTables);
 
         // Verify Data on Destination site
