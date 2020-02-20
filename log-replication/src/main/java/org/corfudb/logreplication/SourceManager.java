@@ -186,9 +186,8 @@ public class SourceManager implements DataReceiver {
 
     @Override
     public void receive(DataMessage dataMessage) {
-
         // Convert from DataMessage to Corfu Internal (deserialize)
-        LogReplicationEntry message =LogReplicationEntry.deserialize(dataMessage.getData());
+        LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
 
         countACKs++;
         ackMessages.setValue(countACKs);
