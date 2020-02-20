@@ -5,8 +5,9 @@ import lombok.Getter;
 public enum MessageType {
     LOG_ENTRY_MESSAGE(1),
     SNAPSHOT_MESSAGE(2),
-    LOG_ENTRY_REPLICATED(3),
-    SNAPSHOT_REPLICATED(4);
+    SNAPSHOT_START(3),
+    LOG_ENTRY_REPLICATED(4),
+    SNAPSHOT_REPLICATED(5);
 
     @Getter
     int val;

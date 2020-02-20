@@ -1,6 +1,5 @@
 package org.corfudb.logreplication.send;
 
-import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 
 /**
