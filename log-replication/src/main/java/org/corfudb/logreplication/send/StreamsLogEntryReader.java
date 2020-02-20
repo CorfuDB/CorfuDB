@@ -89,12 +89,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        // If Log Entry Sync is not based on a snapshot sync (== -1), we don't have to seek
-        // besides we cannot seek to a negative address, as this will throw an error
-        if (preMsgTs > 0) {
-            txStream.seek(preMsgTs);
-        }
+        log.trace("snapshot {} ackTimestamp {} preMsgTs {}", snapshot, ackTimestamp, preMsgTs);
+        txStream.seek(preMsgTs+1);
         sequence = 0;
+
     }
 
     @Override
@@ -138,6 +136,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
          * @param snapshot
          */
         void streamUpTo(long snapshot) {
+            log.trace("StreamUpTo {}", snapshot);
             iterator = txStream.streamUpTo(snapshot).iterator();
         }
 
@@ -164,7 +163,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
         OpaqueEntry next() {
             if (!hasNext())
                 return null;
-            return (OpaqueEntry)iterator.next();
+
+            OpaqueEntry opaqueEntry = (OpaqueEntry)iterator.next();
+            log.trace("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
+            return opaqueEntry;
         }
 
         /**
@@ -173,6 +175,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
          * @param firstAddress
          */
         public void seek(long firstAddress) {
+            log.trace("seek head {}", firstAddress);
             txStream.seek(firstAddress);
             streamUpTo();
         }
