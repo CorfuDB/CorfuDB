@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @Slf4j
 public class LogEntrySender {
-    public static final int READ_BATCH_SIZE = 5;
+    public static final int READ_BATCH_SIZE = 1;
 
     /*
      * for internal timer increasing for each message
