@@ -35,11 +35,7 @@ public class SinkManager implements DataReceiver {
     private DataSender dataSender;
     private DataControl dataControl;
     private LogReplicationConfig config;
-    private boolean startSnapshot;
     private UUID snapshotRequestId = new UUID(0L, 0L);
-    private long lastAckTime;
-    private long currentTime;
-    private long msgCnt;
 
     /**
      * Constructor
@@ -81,7 +77,6 @@ public class SinkManager implements DataReceiver {
      */
     public void startSnapshotApply() {
         rxState = RxState.SNAPSHOT_SYNC;
-        startSnapshot = true;
     }
 
     /**
@@ -92,7 +87,7 @@ public class SinkManager implements DataReceiver {
         rxState = RxState.LOG_SYNC;
         persistedWriterMetadata.setsrcBaseSnapshotDone();
 
-        // Prepare Snapshot Sync ACK
+        // Prepare and Send Snapshot Sync ACK
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_REPLICATED,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
@@ -103,7 +98,6 @@ public class SinkManager implements DataReceiver {
 
     @Override
     public void receive(DataMessage dataMessage) {
-        // @maxi, how do we distinguish log entry apply from snapshot apply?
         // Buffer data (out of order) and apply
         if (config != null) {
             try {
@@ -113,30 +107,14 @@ public class SinkManager implements DataReceiver {
                 if (!receivedValidMessage(message)) {
                     // Invalid message // Drop the message
                     log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                            message.getMetadata().getMessageMetadataType()); } else {
-                    if (rxState == RxState.SNAPSHOT_SYNC) {
-                        // If the snapshot sync has just started, initialize snapshot sync metadata
-                        if (startSnapshot) {
-                            initializeSnapshotSync(message);
-                        }
+                            message.getMetadata().getMessageMetadataType());
+                    return;
+                }
 
-                        // Apply snapshot sync message
-                        snapshotWriter.apply(message);
-
-                    } else if (rxState == RxState.LOG_SYNC) {
-                        // Apply log entry sync message
-                        long ackTs = logEntryWriter.apply(message);
-                        System.out.println("ackTs " + ackTs);
-                        if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
-                            persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
-
-                            // TODO: this will be changed to be sent every T seconds instead on every apply
-                            // Prepare ACK message for Log Entry Sync
-                            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
-                                    message.getMetadata().getSnapshotTimestamp());
-                            dataSender.send(DataMessage.generateAck(metadata));
-                        }
-                    }
+                if (rxState == RxState.SNAPSHOT_SYNC) {
+                    applySnapshotSync(message);
+                } else if (rxState == RxState.LOG_SYNC) {
+                    applyLogEntrySync(message);
                 }
             } catch (ReplicationWriterException e) {
                 log.error("Get an exception: ", e);
@@ -145,6 +123,33 @@ public class SinkManager implements DataReceiver {
             }
         } else {
             log.error("Required LogReplicationConfig for Sink Manager.");
+            throw new IllegalArgumentException("Required LogReplicationConfig for Sink Manager.");
+        }
+    }
+
+    private void applyLogEntrySync(LogReplicationEntry message) {
+        // Apply log entry sync message
+        long ackTs = logEntryWriter.apply(message);
+
+        // Send Ack for log entry
+        if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
+            persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+
+            // TODO: this will be changed to be sent every T seconds instead on every apply
+            // Prepare ACK message for Log Entry Sync
+            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
+                    message.getMetadata().getSnapshotTimestamp());
+            dataSender.send(DataMessage.generateAck(metadata));
+        }
+    }
+
+    private void applySnapshotSync(LogReplicationEntry message) {
+        // If the snapshot sync has just started, initialize snapshot sync metadata
+        if (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START) {
+            initializeSnapshotSync(message);
+        } else {
+            // For all other snapshot sync messages, apply
+            snapshotWriter.apply(message);
         }
     }
 
@@ -157,13 +162,11 @@ public class SinkManager implements DataReceiver {
 
         // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
         snapshotRequestId = entry.getMetadata().getSnapshotRequestId();
-
-        // Reset start snapshot flag / continue on this baseSnapshotTimestamp
-        startSnapshot = false;
     }
 
     private boolean receivedValidMessage(LogReplicationEntry message) {
-        return rxState == RxState.SNAPSHOT_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE
+        return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE
+                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START)
                 || rxState == RxState.LOG_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
