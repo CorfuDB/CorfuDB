@@ -54,8 +54,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 10;
-    static private final int NUM_STREAMS = 1;
-    static private final int TOTAL_STREAM_COUNT = 3;
+    static private final int NUM_STREAMS = 2;
+    static private final int TOTAL_STREAM_COUNT = 4;
     static private final int WRITE_CYCLES = 4;
 
     Process sourceServer;

@@ -9,6 +9,7 @@ import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 
 import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -30,13 +31,14 @@ import java.util.UUID;
  * Process TxMessage that contains transaction logs for registered streams.
  */
 public class LogEntryWriter {
+    public static final int MAX_MSG_QUE_SIZE = LogEntrySender.READ_BATCH_SIZE; //The max size of the msgQ.
+
     private Set<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the streamview.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
     private HashMap<Long, LogReplicationEntry> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
-    private final int MAX_MSG_QUE_SIZE = 20; //The max size of the msgQ.
 
     public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
@@ -99,6 +101,7 @@ public class LogEntryWriter {
         }
 
         lastMsgTs = txMessage.getMetadata().getTimestamp();
+        System.out.println("process message " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
     }
 
     /**
@@ -106,12 +109,15 @@ public class LogEntryWriter {
      */
     void processQueue() {
         while (true) {
+            long preTs = lastMsgTs;
             LogReplicationEntry txMessage = msgQ.get(lastMsgTs);
             if (txMessage == null) {
+                System.out.println("process queue, tx null " + " Qsize " + msgQ.size());
                 return;
             }
+            System.out.println("msgQ remove one entry " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
             processMsg(txMessage);
-            msgQ.remove(lastMsgTs);
+            msgQ.remove(preTs);
         }
     }
 
@@ -167,8 +173,10 @@ public class LogEntryWriter {
         //If the entry's ts is larger than the entry processed, put it to the queue
         if (msgQ.size() < MAX_MSG_QUE_SIZE) {
             msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
+            System.out.println("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
+            System.out.println("The message is out of order and the queue is full, will drop the message  " + msg.getMetadata());
         }
 
         return Address.NON_ADDRESS;
