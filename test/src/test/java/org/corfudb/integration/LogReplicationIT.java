@@ -595,7 +595,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testSnapshotSyncCrossTables(crossTables, true);
 
         // Start Log Entry Sync
-        expectedAckMessages =  NUM_KEYS;
+        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
         startLogEntrySync(crossTables, true, false);
 
         // Verify Data on Destination site
