@@ -125,9 +125,9 @@ public class StreamsReplicationIT extends AbstractIT {
         dstTestRuntime.setTransactionLogging(true).connect();
     }
 
-    public static DataMessage deserializeTest(DataMessage msg) {
-        LogReplicationEntry entry = LogReplicationEntry.deserialize(msg.getData());
-        return new DataMessage(entry.serialize());
+    public static LogReplicationEntry deserializeTest(LogReplicationEntry entry) {
+        LogReplicationEntry newEntry = LogReplicationEntry.deserialize((new DataMessage(entry.serialize()).getData()));
+        return newEntry;
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
@@ -244,8 +244,8 @@ public class StreamsReplicationIT extends AbstractIT {
                 assertThat(false);
             }
             System.out.println("generate the message " + i);
-            deserializeTest(dataMessage);
-            msgQ.add(message);
+
+            msgQ.add(deserializeTest(message));
         }
     }
 
@@ -311,9 +311,7 @@ public class StreamsReplicationIT extends AbstractIT {
         while (true) {
             SnapshotReadMessage snapshotReadMessage = reader.read();
             for (LogReplicationEntry data : snapshotReadMessage.getMessages()) {
-                DataMessage dataMessage = new DataMessage(data.serialize());
-                deserializeTest(dataMessage);
-                msgQ.add(data);
+                msgQ.add(deserializeTest(data));
             }
 
             if (snapshotReadMessage.isEndRead()) {
