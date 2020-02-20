@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SourceForwardingDataSender implements DataSender {
+    private static int NUM_MOD = 2;
 
     // Runtime to remote/destination Corfu Server
     private CorfuRuntime runtime;
@@ -33,7 +34,11 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int receivedMessages = 0;
 
-    public SourceForwardingDataSender(String sourceEndpoint, String destinationEndpoint, LogReplicationConfig config) {
+    private boolean ifDropMsg = false;
+
+    int msgCnt = 0;
+
+    public SourceForwardingDataSender(String sourceEndpoint, String destinationEndpoint, LogReplicationConfig config, boolean ifDropMsg) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
                 .connect();
@@ -42,6 +47,7 @@ public class SourceForwardingDataSender implements DataSender {
         this.destinationLogReplicationManager = new SinkManager(runtime, destinationDataSender, destinationDataControl);
         this.destinationLogReplicationManager.setLogReplicationConfig(config);
         this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
+        this.ifDropMsg = ifDropMsg;
     }
 
     /*
@@ -79,6 +85,9 @@ public class SourceForwardingDataSender implements DataSender {
      */
     @Override
     public boolean send(DataMessage message) {
+        msgCnt ++;
+        if (msgCnt % NUM_MOD == 0)
+            return true;
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
         channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
         return true;
