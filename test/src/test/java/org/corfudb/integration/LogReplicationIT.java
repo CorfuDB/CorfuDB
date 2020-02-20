@@ -555,8 +555,30 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testSnapshotSyncCrossTables(crossTables);
 
         // Start Log Entry Sync
+        expectedAckMessages =  NUM_KEYS;
+        startLogEntrySync(crossTables, false);
+
+        // Verify Data on Destination site
+        System.out.println("****** Verify Data on Destination");
+        // Because t2 is not specified as a replicated table, we should not see it on the destination
+        srcHashMap.get(t2).clear();
+
+        // Verify Destination
+        verifyData(dstTables, srcHashMap);
+    }
+
+    @Test
+    public void testLogEntrySyncValidCrossTablesWithDropMsg() throws Exception {
+        // Write data in transaction to t0 and t1
+        Set<String> crossTables = new HashSet<>();
+        crossTables.add(t0);
+        crossTables.add(t1);
+
+        testSnapshotSyncCrossTables(crossTables);
+
+        // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-        startLogEntrySync(crossTables);
+        startLogEntrySync(crossTables, true);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -642,7 +664,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private SourceManager startSnapshotSync(Set<String> tablesToReplicate) throws Exception {
         // Start Snapshot Sync (through Source Manager)
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config);
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender( DESTINATION_ENDPOINT, config, false);
         DefaultDataControl sourceDataControl = new DefaultDataControl(true);
         SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
 
@@ -669,11 +691,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         return logReplicationSourceManager;
     }
 
-    private void startLogEntrySync(Set<String> tablesToReplicate) throws Exception {
+    private void startLogEntrySync(Set<String> tablesToReplicate, boolean ifDropMsg) throws Exception {
         // Start Snapshot Sync (through Source Manager)
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config);
+
         DefaultDataControl sourceDataControl = new DefaultDataControl(true);
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, ifDropMsg);
         SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages
