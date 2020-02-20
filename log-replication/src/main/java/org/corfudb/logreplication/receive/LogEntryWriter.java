@@ -101,7 +101,7 @@ public class LogEntryWriter {
         }
 
         lastMsgTs = txMessage.getMetadata().getTimestamp();
-        System.out.println("process message " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
+        log.trace("process message " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
     }
 
     /**
@@ -112,10 +112,10 @@ public class LogEntryWriter {
             long preTs = lastMsgTs;
             LogReplicationEntry txMessage = msgQ.get(lastMsgTs);
             if (txMessage == null) {
-                System.out.println("process queue, tx null " + " Qsize " + msgQ.size());
+                log.info("process queue, tx null " + " Qsize " + msgQ.size());
                 return;
             }
-            System.out.println("msgQ remove one entry " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
+            log.info("msgQ remove one entry " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
             processMsg(txMessage);
             msgQ.remove(preTs);
         }
@@ -173,7 +173,7 @@ public class LogEntryWriter {
         //If the entry's ts is larger than the entry processed, put it to the queue
         if (msgQ.size() < MAX_MSG_QUE_SIZE) {
             msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
-            System.out.println("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
+            log.info("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
             System.out.println("The message is out of order and the queue is full, will drop the message  " + msg.getMetadata());
