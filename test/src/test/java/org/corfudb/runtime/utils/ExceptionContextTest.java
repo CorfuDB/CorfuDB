@@ -7,6 +7,7 @@ import java.util.concurrent.ExecutionException;
 
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 
 import org.junit.Test;
 
@@ -23,8 +24,16 @@ public class ExceptionContextTest extends AbstractViewTest {
         }
     }
 
+    // make a static in Utils.java?
+    private static final StackTraceElement dummyStackFrameEntry = new StackTraceElement(
+            "Dummy stack frame", "--- End caller context ---", null, -1);
+
+    /**
+     * Verifies a causing exception from another thread thrown from CFUtils.getUninterruptibly has
+     * caller's stacktrace prepended
+     */
     @Test
-    public void validateCallerStackTracePresent() throws InterruptedException {
+    public void validateCallerStackTracePresentInGetUninterruptibly() throws InterruptedException {
         final CompletableFuture<Void> future = CompletableFuture.supplyAsync(() -> {
             throw new DummyCausingException("Dummy causing exception");
         });
@@ -34,7 +43,7 @@ public class ExceptionContextTest extends AbstractViewTest {
                 () -> {
                     future.get();
                 }
-         );
+        );
         final StackTraceElement[] causeOriginalStackTrace = originalExecutionException
                                                                 .getCause()
                                                                 .getStackTrace();
@@ -44,21 +53,23 @@ public class ExceptionContextTest extends AbstractViewTest {
                 () -> {
                     CFUtils.getUninterruptibly(future, RuntimeException.class);
                 }
-         );
+        );
         final List<StackTraceElement> causeFromGetUninterruptiblyStackTrace = Arrays.asList(
                 causeFromGetUninterruptibly.getStackTrace()
         );
 
+        // check for dummy stack separator entry
         final int callerContextEndIndex = causeFromGetUninterruptiblyStackTrace.indexOf(
-                new StackTraceElement("Dummy stack frame", "--- End caller context ---", null, -1)
+                dummyStackFrameEntry
         );
         assertNotEquals(callerContextEndIndex, -1);
 
+        // check for caller's stack trace entries
         final List<String> expectedStackTraceContents = Arrays.asList(
                 "CompletableFuture.reportGet",
                 "CompletableFuture.get",
                 "CFUtils.getUninterruptibly",
-                "ExceptionContextTest.validateCallerStackTracePresent"
+                "ExceptionContextTest.validateCallerStackTracePresentInGetUninterruptibly"
         );
         expectedStackTraceContents.forEach(contents -> {
             final String className = contents.split("\\.")[0];
@@ -77,11 +88,76 @@ public class ExceptionContextTest extends AbstractViewTest {
             );
         });
 
+        // check for causing exception's original stack trace
         for (int i = 0; i < causeOriginalStackTrace.length; ++i) {
             assertEquals(
                     causeOriginalStackTrace[i],
                     causeFromGetUninterruptiblyStackTrace.get(callerContextEndIndex + i + 1)
             );
         }
+    }
+
+    /**
+     * Verifies a causing exception from another thread extracted using
+     * Utils.extractCauseWithCompleteStacktrace has outer exception's stacktrace prepended
+     */
+    @Test
+    public void validateCallerStackTracePresentInExtractCause() throws InterruptedException {
+        final CompletableFuture<Void> future = CompletableFuture.supplyAsync(() -> {
+            throw new DummyCausingException("Dummy causing exception");
+        });
+
+        final ExecutionException originalExecutionException = assertThrows(
+                ExecutionException.class,
+                () -> {
+                    future.get();
+                }
+        );
+        final StackTraceElement[] originalExecutionExceptionStackTrace = originalExecutionException
+                                                                            .getStackTrace();
+        final StackTraceElement[] causeOriginalStackTrace = originalExecutionException
+                                                                .getCause()
+                                                                .getStackTrace();
+
+        final Throwable causeFromExtractCause = Utils.extractCauseWithCompleteStacktrace(
+                originalExecutionException
+        );
+        assertTrue(causeFromExtractCause instanceof DummyCausingException);
+        final StackTraceElement[] causeFromExtractCauseStackTrace = causeFromExtractCause
+                                                                        .getStackTrace();
+
+        // check caller's track trace present
+        for (int i = 0; i < originalExecutionExceptionStackTrace.length; ++i) {
+            assertEquals(
+                    originalExecutionExceptionStackTrace[i],
+                    causeFromExtractCauseStackTrace[i]
+            );
+        }
+
+        // check for dummy stack separator entry
+        assertEquals(
+                causeFromExtractCauseStackTrace[originalExecutionExceptionStackTrace.length],
+                dummyStackFrameEntry
+        );
+
+        // check for causing exception's original stack trace
+        for (int i = 0; i < causeOriginalStackTrace.length; ++i) {
+            assertEquals(
+                    causeOriginalStackTrace[i],
+                    causeFromExtractCauseStackTrace[originalExecutionExceptionStackTrace.length + 1 + i]
+            );
+        }
+    }
+
+    /**
+     * Call Utils.extractCauseWithCompleteStacktrace on a throwable with no cause
+     */
+    @Test
+    public void extractNullCause() {
+        assertEquals(null,
+                    Utils.extractCauseWithCompleteStacktrace(
+                        new DummyCausingException("Dummy causing exception")
+                    )
+        );
     }
 }
