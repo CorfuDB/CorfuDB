@@ -126,7 +126,7 @@ public class SinkManager implements DataReceiver {
                     } else if (rxState == RxState.LOG_SYNC) {
                         // Apply log entry sync message
                         long ackTs = logEntryWriter.apply(message);
-
+                        System.out.println("ackTs " + ackTs);
                         if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
                             persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
 
