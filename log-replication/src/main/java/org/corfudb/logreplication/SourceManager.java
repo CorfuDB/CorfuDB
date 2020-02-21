@@ -63,7 +63,7 @@ public class SourceManager implements DataReceiver {
                          DataControl dataControl,
                          LogReplicationConfig config) {
 
-        this(runtime, dataSender, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+        this(runtime, dataSender, dataControl, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
@@ -73,7 +73,7 @@ public class SourceManager implements DataReceiver {
      * @param runtime Corfu Runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
-     * @
+     * @param dataControl implementation of a data control, this represents the application callback for control messages.
      * @param readProcessor implementation for reads processor (data transformation)
      * @param config Log Replication Configuration
      */
@@ -83,7 +83,7 @@ public class SourceManager implements DataReceiver {
                          ReadProcessor readProcessor,
                          LogReplicationConfig config) {
         // Default to single dedicated thread for state machine workers (perform state tasks)
-        this(runtime, dataSender, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+        this(runtime, dataSender, dataControl, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
@@ -95,14 +95,16 @@ public class SourceManager implements DataReceiver {
      * @param runtime corfu runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
+     * @param dataControl implementation of a data control, this represents the application callback for control messages.
      * @param config Log Replication Configuration
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
     public SourceManager(CorfuRuntime runtime,
                          DataSender dataSender,
+                         DataControl dataControl,
                          LogReplicationConfig config,
                          ExecutorService logReplicationFSMWorkers) {
-        this(runtime, dataSender, new DefaultReadProcessor(runtime), config, logReplicationFSMWorkers);
+        this(runtime, dataSender, dataControl, new DefaultReadProcessor(runtime), config, logReplicationFSMWorkers);
     }
 
     /**
@@ -119,6 +121,7 @@ public class SourceManager implements DataReceiver {
      */
     public SourceManager(CorfuRuntime runtime,
                          DataSender dataSender,
+                         DataControl dataControl,
                          ReadProcessor readProcessor,
                          LogReplicationConfig config,
                          ExecutorService logReplicationFSMWorkers) {
@@ -126,7 +129,7 @@ public class SourceManager implements DataReceiver {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, readProcessor,
+        this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, dataControl, readProcessor,
                 logReplicationFSMWorkers);
     }
 
