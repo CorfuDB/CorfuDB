@@ -213,6 +213,7 @@ public class LogReplicationFSM {
                 // Log: not accepting events, in stopped state
                 return;
             }
+            log.info("Enqueue event {} ", event);
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             log.error("Log Replication interrupted Exception: ", ex);
@@ -234,7 +235,9 @@ public class LogReplicationFSM {
             // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
-            
+
+            log.info("consume event {}", event);
+
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 // TODO (Anny): Verify it's for the same request, as that request could've been canceled and was received later
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
