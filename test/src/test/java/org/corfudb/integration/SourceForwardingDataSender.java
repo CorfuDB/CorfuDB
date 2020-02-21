@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.SinkManager;
 import org.corfudb.logreplication.SourceManager;
@@ -38,18 +39,25 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int errorCount = 0;
 
-    private boolean ifDropMsg = false;
+    /*
+     * 0: no message drop
+     * 1: drop some message once
+     * 2: drop a particular message 5 times to trigger a timeout error
+     */
+    final public static int DROP_MSG_ONCE = 1;
 
-    Random random = new Random();
+    final public static int TRIGGER_TIMEOUT = 2;
 
-    private int firstDrop = 0;
+    private int ifDropMsg = 0;
 
     final static int DROP_INCREMENT = 4;
+
+    private int firstDrop = DROP_INCREMENT;
 
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
 
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, boolean ifDropMsg) {
+    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, int ifDropMsg) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
                 .connect();
@@ -97,9 +105,11 @@ public class SourceForwardingDataSender implements DataSender {
     public boolean send(DataMessage message) {
         LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(message.getData());
 
-        if (ifDropMsg && logReplicationEntry.metadata.timestamp == firstDrop) {
-            System.out.println("****** Drop log entry " + logReplicationEntry.metadata.timestamp);
-            firstDrop += DROP_INCREMENT;
+        if (ifDropMsg > 0 && logReplicationEntry.metadata.timestamp == firstDrop) {
+            System.out.println("******drop log entry " + logReplicationEntry.metadata.timestamp);
+            if (ifDropMsg == DROP_MSG_ONCE) {
+                firstDrop += DROP_INCREMENT;
+            }
             return true;
         }
 
