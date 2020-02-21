@@ -237,7 +237,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {
-            LogReplicationEntry message = reader.read();
+            LogReplicationEntry message = reader.read(UUID.randomUUID());
             DataMessage dataMessage = new DataMessage(message.serialize());
             if (dataMessage == null) {
                 System.out.println("**********data message is null");
@@ -309,7 +309,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
-            SnapshotReadMessage snapshotReadMessage = reader.read();
+            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             for (LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(deserializeTest(data));
             }
