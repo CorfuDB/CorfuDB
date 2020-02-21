@@ -82,7 +82,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         //the expected behavior
         log.error("There are noisy streams {} in the entry, expected streams set {}",
                     entry.getEntries().keySet(), streamUUIDs);
-        throw new ReplicationReaderException("There are noisy streams in the transaction log entry");
+        throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
 
     }
 
@@ -95,7 +95,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public LogReplicationEntry read() throws TrimmedException, ReplicationReaderException {
+    public LogReplicationEntry read() throws TrimmedException, IllegalTransactionStreamsException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
         while(txStream.hasNext()) {
             OpaqueEntry opaqueEntry = txStream.next();
