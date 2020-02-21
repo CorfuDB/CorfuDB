@@ -17,7 +17,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -74,20 +73,22 @@ public class SnapshotSender {
 
         log.debug("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId, baseSnapshotTimestamp);
 
-        boolean endRead = false;    // Flag indicating the snapshot sync is completed
+        boolean completed = false;    // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
-        int messagesSent = 0;
+        int messagesSent = 0;       // Limit the number of messages to SNAPSHOT_BATCH_SIZE. The reason we need to limit
+                                    // is because by design several state machines can share the same thread pool,
+                                    // therefore, we need to hand the thread for other workers to execute.
         SnapshotReadMessage snapshotReadMessage;
 
         // Skip if no data is present in the log
         if (Address.isAddress(baseSnapshotTimestamp)) {
-
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
-            while (messagesSent < SNAPSHOT_BATCH_SIZE && !endRead && !stopSnapshotSync) {
+            while (messagesSent < SNAPSHOT_BATCH_SIZE && !completed && !stopSnapshotSync) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read();
+                    completed = snapshotReadMessage.isEndRead();
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
@@ -102,30 +103,13 @@ public class SnapshotSender {
                     break;
                 }
 
-                // messages may be empty, send regardless.
-                List<LogReplicationEntry> messages = snapshotReadMessage.getMessages();
-                endRead = snapshotReadMessage.isEndRead();
+                List<DataMessage> dataToSend = processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId);
 
-                // Convert Log Replication Entry to DataMessage Format
-                List<DataMessage> dataToSend = new ArrayList<>();
-
-                // If we are starting a snapshot sync, send a start marker.
-                if (startSnapshotSync) {
-                    DataMessage startDataMessage = getSnapshotStartMessage(snapshotSyncEventId);
-                    dataToSend.add(startDataMessage);
-                    startSnapshotSync = false;
-                }
-
-                for (LogReplicationEntry message : messages) {
-                    DataMessage dataMessage = new DataMessage(message.serialize());
-                    dataToSend.add(dataMessage);
-                }
-
-                // Send message to dataSender (application)
-                if (!dataSender.send(dataToSend, snapshotSyncEventId, endRead)) {
+                // Send message to the application through the dataSender
+                if (!dataSender.send(dataToSend, snapshotSyncEventId, completed)) {
                     // TODO: Optimize (back-off) retry on the failed send.
                     log.error("DataSender did not acknowledge next sent message(s). Notify error.");
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.SENDER_ERROR);
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                     cancel = true;
                     break;
                 }
@@ -134,38 +118,68 @@ public class SnapshotSender {
                 observedCounter.setValue(messagesSent);
             }
 
-            if (endRead) {
+            if (completed) {
                 // Snapshot Sync Completed
                 log.info("Snapshot sync completed for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
                 snapshotSyncComplete(snapshotSyncEventId);
             } else if (!cancel) {
-                // Terminated due to number of batch messages being sent. This snapshot sync needs to
-                // continue.
-                log.debug("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
+                // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
-                // Note: Snapshot Sync is not performed continuous as for the case of multi-site replication
+                // Snapshot Sync is not performed in a single run, as for the case of multi-site replication
                 // the shared thread pool could be lower than the number of sites, so we assign resources in
                 // a round robin fashion.
+                log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
                         new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
         } else {
-            log.info("Snapshot sync completed for {} as there is not data in the log.", snapshotSyncEventId);
-            // Empty Log Replication Entry no data and only metadata (used as start marker on receiver side
-            // to complete snapshot sync)
-            DataMessage dataMessage = getSnapshotStartMessage(snapshotSyncEventId);
-            dataSender.send(dataMessage, snapshotSyncEventId, true);
+            log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
+            // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
+            // to complete snapshot sync and send the right ACK)
+            dataSender.send(getSnapshotSyncStartMarker(snapshotSyncEventId), snapshotSyncEventId, true);
             snapshotSyncComplete(snapshotSyncEventId);
         }
     }
 
-    private DataMessage getSnapshotStartMessage(UUID snapshotSyncEventId) {
+    private List<DataMessage> processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId) {
+
+        List<DataMessage> dataToSend = new ArrayList<>();
+
+        // If we are starting a snapshot sync, send a start marker.
+        if (startSnapshotSync) {
+            DataMessage startDataMessage = getSnapshotSyncStartMarker(snapshotSyncEventId);
+            dataToSend.add(startDataMessage);
+            startSnapshotSync = false;
+        }
+
+        // Convert Log Replication Entry to DataMessage Format
+        for (LogReplicationEntry entry : logReplicationEntries) {
+            DataMessage dataMessage = new DataMessage(entry.serialize());
+            dataToSend.add(dataMessage);
+        }
+
+        return dataToSend;
+    }
+
+
+    /**
+     * Prepare a Snapshot Sync Replication start marker.
+     *
+     * @param snapshotSyncEventId snapshot sync event identifier
+     * @return snapshot sync start marker as DataMessage
+     */
+    private DataMessage getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START,
                 Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
         return new DataMessage(emptyEntry.serialize());
     }
 
+    /**
+     * Complete Snapshot Sync, insert completion event in the FSM queue.
+     *
+     * @param snapshotSyncEventId unique identifier for the completed snapshot sync.
+     */
     private void snapshotSyncComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
@@ -173,8 +187,15 @@ public class SnapshotSender {
                 new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
     }
 
+    /**
+     * Cancel Snapshot Sync due to an error.
+     *
+     * @param snapshotSyncEventId unique identifier for the snapshot sync task
+     * @param error specific error cause
+     */
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
-        // Enqueue cancel event
+        // Enqueue cancel event, this will cause a transition to the require snapshot sync request, which
+        // will notify application through the data control about this request.
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncEventId)));
 
@@ -187,7 +208,6 @@ public class SnapshotSender {
      */
     public void reset() {
         // TODO: Do we need to persist the baseSnapshotTimestamp in the event of failover?
-
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
 
@@ -195,7 +215,6 @@ public class SnapshotSender {
         snapshotReader.reset(baseSnapshotTimestamp);
 
         stopSnapshotSync = false;
-
         startSnapshotSync = true;
     }
 

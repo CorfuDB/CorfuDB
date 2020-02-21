@@ -298,7 +298,7 @@ public class StreamsReplicationIT extends AbstractIT {
         verifyData("srctables", srcTables, srcHashMap);
         verifyData("srcTestTables", srcTestTables, srcHashMap);
 
-        verifyData("dstTables", dstTables, dstHashMap);
+        verifyData("dstCorfuTables", dstTables, dstHashMap);
         verifyData("dstTestTables", dstTestTables, dstHashMap);
         return;
     }

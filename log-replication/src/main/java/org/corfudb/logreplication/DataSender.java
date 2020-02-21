@@ -8,9 +8,12 @@ import java.util.UUID;
 
 
 /**
- * This Interface comprises Data Path send operations.
+ * This Interface comprises Data Path send operations for both Source and Sink.
  *
- * Application is expected
+ * Application is expected to transmit messages from source to sink, and ACKs
+ * from sink to source.
+ *
+ *
  */
 public interface DataSender {
 
