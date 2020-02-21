@@ -6,8 +6,10 @@ package org.corfudb.logreplication.send;
 public enum LogReplicationError {
     TRIM_SNAPSHOT_SYNC(0, "A trim exception has occurred during snapshot sync."),
     TRIM_LOG_ENTRY_SYNC(1, "A trim exception has occurred during log entry sync."),
-    SENDER_ERROR(2, "Listener error while processing message."),
-    UNKNOWN (3, "Unknown exception caused sync cancel.");
+    LOG_ENTRY_ACK_TIMEOUT(2, "Log Entry Sync ack has timed out."),
+    ILLEGAL_TRANSACTION (3, "Illegal Transaction across replicated and non-replicated streams. " +
+            "Log Replication is TERMINATED."),
+    UNKNOWN (4, "Unknown exception caused sync cancel.");
 
     private final int code;
     private final String description;

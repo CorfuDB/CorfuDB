@@ -3,6 +3,7 @@ package org.corfudb.logreplication.fsm;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.logreplication.DataControl;
 import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.DefaultReadProcessor;
@@ -55,6 +56,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private LogReplicationFSM fsm;
     private CorfuRuntime runtime;
     private DataSender dataSender;
+    private DataControl dataControl;
     private SnapshotReader snapshotReader;
     private LogEntryReader logEntryReader;
 
@@ -381,6 +383,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         logEntryReader = new TestLogEntryReader();
         dataSender = new TestDataSender();
+        dataControl = new TestDataControl();
 
         switch(readerImpl) {
             case EMPTY:
@@ -414,8 +417,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
-        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader, new DefaultReadProcessor(runtime),
-                new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID()),
+        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, dataControl, logEntryReader,
+                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID()),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
