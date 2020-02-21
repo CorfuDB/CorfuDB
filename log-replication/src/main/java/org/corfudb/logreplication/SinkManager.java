@@ -29,9 +29,10 @@ import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_RESENT_TIME
  * */
 @Slf4j
 public class SinkManager implements DataReceiver {
-    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
+    private static final String config_file = "/config/corfu/corfu_replication_config.properties";
+    private static final int DEFAULT_ACK_CNT = 1;
 
-    private int ackCycleTime;
+    private int ackCycleTime = DEFAULT_ACK_CNT;
     private int ackCycleCnt;
 
     private CorfuRuntime runtime;
@@ -159,6 +160,7 @@ public class SinkManager implements DataReceiver {
     }
 
     boolean shouldAck() {
+        ackCnt++;
         long currentTime = java.lang.System.currentTimeMillis();
         if (ackCnt == ackCycleCnt || (currentTime - ackTime) >= ackCycleTime) {
             ackCnt = 0;

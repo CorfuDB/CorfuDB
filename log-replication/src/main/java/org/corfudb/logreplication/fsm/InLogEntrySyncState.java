@@ -55,10 +55,11 @@ public class InLogEntrySyncState implements LogReplicationState {
                 snapshotSyncState.setTransitionEventId(event.getEventID());
                 return snapshotSyncState;
             case SYNC_CANCEL:
-                // If cancel was intended for current snapshot sync task, cancel and transition to new state
-                // In the case of lpg entry sync, cancel is caused by an encountered trimmed exception.
+                // If cancel was intended for current log entry sync task, cancel and transition to new state
+                // In the case of log entry sync, cancel is caused by an encountered trimmed exception or any
+                // other exception while reading/sending.
                 if (transitionEventId == event.getMetadata().getRequestId()) {
-                    cancelLogEntrySync("trimmed exception.");
+                    cancelLogEntrySync("sync cancel.");
                     return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
                 }
 
@@ -119,7 +120,8 @@ public class InLogEntrySyncState implements LogReplicationState {
             // Reset before start sending log entry data, only when we're coming
             // from snapshot sync or initialized state, this way we will seek the stream up to the base snapshot
             // address and send incremental updates from this point onwards.
-            if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC || from.getType() == LogReplicationStateType.INITIALIZED) {
+            if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC
+                    || from.getType() == LogReplicationStateType.INITIALIZED) {
                 logEntrySender.reset(fsm.persistedReaderMetadata);
             }
 
