@@ -10,11 +10,16 @@ import org.corfudb.logreplication.receive.LogEntryWriter;
 import org.corfudb.logreplication.receive.PersistedWriterMetadata;
 import org.corfudb.logreplication.receive.ReplicationWriterException;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
-import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.io.File;
+import java.io.FileReader;
 import java.util.List;
+import java.util.Properties;
 import java.util.UUID;
+
+import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEUE_SIZE;
+import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_RESENT_TIMER;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -24,8 +29,10 @@ import java.util.UUID;
  * */
 @Slf4j
 public class SinkManager implements DataReceiver {
-    private static int ACK_PERIOD = LogEntrySender.ENTRY_RESENT_TIMER/5;
-    private static int ACK_CNT = LogEntrySender.READ_BATCH_SIZE/5;
+    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
+
+    private int ackCycleTime;
+    private int ackCycleCnt;
 
     private CorfuRuntime runtime;
     private StreamsSnapshotWriter snapshotWriter;
@@ -36,6 +43,9 @@ public class SinkManager implements DataReceiver {
     private DataControl dataControl;
     private LogReplicationConfig config;
     private UUID snapshotRequestId = new UUID(0L, 0L);
+
+    private int ackCnt = 0;
+    private long ackTime = 0;
 
     /**
      * Constructor
@@ -70,8 +80,29 @@ public class SinkManager implements DataReceiver {
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
+        readConfig();
     }
 
+    private void readConfig() {
+        try {
+            File configFile = new File(config_file);
+            FileReader reader = new FileReader(configFile);
+
+            Properties props = new Properties();
+            props.load(reader);
+
+            int logWriterQueueSize = Integer.parseInt(props.getProperty("log_writer_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
+            logEntryWriter.setMaxMsgQueSize(logWriterQueueSize);
+
+            ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count", Integer.toString(DEFAULT_READER_QUEUE_SIZE/5)));
+            ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(DEFAULT_RESENT_TIMER/5)));
+            reader.close();
+            log.info("log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
+                    logWriterQueueSize, ackCycleCnt, ackCycleTime);
+        } catch (Exception e) {
+            log.warn("Caught an exception while reading the config file", e);
+        }
+    }
     /**
      * Signal the manager a snapshot sync is about to start. This is required to reset previous states.
      */
@@ -127,6 +158,18 @@ public class SinkManager implements DataReceiver {
         }
     }
 
+    boolean shouldAck() {
+        long currentTime = java.lang.System.currentTimeMillis();
+        if (ackCnt == ackCycleCnt || (currentTime - ackTime) >= ackCycleTime) {
+            ackCnt = 0;
+            ackTime = currentTime;
+            return true;
+        }
+
+        ackCnt++;
+        return false;
+    }
+
     private void applyLogEntrySync(LogReplicationEntry message) {
         // Apply log entry sync message
         long ackTs = logEntryWriter.apply(message);
@@ -137,9 +180,11 @@ public class SinkManager implements DataReceiver {
 
             // TODO: this will be changed to be sent every T seconds instead on every apply
             // Prepare ACK message for Log Entry Sync
-            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
-                    message.getMetadata().getSnapshotTimestamp());
-            dataSender.send(DataMessage.generateAck(metadata));
+            if (shouldAck()) {
+                LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
+                        message.getMetadata().getSnapshotTimestamp());
+                dataSender.send(DataMessage.generateAck(metadata));
+            }
         }
     }
 
@@ -172,7 +217,6 @@ public class SinkManager implements DataReceiver {
 
     @Override
     public void receive(List<DataMessage> messages) {
-        LogEntrySender.DefaultTimer timer = new LogEntrySender.DefaultTimer();
         for (DataMessage msg : messages) {
             receive(msg);
         }
