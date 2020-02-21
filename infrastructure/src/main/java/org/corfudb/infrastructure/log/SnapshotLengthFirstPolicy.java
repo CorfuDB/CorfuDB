@@ -95,10 +95,6 @@ public class SnapshotLengthFirstPolicy extends AbstractCompactionPolicy {
      * the compaction mark after this bound.
      */
     private long newCompactionUpperBound() {
-        // Minus 1 to avoid handling the case where log tail not moving when
-        // being compacted in the next cycle and the log tail happens to be a
-        // hole. In that case, if the hole is compacted and server restarted,
-        // the rebuilt global log tail could regress.
-        return logMetadata.getGlobalTail() - 1;
+        return logMetadata.getGlobalTail();
     }
 }

@@ -15,7 +15,6 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -322,10 +321,15 @@ public class SegmentManager {
         }
 
         // Take a snapshot of the current segmentCompactionMetadata.
-        Map<Long, CompactionMetadata> metaDataMapCopy = new HashMap<>(segmentCompactionMetadata);
+        // Do not compact the protected segments that have highest ordinals.
+        List<CompactionMetadata> metaDataCopy = segmentCompactionMetadata
+                .values()
+                .stream()
+                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal).reversed())
+                .skip(logParams.protectedSegments)
+                .collect(Collectors.toList());
 
-        // Check if any segment can be selected other than the protected ones.
-        if (metaDataMapCopy.size() <= logParams.protectedSegments) {
+        if (metaDataCopy.isEmpty()) {
             return Collections.emptyList();
         }
 
@@ -335,11 +339,9 @@ public class SegmentManager {
             return Collections.emptyList();
         }
 
-        return metaDataMapCopy
-                .values()
+        return metaDataCopy
                 .stream()
-                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal).reversed())
-                .skip(logParams.protectedSegments)
+                .filter(meta -> meta.getOrdinal() <= lastOrdinal)
                 .collect(Collectors.toList());
     }
 
