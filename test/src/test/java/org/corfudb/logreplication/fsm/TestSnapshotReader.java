@@ -31,7 +31,7 @@ public class TestSnapshotReader implements SnapshotReader {
     }
 
     @Override
-    public SnapshotReadMessage read() {
+    public SnapshotReadMessage read(UUID snapshotRequestId) {
         // Connect to endpoint
         List<LogReplicationEntry> messages = new ArrayList<>();
 
@@ -43,7 +43,7 @@ public class TestSnapshotReader implements SnapshotReader {
             // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
             // and overwrite it in the TestDataSender with the correct one, before sending the message out
             LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE,
-                    i, config.getNumEntries(), UUID.randomUUID());
+                    snapshotRequestId, i, config.getNumEntries(), UUID.randomUUID());
             messages.add(new LogReplicationEntry(metadata, (byte[])data));
             globalIndex++;
         }
