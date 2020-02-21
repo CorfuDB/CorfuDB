@@ -13,7 +13,10 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
+import java.io.File;
+import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.Properties;
 import java.util.UUID;
 
 /**
@@ -25,22 +28,37 @@ import java.util.UUID;
  */
 @Slf4j
 public class LogEntrySender {
-    public static final int READ_BATCH_SIZE = 1;
+    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
+    public static final int DEFAULT_READER_QUEUE_SIZE = 1;
+    public static final int DEFAULT_RESENT_TIMER = 500;
+    public static final int DEFAULT_MAX_RETRY = 5;
 
     /*
-     * for internal timer increasing for each message
+     * for internal timer increasing for each message in milliseconds
      */
-    public static final long TIME_INCREMENT = 50;
+    final static private long TIME_INCREMEMNT = 10;
+
+    private int readerBatchSize = DEFAULT_READER_QUEUE_SIZE;
 
     /*
      * The timer to resend an entry. This is the roundtrip time between sender/receiver.
      */
-    public static final int ENTRY_RESENT_TIMER = 500;
+    private int msgTimer = DEFAULT_RESENT_TIMER;
 
     /*
      * The max number of retry for sending an entry.
      */
-    public static final int MAX_TRY = 5;
+    private int maxRetry = DEFAULT_MAX_RETRY;
+
+    /*
+     * wait for ack or not
+     */
+    private boolean errorOnMsgTimeout = true;
+
+    /*
+     * reset while process messages
+     */
+    long currentTime;
 
     /*
      * Corfu Runtime
@@ -69,7 +87,6 @@ public class LogEntrySender {
      */
     private LogReplicationFSM logReplicationFSM;
 
-    private ReadProcessor readProcessor;
 
     private volatile boolean taskActive = false;
 
@@ -90,41 +107,70 @@ public class LogEntrySender {
      */
     public LogEntrySender(CorfuRuntime runtime, LogEntryReader logEntryReader, DataSender dataSender,
                           ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
+
+        readConfig();
         this.runtime = runtime;
         this.logEntryReader = logEntryReader;
         this.dataSender = dataSender;
-        this.readProcessor = readProcessor;
         this.logReplicationFSM = logReplicationFSM;
-        this.pendingEntries = new LogReplicationEntryQueue(READ_BATCH_SIZE);
+        this.pendingEntries = new LogReplicationEntryQueue(readerBatchSize);
     }
 
-    void resend(long timer) {
+    private void readConfig() {
+        try {
+            File configFile = new File(config_file);
+            FileReader reader = new FileReader(configFile);
+
+            Properties props = new Properties();
+            props.load(reader);
+
+            maxRetry = Integer.parseInt(props.getProperty("log_reader_max_retry", Integer.toString(DEFAULT_MAX_RETRY)));
+            readerBatchSize = Integer.parseInt(props.getProperty("log_reader_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
+            msgTimer = Integer.parseInt(props.getProperty("log_reader_resend_timer", Integer.toString(DEFAULT_RESENT_TIMER)));
+            errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout", "true"));
+            reader.close();
+
+            log.info("log reader config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
+                    maxRetry, readerBatchSize, msgTimer, errorOnMsgTimeout);
+        } catch (Exception e) {
+            log.warn("Caught an exception while reading the config file", e);
+        }
+    }
+
+    /**
+     * resend the messages in the queue if it times out.
+     * @param
+     * @return it returns false if there is an entry has been resent MAX_RETRY and timeout again.
+     * Otherwise it returns true.
+     */
+
+    void resend() {
         for (int i = 0; i < pendingEntries.list.size() && taskActive; i++) {
             LogReplicationPendingEntry entry  = pendingEntries.list.get(i);
-            if (entry.timeout(timer)) {
-                if (entry.retry >= MAX_TRY) {
-                    log.warn("Entry {} data {} has been resent max times {}.", entry, entry.data, MAX_TRY);
-                    throw new LogEntrySyncTimeoutException("Log Entry Sync has been retried max time.");
+            if (entry.timeout(getCurrentTime(), msgTimer)) {
+                if (errorOnMsgTimeout && entry.retry >= maxRetry) {
+                    log.warn("Entry {} data {} has been resent max times {} for timer {}.", entry, entry.data, maxRetry, msgTimer);
+                    throw new LogEntrySyncTimeoutException("timeout");
                 }
 
-                entry.retry(timer + TIME_INCREMENT);
+                entry.retry(getCurrentTime());
                 dataSender.send(new DataMessage(entry.getData().serialize()));
                 log.info("resend message " + entry.getData().metadata.timestamp);
             }
         }
-    }
+   }
 
     /**
      * Read and send incremental updates (log entries)
      */
     public void send(UUID logEntrySyncEventId) {
-        DefaultTimer timer = new DefaultTimer();
+        currentTime = java.lang.System.currentTimeMillis();
         taskActive = true;
 
         try {
             // If there are pending entries, resend them.
             if (!pendingEntries.list.isEmpty()) {
-                resend(timer.getCurrentTime());
+                resend();
             }
         } catch (LogEntrySyncTimeoutException te) {
             log.error("LogEntrySyncTimeoutException after several retries.", te);
@@ -132,16 +178,15 @@ public class LogEntrySender {
             return;
         }
 
-        while (taskActive && pendingEntries.list.size() < READ_BATCH_SIZE) {
+        while (taskActive && pendingEntries.list.size() < readerBatchSize) {
             LogReplicationEntry message;
-
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read();
                 // readProcessor.process(message);
 
                 if (message != null) {
-                    pendingEntries.append(message, timer.getCurrentTime());
+                    pendingEntries.append(message, getCurrentTime());
                     dataSender.send(new DataMessage(message.serialize()));
                     log.trace("send message " + message.metadata.timestamp);
                 } else {
@@ -196,12 +241,17 @@ public class LogEntrySender {
      * Update the last ackTimestamp and evict all entries whose timestamp is less or equal to the ackTimestamp
      * @param ackTimestamp
      */
-    public void update(Long ackTimestamp) {
+    public void updateAckTs(Long ackTimestamp) {
         if (ackTimestamp <= ackTs)
             return;
         ackTs = ackTimestamp;
         pendingEntries.evictAll(ackTs);
         log.trace("ackTS " + ackTs + " queue size " + pendingEntries.list.size());
+    }
+
+    private long getCurrentTime() {
+        currentTime += TIME_INCREMEMNT;
+        return currentTime;
     }
 
     /**
@@ -225,8 +275,9 @@ public class LogEntrySender {
             this.retry = 0;
         }
 
-        boolean timeout(long currentTimer) {
-            return  (currentTimer - this.time) > ENTRY_RESENT_TIMER;
+        boolean timeout(long ctime, long timer) {
+            log.trace("current time {} - original time {} = {} timer {}", ctime, this.time, timer);
+            return  (ctime - this.time) > timer;
         }
 
         void retry(long time) {
@@ -258,22 +309,6 @@ public class LogEntrySender {
         void append(LogReplicationEntry data, long timer) {
             LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data, timer);
             list.add(entry);
-        }
-    }
-
-    /**
-     * To avoid to call system.currenTime, it is a simple incremental of the time
-     * on each call.
-     */
-    public static class DefaultTimer {
-        long currentTime;
-        public DefaultTimer() {
-            currentTime = java.lang.System.currentTimeMillis();
-        }
-
-        long getCurrentTime() {
-            currentTime += TIME_INCREMENT;
-            return currentTime;
         }
     }
 }
