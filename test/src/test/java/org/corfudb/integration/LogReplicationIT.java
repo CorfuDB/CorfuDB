@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationStateType;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.LogReplicationEntry;
@@ -58,6 +59,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int NUM_STREAMS = 1;
     static private final int TOTAL_STREAM_COUNT = 3;
     static private final int WRITE_CYCLES = 4;
+
+    static private final int STATE_CHANGE_CHECKS = 20;
+    static private final int WAIT_STATE_CHANGE = 300;
 
     Process sourceServer;
     Process destinationServer;
@@ -616,6 +620,46 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
+     * Test behaviour when log entry sync is initiated and the log is empty. It should continue
+     * attempting log entry sync indefinitely without any error.
+     */
+    @Test
+    public void testLogEntrySyncForEmptyLog() throws Exception {
+        // Setup Environment
+        setupEnv();
+
+        // Open Streams on Source
+        openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
+
+        // Verify no data on source
+        System.out.println("****** Verify No Data in Source Site");
+        verifyNoData(srcCorfuTables);
+
+        // Verify destination tables have no actual data.
+        openStreams(dstCorfuTables, dstDataRuntime, NUM_STREAMS);
+        System.out.println("****** Verify No Data in Destination Site");
+        verifyNoData(dstCorfuTables);
+
+        // We did not write data to the log
+        LogReplicationFSM fsm = startLogEntrySync(Collections.singleton(t0), WAIT.NONE, false);
+
+        // Wait until Log Entry Starts
+        checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
+
+        int retries = 0;
+        // Check for several iterations that it is still in Log Entry Sync State and no Error because of empty log
+        // shutdown the state machine
+        while (retries < STATE_CHANGE_CHECKS) {
+            checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, false);
+            retries++;
+            Thread.sleep(WAIT_STATE_CHANGE);
+        }
+
+        // Verify No Data On Destination
+        verifyNoData(dstCorfuTables);
+    }
+
+    /**
      * Test Log Entry Sync, when transactions are performed across valid tables
      * (i.e., all tables are set to be replicated).
      *
@@ -633,7 +677,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-        startLogEntrySync(crossTables, true, false);
+        startLogEntrySync(crossTables);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -656,7 +700,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-        startLogEntrySync(crossTables, true, true);
+        startLogEntrySync(crossTables, WAIT.ON_ACK, true);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -693,7 +737,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
-        startLogEntrySync(replicateTables, false, false);
+        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR, false);
+
+        checkStateChange(fsm, LogReplicationStateType.STOPPED, true);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -702,6 +748,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyNoData(dstCorfuTables);
+    }
+
+    private void checkStateChange(LogReplicationFSM fsm, LogReplicationStateType finalState, boolean waitUntil) {
+        // Due to the error, verify FSM has moved to the stopped state, as this kind of error should terminate
+        // the state machine execution.
+        while (fsm.getState().getType() != finalState && waitUntil) {
+            // Wait until state changes
+        }
+
+        assertThat(fsm.getState().getType()).isEqualTo(finalState);
     }
 
     /**
@@ -734,7 +790,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
-        startLogEntrySync(replicateTables, false, false);
+        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR, false);
+
+        checkStateChange(fsm, LogReplicationStateType.STOPPED, true);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -790,24 +848,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private SourceManager startSnapshotSync(Set<String> tablesToReplicate) throws Exception {
-        // Start Snapshot Sync (through Source Manager)
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender( DESTINATION_ENDPOINT, config, false);
-        DefaultDataControl sourceDataControl = new DefaultDataControl(true);
-        SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender,
-                sourceDataControl, config);
-
-        // Set Log Replication Source Manager so we can emulate the channel for data & control messages
-        sourceDataSender.setSourceManager(logReplicationSourceManager);
-        sourceDataControl.setSourceManager(logReplicationSourceManager);
 
         // Observe ACKs on SourceManager, to assess when snapshot sync is completed
-        expectedAckMessages = 1; // We only expect one message, related to the snapshot sync complete
-        ackMessages = logReplicationSourceManager.getAckMessages();
-        ackMessages.addObserver(this);
-
-        // Acquire semaphore for the first time
-        blockUntilExpectedValueReached.acquire();
+        // We only expect one message, related to the snapshot sync complete
+        expectedAckMessages = 1;
+        SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
+                WAIT.ON_ACK, false);
 
         // Start Snapshot Sync
         System.out.println("****** Start Snapshot Sync");
@@ -824,54 +870,71 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Start Log Entry Sync
      *
      * @param tablesToReplicate set of tables to replicate
-     * @param waitForAck a flag indicating if we should wait for an ack. If false, we should wait for an error
-     * @param ifDropMsg a flag indicating if messages should be dropped at the sender
+     * @param waitCondition an enum indicating if we should wait for an ack. If false, we should wait for an error
+     * @param dropMessages a flag indicating if messages should be dropped at the sender
      * @throws Exception
      */
-    private void startLogEntrySync(Set<String> tablesToReplicate, boolean waitForAck, boolean ifDropMsg) throws Exception {
-        // Start Snapshot Sync (through Source Manager)
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
+    private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, WAIT waitCondition, boolean dropMessages) throws Exception {
 
-        DefaultDataControl sourceDataControl = new DefaultDataControl(true);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, ifDropMsg);
-        SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
+        SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
+                waitCondition, dropMessages);
 
-        // Set Log Replication Source Manager so we can emulate the channel for data & control messages
-        sourceDataSender.setSourceManager(logReplicationSourceManager);
-        sourceDataControl.setSourceManager(logReplicationSourceManager);
-
-        // Observe ACKs on SourceManager, to assess when snapshot sync is completed
-        if (waitForAck) {
-            ackMessages = logReplicationSourceManager.getAckMessages();
-            ackMessages.addObserver(this);
-        } else {
-            errorsLogEntrySync = sourceDataSender.getErrors();
-            errorsLogEntrySync.addObserver(this);
-        }
-
-        // Acquire semaphore for the first time
-        blockUntilExpectedValueReached.acquire();
-
-        // Start Snapshot Sync
+        // Start Log Entry Sync
         System.out.println("****** Start Log Entry Sync");
         logReplicationSourceManager.startReplication();
 
-        // Block until the snapshot sync completes == one ACK is received by the source manager or an error occurs
-        System.out.println("****** Wait until log entry sync completes and ACK is received");
+        // Block until the snapshot sync completes == one ACK is received by the source manager, or an error occurs
+        System.out.println("****** Wait until the wait condition is met");
         blockUntilExpectedValueReached.acquire();
 
-        if(!waitForAck) {
-            // If wait on error to occur, check that log replication has been shutdown/stopped.
-            while (logReplicationSourceManager.getLogReplicationFSM().getState().getType()
-                    != LogReplicationStateType.STOPPED) {
-                // Wait until state changes
-            }
-            assertThat(logReplicationSourceManager.getLogReplicationFSM().getState().getType()).isEqualTo(LogReplicationStateType.STOPPED);
-        }
+        return logReplicationSourceManager.getLogReplicationFSM();
     }
 
+    private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
+                                                              WAIT waitCondition,
+                                                              boolean dropMessages) throws InterruptedException {
+        // Config
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
+
+        // Data Control and Data Sender
+        DefaultDataControl sourceDataControl = new DefaultDataControl(true);
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, dropMessages);
+
+        // Source Manager
+        SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
+
+        // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
+        // for testing)
+        sourceDataSender.setSourceManager(logReplicationSourceManager);
+        sourceDataControl.setSourceManager(logReplicationSourceManager);
+
+        // Add this class as observer of the value of interest for the wait condition
+        switch(waitCondition) {
+            case ON_ACK:
+                ackMessages = logReplicationSourceManager.getAckMessages();
+                ackMessages.addObserver(this);
+                // Acquire semaphore for the first time, so next time it blocks until the observed
+                // value reaches the expected value.
+                blockUntilExpectedValueReached.acquire();
+                break;
+            case ON_ERROR:
+                errorsLogEntrySync = sourceDataSender.getErrors();
+                errorsLogEntrySync.addObserver(this);
+                // Acquire semaphore for the first time, so next time it blocks until the observed
+                // value reaches the expected value.
+                blockUntilExpectedValueReached.acquire();
+                break;
+            default:
+                // Nothing
+                break;
+        }
+
+        return logReplicationSourceManager;
+    }
+
+
     private void startLogEntrySync(Set<String> tablesToReplicate) throws Exception {
-        startLogEntrySync(tablesToReplicate, true, false);
+        startLogEntrySync(tablesToReplicate, WAIT.ON_ACK, false);
     }
 
     /**
@@ -908,5 +971,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         if (expectedAckMessages == value) {
             blockUntilExpectedValueReached.release();
         }
+    }
+
+    public enum WAIT {
+        ON_ACK,
+        ON_ERROR,
+        NONE
     }
 }
