@@ -174,7 +174,7 @@ public class LogEntrySender {
             }
         } catch (LogEntrySyncTimeoutException te) {
             log.error("LogEntrySyncTimeoutException after several retries.", te);
-            cancelLogEntrySync(LogReplicationError.LOG_ENTRY_ACK_TIMEOUT, LogReplicationEventType.SYNC_CANCEL);
+            cancelLogEntrySync(LogReplicationError.LOG_ENTRY_ACK_TIMEOUT, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
             return;
         }
 
@@ -204,17 +204,17 @@ public class LogEntrySender {
 
             } catch (TrimmedException te) {
                 log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
-                cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC, LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL);
+                cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC, LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             } catch (IllegalTransactionStreamsException se) {
                 // Unrecoverable error, noisy streams found in transaction stream (streams of interest and others not
                 // intended for replication). Shutdown.
                 log.error("IllegalTransactionStreamsException, log replication will be TERMINATED.", se);
-                cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN);
+                cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
                 return;
             } catch (Exception e) {
                 log.error("Caught exception at LogEntrySender", e);
-                cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL);
+                cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                 return;
             }
         }
@@ -223,9 +223,9 @@ public class LogEntrySender {
                 new LogReplicationEventMetadata(logEntrySyncEventId)));
     }
 
-    private void cancelLogEntrySync(LogReplicationError error, LogReplicationEventType transition) {
+    private void cancelLogEntrySync(LogReplicationError error, LogReplicationEventType transition, UUID logEntrySyncEventId) {
         dataSender.onError(error);
-        logReplicationFSM.input(new LogReplicationEvent(transition));
+        logReplicationFSM.input(new LogReplicationEvent(transition, new LogReplicationEventMetadata(logEntrySyncEventId)));
 
     }
 
