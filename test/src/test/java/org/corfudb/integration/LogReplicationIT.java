@@ -281,7 +281,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
-            SnapshotReadMessage snapshotReadMessage = reader.read();
+            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             msgQ.addAll(snapshotReadMessage.getMessages());
             if (snapshotReadMessage.isEndRead()) {
                 break;
@@ -1008,7 +1008,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedACKs(int value) {
         // If expected value, release semaphore / unblock the wait
-        System.out.println("expected val " + expectedAckMessages + " val " + value);
         if (expectedAckMessages == value) {
             blockUntilExpectedValueReached.release();
         }

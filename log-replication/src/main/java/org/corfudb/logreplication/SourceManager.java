@@ -199,11 +199,11 @@ public class SourceManager implements DataReceiver {
         if(message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
             log.debug("Log entry sync ACK received on timestamp {}", message.getMetadata().getTimestamp());
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-                new LogReplicationEventMetadata(message.getMetadata().getTimestamp())));
+                new LogReplicationEventMetadata(message.getMetadata().getSyncRequestId(), message.getMetadata().getTimestamp())));
         } else if (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
             log.debug("Snapshot sync ACK received on base timestamp {}", message.getMetadata().getSnapshotTimestamp());
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
-                    new LogReplicationEventMetadata(message.getMetadata().getSnapshotRequestId(), message.getMetadata().getTimestamp())));
+                    new LogReplicationEventMetadata(message.getMetadata().getSyncRequestId(), message.getMetadata().getTimestamp())));
         } else {
             log.debug("Received data message of type {} not an ACK", message.getMetadata().getMessageMetadataType());
         }
