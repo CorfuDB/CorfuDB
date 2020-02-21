@@ -98,7 +98,7 @@ public class SourceForwardingDataSender implements DataSender {
         LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(message.getData());
 
         if (ifDropMsg && logReplicationEntry.metadata.timestamp == firstDrop) {
-            System.out.println("******drop log entry " + logReplicationEntry.metadata.timestamp);
+            System.out.println("****** Drop log entry " + logReplicationEntry.metadata.timestamp);
             firstDrop += DROP_INCREMENT;
             return true;
         }
