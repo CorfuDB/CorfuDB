@@ -622,6 +622,31 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyData(dstCorfuTables, srcDataForVerification);
     }
 
+
+    @Test
+    public void testLogEntrySyncValidCrossTablesWithTriggerTimeout() throws Exception {
+        // Write data in transaction to t0 and t1
+        Set<String> crossTables = new HashSet<>();
+        crossTables.add(t0);
+        crossTables.add(t1);
+
+        testSnapshotSyncCrossTables(crossTables, true);
+
+        // Start Log Entry Sync
+        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
+        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR, new TestConfig(2, false));
+
+        checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
+
+        // Verify Data on Destination site
+        System.out.println("****** Verify Data on Destination");
+        // Because t2 is not specified as a replicated table, we should not see it on the destination
+        //srcDataForVerification.get(t2).clear();
+
+        // Verify Destination
+        //verifyData(dstCorfuTables, srcDataForVerification);
+    }
+
     /**
      * Test Log Entry Sync, when transactions are performed across invalid tables
      * (i.e., NOT all tables in the transaction are set to be replicated).
