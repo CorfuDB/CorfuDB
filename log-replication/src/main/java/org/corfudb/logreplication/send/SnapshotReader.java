@@ -3,6 +3,8 @@ package org.corfudb.logreplication.send;
 
 import lombok.NonNull;
 
+import java.util.UUID;
+
 /**
  * An Interface for snapshot reader.
  *
@@ -13,10 +15,12 @@ public interface SnapshotReader {
     /**
      * Read streams to replicate across sites.
      *
+     * @param snapshotRequestId Snapshot Sync request Id
+     *
      * @return result of read operation. If the read result is NULL, the snapshot sync will be terminated.
      */
     @NonNull
-    SnapshotReadMessage read();
+    SnapshotReadMessage read(UUID snapshotRequestId);
 
     /**
      * Reset reader in between snapshot syncs.
