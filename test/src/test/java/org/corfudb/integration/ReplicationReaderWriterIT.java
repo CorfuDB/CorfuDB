@@ -37,7 +37,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
-public class StreamsReplicationIT extends AbstractIT {
+public class ReplicationReaderWriterIT extends AbstractIT {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;

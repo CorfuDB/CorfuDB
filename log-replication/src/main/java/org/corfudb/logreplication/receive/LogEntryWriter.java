@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.logreplication.message.LogReplicationEntry;
@@ -18,12 +19,17 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.io.File;
+import java.io.FileReader;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEUE_SIZE;
 
 @NotThreadSafe
 @Slf4j
@@ -31,7 +37,8 @@ import java.util.UUID;
  * Process TxMessage that contains transaction logs for registered streams.
  */
 public class LogEntryWriter {
-    public static final int MAX_MSG_QUE_SIZE = LogEntrySender.READ_BATCH_SIZE; //The max size of the msgQ.
+    @Setter
+    private int maxMsgQueSize = DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
 
     private Set<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the streamview.
@@ -58,6 +65,7 @@ public class LogEntryWriter {
             streamViewMap.put(uuid, rt.getStreamsView().getUnsafe(uuid));
         }
     }
+
 
     /**
      * Verify the metadata is the correct data type.
@@ -171,7 +179,7 @@ public class LogEntryWriter {
         }
 
         //If the entry's ts is larger than the entry processed, put it to the queue
-        if (msgQ.size() < MAX_MSG_QUE_SIZE) {
+        if (msgQ.size() < maxMsgQueSize) {
             msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
             log.info("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
