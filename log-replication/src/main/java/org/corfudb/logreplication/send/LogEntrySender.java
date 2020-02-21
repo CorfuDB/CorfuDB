@@ -182,7 +182,7 @@ public class LogEntrySender {
             LogReplicationEntry message;
             // Read and Send Log Entries
             try {
-                message = logEntryReader.read();
+                message = logEntryReader.read(logEntrySyncEventId);
                 // readProcessor.process(message);
 
                 if (message != null) {

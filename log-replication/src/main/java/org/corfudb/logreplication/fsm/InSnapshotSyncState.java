@@ -171,7 +171,6 @@ public class InSnapshotSyncState implements LogReplicationState {
     @Override
     public UUID getTransitionEventId() { return transitionEventId; }
 
-
     /**
      * Force interruption of the ongoing snapshot sync task.
      *
