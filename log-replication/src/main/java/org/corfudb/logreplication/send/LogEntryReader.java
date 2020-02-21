@@ -2,6 +2,8 @@ package org.corfudb.logreplication.send;
 
 import org.corfudb.logreplication.message.LogReplicationEntry;
 
+import java.util.UUID;
+
 /**
  * An Interface for Log Entry Reader
  *
@@ -9,7 +11,14 @@ import org.corfudb.logreplication.message.LogReplicationEntry;
  */
 public interface LogEntryReader {
 
-    LogReplicationEntry read();
+    /**
+     * Read a Log Entry.
+     *
+     * @param logEntryRequestId unique identifier of log entry sync request.
+     *
+     * @return a log replication entry.
+     */
+    LogReplicationEntry read(UUID logEntryRequestId);
 
     void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
 }

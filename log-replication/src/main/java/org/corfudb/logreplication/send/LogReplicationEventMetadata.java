@@ -10,9 +10,9 @@ public class LogReplicationEventMetadata {
     private static final UUID NIL_UUID = new UUID(0,0);
 
     /*
-     * Represents the request Id that preceded this event.
+     * Represents the request/event Id that preceded this event.
      *
-     * This is used to correlate the new event with the state in which it was originated.
+     * This is used to correlate the event with the state in which it was originated.
      * For example, a trimmed exception from state A vs. a trimmed exception from state B.
      */
     private UUID requestId;
@@ -40,15 +40,6 @@ public class LogReplicationEventMetadata {
      */
     public LogReplicationEventMetadata(UUID requestId) {
         this.requestId = requestId;
-    }
-
-    /**
-     * Constructor
-     *
-     * @param syncTimestamp last synced timestamp.
-     */
-    public LogReplicationEventMetadata(long syncTimestamp) {
-        this.syncTimestamp = syncTimestamp;
     }
 
     /**

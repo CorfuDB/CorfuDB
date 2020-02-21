@@ -19,9 +19,9 @@ public class LogReplicationEntry {
         this.metadata = metadata;
     }
 
-    public LogReplicationEntry(MessageType type, long entryTS, long preTS, long snapshot, long sequence,
+    public LogReplicationEntry(MessageType type, UUID syncRequestId, long entryTS, long preTS, long snapshot, long sequence,
                                byte[] payload) {
-        this.metadata = new LogReplicationEntryMetadata(type, entryTS, preTS, snapshot, sequence);
+        this.metadata = new LogReplicationEntryMetadata(type, syncRequestId, entryTS, preTS, snapshot, sequence);
         this.payload = payload;
     }
 
@@ -31,8 +31,8 @@ public class LogReplicationEntry {
         // Metadata
         buf.writeInt(metadata.getMessageMetadataType().getVal());
         buf.writeLong(metadata.getPreviousTimestamp());
-        buf.writeLong(metadata.getSnapshotRequestId().getMostSignificantBits());
-        buf.writeLong(metadata.getSnapshotRequestId().getLeastSignificantBits());
+        buf.writeLong(metadata.getSyncRequestId().getMostSignificantBits());
+        buf.writeLong(metadata.getSyncRequestId().getLeastSignificantBits());
         buf.writeLong(metadata.getSnapshotSyncSeqNum());
         buf.writeLong(metadata.getSnapshotTimestamp());
         buf.writeLong(metadata.getTimestamp());
@@ -52,7 +52,7 @@ public class LogReplicationEntry {
         metadata.setMessageMetadataType(MessageType.fromValue(byteBuf.readInt()));
         metadata.setPreviousTimestamp(byteBuf.readLong());
         UUID uuid = new UUID(byteBuf.readLong(), byteBuf.readLong());
-        metadata.setSnapshotRequestId(uuid);
+        metadata.setSyncRequestId(uuid);
         metadata.setSnapshotSyncSeqNum(byteBuf.readLong());
         metadata.setSnapshotTimestamp(byteBuf.readLong());
         metadata.setTimestamp(byteBuf.readLong());

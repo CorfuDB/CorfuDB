@@ -26,9 +26,9 @@ public class LogReplicationEntryMetadata {
     private long previousTimestamp;
 
     /*
-     * Used to correlate completed snapshot sync to the actual request
+     * Used to correlate snapshot and log entry sync ACKs to the actual state
      */
-    private UUID snapshotRequestId;
+    private UUID syncRequestId;
 
     /*
      * Used to keep track of the time used for snapshots.
@@ -39,8 +39,8 @@ public class LogReplicationEntryMetadata {
     private long snapshotSyncSeqNum; //used by snapshot fullsync stream only, zero means the start of the stream.
 
 
-    public LogReplicationEntryMetadata(MessageType type, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
-        this(type, entryTimeStamp, snapshotTimestamp);
+    public LogReplicationEntryMetadata(MessageType type, UUID syncRequestId, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
+        this(type, syncRequestId, entryTimeStamp, snapshotTimestamp);
         this.previousTimestamp = previousEntryTimestamp;
         this.snapshotSyncSeqNum = sequence;
     }
@@ -48,17 +48,17 @@ public class LogReplicationEntryMetadata {
     public LogReplicationEntryMetadata() { }
 
     // Constructor for log entry ACK
-    public LogReplicationEntryMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp) {
+    public LogReplicationEntryMetadata(MessageType type, UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp) {
         this.messageMetadataType = type;
+        this.syncRequestId = syncRequestId;
         this.timestamp = entryTimeStamp;
         this.snapshotTimestamp = snapshotTimestamp;
-        this.snapshotRequestId = new UUID(0,0);
     }
 
     // Constructor used for snapshot sync
-    public LogReplicationEntryMetadata(MessageType type, long entryTimeStamp, long snapshotTimestamp, UUID snapshotRequestId) {
-        this(type, entryTimeStamp, Address.NON_EXIST, snapshotTimestamp, Address.NON_EXIST);
-        this.snapshotRequestId = snapshotRequestId;
+    public LogReplicationEntryMetadata(MessageType type, UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp, UUID snapshotRequestId) {
+        this(type, syncRequestId,  entryTimeStamp, Address.NON_EXIST, snapshotTimestamp, Address.NON_EXIST);
+        this.syncRequestId = snapshotRequestId;
     }
 }
 

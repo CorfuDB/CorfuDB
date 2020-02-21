@@ -87,7 +87,7 @@ public class SnapshotSender {
             while (messagesSent < SNAPSHOT_BATCH_SIZE && !completed && !stopSnapshotSync) {
 
                 try {
-                    snapshotReadMessage = snapshotReader.read();
+                    snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
                     completed = snapshotReadMessage.isEndRead();
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
@@ -170,7 +170,7 @@ public class SnapshotSender {
      */
     private DataMessage getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START,
-                Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
+                snapshotSyncEventId, Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
         return new DataMessage(emptyEntry.serialize());
     }

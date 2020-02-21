@@ -121,6 +121,7 @@ public class SinkManager implements DataReceiver {
 
         // Prepare and Send Snapshot Sync ACK
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_REPLICATED,
+                snapshotRequestId,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 snapshotRequestId);
@@ -183,7 +184,8 @@ public class SinkManager implements DataReceiver {
             // TODO: this will be changed to be sent every T seconds instead on every apply
             // Prepare ACK message for Log Entry Sync
             if (shouldAck()) {
-                LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED, ackTs,
+                LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED,
+                        message.getMetadata().getSyncRequestId(), ackTs,
                         message.getMetadata().getSnapshotTimestamp());
                 dataSender.send(DataMessage.generateAck(metadata));
             }
@@ -208,7 +210,7 @@ public class SinkManager implements DataReceiver {
         snapshotWriter.reset(entry.getMetadata().getSnapshotTimestamp());
 
         // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
-        snapshotRequestId = entry.getMetadata().getSnapshotRequestId();
+        snapshotRequestId = entry.getMetadata().getSyncRequestId();
     }
 
     private boolean receivedValidMessage(LogReplicationEntry message) {

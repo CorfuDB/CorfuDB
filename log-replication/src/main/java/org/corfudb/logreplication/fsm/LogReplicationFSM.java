@@ -26,15 +26,15 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * This class implements the Log Replication Finite State Machine.
  *
- * CorfuDB provides a Log Replication functionality for standby sites. This enables logs to
- * be automatically replicated from the primary site to a remote site. So in the case of failure or data corruption,
- * the system can failover to the standby data-store.
+ * CorfuDB provides a Log Replication functionality. This enables logs to
+ * be automatically replicated from the primary site to a remote site.
+ * So in the case of failure or data corruption, the system can failover to the standby/secondary data-store.
  *
- * This functionality is driven by the application and initiated through the Source
- * on the source (primary) site and handled through the Sync on the destination (standby) site.
+ * This functionality is driven by the application and initiated through the SourceManager
+ * on the primary site and handled through the SinkManager on the destination site.
  *
- * Log Replication on the send side is defined by an event-driven finite state machine, with 5 states
- * and 7 events/messages---which can trigger the transition between states.
+ * Log Replication on the source site is defined by an event-driven finite state machine, with 5 states
+ * and 8 events/messages---which can trigger the transition between states.
  *
  * States:
  * ------
@@ -50,8 +50,11 @@ import java.util.concurrent.LinkedBlockingQueue;
  *  - replication_stop
  *  - snapshot_sync_request
  *  - snapshot_sync_complete
+ *  - snapshot_sync_continue
  *  - sync_cancel
+ *  - log_entry_sync_replicated
  *  - replication_shutdown
+ *
  *
  *
  *                                       replication_stop
@@ -83,6 +86,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * +---------+    shutdown    +------------+
  * | STOPPED +<---------------+ ALL_STATES |
  * +---------+                +------------+
+ *
+ *
  */
 @Slf4j
 public class LogReplicationFSM {
@@ -239,15 +244,15 @@ public class LogReplicationFSM {
             log.info("consume event {}", event);
 
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
-                // TODO (Anny): Verify it's for the same request, as that request could've been canceled and was received later
-                if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
+                if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
+                        state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                     persistedReaderMetadata.setLastAckedTimestamp(event.getMetadata().getSyncTimestamp());
                 }
             } else {
                 if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE) {
                     // Verify it's for the same request, as that request could've been canceled and was received later
-                    if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC && state.getTransitionEventId()
-                            == event.getMetadata().getRequestId()) {
+                    if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
+                            state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                         // Retrieve the base snapshot timestamp associated to this snapshot sync request from the send
                         persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(event.getMetadata().getSyncTimestamp());
                     }

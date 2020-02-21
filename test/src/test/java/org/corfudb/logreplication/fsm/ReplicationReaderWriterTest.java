@@ -1,6 +1,5 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.receive.LogEntryWriter;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
@@ -19,8 +18,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.corfudb.integration.ReplicationReaderWriterIT.generateTransactions;
 import static org.corfudb.integration.ReplicationReaderWriterIT.openStreams;
@@ -33,8 +30,6 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
     static private final int NUM_TRANS = 2;
-
-    public static  ExecutorService executorService = Executors.newFixedThreadPool(1);
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -92,7 +87,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
-            SnapshotReadMessage snapshotReadMessage = reader.read();
+            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             msgQ.addAll(snapshotReadMessage.getMessages());
             if (snapshotReadMessage.isEndRead()) {
                 break;

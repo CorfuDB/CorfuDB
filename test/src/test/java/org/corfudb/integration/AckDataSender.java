@@ -41,7 +41,7 @@ public class AckDataSender implements DataSender {
 
         if (completed) {
             assertThat(message.getMetadata().getMessageMetadataType()).isEqualTo(MessageType.SNAPSHOT_REPLICATED);
-//            assertThat(message.getMetadata().getSnapshotRequestId()).isEqualTo(snapshotSyncRequestId);
+//            assertThat(message.getMetadata().getSyncRequestId()).isEqualTo(snapshotSyncRequestId);
 //            assertThat(message.getMetadata().getSnapshotTimestamp()).isEqualTo(baseSnapshotTimestamp);
 
             // Emulate it was sent over the wire and arrived on the source side

@@ -90,7 +90,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param entries
      * @return
      */
-    LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries) {
+    LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries, UUID snapshotRequestId) {
         currentMsgTs = stream.maxVersion;
         OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
         if (!stream.iterator.hasNext()) {
@@ -101,7 +101,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, opaqueEntry);
 
-        LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, currentMsgTs,
+        LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, snapshotRequestId, currentMsgTs,
                 preMsgTs, globalSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -138,9 +138,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    LogReplicationEntry read(OpaqueStreamIterator stream) {
+    LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
-        LogReplicationEntry txMsg = generateMessage(stream, entries);
+        LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
         log.info("Successfully pass a stream {} for globalSnapshot {}", stream.name, globalSnapshot);
         return txMsg;
     }
@@ -152,7 +152,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @return
      */
     @Override
-    public SnapshotReadMessage read() {
+    public SnapshotReadMessage read(UUID syncRequestId) {
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.
         boolean endStream;
@@ -176,7 +176,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (currentStreamInfo.iterator.hasNext()) {
-            msgs.add(read(currentStreamInfo));
+            msgs.add(read(currentStreamInfo, syncRequestId));
         }
 
         if (!currentStreamInfo.iterator.hasNext()) {
