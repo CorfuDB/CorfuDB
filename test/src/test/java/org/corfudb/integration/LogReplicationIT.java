@@ -306,7 +306,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
-            SnapshotReadMessage snapshotReadMessage = reader.read();
+            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             msgQ.addAll(snapshotReadMessage.getMessages());
             if (snapshotReadMessage.isEndRead()) {
                 break;

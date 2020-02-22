@@ -55,12 +55,13 @@ public class StreamsLogEntryReader implements LogEntryReader {
         txStream = new TxOpaqueStream(rt);
     }
 
-    LogReplicationEntry generateMessage(OpaqueEntry entry) {
+    LogReplicationEntry generateMessage(OpaqueEntry entry, UUID logEntryRequestId) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
 
         currentMsgTs = entry.getVersion();
-        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
+        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, logEntryRequestId,
+                currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         return  txMessage;
@@ -95,14 +96,14 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public LogReplicationEntry read() throws TrimmedException, IllegalTransactionStreamsException {
+    public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
         //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
         while(txStream.hasNext()) {
             OpaqueEntry opaqueEntry = txStream.next();
             if (!shouldProcess(opaqueEntry)) {
                 continue;
             }
-            LogReplicationEntry txMessage = generateMessage(opaqueEntry);
+            LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
             return txMessage;
         }
 
