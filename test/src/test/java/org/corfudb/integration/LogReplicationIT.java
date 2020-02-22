@@ -68,6 +68,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int STATE_CHANGE_CHECKS = 20;
     static private final int WAIT_STATE_CHANGE = 300;
 
+    // If testConfig set deleteOp enabled, will have one delete operation for four put operations.
+    static private final int DELETE_PACE = 4;
+    static private final int PRINT_ROUND = 10;
+    static private final int SLEEP_TIME = 500;
+
     static private TestConfig testConfig = new TestConfig();
 
     Process sourceServer;
@@ -239,7 +244,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 tablesForVerification.get(name).put(key, key);
 
                 // delete keys randomly
-                if (testConfig.deleteOP && (i % 4 == 0)) {
+                if (testConfig.deleteOP && (i % DELETE_PACE == 0)) {
                     tables.get(name).delete(key - 1);
                     tablesForVerification.get(name).remove(key - 1);
                     cntDelete++;
@@ -947,7 +952,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t1);
 
         generateTransactionsCrossTables(srcCorfuTables, crossTables, srcDataForVerification,
-                NUM_KEYS_NEW, srcDataRuntime, NUM_KEYS*4);
+                NUM_KEYS_NEW, srcDataRuntime, NUM_KEYS*WRITE_CYCLES);
     }
 
     void startTxDst() {
@@ -1006,8 +1011,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         startTx();
 
-        for (int i = 0; i < 10; i++) {
-            sleep(600);
+        for (int i = 0; i < PRINT_ROUND; i++) {
+            sleep(SLEEP_TIME);
             System.out.println("****** Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                     + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
         }
