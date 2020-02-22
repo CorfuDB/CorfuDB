@@ -41,9 +41,9 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
     static private final int START_VAL = 11;
-    static private final int NUM_KEYS = 2;
+    static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
-    static private final int NUM_TRANSACTIONS = 2;
+    static private final int NUM_TRANSACTIONS = 10;
 
     Process server1;
     Process server2;
@@ -173,6 +173,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             }
             rt.getObjectsView().TXEnd();
         }
+        System.out.println("generate transactions num " + numT);
     }
 
     public static void verifyData(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
@@ -189,7 +190,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
             for (Long key : mapKeys.keySet()) {
                 assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
-                System.out.println("tableKey " + table.get(key) + " mapKey " + mapKeys.get(key));
             }
         }
     }
@@ -433,6 +433,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         openStreams(srcTables, srcDataRuntime);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
+
+        HashMap<String, CorfuTable<Long, Long>> singleTables = new HashMap<>();
+        singleTables.putIfAbsent("test0", srcTables.get("test0"));
+        generateTransactions(singleTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
+
+
         verifyData("after writing to src", srcTables, srcHashMap);
 
         printTails("after writing to server1", srcDataRuntime, dstDataRuntime);

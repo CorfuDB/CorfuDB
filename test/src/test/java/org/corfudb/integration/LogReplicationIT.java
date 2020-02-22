@@ -37,8 +37,11 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -57,12 +60,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 10;
+    static private final int NUM_KEYS_NEW = 1000;
     static private final int NUM_STREAMS = 1;
     static private final int TOTAL_STREAM_COUNT = 3;
     static private final int WRITE_CYCLES = 4;
 
     static private final int STATE_CHANGE_CHECKS = 20;
     static private final int WAIT_STATE_CHANGE = 300;
+
+    static private TestConfig testConfig = new TestConfig();
 
     Process sourceServer;
     Process destinationServer;
@@ -220,9 +226,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * further verification into an in-memory copy 'tablesForVerification'.
      */
     private void generateTransactionsCrossTables(HashMap<String, CorfuTable<Long, Long>> tables,
-                                         Set<String> tablesCrossTxs,
-                                         HashMap<String, HashMap<Long, Long>> tablesForVerification,
-                                         int numKeys, CorfuRuntime rt, long startValue) {
+                                                 Set<String> tablesCrossTxs,
+                                                 HashMap<String, HashMap<Long, Long>> tablesForVerification,
+                                                 int numKeys, CorfuRuntime rt, long startValue) {
+        int cntDelete = 0;
         for (int i = 0; i < numKeys; i++) {
             rt.getObjectsView().TXBegin();
             for (String name : tablesCrossTxs) {
@@ -230,10 +237,23 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 long key = i + startValue;
                 tables.get(name).put(key, key);
                 tablesForVerification.get(name).put(key, key);
+
+                // delete keys randomly
+                if (testConfig.deleteOP && (i % 4 == 0)) {
+                    tables.get(name).delete(key - 1);
+                    tablesForVerification.get(name).remove(key - 1);
+                    cntDelete++;
+                }
             }
             rt.getObjectsView().TXEnd();
         }
+
+        if (cntDelete > 0) {
+            System.out.println("delete cnt " + cntDelete);
+        }
+
     }
+
 
     void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
@@ -316,9 +336,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * This test attempts to perform a snapshot sync through the Log Replication Manager.
      * We emulate the channel between source and destination by directly handling the received data
      * to the other side.
-     *
-     *
-     *
      */
     @Test
     public void testSnapshotAndLogEntrySyncThroughManager() throws Exception {
@@ -553,7 +570,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyNoData(dstCorfuTables);
 
         // We did not write data to the log
-        LogReplicationFSM fsm = startLogEntrySync(Collections.singleton(t0), WAIT.NONE, new TestConfig());
+        testConfig.clear();
+        LogReplicationFSM fsm = startLogEntrySync(Collections.singleton(t0), WAIT.NONE);
 
         // Wait until Log Entry Starts
         checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
@@ -564,7 +582,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         while (retries < STATE_CHANGE_CHECKS) {
             checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, false);
             retries++;
-            Thread.sleep(WAIT_STATE_CHANGE);
+            sleep(WAIT_STATE_CHANGE);
         }
 
         // Verify No Data On Destination
@@ -589,6 +607,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
+        testConfig.clear();
         startLogEntrySync(crossTables);
 
         // Verify Data on Destination site
@@ -612,7 +631,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-        startLogEntrySync(crossTables, WAIT.ON_ACK, new TestConfig(1, false));
+
+        testConfig.clear().setDropMessageLevel(1);
+        startLogEntrySync(crossTables, WAIT.ON_ACK);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -635,7 +656,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR, new TestConfig(2, false));
+
+        testConfig.clear().setDropMessageLevel(2);
+        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR);
 
         checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
 
@@ -674,7 +697,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
-        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR, new TestConfig());
+        testConfig.clear();
+        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR);
 
         checkStateChange(fsm, LogReplicationStateType.STOPPED, true);
 
@@ -717,7 +741,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
-        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR, new TestConfig());
+        testConfig.clear();
+        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR);
 
         checkStateChange(fsm, LogReplicationStateType.STOPPED, true);
 
@@ -737,6 +762,37 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuTables, partialSrcHashMap);
+    }
+
+    /**
+     * While replication log entries from src to dst, still continue to pump data at the src with transactions
+     * The transactions will include both put and delete entries.
+     * @throws Exception
+     */
+    @Test
+    public void testLogEntrySyncValidCrossTablesWithWritingAtSrc() throws Exception {
+        // Write data in transaction to t0 and t1
+        Set<String> crossTables = new HashSet<>();
+        crossTables.add(t0);
+        crossTables.add(t1);
+
+        testSnapshotSyncCrossTables(crossTables, true);
+
+        // Start Log Entry Sync
+        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
+
+        testConfig.clear();
+        testConfig.setWritingSrc(true);
+        testConfig.setDeleteOP(true);
+        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ACK);
+
+        // Verify Data on Destination site
+        System.out.println("****** Verify Data on Destination");
+        // Because t2 is not specified as a replicated table, we should not see it on the destination
+        srcDataForVerification.get(t2).clear();
+
+        // Verify Destination
+        verifyData(dstCorfuTables, srcDataForVerification);
     }
 
     /**
@@ -886,13 +942,40 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyNoData(dstCorfuTables);
     }
 
+    void startTxAtSrc() {
+        Set<String> crossTables = new HashSet<>();
+        crossTables.add(t0);
+        crossTables.add(t1);
+
+        generateTransactionsCrossTables(srcCorfuTables, crossTables, srcDataForVerification,
+                NUM_KEYS_NEW, srcDataRuntime, NUM_KEYS*4);
+    }
+
+    void startTxDst() {
+
+    }
+
+    /**
+     * It will start to continue pump data to src or dst according to the config.
+     */
+    void startTx() {
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
+        if (testConfig.writingSrc) {
+            expectedAckMessages += NUM_KEYS_NEW;
+            scheduledExecutorService.submit(this::startTxAtSrc);
+        }
+        if (testConfig.writingDst) {
+            scheduledExecutorService.submit(this::startTxDst);
+        }
+    }
+
     private SourceManager startSnapshotSync(Set<String> tablesToReplicate) throws Exception {
 
         // Observe ACKs on SourceManager, to assess when snapshot sync is completed
         // We only expect one message, related to the snapshot sync complete
         expectedAckMessages = 1;
         SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
-                WAIT.ON_ACK, new TestConfig());
+                WAIT.ON_ACK);
 
         // Start Snapshot Sync
         System.out.println("****** Start Snapshot Sync");
@@ -910,38 +993,47 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      *
      * @param tablesToReplicate set of tables to replicate
      * @param waitCondition an enum indicating if we should wait for an ack. If false, we should wait for an error
-     * @param dropMessages a flag indicating if messages should be dropped at the sender
      * @throws Exception
      */
-    private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, WAIT waitCondition, TestConfig dropMessages) throws Exception {
+    private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, WAIT waitCondition) throws Exception {
 
         SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
-                waitCondition, dropMessages);
+                waitCondition);
 
         // Start Log Entry Sync
-        System.out.println("****** Start Log Entry Sync");
+        System.out.println("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
+                + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
         logReplicationSourceManager.startReplication();
+
+        startTx();
+
+        for (int i = 0; i < 10; i++) {
+            sleep(600);
+            System.out.println("****** Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
+                    + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
+        }
 
         // Block until the snapshot sync completes == one ACK is received by the source manager, or an error occurs
         System.out.println("****** Wait until the wait condition is met");
         blockUntilExpectedValueReached.acquire();
+        System.out.println("****** Log Entry Sync Complete with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
+         + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
 
         return logReplicationSourceManager.getLogReplicationFSM();
     }
 
     private void startLogEntrySync(Set<String> tablesToReplicate) throws Exception {
-        startLogEntrySync(tablesToReplicate, WAIT.ON_ACK, new TestConfig());
+        startLogEntrySync(tablesToReplicate, WAIT.ON_ACK);
     }
 
     private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
-                                                              WAIT waitCondition,
-                                                              TestConfig dropMessages) throws InterruptedException {
+                                                              WAIT waitCondition) throws InterruptedException {
         // Config
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
 
         // Data Control and Data Sender
         DefaultDataControl sourceDataControl = new DefaultDataControl(true);
-        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, dropMessages.getDropMessageLevel());
+        SourceForwardingDataSender sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
 
         // Source Manager
         SourceManager logReplicationSourceManager = new SourceManager(srcTestRuntime, sourceDataSender, sourceDataControl, config);
@@ -1024,11 +1116,19 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     public static class TestConfig {
         int dropMessageLevel = 0;
         boolean trim = false;
+        boolean writingSrc = false;
+        boolean writingDst = false;
+        boolean deleteOP = false;
 
         public TestConfig() {}
-        public TestConfig(int level, boolean trim) {
-            this.dropMessageLevel = level;
-            this.trim = trim;
+
+        public TestConfig clear() {
+            dropMessageLevel = 0;
+            trim = false;
+            writingSrc = false;
+            writingDst = false;
+            deleteOP = false;
+            return this;
         }
     }
 }
