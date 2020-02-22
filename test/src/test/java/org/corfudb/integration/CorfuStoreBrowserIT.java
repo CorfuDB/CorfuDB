@@ -4,6 +4,7 @@ import com.google.protobuf.UnknownFieldSet;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Paths;
 
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
@@ -18,7 +19,6 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
-
 
 public class CorfuStoreBrowserIT extends AbstractIT {
 
@@ -257,5 +257,68 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         // Invoke listTables and verify table count
         Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
+    }
+
+    /**
+     * Create a table and add data to it.  Verify that the browser tool is able
+     * to read disk based tables in disk based mode.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void browserDiskBasedTableTest() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().persistentDataPath(Paths.get(PARAMETERS.TEST_TEMP_DIR)).build());
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+        TxBuilder tx = store.tx(namespace);
+        tx.create(tableName, uuidKey, uuidVal, metadata)
+                .update(tableName, uuidKey, uuidVal, metadata)
+                .commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        final CorfuStoreBrowser badBrowser = new CorfuStoreBrowser(runtime);
+        String tempDir = com.google.common.io.Files.createTempDir()
+                .getAbsolutePath();
+        final CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime, tempDir);
+        // Verify table count
+        Assert.assertEquals(1, browser.printTable(namespace, tableName));
     }
 }

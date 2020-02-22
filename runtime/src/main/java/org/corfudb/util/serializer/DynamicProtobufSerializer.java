@@ -18,12 +18,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
 
 import java.io.IOException;
@@ -89,17 +91,17 @@ public class DynamicProtobufSerializer implements ISerializer {
         Serializers.registerSerializer(protobufSerializer);
 
         // Open the Registry Table.
-        CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>> corfuTable = corfuRuntime.getObjectsView()
+        CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> corfuTable = corfuRuntime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>>>() {
+                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
                 })
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
                 .setSerializer(protobufSerializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         // Cache the FileDescriptorProtos from the registry table.
         corfuTable.forEach((tableName, value) -> {
-
             TableDescriptors tableDescriptors = value.getPayload();
             tableDescriptors.getFileDescriptorsMap().forEach((fdName, fileDescriptorProto) -> {
                 String protoFileName = fileDescriptorProto.getName();
@@ -125,9 +127,11 @@ public class DynamicProtobufSerializer implements ISerializer {
     private ISerializer createProtobufSerializer() {
         Map<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
 
-        // Register the schemas of TableName and TableDescriptors to be able to understand registry table.
+        // Register the schemas of TableName, TableDescriptors & TableMetadata
+        // to be able to understand registry table.
         classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
         classMap.put(getTypeUrl(TableDescriptors.getDescriptor()), TableDescriptors.class);
+        classMap.put(getTypeUrl(TableMetadata.getDescriptor()), TableMetadata.class);
         return new ProtobufSerializer(classMap);
     }
 
