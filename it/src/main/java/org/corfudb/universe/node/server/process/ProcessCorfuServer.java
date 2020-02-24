@@ -5,6 +5,7 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
@@ -12,9 +13,12 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.util.IpAddress;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -34,15 +38,18 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     @NonNull
     private final CorfuProcessManager processManager;
 
+    @NonNull
+    private final CorfuServerPath serverPath;
+
     private final ExecutionHelper commandHelper = ExecutionHelper.getInstance();
 
     @Builder
     public ProcessCorfuServer(
-            @NonNull CorfuServerParams params, @NonNull UniverseParams universeParams) {
-        super(params, universeParams);
+            @NonNull CorfuServerParams params, @NonNull UniverseParams universeParams, LoggingParams loggingParams) {
+        super(params, universeParams, loggingParams);
 
-        Path corfuDir = Paths.get(System.getProperty("user.home"), "corfu");
-        this.processManager = new CorfuProcessManager(corfuDir, params);
+        this.serverPath = new CorfuServerPath(params);
+        this.processManager = new CorfuProcessManager(serverPath, params);
     }
 
     /**
@@ -57,7 +64,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
 
         commandHelper.copyFile(
                 params.getInfrastructureJar(),
-                processManager.getServerJar()
+                serverPath.getServerJar()
         );
         start();
         return this;
@@ -99,7 +106,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     @Override
     public void start() {
         executeCommand(
-                Optional.of(processManager.getCorfuDir()),
+                Optional.of(serverPath.getCorfuDir()),
                 processManager.startCommand(getCommandLineParams())
         );
     }
@@ -196,6 +203,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         log.info("Destroy node: {}", params.getName());
         kill();
         try {
+            collectLogs();
             removeAppDir();
         } catch (Exception e) {
             throw new NodeException("Can't clean corfu directories", e);
@@ -214,5 +222,37 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
     @Override
     public IpAddress getNetworkInterface() {
         return ipAddress;
+    }
+
+    @Override
+    public void collectLogs() {
+        if (!loggingParams.isEnabled()) {
+            log.debug("Logging is disabled");
+            return;
+        }
+
+        log.info("Download corfu server logs: {}", params.getName());
+
+        Path corfuLogDir = params
+                .getUniverseDirectory()
+                .resolve("logs")
+                .resolve(loggingParams.getRelativeServerLogDir());
+
+        File logDirFile = corfuLogDir.toFile();
+        if (!logDirFile.exists() && logDirFile.mkdirs()) {
+            log.info("Created new corfu log directory at {}.", corfuLogDir);
+        }
+
+        try {
+            String serverLog = executeCommand(Optional.empty(), "cat " + serverPath.getCorfuLogFile());
+
+            Files.write(
+                    corfuLogDir.resolve(params.getName() + ".log"),
+                    serverLog.getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+            );
+        } catch (Exception e) {
+            log.error("Can't download logs for corfu server: " + params.getName());
+        }
     }
 }

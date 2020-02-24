@@ -70,9 +70,14 @@ public class CorfuServerParams implements NodeParams {
     @NonNull
     private final String serverVersion;
 
+    /**
+     * The directory where the universe framework keeps files needed for the framework functionality.
+     * By default the directory is equal to the build directory of a build tool
+     * ('target' directory in case of maven, 'build' directory in case of gradle)
+     */
     @NonNull
     @Default
-    private final Path serverJarDirectory = Paths.get("target");
+    private final Path universeDirectory = Paths.get("target");
 
     @NonNull
     @Default
@@ -86,8 +91,8 @@ public class CorfuServerParams implements NodeParams {
         return clusterName + "-corfu-node" + getPort();
     }
 
-    public String getStreamLogDir() {
-        return getName() + "/" + streamLogDir;
+    public Path getStreamLogDir() {
+        return Paths.get(getName(), streamLogDir);
     }
 
     @Override
@@ -100,7 +105,7 @@ public class CorfuServerParams implements NodeParams {
     }
 
     public Path getInfrastructureJar() {
-        return serverJarDirectory.resolve(
+        return universeDirectory.resolve(
                 String.format("infrastructure-%s-shaded.jar", serverVersion)
         );
     }

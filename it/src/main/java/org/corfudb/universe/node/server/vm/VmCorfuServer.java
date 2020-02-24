@@ -5,18 +5,23 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.process.CorfuProcessManager;
+import org.corfudb.universe.node.server.process.CorfuServerPath;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
 
@@ -43,18 +48,20 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @NonNull
     private final CorfuProcessManager processManager;
 
+    @NonNull
+    private final CorfuServerPath serverPath;
+
     @Builder
     public VmCorfuServer(
             VmCorfuServerParams params, VmManager vmManager, VmUniverseParams universeParams,
-            VmStress stress, RemoteOperationHelper remoteOperationHelper) {
-        super(params, universeParams);
+            VmStress stress, RemoteOperationHelper remoteOperationHelper, LoggingParams loggingParams) {
+        super(params, universeParams, loggingParams);
         this.vmManager = vmManager;
         this.ipAddress = getIpAddress();
         this.stress = stress;
         this.remoteOperationHelper = remoteOperationHelper;
-
-        Path corfuDir = Paths.get("~");
-        this.processManager = new CorfuProcessManager(corfuDir, params);
+        this.serverPath = new CorfuServerPath(params);
+        this.processManager = new CorfuProcessManager(serverPath, params);
     }
 
     /**
@@ -71,7 +78,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
 
         remoteOperationHelper.copyFile(
                 params.getInfrastructureJar(),
-                processManager.getServerJar()
+                serverPath.getServerJar()
         );
 
         start();
@@ -253,6 +260,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         kill();
         try {
             executeSudoCommand(IpTablesUtil.cleanAll());
+            collectLogs();
             removeAppDir();
         } catch (Exception e) {
             throw new NodeException("Can't clean corfu directories", e);
@@ -271,5 +279,37 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public IpAddress getNetworkInterface() {
         return ipAddress;
+    }
+
+    @Override
+    public void collectLogs() {
+        if (!loggingParams.isEnabled()) {
+            log.debug("Logging is disabled");
+            return;
+        }
+
+        log.info("Download corfu server logs: {}", params.getName());
+
+        Path corfuLogDir = params
+                .getUniverseDirectory()
+                .resolve("logs")
+                .resolve(loggingParams.getRelativeServerLogDir());
+
+        File logDirFile = corfuLogDir.toFile();
+        if (!logDirFile.exists() && logDirFile.mkdirs()) {
+            log.info("Created new corfu log directory at {}.", corfuLogDir);
+        }
+
+        try {
+            String serverLog = remoteOperationHelper.executeCommand("cat " + serverPath.getCorfuLogFile());
+
+            Files.write(
+                    corfuLogDir.resolve(params.getName() + ".log"),
+                    serverLog.getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+            );
+        } catch (Exception e) {
+            log.error("Can't download logs for corfu server: " + params.getName());
+        }
     }
 }

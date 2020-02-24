@@ -9,6 +9,7 @@ import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
@@ -35,8 +36,8 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
     private final ApplianceManager applianceManager;
 
     @Builder
-    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager) {
-        super(universeParams);
+    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager, LoggingParams loggingParams) {
+        super(universeParams, loggingParams);
         this.applianceManager = applianceManager;
 
         applianceManager.deploy();
