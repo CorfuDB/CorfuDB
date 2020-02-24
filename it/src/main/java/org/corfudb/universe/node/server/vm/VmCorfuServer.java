@@ -306,7 +306,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
             Files.write(
                     corfuLogDir.resolve(params.getName() + ".log"),
                     serverLog.getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SYNC
             );
         } catch (Exception e) {
             log.error("Can't download logs for corfu server: " + params.getName());

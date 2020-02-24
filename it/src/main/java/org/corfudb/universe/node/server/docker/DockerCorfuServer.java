@@ -373,6 +373,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     /**
      * Collect logs from container and write to the log directory
      */
+    @Override
     public void collectLogs() {
         if (!loggingParams.isEnabled()) {
             log.debug("Logging is disabled");
@@ -398,8 +399,11 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 log.warn("Empty logs from container: {}", params.getName());
             }
 
-            Path logFile = corfuLogDir.resolve(params.getName() + ".log");
-            Files.write(logFile, logs.getBytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.write(
+                    corfuLogDir.resolve(params.getName() + ".log"),
+                    logs.getBytes(),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SYNC
+            );
         } catch (Exception e) {
             log.error("Can't collect logs from container: {}", params.getName(), e);
         }
