@@ -1,8 +1,15 @@
 package org.corfudb.logreplication.fsm;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.DataControl;
+
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class represents the InRequireSnapshotSync state of the Log Replication State Machine.
@@ -18,6 +25,29 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
     private final LogReplicationFSM fsm;
 
     /*
+     * Used to schedule verification of the sent request, if not, resend snapshot sync request
+     */
+    private ScheduledExecutorService resendSnapshotSyncRequest;
+
+    /*
+     * Resend Snapshot Sync Request Timeout
+     */
+    private final int RESEND_REQUEST_TIMEOUT = 600;
+
+    /*
+     * Event that caused the transition to this state
+     */
+    private UUID transitionEventId;
+
+    /*
+     * Count reschedules, used for testing purposes.
+     */
+    private int rescheduleCounter = 0;
+
+    @Getter
+    private ObservableValue rescheduleCount = new ObservableValue(rescheduleCounter);
+
+    /*
      * Data Control Implementation
      */
     private final DataControl dataControl;
@@ -25,6 +55,8 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
     public InRequireSnapshotSyncState(@NonNull LogReplicationFSM logReplicationFSM, @NonNull DataControl dataControl) {
         this.fsm = logReplicationFSM;
         this.dataControl = dataControl;
+        this.resendSnapshotSyncRequest = Executors.newSingleThreadScheduledExecutor(new
+                ThreadFactoryBuilder().setNameFormat("scheduled-snapshot-request").build());
     }
 
     @Override
@@ -47,13 +79,47 @@ public class InRequireSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-        // TODO: since a SNAPSHOT_SYNC_REQUEST is the only event that can take us out of this state,
-        //  we need a scheduler to re-notify the remote site of the error, in case the request was lost.
+        requestSnapshotSync();
+    }
+
+    private void requestSnapshotSync() {
+        log.info("Request Snapshot Sync to the application");
+        rescheduleCounter++;
+        rescheduleCount.setValue(rescheduleCounter);
         dataControl.requestSnapshotSync();
+        // We will remain in this state until the application triggers a snapshot sync as we have determined
+        // it is required due to an error in the current log replication.
+        // For this reason, we schedule a verification of this request, as the message might have been dropped.
+        // If we have not transitioned to a state of log replication, resend the request.
+        resendSnapshotSyncRequest.schedule(() -> verifyPendingRequest(transitionEventId),
+                RESEND_REQUEST_TIMEOUT, TimeUnit.MILLISECONDS);
     }
 
     @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC;
+    }
+
+    @Override
+    public void setTransitionEventId(UUID transitionEventId) {
+        this.transitionEventId = transitionEventId;
+    }
+
+    @Override
+    public UUID getTransitionEventId() {
+        return this.transitionEventId;
+    }
+
+    private void verifyPendingRequest(UUID pendingEventId) {
+        if(fsm.getState().getType() == this.getType() && pendingEventId == transitionEventId) {
+            log.info("Snapshot Sync Request {} is pending. Application has not reacted to this request.", transitionEventId);
+            requestSnapshotSync();
+            return;
+        }
+
+        // Refresh the scheduler even though it doesn't count as a re-schedule so observers can notice this
+        rescheduleCount.setValue(rescheduleCounter);
+        log.trace("Snapshot Sync Request {} has already been triggered by application. Re-scheduling not required.",
+                pendingEventId);
     }
 }

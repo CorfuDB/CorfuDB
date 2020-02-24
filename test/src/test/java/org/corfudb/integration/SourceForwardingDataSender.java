@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import lombok.Getter;
-import lombok.Setter;
 import org.corfudb.logreplication.DataSender;
 import org.corfudb.logreplication.SinkManager;
 import org.corfudb.logreplication.SourceManager;
@@ -11,6 +10,7 @@ import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.send.LogReplicationError;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
 import static org.assertj.core.api.Assertions.fail;
 
@@ -61,7 +61,7 @@ public class SourceForwardingDataSender implements DataSender {
                 .parseConfigurationString(destinationEndpoint)
                 .connect();
         this.destinationDataSender = new AckDataSender();
-        this.destinationDataControl = new DefaultDataControl(false);
+        this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
         this.destinationLogReplicationManager = new SinkManager(runtime, destinationDataSender, destinationDataControl);
         this.destinationLogReplicationManager.setLogReplicationConfig(config);
         this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
