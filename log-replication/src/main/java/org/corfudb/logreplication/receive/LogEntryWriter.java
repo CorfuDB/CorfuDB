@@ -184,16 +184,16 @@ public class LogEntryWriter {
             log.info("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
         } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
             log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
-            System.out.println("The message is out of order and the queue is full, will drop the message  " + msg.getMetadata());
         }
 
         return Address.NON_ADDRESS;
     }
 
     /**
-     * Set the basesnapshot that last full sync based on and ackTimesstamp
+     * Set the base snapshot that last full sync based on and ackTimesstamp
      * that is the last log entry it has played.
      * This is called while the writer enter the log entry sync state.
+     *
      * @param snapshot
      * @param ackTimestamp
      */
