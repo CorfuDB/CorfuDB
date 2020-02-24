@@ -26,12 +26,13 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * This class implements the Log Replication Finite State Machine.
  *
- * CorfuDB provides a Log Replication functionality. This enables logs to
- * be automatically replicated from the primary site to a remote site.
- * So in the case of failure or data corruption, the system can failover to the standby/secondary data-store.
+ * CorfuDB provides a Log Replication functionality, which allows logs to be automatically replicated from a primary
+ * to a remote site. This feature is particularly useful in the event of failure or data corruption, so the system
+ * can failover to the standby/secondary data-store.
  *
- * This functionality is driven by the application and initiated through the SourceManager
- * on the primary site and handled through the SinkManager on the destination site.
+ * This functionality is initiated by the application through the SourceManager on the primary site and handled
+ * through the SinkManager on the destination site. This implementation assumes that the application provides its own
+ * communication channels.
  *
  * Log Replication on the source site is defined by an event-driven finite state machine, with 5 states
  * and 8 events/messages---which can trigger the transition between states.
@@ -55,6 +56,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  *  - log_entry_sync_replicated
  *  - replication_shutdown
  *
+ *
+ * The following diagram illustrates the Log Replication FSM state transition:
  *
  *
  *                                       replication_stop
@@ -96,7 +99,7 @@ public class LogReplicationFSM {
      * Current state of the FSM.
      */
     @Getter
-    private LogReplicationState state;
+    private volatile LogReplicationState state;
 
     /**
      * Map of all Log Replication FSM States (reuse single instance for each state)
@@ -113,7 +116,6 @@ public class LogReplicationFSM {
     /**
      * Executor service for FSM event queue consume
      */
-    @Getter
     private ExecutorService logReplicationFSMConsumer;
 
     /**
@@ -212,7 +214,7 @@ public class LogReplicationFSM {
      *
      * @param event LogReplicationEvent to process.
      */
-    public void input(LogReplicationEvent event) {
+    public synchronized void input(LogReplicationEvent event) {
         try {
             if (state.getType().equals(LogReplicationStateType.STOPPED)) {
                 // Log: not accepting events, in stopped state
@@ -241,11 +243,12 @@ public class LogReplicationFSM {
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
 
-            log.info("consume event {}", event);
+            log.info("Log Replication FSM consume event {}", event);
 
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
                         state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
+                    log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
                     persistedReaderMetadata.setLastAckedTimestamp(event.getMetadata().getSyncTimestamp());
                 }
             } else {
@@ -253,6 +256,7 @@ public class LogReplicationFSM {
                     // Verify it's for the same request, as that request could've been canceled and was received later
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
                             state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
+                        log.debug("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
                         // Retrieve the base snapshot timestamp associated to this snapshot sync request from the send
                         persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(event.getMetadata().getSyncTimestamp());
                     }
@@ -260,6 +264,7 @@ public class LogReplicationFSM {
 
                 try {
                     LogReplicationState newState = state.processEvent(event);
+                    log.trace("Transition from {} to {}", state, newState);
                     transition(state, newState);
                     state = newState;
                     numTransitions.setValue(numTransitions.getValue() + 1);
