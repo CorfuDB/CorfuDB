@@ -60,7 +60,9 @@ public class InLogEntrySyncState implements LogReplicationState {
                 // other exception while reading/sending.
                 if (transitionEventId == event.getMetadata().getRequestId()) {
                     cancelLogEntrySync("sync cancel.");
-                    return fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
+                    LogReplicationState inRequireSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
+                    inRequireSnapshotSyncState.setTransitionEventId(event.getEventID());
+                    return inRequireSnapshotSyncState;
                 }
 
                 log.warn("Log Entry Sync cancel for eventId {}, but running log entry sync for {}",
