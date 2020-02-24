@@ -3,7 +3,6 @@ package org.corfudb.logreplication;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
@@ -42,13 +41,13 @@ public class SourceManager implements DataReceiver {
     /*
      *  Log Replication State Machine
      */
+    @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
     @VisibleForTesting
     private int countACKs = 0;
 
     @VisibleForTesting
-    @Getter
     private ObservableAckMsg ackMessages = new ObservableAckMsg();
 
     /**
@@ -144,6 +143,7 @@ public class SourceManager implements DataReceiver {
     public UUID startSnapshotSync() {
         // Enqueue snapshot sync request into Log Replication FSM
         LogReplicationEvent snapshotSyncRequest = new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+        log.info("Start Snapshot Sync for request: {}", snapshotSyncRequest.getEventID());
         logReplicationFSM.input(snapshotSyncRequest);
         return snapshotSyncRequest.getEventID();
     }
@@ -154,15 +154,19 @@ public class SourceManager implements DataReceiver {
      * Connectivity and data transmission is provided by the application requiring log replication.
      * This method should be called upon connectivity to a remote site.
      */
-    public void startReplication() {
+    public UUID startReplication() {
         // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_START));
+        LogReplicationEvent replicationStart = new LogReplicationEvent(LogReplicationEventType.REPLICATION_START);
+        log.info("Start Log Entry Sync for request: {}", replicationStart.getEventID());
+        logReplicationFSM.input(replicationStart);
+        return replicationStart.getEventID();
     }
 
     /**
      * Signal to stop log replication.
      */
     public void stopReplication() {
+        log.info("Stop Log Replication");
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
     }
@@ -173,6 +177,7 @@ public class SourceManager implements DataReceiver {
      * @param snapshotSyncId identifier of the snapshot sync task to cancel.
      */
     public void cancelSnapshotSync(UUID snapshotSyncId) {
+        log.info("Cancel Snapshot Sync for request: {}", snapshotSyncId);
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncId)));
@@ -184,12 +189,14 @@ public class SourceManager implements DataReceiver {
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
      */
     public void shutdown() {
+        log.info("Shutdown Log Replication. To enable Log Replication a JVM restart is required.");
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
     }
 
     @Override
     public void receive(DataMessage dataMessage) {
+        log.trace("Data Message received on source");
         // Convert from DataMessage to Corfu Internal (deserialize)
         LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
 
