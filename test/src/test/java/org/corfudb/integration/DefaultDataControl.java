@@ -1,8 +1,10 @@
 package org.corfudb.integration;
 
+import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.logreplication.DataControl;
 import org.corfudb.logreplication.SourceManager;
+import org.corfudb.logreplication.fsm.ObservableValue;
 
 import static org.assertj.core.api.Assertions.fail;
 
@@ -14,25 +16,44 @@ public class DefaultDataControl implements DataControl {
     @Setter
     private SourceManager sourceManager;
 
-    private boolean source;
+    private int controlCallsCount = 0;
 
-    public DefaultDataControl(boolean source) {
-        this.source = source;
+    private DefaultDataControlConfig config;
+
+    @Getter
+    private ObservableValue controlCalls = new ObservableValue(controlCallsCount);
+
+    public DefaultDataControl(DefaultDataControlConfig config) {
+        this.config = config;
     }
 
     @Override
     public void requestSnapshotSync() {
-        if (!source && sourceManager != null) {
-            // If it represents the destination data control, we should have an instance of the source manager
-            //sourceManager.startSnapshotSync();
-        } else if (source && sourceManager != null) {
-            // If it represents the source data control, we assume the request went over the wire to the destination
-            // application side and they re-triggered snapshot sync
+        // Increase counter used for testing purposes
+        controlCallsCount++;
+        controlCalls.setValue(controlCallsCount);
 
-            // Keep both paths as we might have different behaviors if it is the source or the destination control
-            //sourceManager.startSnapshotSync();
+        if (sourceManager != null && config.dropSnapshotSyncRequestMessage && config.dropCount >= controlCallsCount) {
+            // Drop Snapshot Sync Request Message, because the request is not satisfied,
+            // this should be periodically re-triggered
+            System.out.println("----- Drop snapshot sync request: " + controlCallsCount);
+        } else if (sourceManager != null) {
+            // Request/Start Snapshot Sync on Source
+            System.out.println("----- Start Snapshot Sync on Source: " + controlCallsCount);
+            sourceManager.startSnapshotSync();
         } else {
-            fail("Data Control request Snapshot Sync is not processed.");
+            fail("Source Manager has not been set for DataControl implementation.");
+        }
+    }
+
+    public static class DefaultDataControlConfig {
+
+        private boolean dropSnapshotSyncRequestMessage;
+        private int dropCount;
+
+        public DefaultDataControlConfig(boolean dropSnapshotSyncRequestMessage, int dropCount) {
+            this.dropSnapshotSyncRequestMessage = dropSnapshotSyncRequestMessage;
+            this.dropCount = dropCount;
         }
     }
 }

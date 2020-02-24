@@ -108,6 +108,7 @@ public class SinkManager implements DataReceiver {
      * Signal the manager a snapshot sync is about to start. This is required to reset previous states.
      */
     public void startSnapshotApply() {
+        log.debug("Start of a snapshot apply");
         rxState = RxState.SNAPSHOT_SYNC;
     }
 
@@ -115,6 +116,7 @@ public class SinkManager implements DataReceiver {
      * The end of snapshot sync
      */
     public void completeSnapshotApply() {
+        log.debug("Complete of a snapshot apply");
         //check if the all the expected message has received
         rxState = RxState.LOG_SYNC;
         persistedWriterMetadata.setsrcBaseSnapshotDone();
@@ -131,6 +133,11 @@ public class SinkManager implements DataReceiver {
 
     @Override
     public void receive(DataMessage dataMessage) {
+
+        if (log.isTraceEnabled()) {
+            log.trace("Received dataMessage by Sink Manager");
+        }
+
         // Buffer data (out of order) and apply
         if (config != null) {
             try {
@@ -160,7 +167,7 @@ public class SinkManager implements DataReceiver {
         }
     }
 
-    boolean shouldAck() {
+    private boolean shouldAck() {
         ackCnt++;
         long currentTime = java.lang.System.currentTimeMillis();
         if (ackCnt == ackCycleCnt || (currentTime - ackTime) >= ackCycleTime) {
@@ -203,6 +210,10 @@ public class SinkManager implements DataReceiver {
     }
 
     private void initializeSnapshotSync(LogReplicationEntry entry) {
+
+        log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
+                entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
+
         // If we are just starting snapshot sync, initialize base snapshot start
         persistedWriterMetadata.setsrcBaseSnapshotStart(entry.getMetadata().getSnapshotTimestamp());
 
