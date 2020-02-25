@@ -18,10 +18,7 @@ import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
 
@@ -301,15 +298,12 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         }
 
         try {
-            String serverLog = remoteOperationHelper.executeCommand("cat " + serverPath.getCorfuLogFile());
-
-            Files.write(
+            remoteOperationHelper.downloadFile(
                     corfuLogDir.resolve(params.getName() + ".log"),
-                    serverLog.getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SYNC
+                    serverPath.getCorfuLogFile()
             );
         } catch (Exception e) {
-            log.error("Can't download logs for corfu server: " + params.getName());
+            log.error("Can't download logs for corfu server: {}", params.getName(), e);
         }
     }
 }

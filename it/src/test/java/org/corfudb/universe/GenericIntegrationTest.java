@@ -29,7 +29,7 @@ public abstract class GenericIntegrationTest {
     public void setUp() {
         universeManager = UniverseManager.builder()
                 .testName(test.getMethodName())
-                .universeMode(UniverseMode.DOCKER)
+                .universeMode(UniverseMode.VM)
                 .corfuServerVersion(APP_UTIL.getAppVersion())
                 .build();
     }

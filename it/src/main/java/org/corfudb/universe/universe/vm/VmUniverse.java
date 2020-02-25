@@ -36,7 +36,8 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
     private final ApplianceManager applianceManager;
 
     @Builder
-    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager, LoggingParams loggingParams) {
+    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager,
+                      LoggingParams loggingParams) {
         super(universeParams, loggingParams);
         this.applianceManager = applianceManager;
 
@@ -72,6 +73,7 @@ public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
                 .universeParams(universeParams)
                 .corfuClusterParams(ClassUtils.cast(groupParams))
                 .vms(applianceManager.getVms())
+                .loggingParams(loggingParams)
                 .build();
 
     }

@@ -3,14 +3,11 @@ package org.corfudb.universe.node.server.process;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.Copy;
-import org.apache.tools.ant.taskdefs.Exec;
 import org.apache.tools.ant.taskdefs.Execute;
 import org.apache.tools.ant.taskdefs.PumpStreamHandler;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Optional;
