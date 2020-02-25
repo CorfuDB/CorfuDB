@@ -39,7 +39,6 @@ public class OneNodeDownIT extends GenericIntegrationTest {
     public void oneNodeDownTest() {
 
         workflow(wf -> {
-            wf.setupVm(f -> f.getLogging().enabled(true));
             wf.deploy();
 
             try {
