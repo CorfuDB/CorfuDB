@@ -3,6 +3,7 @@ package org.corfudb.util.serializer;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.SerializerException;
 
@@ -77,5 +78,10 @@ public class Serializers {
      */
     public static synchronized void clearCustomSerializers() {
         customSerializers.clear();
+    }
+
+    @VisibleForTesting
+    public static synchronized void removeSerializer(ISerializer serializer) {
+        customSerializers.remove(serializer.getType());
     }
 }
