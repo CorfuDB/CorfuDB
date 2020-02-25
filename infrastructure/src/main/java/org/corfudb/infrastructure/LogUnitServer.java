@@ -359,7 +359,7 @@ public class LogUnitServer extends AbstractServer {
             if (ce.getCause() instanceof WrongEpochException) {
                 // The BaseServer expects to observe this exception,
                 // when it happens, so it needs to be unwrapped
-                throw (WrongEpochException) ce.getCause();
+                throw (WrongEpochException) Utils.extractCauseWithCompleteStacktrace(ce);
             }
         }
         log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);

@@ -60,6 +60,7 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
 
 
 /**
@@ -413,7 +414,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             return f;
         } catch (ExecutionException ee) {
             CompletableFuture<T> f = new CompletableFuture<>();
-            f.completeExceptionally(ee.getCause());
+            f.completeExceptionally(Utils.extractCauseWithCompleteStacktrace(ee));
             return f;
         }
 
