@@ -1,18 +1,20 @@
 package org.corfudb.runtime.view.stream;
 
-import lombok.extern.slf4j.Slf4j;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-@Slf4j
 public class OpaqueStream {
     /**
      * The stream view backing this adapter.
@@ -36,6 +38,7 @@ public class OpaqueStream {
 
         if (logData.isHole()) {
             Collections.emptyList();
+            //TODO(return something)
         } else if (logData.isTrimmed()) {
             throw new TrimmedException();
         } else if (logData.isEmpty()) {
@@ -46,19 +49,7 @@ public class OpaqueStream {
             throw new IllegalStateException("Must have a payload");
         }
 
-        byte[] payload = ((LogData) logData).getData();
-
-        if (payload == null) {
-            log.debug("payload is null log data {} address {} type {}", logData, logData.getGlobalAddress(), logData.getType());
-            throw new IllegalStateException("Payload has been deserialized");
-        }
-
         return OpaqueEntry.unpack(logData);
-    }
-
-    public OpaqueEntry current() {
-        ILogData data = streamView.current();
-        return processLogData(data);
     }
 
     public long pos() {
@@ -74,6 +65,7 @@ public class OpaqueStream {
                 .filter(m -> m.getType() == DataType.DATA)
                 .map(this::processLogData)
                 .filter(e -> !e.getEntries().isEmpty());
+
     }
 
     public UUID getId() {

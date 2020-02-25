@@ -54,8 +54,6 @@ public class OpaqueEntry {
                 smrEntry.serialize(buf);
             }
         }
-        int wIdx = buf.writerIndex();
-        buf.capacity(wIdx);
     }
 
     public static OpaqueEntry deserialize(ByteBuf buf) {
@@ -78,6 +76,8 @@ public class OpaqueEntry {
 
     public static OpaqueEntry unpack(ILogData logData) {
         byte[] payload = ((LogData) logData).getData();
+        if (payload == null) return empty;
+        // what if payload is null ?
         ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
 
         if (logData.hasPayloadCodec()) {
@@ -119,8 +119,9 @@ public class OpaqueEntry {
             case CHECKPOINT:
                 CheckpointEntry cpEntries = (CheckpointEntry) entry;
                 if (cpEntries.getCpType() != CheckpointEntry.CheckpointEntryType.CONTINUATION) return empty;
+
                 version = Long.decode(cpEntries.getDict().get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
-                res.put(logData.getCheckpointedStreamId(), cpEntries.getSmrEntries().getUpdates());
+                res.put(logData.getCheckpointedStreamId(), cpEntries.getSmrEntries(true).getUpdates());
                 break;
             default:
                 throw new IllegalStateException("Unknown type " + entry.getType());
