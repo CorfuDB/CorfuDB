@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @Data
 public class PersistedReaderMetadata {
-    private final String TABLE_PREFIX_NAME = "READER-FOR-";
+    private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-READER-";
 
     private long lastSentBaseSnapshotTimestamp = Address.NON_ADDRESS; //used by fullsync send
     private long lastAckedTimestamp = Address.NON_ADDRESS; //used by fullsync send
@@ -38,10 +38,18 @@ public class PersistedReaderMetadata {
     public PersistedReaderMetadata(CorfuRuntime rt, UUID dst) {
         readerMetaDataTable = rt.getObjectsView()
                 .build()
-                .setStreamName(TABLE_PREFIX_NAME + dst.toString())
+                .setStreamName(getPersistedReaderMetadataTableName(dst))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {})
                 .setSerializer(Serializers.JSON)
                 .open();
+        if (readerMetaDataTable.isEmpty()) {
+            setLastSentBaseSnapshotTimestamp(Address.NON_ADDRESS);
+            setLastAckedTimestamp(Address.NON_ADDRESS);
+        }
+    }
+
+    public static String getPersistedReaderMetadataTableName(UUID uuid) {
+        return TABLE_PREFIX_NAME + uuid.toString();
     }
 
     /**
@@ -63,7 +71,7 @@ public class PersistedReaderMetadata {
         lastAckedTimestamp = ts;
     }
 
-    private enum PersistedMetaDataType {
+    public enum PersistedMetaDataType {
         LastSnapSync ("lastSnapSync"),
         LastLogSync ("lastLogSync");
 
