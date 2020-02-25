@@ -7,6 +7,7 @@ import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.process.ProcessCorfuCluster;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
@@ -31,8 +32,8 @@ public class ProcessUniverse extends AbstractUniverse<NodeParams, UniverseParams
     private final AtomicBoolean destroyed = new AtomicBoolean(false);
 
     @Builder
-    public ProcessUniverse(UniverseParams universeParams) {
-        super(universeParams);
+    public ProcessUniverse(UniverseParams universeParams, LoggingParams loggingParams) {
+        super(universeParams, loggingParams);
         init();
     }
 

@@ -95,6 +95,11 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
 
     LocalCorfuClient getLocalCorfuClient();
 
+    /**
+     * Save server logs in the server logs directory
+     */
+    void collectLogs();
+
     enum Mode {
         SINGLE, CLUSTER
     }

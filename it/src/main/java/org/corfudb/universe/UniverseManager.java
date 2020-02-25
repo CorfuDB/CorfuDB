@@ -203,11 +203,11 @@ public class UniverseManager {
             return this;
         }
 
-        private void initVmUniverse() {
+        private UniverseWorkflow<T> initVmUniverse() {
             checkMode(UniverseMode.VM);
 
             if (initialized) {
-                throw new IllegalStateException("Can't initialize the universe twice");
+                return this;
             }
 
             VmUniverseParams universeParams = ClassUtils.cast(fixture.data());
@@ -216,11 +216,20 @@ public class UniverseManager {
                     .universeParams(universeParams)
                     .build();
 
+            UniverseFixture vmFixture = ClassUtils.cast(fixture);
+            LoggingParams loggingParams = vmFixture
+                    .getLogging()
+                    .testName(testName)
+                    .build();
+
             //Assign universe variable before deploy prevents resources leaks
             universe = VmUniverse.builder()
                     .universeParams(universeParams)
+                    .loggingParams(loggingParams)
                     .applianceManager(manager)
                     .build();
+
+            return this;
         }
 
         private UniverseWorkflow<T> deployDocker() {
@@ -236,7 +245,7 @@ public class UniverseManager {
             checkMode(UniverseMode.DOCKER);
 
             if (initialized) {
-                throw new IllegalStateException("Can't initialize the universe twice");
+                return this;
             }
 
             DefaultDockerClient docker;
@@ -273,12 +282,19 @@ public class UniverseManager {
             checkMode(UniverseMode.PROCESS);
 
             if (initialized) {
-                throw new IllegalStateException("Can't initialize the universe twice");
+                return this;
             }
+
+            UniverseFixture processFixture = ClassUtils.cast(fixture);
+            LoggingParams loggingParams = processFixture
+                    .getLogging()
+                    .testName(testName)
+                    .build();
 
             //Assign universe variable before deploy prevents resources leaks
             universe = ProcessUniverse.builder()
                     .universeParams(fixture.data())
+                    .loggingParams(loggingParams)
                     .build();
 
             return this;

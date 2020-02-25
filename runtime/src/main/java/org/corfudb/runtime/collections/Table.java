@@ -233,7 +233,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      *
      * @return Count of records.
      */
-    int count() {
+    public int count() {
         return corfuTable.size();
     }
 
