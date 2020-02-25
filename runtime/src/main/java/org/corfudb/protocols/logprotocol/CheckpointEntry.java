@@ -16,7 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.Serializers;
+import org.corfudb.util.serializer.CorfuSerializer;
 
 
 /**
@@ -101,7 +101,7 @@ public class CheckpointEntry extends LogEntry {
      */
     private MultiSMREntry smrEntries;
 
-    private byte[] updateBuffer;
+    private byte[] streamUpdates;
 
     /** Byte count of smrEntries in serialized form, zero
      *  if smrEntries.size() is zero or if value is unknown.
@@ -118,15 +118,6 @@ public class CheckpointEntry extends LogEntry {
         this.checkpointAuthorId = authorId;
         this.dict = dict;
         this.smrEntries = smrEntries;
-    }
-
-    public synchronized MultiSMREntry getSmrEntries() {
-        if (updateBuffer == null) {
-            return smrEntries;
-        }
-        ByteBuf buf = Unpooled.wrappedBuffer(updateBuffer);
-        smrEntries = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
-        return smrEntries;
     }
 
     /**
@@ -153,17 +144,45 @@ public class CheckpointEntry extends LogEntry {
         }
         smrEntries = null;
         byte hasSmrEntries = b.readByte();
+
         if (hasSmrEntries > 0) {
-            int start = b.readerIndex();
-            MultiSMREntry.seekToEnd(b);
-            int multiSMRLen = b.readerIndex() - start;
-            b.readerIndex(start);
-            updateBuffer = new byte[multiSMRLen];
-            b.readBytes(updateBuffer);
+            ByteBuf newBuf = Unpooled.buffer();
+            newBuf.writeByte(CorfuSerializer.corfuPayloadMagic);
+            newBuf.writeBytes(b);
+
+            // converted to ICorfuSerialization serializer
+
+            int start = newBuf.readerIndex();
+            MultiSMREntry.seekToEnd(newBuf);
+            int multiSMRLen = newBuf.readerIndex() - start;
+            newBuf.readerIndex(start);
+            streamUpdates = new byte[multiSMRLen];
+            newBuf.readBytes(streamUpdates);
+
+            //smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime, true);
+            smrEntriesBytes = newBuf.readInt();
+        } else {
+            smrEntriesBytes = b.readInt();
         }
-        // skip smrEntriesBytes = b.readInt();
-        b.readInt();
-        smrEntriesBytes = updateBuffer == null ? 0 : updateBuffer.length;
+    }
+
+    public MultiSMREntry getSmrEntries() {
+        return getSmrEntries(false);
+    }
+
+    public synchronized MultiSMREntry getSmrEntries(boolean opaque) {
+        if (streamUpdates != null) {
+            ByteBuf b = Unpooled.wrappedBuffer(streamUpdates);
+            b.readByte(); // remove magic
+            if (opaque) {
+                smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime, true);
+            } else {
+                smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime, false);
+            }
+            streamUpdates = null;
+        }
+
+        return smrEntries;
     }
 
     /**
@@ -200,8 +219,7 @@ public class CheckpointEntry extends LogEntry {
         if (smrEntries != null) {
             b.writeByte(1);
             int byteStart = b.readableBytes();
-            // This might break migration
-            Serializers.CORFU.serialize(smrEntries, b);
+            smrEntries.serialize(b);
             smrEntriesBytes = b.readableBytes() - byteStart;
         } else {
             b.writeShort(0);
