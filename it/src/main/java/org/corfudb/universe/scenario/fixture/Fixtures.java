@@ -8,6 +8,7 @@ import org.corfudb.universe.group.cluster.CorfuClusterParams.CorfuClusterParamsB
 import org.corfudb.universe.group.cluster.SupportClusterParams;
 import org.corfudb.universe.group.cluster.SupportClusterParams.SupportClusterParamsBuilder;
 import org.corfudb.universe.logging.LoggingParams;
+import org.corfudb.universe.logging.LoggingParams.LoggingParamsBuilder;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.ClientParams.ClientParamsBuilder;
@@ -88,7 +89,7 @@ public interface Fixtures {
 
         private final FixtureUtilBuilder fixtureUtilBuilder = FixtureUtil.builder();
 
-        private final LoggingParams.LoggingParamsBuilder logging = LoggingParams.builder()
+        private final LoggingParamsBuilder logging = LoggingParams.builder()
                 .enabled(false);
 
         private Optional<UniverseParams> data = Optional.empty();
@@ -149,6 +150,9 @@ public interface Fixtures {
         private final Properties vmProperties = VmConfigPropertiesLoader
                 .loadVmProperties()
                 .get();
+
+        private final LoggingParamsBuilder logging = LoggingParams.builder()
+                .enabled(false);
 
         public VmUniverseFixture() {
             Properties credentials = VmConfigPropertiesLoader
