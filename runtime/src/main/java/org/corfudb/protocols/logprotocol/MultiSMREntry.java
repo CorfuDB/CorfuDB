@@ -62,8 +62,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         int numUpdates = b.readInt();
         updates = new ArrayList<>();
         for (int i = 0; i < numUpdates; i++) {
-            byte magicByte = b.readByte(); //
-            checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");// strip magic
+            b.readByte(); // strip magic
             updates.add((SMREntry) SMREntry.deserialize(b, rt, isOpaque()));
         }
     }
