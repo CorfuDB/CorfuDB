@@ -1110,7 +1110,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 verifyExpectedACKs(ackMessages.getValue());
                 break;
             case ON_ACK_TS:
-                verifExpectedAckTs((ObservableAckMsg)o);
+                verifyExpectedAckTimestamp((ObservableAckMsg)o);
                 break;
             case ON_ERROR:
                 verifyExpectedErrors(errorsLogEntrySync.getValue());
@@ -1131,12 +1131,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private void verifyExpectedACKs(ObservableAckMsg observableAckMsg) {
         // If expected value, release semaphore / unblock the wait
         //System.out.println("ack " + observableAckMsg.getMsgCnt() + " expected" + expectedAckTimestamp);
-        if (expectedAckMessages == observableAckMsg.getValue().getMsgCnt()) {
+        if (expectedAckMessages == observableAckMsg.getMsgCnt()) {
             blockUntilExpectedValueReached.release();
         }
     }
 
-    private void verifExpectedAckTs(ObservableAckMsg observableAckMsg) {
+    private void verifyExpectedAckTimestamp(ObservableAckMsg observableAckMsg) {
         // If expected a ackTs, release semaphore / unblock the wait
         LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(observableAckMsg.getDataMessage().getData());
         // System.out.println("ack " + logReplicationEntry.metadata + "expected " + expectedAckTimestamp);
