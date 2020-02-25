@@ -68,7 +68,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 10;
-    static private final int NUM_KEYS_NEW = 0;
+    static private final int NUM_KEYS_NEW = 1000;
     static private final int NUM_STREAMS = 1;
     static private final int TOTAL_STREAM_COUNT = 3;
     static private final int WRITE_CYCLES = 4;
@@ -297,7 +297,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             System.out.println("delete cnt " + cntDelete);
         }
 
-        System.out.println("expectedTimeStamp " + expectedAckTimestamp);
+        System.out.println("set expectedTimestamp as " + expectedAckTimestamp);
     }
 
 
@@ -1239,7 +1239,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Override
     public void update(Observable o, Object arg) {
         if (o == ackMessages) {
-            verifyExpectedAckMsg((ObservableAckMsg)ackMessages);
+            verifyExpectedAckMessage((ObservableAckMsg)o);
         } else if (o == errorsLogEntrySync) {
             verifyExpectedValue(expectedErrors, errorsLogEntrySync.getValue());
         } else if (o == dataControlCalls) {
@@ -1256,17 +1256,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    private void verifyExpectedAckMsg(ObservableAckMsg ackMsg) {
+    private void verifyExpectedAckMessage(ObservableAckMsg observableAckMsg) {
+        // If expected a ackTs, release semaphore / unblock the wait
+        LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(observableAckMsg.getDataMessage().getData());
         switch (testConfig.waitOn) {
             case ON_ACK:
-                verifyExpectedValue(expectedAckMessages, ackMsg.getMsgCnt());
-                break;
+                verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
             case ON_ACK_TS:
-                LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(ackMsg.getDataMessage().getData());
-                verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.metadata.getTimestamp());
-                break;
+                verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
         }
     }
+
 
     public enum WAIT {
         ON_ACK,
