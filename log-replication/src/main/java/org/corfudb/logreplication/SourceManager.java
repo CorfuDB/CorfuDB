@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
+import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
@@ -47,7 +48,7 @@ public class SourceManager implements DataReceiver {
     private int countACKs = 0;
 
     @VisibleForTesting
-    private ObservableValue ackMessages = new ObservableValue(countACKs);
+    private ObservableAckMsg ackMessages = new ObservableAckMsg();
 
     /**
      * Constructor Source (default)
@@ -200,7 +201,7 @@ public class SourceManager implements DataReceiver {
         LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
 
         countACKs++;
-        ackMessages.setValue(countACKs);
+        ackMessages.setValue(dataMessage);
 
         // Process ACKs from Application, for both, log entry and snapshot sync.
         if(message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
