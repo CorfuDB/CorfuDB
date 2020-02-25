@@ -15,7 +15,7 @@ import java.util.UUID;
  * It records the reader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
  */
 public class PersistedWriterMetadata {
-    private final String TABLE_PREFIX_NAME = "WRITER-";
+    private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
 
     @Getter
     private long lastSrcBaseSnapshotTimestamp;
@@ -28,14 +28,22 @@ public class PersistedWriterMetadata {
     public PersistedWriterMetadata(CorfuRuntime rt, UUID dst) {
         writerMetaDataTable = rt.getObjectsView()
                 .build()
-                .setStreamName(TABLE_PREFIX_NAME + dst.toString())
+                .setStreamName(getPersistedWriterMetadataTableName(dst))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
 
-        lastSrcBaseSnapshotTimestamp = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastSnapDone, Address.NON_ADDRESS);
-        lastProcessedLogTimestamp = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastLogProcessed, Address.NON_ADDRESS);
+        if (writerMetaDataTable.isEmpty()) {
+            setsrcBaseSnapshotStart(Address.NON_ADDRESS);
+            setsrcBaseSnapshotDone();
+            setLastProcessedLogTimestamp(Address.NON_ADDRESS);
+
+        }
+    }
+
+    public static String getPersistedWriterMetadataTableName(UUID dst) {
+        return TABLE_PREFIX_NAME + dst.toString();
     }
 
     public void setsrcBaseSnapshotStart(long ts) {
@@ -43,7 +51,7 @@ public class PersistedWriterMetadata {
     }
 
     public void setsrcBaseSnapshotDone() {
-        long ts = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastSnapStart, Address.NON_EXIST);
+        long ts = writerMetaDataTable.getOrDefault(PersistedWriterMetadataType.LastSnapStart.getVal(), Address.NON_EXIST);
         writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapDone.getVal(), ts);
         lastSrcBaseSnapshotTimestamp = ts;
         lastProcessedLogTimestamp = ts;
@@ -54,7 +62,7 @@ public class PersistedWriterMetadata {
         lastProcessedLogTimestamp = ts;
     }
 
-    enum PersistedWriterMetadataType {
+    public enum PersistedWriterMetadataType {
         LastSnapStart("lastSnapStart"),
         LastSnapDone("lastSnapDone"),
         LastLogProcessed("lastLogProcessed");
