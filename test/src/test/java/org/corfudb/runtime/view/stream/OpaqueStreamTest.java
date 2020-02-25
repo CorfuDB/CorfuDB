@@ -1,12 +1,19 @@
 package org.corfudb.runtime.view.stream;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.CustomSerializer;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.Test;
 
 import java.util.UUID;
@@ -17,7 +24,9 @@ public class OpaqueStreamTest extends AbstractViewTest {
     @Test
     public void testBasicStreaming() {
         CorfuRuntime rt = getDefaultRuntime();
-        rt.setCacheDisabled(true);
+
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
+        Serializers.registerSerializer(customSerializer);
 
         UUID streamId = CorfuRuntime.getStreamID("stream1");
 
@@ -25,6 +34,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamId)
                 .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .setSerializer(customSerializer)
                 .open() ;
 
 
@@ -41,6 +51,8 @@ public class OpaqueStreamTest extends AbstractViewTest {
 
         rt.getAddressSpaceView().prefixTrim(token);
 
+        Serializers.removeSerializer(customSerializer);
+
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView sv = rt2.getStreamsView().get(streamId);
@@ -49,7 +61,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
 
         stream.forEach(entry -> {
-            //System.out.println(entry.getVersion() + " " + entry.getEntries());
+            System.out.println(entry.getVersion() + " " + entry.getEntries());
         });
 
         CorfuRuntime rt3 = getNewRuntime(getDefaultNode()).connect();
@@ -60,7 +72,6 @@ public class OpaqueStreamTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                 .open() ;
 
-        System.out.println(map2.size());
+        assertThatThrownBy(() -> map2.size()).isInstanceOf(SerializerException.class);
     }
-
 }
