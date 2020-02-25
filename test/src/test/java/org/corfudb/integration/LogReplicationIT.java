@@ -7,10 +7,12 @@ import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationStateType;
+import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 
+import org.corfudb.logreplication.send.LogReplicationError;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -21,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
@@ -60,7 +63,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 10;
-    static private final int NUM_KEYS_NEW = 1000;
+    static private final int NUM_KEYS_NEW = 10;
     static private final int NUM_STREAMS = 1;
     static private final int TOTAL_STREAM_COUNT = 3;
     static private final int WRITE_CYCLES = 4;
@@ -105,7 +108,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     HashMap<String, CorfuTable<Long, Long>> dstTestTables = new HashMap<>();
 
     // An observable value on the number of received ACKs (source side)
-    private ObservableValue ackMessages;
+    private ObservableAckMsg ackMessages;
 
     // An Observable value on the number of errors received on Log Entry Sync (source side)
     private ObservableValue errorsLogEntrySync;
@@ -115,6 +118,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     // Set per test according to the expected number of ACKs that will unblock the code waiting for the value change
     private int expectedAckMessages = 0;
+
+    // Set per test according to the expected ACK's timestamp.
+    private long expectedAckTimestamp = -1;
 
     // Set per test according to the expected number of errors in a test
     private  int expectedErrors = 1;
@@ -257,6 +263,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             System.out.println("delete cnt " + cntDelete);
         }
 
+        long tail = rt.getAddressSpaceView().getLogAddressSpace().getAddressMap().get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
+        expectedAckTimestamp = Math.max(tail, expectedAckTimestamp);
     }
 
 
@@ -788,7 +796,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testConfig.clear();
         testConfig.setWritingSrc(true);
         testConfig.setDeleteOP(true);
-        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ACK);
+        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ACK_TS);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
@@ -978,6 +986,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Observe ACKs on SourceManager, to assess when snapshot sync is completed
         // We only expect one message, related to the snapshot sync complete
         expectedAckMessages = 1;
+        testConfig.setWait(WAIT.ON_ACK);
         SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
                 WAIT.ON_ACK);
 
@@ -1001,6 +1010,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, WAIT waitCondition) throws Exception {
 
+        testConfig.setWait(waitCondition);
+
         SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
                 waitCondition);
 
@@ -1010,6 +1021,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         logReplicationSourceManager.startReplication();
 
         startTx();
+
+        System.out.println("Expecting " + waitCondition + " expectedAckTimestamp " + expectedAckTimestamp);
 
         for (int i = 0; i < PRINT_ROUND; i++) {
             sleep(SLEEP_TIME);
@@ -1050,12 +1063,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Add this class as observer of the value of interest for the wait condition
         switch(waitCondition) {
             case ON_ACK:
+            case ON_ACK_TS:
                 ackMessages = logReplicationSourceManager.getAckMessages();
                 ackMessages.addObserver(this);
                 // Acquire semaphore for the first time, so next time it blocks until the observed
                 // value reaches the expected value.
                 blockUntilExpectedValueReached.acquire();
                 break;
+
             case ON_ERROR:
                 errorsLogEntrySync = sourceDataSender.getErrors();
                 errorsLogEntrySync.addObserver(this);
@@ -1063,6 +1078,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 // value reaches the expected value.
                 blockUntilExpectedValueReached.acquire();
                 break;
+
             default:
                 // Nothing
                 break;
@@ -1089,12 +1105,21 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Callback for observed values
     @Override
     public void update(Observable o, Object arg) {
-        if (o == ackMessages) {
-            verifyExpectedACKs(ackMessages.getValue());
-        } else if (o == errorsLogEntrySync) {
-            verifyExpectedErrors(errorsLogEntrySync.getValue());
+        switch (testConfig.getWait()) {
+            case ON_ACK:
+                verifyExpectedACKs(ackMessages.getValue());
+                break;
+            case ON_ACK_TS:
+                verifExpectedAckTs((ObservableAckMsg)o);
+                break;
+            case ON_ERROR:
+                verifyExpectedErrors(errorsLogEntrySync.getValue());
+                break;
+            default:
+                System.out.println("");
         }
     }
+
 
     private void verifyExpectedErrors(int value) {
         // If expected value, release semaphore / unblock the wait
@@ -1103,9 +1128,19 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    private void verifyExpectedACKs(int value) {
+    private void verifyExpectedACKs(ObservableAckMsg observableAckMsg) {
         // If expected value, release semaphore / unblock the wait
-        if (expectedAckMessages == value) {
+        //System.out.println("ack " + observableAckMsg.getMsgCnt() + " expected" + expectedAckTimestamp);
+        if (expectedAckMessages == observableAckMsg.getValue().getMsgCnt()) {
+            blockUntilExpectedValueReached.release();
+        }
+    }
+
+    private void verifExpectedAckTs(ObservableAckMsg observableAckMsg) {
+        // If expected a ackTs, release semaphore / unblock the wait
+        LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(observableAckMsg.getDataMessage().getData());
+        // System.out.println("ack " + logReplicationEntry.metadata + "expected " + expectedAckTimestamp);
+        if (expectedAckTimestamp == logReplicationEntry.metadata.getTimestamp()) {
             blockUntilExpectedValueReached.release();
         }
     }
@@ -1113,6 +1148,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     public enum WAIT {
         ON_ACK,
         ON_ERROR,
+        ON_ACK_TS,
         NONE
     }
 
@@ -1123,6 +1159,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         boolean writingSrc = false;
         boolean writingDst = false;
         boolean deleteOP = false;
+
+        WAIT wait;
 
         public TestConfig() {}
 
