@@ -1322,7 +1322,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();
     }
 
-
     public enum WAIT {
         ON_ACK,
         ON_ACK_TS,
