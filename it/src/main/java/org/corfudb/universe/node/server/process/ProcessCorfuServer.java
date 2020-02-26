@@ -15,10 +15,7 @@ import org.corfudb.universe.util.IpAddress;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -244,15 +241,12 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         }
 
         try {
-            String serverLog = executeCommand(Optional.empty(), "cat " + serverPath.getCorfuLogFile());
-
-            Files.write(
-                    corfuLogDir.resolve(params.getName() + ".log"),
-                    serverLog.getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SYNC
+            commandHelper.copyFile(
+                    serverPath.getCorfuLogFile(),
+                    corfuLogDir.resolve(params.getName() + ".log")
             );
         } catch (Exception e) {
-            log.error("Can't download logs for corfu server: " + params.getName());
+            log.error("Can't download logs for corfu server: {}", params.getName(), e);
         }
     }
 }

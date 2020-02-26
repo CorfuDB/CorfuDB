@@ -18,7 +18,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
-import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.vm.ApplianceManager.ManagedEntityType;

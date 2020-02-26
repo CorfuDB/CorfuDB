@@ -216,7 +216,7 @@ public class UniverseManager {
                     .universeParams(universeParams)
                     .build();
 
-            UniverseFixture vmFixture = ClassUtils.cast(fixture);
+            VmUniverseFixture vmFixture = ClassUtils.cast(fixture);
             LoggingParams loggingParams = vmFixture
                     .getLogging()
                     .testName(testName)
