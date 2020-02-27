@@ -19,6 +19,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
@@ -29,11 +30,16 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.stream.Stream;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
@@ -42,9 +48,9 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
     static private final int START_VAL = 11;
-    static private final int NUM_KEYS = 10;
+    static private final int NUM_KEYS = 100;
     static private final int NUM_STREAMS = 2;
-    static private final int NUM_TRANSACTIONS = 10;
+    static private final int NUM_TRANSACTIONS = 100;
 
     Process server1;
     Process server2;
@@ -131,7 +137,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
-        for (int i = 0; i < NUM_STREAMS; i++) {
+        openStreams(tables, rt, NUM_STREAMS);
+    }
+
+    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams) {
+        for (int i = 0; i < num_streams; i++) {
             String name = "test" + Integer.toString(i);
 
             CorfuTable<Long, Long> table = rt.getObjectsView()
@@ -174,7 +184,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             }
             rt.getObjectsView().TXEnd();
         }
-        System.out.println("generate transactions num " + numT);
+        System.out.println("\ngenerate transactions num " + numT);
     }
 
     public static void verifyData(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
@@ -201,6 +211,20 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
+    public static void trim(long address, CorfuRuntime rt) {
+        Token token = Token.of(0, address);
+        rt.getAddressSpaceView().prefixTrim(token);
+        Token trimMark = rt.getAddressSpaceView().getTrimMark();
+
+        while (trimMark.getSequence() != (token.getSequence() + 1)) {
+            System.out.println("trimMark " + trimMark + " trimToken " + token);
+            trimMark = rt.getAddressSpaceView().getTrimMark();
+        }
+
+        rt.getAddressSpaceView().invalidateServerCaches();
+        System.out.println("trim " + token);
+    }
+
     /**
      * enforce checkpoint entries at the streams.
      */
@@ -215,6 +239,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         // Trim the log
         rt.getAddressSpaceView().prefixTrim(checkpointAddress);
         rt.getAddressSpaceView().gc();
+        rt.getAddressSpaceView().invalidateServerCaches();
+        rt.getAddressSpaceView().invalidateClientCache();
     }
 
     void verifyTxStream(CorfuRuntime rt) {
@@ -233,11 +259,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
-
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {
             LogReplicationEntry message = reader.read(UUID.randomUUID());
+
             if (message == null) {
                 System.out.println("**********data message is null");
                 assertThat(false);
@@ -248,8 +274,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                     assertThat(false);
                 }
 
-                System.out.println("generate the message " + i);
-
+                //System.out.println("generate the message " + i);
                 msgQ.add(deserializeTest(message));
             }
         }
@@ -312,12 +337,15 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapLogMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
+        int cnt = 0;
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
+            cnt++;
             SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             for (LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(deserializeTest(data));
+                //System.out.println("generate msg " + cnt);
             }
 
             if (snapshotReadMessage.isEndRead()) {
@@ -337,6 +365,105 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
+        }
+    }
+
+    void accessTxStream(Iterator iterator, int num) {
+
+        int i = 0;
+        while (iterator.hasNext() && i++ < num) {
+            ILogData data = (ILogData) iterator.next();
+            //System.out.println("entry address " + data.getGlobalAddress() );
+        }
+    }
+
+    /**
+     * Generate some transactions, and start a txstream. Do a trim
+     * To see if a trimmed exception happens
+     */
+    @Test
+    public void testTrimmedExceptionForTxStream() throws IOException {
+        setupEnv();
+        openStreams(srcTables, srcDataRuntime);
+        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        // Open a tx stream
+        IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+        long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
+        Stream<ILogData> stream = txStream.streamUpTo(tail);
+        Iterator iterator = stream.iterator();
+
+        accessTxStream(iterator, 10);
+        Exception result = null;
+        trim(tail, srcDataRuntime);
+
+        try {
+            accessTxStream(iterator, (int)tail);
+        } catch (Exception e) {
+            result = e;
+            System.out.println("caught an exception " + e + " tail " + tail);
+        } finally {
+            assertThat(result).isInstanceOf(TrimmedException.class);
+        }
+    }
+
+    void trimDelay() {
+        try {
+            while(msgQ.isEmpty()) {
+                sleep(1);
+            }
+            trim(srcDataRuntime.getAddressSpaceView().getLogTail(), srcDataRuntime);
+        } catch (Exception e) {
+            System.out.println("caught an exception " + e);
+        }
+    }
+
+
+    @Test
+    public void testTrimmedExceptionForLogEntryReader() throws IOException {
+        setupEnv();
+
+        openStreams(srcTables, srcDataRuntime);
+        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+        long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
+
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
+        scheduledExecutorService.submit(this::trimDelay);
+        Exception result = null;
+
+        try {
+            readLogEntryMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+        } catch (Exception e) {
+            result = e;
+            System.out.println("msgQ size " + msgQ.size());
+            System.out.println("caught an exception " + e + " tail " + tail);
+        } finally {
+            assertThat(result).isInstanceOf(TrimmedException.class);
+        }
+    }
+
+
+    @Test
+    public void testTrimmedExceptionForSnapshotReader() throws IOException, InterruptedException {
+        setupEnv();
+
+        openStreams(srcTables, srcDataRuntime, 1);
+        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
+        scheduledExecutorService.submit(this::trimDelay);
+
+        long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
+        Exception result = null;
+
+        try {
+            readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+        } catch (Exception e) {
+            result = e;
+            System.out.println("msgQ size " + msgQ.size());
+            System.out.println("caught an exception " + e + " tail " + tail);
+        } finally {
+            assertThat(result).isInstanceOf(TrimmedException.class);
         }
     }
 
