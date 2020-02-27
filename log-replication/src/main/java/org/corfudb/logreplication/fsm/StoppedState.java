@@ -20,6 +20,12 @@ public class StoppedState implements LogReplicationState {
     }
 
     @Override
+    public void onEntry(LogReplicationState from) {
+        log.info("Unrecoverable error or explicit shutdown. " +
+                "Log Replication is terminated from state {}. To resume, restart the JVM.", from.getType());
+    }
+
+    @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.STOPPED;
     }
