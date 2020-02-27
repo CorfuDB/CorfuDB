@@ -105,6 +105,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
+        System.out.println("Generate TxMsg " + txMsg.getMetadata());
         return txMsg;
     }
 
@@ -126,6 +127,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
+            System.out.println("catch trimmed exception " + e);
             throw e;
         }
         return list;
@@ -214,7 +216,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;
             uuid = CorfuRuntime.getStreamID(name);
-            System.out.println(">>>>> Stream Up To Beginning");
+            System.out.println(">>>>> Stream Up To Beginning " + snapshot);
             Stream stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;

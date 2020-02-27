@@ -2,10 +2,12 @@ package org.corfudb.runtime.exceptions;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Collections;
 import java.util.List;
 
+@Slf4j
 /**
  * This exception is thrown when a client tries to read an address
  * that has been trimmed.
