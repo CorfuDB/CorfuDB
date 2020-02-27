@@ -7,9 +7,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * On FSM start this is the default state, there are three events that cause transitions from this state:
  *
- * (1) SNAPSHOT_SYNC_REQUEST: external event (application driven) indicating to start full sync.
+ * (1) SNAPSHOT_SYNC_REQUEST: external event (application driven) indicating to start snapshot/full sync.
  * (2) REPLICATION_START: external event (application driven) indicating that connectivity to remote site has been
- *                        established and the replication can start, this enters into log entry sync.
+ *                        established and the replication can start, this enters into log entry/delta sync.
  * (3) REPLICATION_SHUTDOWN: completely stop/terminate log replication.
  */
 @Slf4j
