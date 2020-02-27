@@ -94,7 +94,9 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public void onError(LogReplicationError error, UUID snapshotSyncId) { fail("Error received for snapshot sync");
+    public void onError(LogReplicationError error, UUID snapshotSyncId) {
+        errorCount++;
+        errors.setValue(errorCount);
     }
 
     /*
@@ -105,7 +107,7 @@ public class SourceForwardingDataSender implements DataSender {
         LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(message.getData());
 
         if (ifDropMsg > 0 && logReplicationEntry.metadata.timestamp == firstDrop) {
-            System.out.println("******drop log entry " + logReplicationEntry.metadata.timestamp);
+            System.out.println("****** Drop log entry " + logReplicationEntry.metadata.timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
                 firstDrop += DROP_INCREMENT;
             }
@@ -135,5 +137,14 @@ public class SourceForwardingDataSender implements DataSender {
     public void setSourceManager(SourceManager sourceManager) {
         destinationDataSender.setSourceManager(sourceManager);
         destinationDataControl.setSourceManager(sourceManager);
+    }
+
+    // Used for testing purposes to access the SinkManager in Test
+    public SinkManager getSinkManager() {
+        return destinationLogReplicationManager;
+    }
+
+    public CorfuRuntime getWriterRuntime() {
+        return this.runtime;
     }
 }
