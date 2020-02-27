@@ -14,18 +14,22 @@ import org.corfudb.runtime.view.Address;
 import java.util.Collection;
 
 /**
- * Per-segment metadata for compaction.
+ * Per-segment compaction stats.
  * <p>
  * Created by WenbinZhu on 6/20/19.
  */
 @Slf4j
 @RequiredArgsConstructor
 @ToString
-class CompactionMetadata {
+@Getter
+@SuppressWarnings("NonAtomicOperationOnVolatileField")
+class CompactionStats {
 
-    // Ordinal of the segment.
-    @Getter
-    private final long ordinal;
+    // ID of the segment.
+    private final SegmentId segmentId;
+
+    // Number of LogData stored in the corresponding stream segment.
+    private volatile int streamEntryCount;
 
     // Total payload size in bytes, excluding meta data in LogData.
     private volatile long totalPayloadSize;
@@ -33,7 +37,7 @@ class CompactionMetadata {
     // Total garbage payload size in bytes.
     private volatile long totalGarbageSize;
 
-    // Total size of the garbage in bytes whose marker addresses
+    // Size of the garbage in bytes whose marker addresses
     // are bounded by nextCompactionUpperBound.
     private volatile long boundedGarbageSize;
 
@@ -56,6 +60,13 @@ class CompactionMetadata {
     @Getter
     @Setter
     static volatile long currCompactionUpperBound = Address.MAX;
+
+    /**
+     * Update number of LogData stored in the corresponding stream segment.
+     */
+    void updateStreamEntryCount(int count) {
+        streamEntryCount += count;
+    }
 
     /**
      * Update total payload size for this segment.
@@ -107,43 +118,5 @@ class CompactionMetadata {
             boundedGarbageSize = totalGarbageSize;
         }
         boundedGarbageSize += garbageEntry.getGarbageSizeUpTo(compactionUpperBound);
-    }
-
-    /**
-     * Get the total size of the garbage in this segment in MB.
-     *
-     * @return total size of the garbage payloads in MB
-     */
-    double getTotalGarbageSizeMB() {
-        return (double) totalGarbageSize / 1024 / 1024;
-    }
-
-    /**
-     * Get the size of the bounded garbage in this segment in MB.
-     *
-     * @return total size of the garbage payloads in MB
-     */
-    double getBoundedGarbageSizeMB() {
-        return (double) boundedGarbageSize / 1024 / 1024;
-    }
-
-    /**
-     * Get the garbage ratio of this segment, which is defined by
-     * total size of garbage payload  / total payload size.
-     *
-     * @return garbage ratio of this segment
-     */
-    double getGarbageRatio() {
-        return (double) totalGarbageSize / totalPayloadSize;
-    }
-
-    /**
-     * Get the bounded garbage ratio of this segment, which is defined
-     * by size of bounded garbage payload  / total payload size.
-     *
-     * @return bounded garbage ratio of this segment
-     */
-    double getBoundedGarbageRatio() {
-        return (double) boundedGarbageSize / totalPayloadSize;
     }
 }

@@ -24,28 +24,31 @@ public class GarbageSizeFirstPolicy extends AbstractCompactionPolicy {
     }
 
     /**
-     * Simply sort the segments by their garbage size, and return the segments
-     * with the most amount garbage size, if they reach the predefined threshold.
-     * The number of segment returned will not exceed a user specified limit.
+     * Returns a list of grouped segments selected for compaction. The input
+     * segment group list is first sorted the by the aggregated garbage size
+     * and the groups whose garbage size or ratio is below the predefined
+     * threshold are filtered out.
      *
-     * @param compactibleSegments unprotected segments that can be selected for compaction
-     * @return a list of ordinals whose associated segments are selected for compaction
+     * @param compactibleSegments unprotected segments that can be compacted
+     * @return a list of grouped segments IDs that are selected for compaction
      */
     @Override
-    public List<Long> getSegmentsToCompact(List<CompactionMetadata> compactibleSegments) {
+    public List<List<SegmentId>> getSegmentsToCompact(List<CompactionStats> compactibleSegments) {
+        // Group all the segments for potential segment merges.
+        List<GroupCompactionStats> segmentGroups = formSegmentGroups(compactibleSegments);
+
         // Force compaction to override the policy if out of disk quota.
-        if (requireForceCompaction(params, fileStore, logSizeQuota, compactibleSegments)) {
+        if (requireForceCompaction(params, fileStore, logSizeQuota, segmentGroups)) {
             log.info("Force compaction needed, ignoring garbage threshold check.");
-            return getSegmentsToForceCompact(compactibleSegments);
+            return getSegmentsToForceCompact(segmentGroups);
         }
 
-        return compactibleSegments
+        return segmentGroups
                 .stream()
-                .sorted(Comparator.comparing(CompactionMetadata::getTotalGarbageSizeMB).reversed())
-                .filter(metaData -> metaData.getTotalGarbageSizeMB() > params.segmentGarbageSizeThresholdMB
-                        || metaData.getGarbageRatio() > params.segmentGarbageRatioThreshold)
-                .limit(params.maxSegmentsForCompaction)
-                .map(CompactionMetadata::getOrdinal)
+                .sorted(Comparator.comparing(GroupCompactionStats::getTotalGarbageSizeMB).reversed())
+                .filter(group -> group.getTotalGarbageSizeMB() > params.segmentGarbageSizeThresholdMB
+                        || group.getGarbageRatio() > params.segmentGarbageRatioThreshold)
+                .map(GroupCompactionStats::getSegmentIds)
                 .collect(Collectors.toList());
     }
 }

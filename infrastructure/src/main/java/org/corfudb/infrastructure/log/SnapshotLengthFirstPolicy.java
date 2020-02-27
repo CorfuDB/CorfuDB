@@ -5,7 +5,6 @@ import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.runtime.view.Address;
 
 import java.nio.file.FileStore;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -33,58 +32,66 @@ public class SnapshotLengthFirstPolicy extends AbstractCompactionPolicy {
     }
 
     /**
-     * TODO: add comments
+     * Returns a list of grouped segments selected for compaction. This policy
+     * not only considers garbage distribution, but also guarantees a fixed
+     * length of snapshot history. The current compaction cycle makes sure that
+     * the entries being compacted could not move the compaction mark beyond
+     * a boundary with is set to the global tail captured in last cycle.
      *
-     * @param compactibleSegments metadata of unprotected segments that
-     * @return a list of ordinals whose associated segments are selected for compaction.
+     * @param compactibleSegments unprotected segments that can be compacted
+     * @return a list of grouped segments IDs that are selected for compaction
      */
     @Override
-    public List<Long> getSegmentsToCompact(List<CompactionMetadata> compactibleSegments) {
+    public List<List<SegmentId>> getSegmentsToCompact(List<CompactionStats> compactibleSegments) {
+        // Group all the segments for potential segment merges.
+        List<GroupCompactionStats> segmentGroups = formSegmentGroups(compactibleSegments);
+
         // Force compaction to override the garbage ratio check if out of disk quota.
-        if (requireForceCompaction(params, fileStore, logSizeQuota, compactibleSegments)) {
+        if (requireForceCompaction(params, fileStore, logSizeQuota, segmentGroups)) {
             long nextCompactionUpperBound = newCompactionUpperBound();
             // Check if log unit is initialized and has data.
             if (Address.isAddress(nextCompactionUpperBound)) {
                 // Set currCompactionUpperBound to current global tail to increase the
                 // number of entries that could be compacted in this cycle.
-                CompactionMetadata.setCurrCompactionUpperBound(nextCompactionUpperBound);
-                CompactionMetadata.setNextCompactionUpperBound(nextCompactionUpperBound);
+                CompactionStats.setCurrCompactionUpperBound(nextCompactionUpperBound);
+                CompactionStats.setNextCompactionUpperBound(nextCompactionUpperBound);
                 log.info("Force compaction needed, ignoring garbage threshold check, " +
                                 "set currCompactionUpperBound={}, nextCompactionUpperBound={}",
-                        CompactionMetadata.getCurrCompactionUpperBound(),
-                        CompactionMetadata.getNextCompactionUpperBound());
-                return getSegmentsToForceCompact(compactibleSegments);
+                        CompactionStats.getCurrCompactionUpperBound(),
+                        CompactionStats.getNextCompactionUpperBound());
+                return getSegmentsToForceCompact(segmentGroups);
             }
             return Collections.emptyList();
         }
 
         // Skip compaction for the first cycle after startup.
-        if (CompactionMetadata.getNextCompactionUpperBound() == Address.MAX) {
+        if (CompactionStats.getNextCompactionUpperBound() == Address.MAX) {
             long nextCompactionUpperBound = newCompactionUpperBound();
             // Check if log unit is initialized and has data.
             if (Address.isAddress(nextCompactionUpperBound)) {
-                CompactionMetadata.setNextCompactionUpperBound(nextCompactionUpperBound);
+                CompactionStats.setNextCompactionUpperBound(nextCompactionUpperBound);
             }
             return Collections.emptyList();
         }
 
-        List<Long> segmentsToCompact = compactibleSegments
+        List<List<SegmentId>> segmentsToCompact =
+                segmentGroups
                 .stream()
-                .sorted(Comparator.comparing(CompactionMetadata::getBoundedGarbageSizeMB).reversed())
-                .filter(metaData -> metaData.getBoundedGarbageSizeMB() > params.segmentGarbageSizeThresholdMB
-                        || metaData.getBoundedGarbageRatio() > params.segmentGarbageRatioThreshold)
+                .sorted(Comparator.comparing(GroupCompactionStats::getBoundedGarbageSizeMB).reversed())
+                .filter(group -> group.getBoundedGarbageSizeMB() > params.segmentGarbageSizeThresholdMB
+                        || group.getBoundedGarbageRatio() > params.segmentGarbageRatioThreshold)
                 .limit(params.maxSegmentsForCompaction)
-                .map(CompactionMetadata::getOrdinal)
+                .map(GroupCompactionStats::getSegmentIds)
                 .collect(Collectors.toList());
 
         // Set currCompactionUpperBound to nextCompactionUpperBound, which is set in the previous
         // cycle, so that when compaction starts for this cycle, entries that would move its stream's
-        // compaction marks after currCompactionUpperBound will not be trimmed, guaranteeing compaction
-        // marks not moving for X amount of time, where X is the compaction cycle interval.
-        CompactionMetadata.setCurrCompactionUpperBound(CompactionMetadata.getNextCompactionUpperBound());
-        CompactionMetadata.setNextCompactionUpperBound(newCompactionUpperBound());
+        // compaction marks after currCompactionUpperBound will not be compacted, guaranteeing that
+        // compaction mark does not move for X amount of time, where X is the compaction cycle interval.
+        CompactionStats.setCurrCompactionUpperBound(CompactionStats.getNextCompactionUpperBound());
+        CompactionStats.setNextCompactionUpperBound(newCompactionUpperBound());
         log.info("getSegmentsToCompact: set currCompactionUpperBound={}, nextCompactionUpperBound={}",
-                CompactionMetadata.getCurrCompactionUpperBound(), CompactionMetadata.getNextCompactionUpperBound());
+                CompactionStats.getCurrCompactionUpperBound(), CompactionStats.getNextCompactionUpperBound());
 
         return segmentsToCompact;
     }

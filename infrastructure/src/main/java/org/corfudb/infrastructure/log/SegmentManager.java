@@ -1,9 +1,6 @@
 package org.corfudb.infrastructure.log;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.RemovalListener;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
 
@@ -17,9 +14,10 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import static org.corfudb.infrastructure.log.StreamLogParams.RECORDS_PER_SEGMENT;
 
 /**
  * A segment manger which manages stream and garbage segment mappings.
@@ -36,20 +34,16 @@ public class SegmentManager {
     // Suffix of the segment files for compaction output.
     private static final String SEGMENT_COMPACTING_FILE_SUFFIX = ".cpt";
 
+    // Log unit configuration parameters.
     private final StreamLogParams logParams;
-
     private final Path logDir;
-
     private final ResourceQuota logSizeQuota;
-
     private final StreamLogDataStore dataStore;
 
-    private final LoadingCache<Long, StreamLogSegment> streamSegmentCache;
-
-    private final LoadingCache<Long, GarbageLogSegment> garbageSegmentCache;
-
-    // A CompactionMetadata is not removed for the whole life time of log unit.
-    private final Map<Long, CompactionMetadata> segmentCompactionMetadata = new ConcurrentHashMap<>();
+    // Segment indexes and metadata.
+    private final SegmentIndex<StreamLogSegment> streamSegmentIndex = new SegmentIndex<>();
+    private final SegmentIndex<GarbageLogSegment> garbageSegmentIndex = new SegmentIndex<>();
+    private final Map<SegmentId, CompactionStats> compactionStatsMap = new ConcurrentHashMap<>();
 
     SegmentManager(StreamLogParams logParams, Path logDir,
                    ResourceQuota logSizeQuota, StreamLogDataStore dataStore) {
@@ -57,35 +51,109 @@ public class SegmentManager {
         this.logDir = logDir;
         this.logSizeQuota = logSizeQuota;
         this.dataStore = dataStore;
-        this.streamSegmentCache = Caffeine.newBuilder()
-                .maximumSize(logParams.maxOpenStreamSegments)
-                .removalListener(getRemovalListener())
-                .build(ordinal -> getLogSegment(ordinal, StreamLogSegment.class));
-        this.garbageSegmentCache = Caffeine.newBuilder()
-                .maximumSize(logParams.maxOpenGarbageSegments)
-                .removalListener(getRemovalListener())
-                .build(ordinal -> getLogSegment(ordinal, GarbageLogSegment.class));
     }
 
-    private <T extends AbstractLogSegment> RemovalListener<Long, T> getRemovalListener() {
-        return (key, value, cause) -> {
-            if (value == null) {
-                return;
-            }
-            if (cause == RemovalCause.SIZE) {
-                value.close(false);
-            } else if (cause == RemovalCause.EXPLICIT) {
-                value.close(true);
-            } else {
-                log.error("RemovalListener: unexpected removal cause: {}", cause);
-            }
-        };
+    /**
+     * Create an artificial unmerged segment ID by global address.
+     *
+     * @param globalAddress the global address
+     * @return ID of an unmerged segment
+     */
+    private SegmentId createSegmentId(long globalAddress) {
+        long start = globalAddress / RECORDS_PER_SEGMENT * RECORDS_PER_SEGMENT;
+        return new SegmentId(start, start + RECORDS_PER_SEGMENT);
     }
 
+    /**
+     * Get the existing stream log segment that is responsible for storing
+     * data associated with the provided address, creating a new one if the
+     * corresponding segment is not present.
+     *
+     * @param address the address to open
+     * @return the stream log segment for that address
+     */
+    StreamLogSegment getStreamLogSegment(long address) {
+        SegmentId segmentId = createSegmentId(address);
+        return getStreamLogSegmentById(segmentId);
+    }
+
+    /**
+     * Get the existing stream log segment that is responsible for storing
+     * data associated with the provided segment ID, creating a new one if
+     * the segment is not present.
+     *
+     * @param segmentId ID of the segment
+     * @return the stream log segment for the segment ID
+     */
+    StreamLogSegment getStreamLogSegmentById(SegmentId segmentId) {
+        StreamLogSegment segment = streamSegmentIndex.getSegmentById(
+                segmentId,
+                sid -> getLogSegment(sid, StreamLogSegment.class)
+        );
+        segment.retain();
+
+        return segment;
+    }
+
+    /**
+     * Get the existing stream log segment that is responsible for storing
+     * garbage decision associated with the provided segment ID, creating
+     * a new one if the segment is not present.
+     *
+     * @param address the address to open
+     * @return the garbage log segment for the address
+     */
+    GarbageLogSegment getGarbageLogSegment(long address) {
+        SegmentId segmentId = createSegmentId(address);
+        return getGarbageLogSegmentById(segmentId);
+    }
+
+    /**
+     * Get the existing garbage log segment that is responsible for storing
+     * garbage decision associated with the provided segment ID, creating a
+     * new one if the segment is not present.
+     *
+     * @param segmentId ID of the segment
+     * @return the garbage log segment for the segment ID
+     */
+    GarbageLogSegment getGarbageLogSegmentById(SegmentId segmentId) {
+        GarbageLogSegment segment = garbageSegmentIndex.getSegmentById(
+                segmentId,
+                sid -> getLogSegment(sid, GarbageLogSegment.class));
+        segment.retain();
+
+        return segment;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T extends AbstractLogSegment> T getLogSegment(SegmentId segmentId, Class<T> segmentType) {
+        String filePath = getSegmentFilePath(segmentId, segmentType, false);
+        CompactionStats metaData = getCompactionStats(segmentId);
+
+        AbstractLogSegment segment;
+        if (segmentType.equals(StreamLogSegment.class)) {
+            segment = new StreamLogSegment(segmentId, logParams, filePath, logSizeQuota, metaData, dataStore);
+        } else if (segmentType.equals(GarbageLogSegment.class)) {
+            segment = new GarbageLogSegment(segmentId, logParams, filePath, logSizeQuota, metaData);
+        } else {
+            throw new IllegalArgumentException("getLogSegment: Unknown segment type: " + segmentType);
+        }
+
+        // The first time we open a file we should read to the end, to load the map
+        // of entries we already have. Once the segment address space is loaded, it
+        // should be ready to accept writes.
+        segment.loadAddressSpace();
+        return (T) segment;
+    }
+
+    /**
+     * Generate the segment file path, can be a regular log segment file or a
+     * compaction output file for compactor to rewrite an existing segment.
+     */
     private <T extends AbstractLogSegment> String getSegmentFilePath(
-            long ordinal, Class<T> segmentType, boolean isCompactionOutput) {
-        String fileSuffix;
+            SegmentId segmentId, Class<T> segmentType, boolean isCompactionOutput) {
 
+        String fileSuffix;
         if (segmentType.equals(StreamLogSegment.class)) {
             fileSuffix = STREAM_SEGMENT_FILE_SUFFIX;
         } else if (segmentType.equals(GarbageLogSegment.class)) {
@@ -99,114 +167,35 @@ public class SegmentManager {
             fileSuffix += SEGMENT_COMPACTING_FILE_SUFFIX;
         }
 
-        return Paths.get(logDir.toString(), ordinal + fileSuffix).toString();
+        return Paths.get(logDir.toString(), segmentId + fileSuffix).toString();
+    }
+
+    private CompactionStats getCompactionStats(SegmentId segmentId) {
+        return compactionStatsMap.computeIfAbsent(
+                segmentId,
+                sid -> new CompactionStats(segmentId));
     }
 
     /**
-     * Get the ordinal of the segment that the global address belongs to.
+     * Create a new compaction stats container for the segment ID.
      *
-     * @param globalAddress the global address
-     * @return ordinal of the segment
+     * @param segmentId the ID of the segment the new metadata is associated with
+     * @return the new compaction stats container for the segment
      */
-    long getSegmentOrdinal(long globalAddress) {
-        return globalAddress / StreamLogParams.RECORDS_PER_SEGMENT;
+    CompactionStats createCompactionStats(SegmentId segmentId) {
+        return new CompactionStats(segmentId);
     }
 
     /**
-     * Get the opened stream log segment that is responsible for storing the
-     * data associated with the provided address, creating a new one if the
-     * segment is not present and opened in the current cached mapping.
+     * Create a new stream log segment object representing an existing segment file
+     * that is used for compaction input. The compactor uses this segment object to
+     * scan the underlying segment file and perform a rewrite.
      *
-     * @param address the address to open
-     * @return the stream log segment for that address
+     * @param segmentId the ID of the compaction input stream segment
+     * @return a new stream log segment representing an existing segment file
      */
-    StreamLogSegment getStreamLogSegment(long address) {
-        long ordinal = getSegmentOrdinal(address);
-        return getStreamLogSegmentByOrdinal(ordinal);
-    }
-
-    /**
-     * Get the opened stream log segment that is responsible for storing the
-     * data associated with the provided segment ordinal, creating a new one
-     * if the segment is not present and opened in the current cached mapping.
-     *
-     * @param ordinal the ordinal of the segment
-     * @return the stream log segment for that ordinal
-     */
-    StreamLogSegment getStreamLogSegmentByOrdinal(long ordinal) {
-        StreamLogSegment segment = streamSegmentCache.get(ordinal);
-        Objects.requireNonNull(segment).retain();
-        return segment;
-    }
-
-    /**
-     * Get the opened garbage log segment that is responsible for storing the garbage
-     * information associated with the provided address, creating a new one if the
-     * segment is not present and opened in the current cached mapping.
-     *
-     * @param address the address to open
-     * @return the garbage log segment for that address
-     */
-    GarbageLogSegment getGarbageLogSegment(long address) {
-        long ordinal = getSegmentOrdinal(address);
-        return getGarbageLogSegmentByOrdinal(ordinal);
-    }
-
-    /**
-     * Get the opened garbage log segment that is responsible for storing the
-     * data associated with the provided segment ordinal, creating a new one
-     * if the segment is not present and opened in the current cached mapping.
-     *
-     * @param ordinal the ordinal of the segment
-     * @return the garbage log segment for that ordinal
-     */
-    GarbageLogSegment getGarbageLogSegmentByOrdinal(long ordinal) {
-        GarbageLogSegment segment = garbageSegmentCache.get(ordinal);
-        Objects.requireNonNull(segment).retain();
-        return segment;
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T extends AbstractLogSegment> T getLogSegment(long ordinal, Class<T> segmentType) {
-        String filePath = getSegmentFilePath(ordinal, segmentType, false);
-        CompactionMetadata metaData = getCompactionMetaData(ordinal);
-
-        AbstractLogSegment segment;
-        if (segmentType.equals(StreamLogSegment.class)) {
-            segment = new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData, dataStore);
-        } else if (segmentType.equals(GarbageLogSegment.class)) {
-            segment = new GarbageLogSegment(ordinal, logParams, filePath, logSizeQuota, metaData);
-        } else {
-            throw new IllegalArgumentException("getLogSegment: Unknown segment type: " + segmentType);
-        }
-
-        // The first time we open a file we should read to the end, to load the map
-        // of entries we already have. Once the segment address space is loaded, it
-        // should be ready to accept writes.
-        segment.loadAddressSpace();
-        return (T) segment;
-    }
-
-    private CompactionMetadata getCompactionMetaData(long ordinal) {
-        return segmentCompactionMetadata.computeIfAbsent(ordinal, seg ->
-                new CompactionMetadata(ordinal));
-    }
-
-    /**
-     * Get a new compaction metadata for the segment.
-     *
-     * @param ordinal the ordinal of the segment the metadata is associated with
-     * @return the compaction metadata for the segment
-     */
-    CompactionMetadata newCompactionMetadata(long ordinal) {
-        return new CompactionMetadata(ordinal);
-    }
-
-    /**
-     * TODO: add comments
-     */
-    StreamLogSegment newCompactionInputStreamSegment(long ordinal) {
-        String filePath = getSegmentFilePath(ordinal, StreamLogSegment.class, false);
+    StreamLogSegment createCompactionInputStreamSegment(SegmentId segmentId) {
+        String filePath = getSegmentFilePath(segmentId, StreamLogSegment.class, false);
 
         if (!Files.exists(Paths.get(filePath))) {
             String msg = String.format("Compaction input stream segment file: " +
@@ -215,30 +204,41 @@ public class SegmentManager {
             throw new IllegalStateException(msg);
         }
 
-        return new StreamLogSegment(ordinal, logParams, filePath, logSizeQuota, null, dataStore);
+        return new StreamLogSegment(segmentId, logParams, filePath, logSizeQuota, null, dataStore);
     }
 
     /**
-     * TODO: add comments
+     * Create a new stream log segment represent a new segment file that is used for
+     * compaction output. The compactor scans existing segment files and rewrite to
+     * the underlying file represented by this segment.
+     *
+     * @param segmentId the ID of the compaction output stream segment
+     * @param cpStats   the compaction stats associated with this segment
+     * @return a new stream log segment representing a new segment file
      */
-    StreamLogSegment newCompactionOutputStreamSegment(long ordinal,
-                                                      CompactionMetadata metaData) {
-        String filePath = getSegmentFilePath(ordinal, StreamLogSegment.class, true);
+    StreamLogSegment createCompactionOutputStreamSegment(SegmentId segmentId,
+                                                         CompactionStats cpStats) {
+        String filePath = getSegmentFilePath(segmentId, StreamLogSegment.class, true);
         deleteExistingCompactionOutputFile(filePath);
 
         // Open a new segment and write header.
         StreamLogSegment streamLogSegment = new StreamLogSegment(
-                ordinal, logParams, filePath, logSizeQuota, metaData, dataStore);
+                segmentId, logParams, filePath, logSizeQuota, cpStats, dataStore);
         streamLogSegment.loadAddressSpace();
 
         return streamLogSegment;
     }
 
     /**
-     * TODO: add comments.
+     * Create a new garbage log segment object representing an existing segment file
+     * that is used for compaction input. The compactor uses this segment object to
+     * scan the underlying segment file and perform a rewrite.
+     *
+     * @param segmentId the ID of the compaction input garbage segment
+     * @return a new garbage log segment representing an existing segment file
      */
-    GarbageLogSegment newCompactionInputGarbageSegment(long ordinal) {
-        String filePath = getSegmentFilePath(ordinal, GarbageLogSegment.class, false);
+    GarbageLogSegment createCompactionInputGarbageSegment(SegmentId segmentId) {
+        String filePath = getSegmentFilePath(segmentId, GarbageLogSegment.class, false);
 
         if (!Files.exists(Paths.get(filePath))) {
             String msg = String.format("Compaction input garbage " +
@@ -247,22 +247,31 @@ public class SegmentManager {
             throw new IllegalStateException(msg);
         }
 
-        GarbageLogSegment curGarbageSegment = getGarbageLogSegmentByOrdinal(ordinal);
+        GarbageLogSegment curGarbageSegment = getGarbageLogSegmentById(segmentId);
         GarbageLogSegment newGarbageSegment =
-                new GarbageLogSegment(ordinal, logParams, filePath, logSizeQuota, null);
+                new GarbageLogSegment(segmentId, logParams, filePath, logSizeQuota, null);
         newGarbageSegment.setGarbageEntryMap(curGarbageSegment.getGarbageEntryMap());
 
         return newGarbageSegment;
     }
 
-    GarbageLogSegment newCompactionOutputGarbageSegment(long ordinal,
-                                                        CompactionMetadata metaData) {
-        String filePath = getSegmentFilePath(ordinal, GarbageLogSegment.class, true);
+    /**
+     * Create a new garbage log segment represent a new segment file that is used for
+     * compaction output. The compactor scans existing segment files and rewrite to
+     * the underlying file represented by this segment.
+     *
+     * @param segmentId the ID of the compaction output garbage segment
+     * @param cpStats   the compaction stats associated with this segment
+     * @return a new garbage log segment representing a new segment file
+     */
+    GarbageLogSegment createCompactionOutputGarbageSegment(SegmentId segmentId,
+                                                           CompactionStats cpStats) {
+        String filePath = getSegmentFilePath(segmentId, GarbageLogSegment.class, true);
         deleteExistingCompactionOutputFile(filePath);
 
         // Open a new segment and write header.
         GarbageLogSegment garbageLogSegment = new GarbageLogSegment(
-                ordinal, logParams, filePath, logSizeQuota, metaData);
+                segmentId, logParams, filePath, logSizeQuota, cpStats);
         garbageLogSegment.loadAddressSpace();
 
         return garbageLogSegment;
@@ -314,35 +323,40 @@ public class SegmentManager {
      *
      * @return a list of segments that can be selected for compaction
      */
-    List<CompactionMetadata> getCompactibleSegments() {
+    List<CompactionStats> getCompactibleSegments() {
         // Do not compact any segment if state transfer is required and not finished.
         if (dataStore.getRequireStateTransfer()) {
             return Collections.emptyList();
         }
 
-        // Take a snapshot of the current segmentCompactionMetadata.
-        // Do not compact the protected segments that have highest ordinals.
-        List<CompactionMetadata> metaDataCopy = segmentCompactionMetadata
+        // Take a snapshot of the current compaction stats map.
+        // Since only the consolidated segments can be compacted, the number
+        // of entries in these segments should not change, so using shallow
+        // copies of compaction stats should be fine.
+        List<CompactionStats> metaDataCopy = compactionStatsMap
                 .values()
                 .stream()
-                .sorted(Comparator.comparingLong(CompactionMetadata::getOrdinal).reversed())
-                .skip(logParams.protectedSegments)
+                .sorted(Comparator.comparing(CompactionStats::getSegmentId))
                 .collect(Collectors.toList());
 
-        if (metaDataCopy.isEmpty()) {
+        // Do not compact the protected segments that have highest ordinals.
+        if (metaDataCopy.size() <= logParams.protectedSegments) {
             return Collections.emptyList();
         }
-
-        // Ordinal of the last compactible segment, rounded by committed tail.
-        long lastOrdinal = getSegmentOrdinal(dataStore.getCommittedTail()) - 1;
-        if (lastOrdinal < 0) {
-            return Collections.emptyList();
+        for (int i = 0; i < logParams.protectedSegments; i++) {
+            metaDataCopy.remove(metaDataCopy.size() - 1);
         }
 
-        return metaDataCopy
+        // Compact only the consolidated segments that falls below committed tail.
+        List<CompactionStats> compactibleSegments = metaDataCopy
                 .stream()
-                .filter(meta -> meta.getOrdinal() <= lastOrdinal)
+                .filter(meta -> meta.getSegmentId().lessThan(dataStore.getCommittedTail()))
                 .collect(Collectors.toList());
+        log.info("getCompactibleSegments: compactible segments: {}", compactibleSegments
+                .stream()
+                .map(CompactionStats::getSegmentId).collect(Collectors.toList()));
+
+        return compactibleSegments;
     }
 
     /**
@@ -387,8 +401,8 @@ public class SegmentManager {
                 throw new RuntimeException(e);
             }
 
-            // Update the compactionMetadata map with the new CompactionMetadata.
-            segmentCompactionMetadata.put(ordinal, newSegment.getCompactionMetaData());
+            // Update the compaction stats map with a new one.
+            compactionStatsMap.put(ordinal, newSegment.getCompactionStats());
 
             // Remove the segment mapping.
             return null;
@@ -396,27 +410,26 @@ public class SegmentManager {
     }
 
     /**
-     * Close and remove the segment from the cache.
+     * Close and evict the segment from the index.
      *
-     * @param ordinal ordinal of the segment to close
+     * @param segmentId ID of the segment to close
      */
-    void close(long ordinal) {
-        streamSegmentCache.invalidate(ordinal);
-        garbageSegmentCache.invalidate(ordinal);
+    void close(SegmentId segmentId) {
+        streamSegmentIndex.invalidate(segmentId);
+        garbageSegmentIndex.invalidate(segmentId);
     }
 
     /**
-     * Close and remove all the segments from the cache.
+     * Close and evict all the segments from the cache.
      */
     public void close() {
-        streamSegmentCache.invalidateAll();
-        garbageSegmentCache.invalidateAll();
-        segmentCompactionMetadata.clear();
+        streamSegmentIndex.invalidateAll();
+        garbageSegmentIndex.invalidateAll();
     }
 
     /**
-     * Close and remove all the segments from the cache,
-     * delete the underlying files.
+     * Close and evict all the segments from the cache,
+     * as well as delete all the underlying segment files.
      */
     void cleanAndClose() {
         close();

@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
-import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -18,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.StampedLock;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
@@ -42,10 +40,10 @@ public class GarbageLogSegment extends AbstractLogSegment {
     @Setter
     private Map<Long, SMRGarbageEntry> garbageEntryMap = new ConcurrentHashMap<>();
 
-    GarbageLogSegment(long ordinal, StreamLogParams logParams,
+    GarbageLogSegment(SegmentId segmentId, StreamLogParams logParams,
                       String filePath, ResourceQuota logSizeQuota,
-                      CompactionMetadata compactionMetaData) {
-        super(ordinal, logParams, filePath, logSizeQuota, compactionMetaData);
+                      CompactionStats compactionStats) {
+        super(segmentId, logParams, filePath, logSizeQuota, compactionStats);
     }
 
     /**
@@ -60,7 +58,7 @@ public class GarbageLogSegment extends AbstractLogSegment {
             SMRGarbageEntry garbageEntry = (SMRGarbageEntry) logData.getPayload(null);
             mergeGarbageEntry(logData.getGlobalAddress(), garbageEntry);
         }
-        compactionMetaData.updateGarbageSize(new ArrayList<>(garbageEntryMap.values()));
+        compactionStats.updateGarbageSize(new ArrayList<>(garbageEntryMap.values()));
     }
 
     /**
@@ -86,11 +84,11 @@ public class GarbageLogSegment extends AbstractLogSegment {
         try {
             writeRecord(address, entry);
             mergeGarbageEntry(address, uniqueGarbageEntry);
-            compactionMetaData.updateGarbageSize(Collections.singletonList(uniqueGarbageEntry));
+            compactionStats.updateGarbageSize(Collections.singletonList(uniqueGarbageEntry));
             log.trace("append[{}]: Written one garbage entry to disk.", address);
         } catch (ClosedChannelException cce) {
             log.warn("append[{}]: Segment channel closed. Segment: {}, file: {}",
-                    entry, ordinal, filePath);
+                    entry, segmentId, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("append[{}]: IOException when writing a garbage entry.", address, ioe);
@@ -139,9 +137,9 @@ public class GarbageLogSegment extends AbstractLogSegment {
         try {
             writeRecords(uniqueGarbageLogData);
             uniqueGarbageEntries.forEach(this::mergeGarbageEntry);
-            compactionMetaData.updateGarbageSize(uniqueGarbageEntries.values());
+            compactionStats.updateGarbageSize(uniqueGarbageEntries.values());
         } catch (ClosedChannelException cce) {
-            log.warn("append: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("append: Segment channel closed. Segment: {}, file: {}", segmentId, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("append: IOException when writing entries: {}", entries, ioe);

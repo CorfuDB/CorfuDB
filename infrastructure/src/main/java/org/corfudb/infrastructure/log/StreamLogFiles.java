@@ -210,7 +210,7 @@ public class StreamLogFiles implements StreamLog {
                 logMetadata.update(Collections.singletonList(logData));
             }
 
-            // Load garbage log segment to update CompactionMetadata.
+            // Load garbage log segment to update CompactionStats.
             segmentManager.getGarbageLogSegmentByOrdinal(currentSegment);
 
             // Close and remove the reference of the unprotected segments.

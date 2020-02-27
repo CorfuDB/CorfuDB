@@ -4,7 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.AbstractLogSegment.IndexedLogEntry;
-import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.logprotocol.SMRGarbageEntry;
 import org.corfudb.protocols.logprotocol.SMRGarbageRecord;
 import org.corfudb.protocols.logprotocol.SMRLogEntry;
@@ -27,7 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.log.CompactionMetadata.currCompactionUpperBound;
+import static org.corfudb.infrastructure.log.CompactionStats.currCompactionUpperBound;
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
 /**
@@ -92,23 +91,23 @@ public class StreamLogCompactor {
     public void compact() {
         try {
             // Get the segments that should be compacted according to compaction policy.
-            List<Long> segmentOrdinals = compactionPolicy
+            List<List<SegmentId>> segmentGroups = compactionPolicy
                     .getSegmentsToCompact(segmentManager.getCompactibleSegments());
 
-            if (segmentOrdinals.isEmpty()) {
-                log.info("No segments to compact, skip");
+            if (segmentGroups.isEmpty()) {
+                log.info("No segments groups to compact, skip");
                 return;
             }
 
-            log.info("Segments to compact: {}", segmentOrdinals);
+            log.info("Segment groups to compact: {}", segmentGroups);
             // Prepare the compaction tasks.
-            List<Callable<Object>> tasks = segmentOrdinals
+            List<Callable<Object>> tasks = segmentGroups
                     .stream()
-                    .map(ordinal -> Executors.callable(() -> compactSegment(ordinal)))
+                    .map(group -> Executors.callable(() -> compactSegmentGroup(group)))
                     .collect(Collectors.toList());
 
             // Get the results when all tasks are finished, ignoring failures.
-            log.info("Launched compaction tasks, compacting {} segments.", tasks.size());
+            log.info("Launched compaction tasks, compacting {} segment groups.", tasks.size());
             long startTime = System.currentTimeMillis();
             compactionWorker.invokeAll(tasks);
             long span = System.currentTimeMillis() - startTime;
@@ -120,21 +119,48 @@ public class StreamLogCompactor {
         }
     }
 
-    private void compactSegment(Long ordinal) {
+    private void compactSegmentGroup(List<SegmentId> segmentGroup) {
+        log.info("Started compacting segment group: {}", segmentGroup);
+
+        StreamLogSegment outputStreamSegment = null;
+        GarbageLogSegment outputGarbageSegment = null;
+
+        try {
+            // Get the merged segment ID representing the merged segment after compaction.
+            SegmentId mergedSegmentId = SegmentId.getMergedSegmentId(segmentGroup);
+            // Get a new compaction stats container for the output segments.
+            CompactionStats compactionStats = segmentManager.createCompactionStats(mergedSegmentId);
+            // Create output stream and garbage segments for rewriting.
+            outputStreamSegment =
+                    segmentManager.createCompactionOutputStreamSegment(mergedSegmentId, compactionStats);
+            outputGarbageSegment =
+                    segmentManager.createCompactionOutputGarbageSegment(mergedSegmentId, compactionStats);
+            CompactionFeedback compactionFeedback = compactStreamSegmentGroup(segmentGroup, outputStreamSegment);
+
+
+        } catch (Throwable t) {
+            log.error("compactSegmentGroup: encountered an exception when " +
+                    "compacting segment group: {}.", segmentGroup);
+        } finally {
+            closeSegments(outputStreamSegment, outputGarbageSegment);
+        }
+    }
+
+    private void compactSegment(SegmentId segmentId) {
         StreamLogSegment inputStreamSegment = null;
         StreamLogSegment outputStreamSegment = null;
         GarbageLogSegment inputGarbageSegment = null;
         GarbageLogSegment outputGarbageSegment = null;
 
         try {
-            // Get a new CompactionMetadata container for the output segments.
-            CompactionMetadata compactionMetaData = segmentManager.newCompactionMetadata(ordinal);
+            // Get a new compaction stats container for the output segments.
+            CompactionStats compactionStats = segmentManager.createCompactionStats(ordinal);
             // Open a new segment that does not contain indexing metadata to save time and memory
             // as this segment is the compaction input which is only needed for linear scanning.
-            inputStreamSegment = segmentManager.newCompactionInputStreamSegment(ordinal);
-            outputStreamSegment = segmentManager.newCompactionOutputStreamSegment(ordinal, compactionMetaData);
-            inputGarbageSegment = segmentManager.newCompactionInputGarbageSegment(ordinal);
-            outputGarbageSegment = segmentManager.newCompactionOutputGarbageSegment(ordinal, compactionMetaData);
+            inputStreamSegment = segmentManager.createCompactionInputStreamSegment(ordinal);
+            outputStreamSegment = segmentManager.createCompactionOutputStreamSegment(ordinal, compactionStats);
+            inputGarbageSegment = segmentManager.createCompactionInputGarbageSegment(ordinal);
+            outputGarbageSegment = segmentManager.createCompactionOutputGarbageSegment(ordinal, compactionStats);
 
             log.debug("Started compacting stream log segment: {}", inputStreamSegment.getFilePath());
             long startTime = System.currentTimeMillis();
@@ -144,7 +170,7 @@ public class StreamLogCompactor {
 
             // Update global compaction mark before remapping to ensure following
             // reads can return the most up-to-date compaction mark.
-            dataStore.updateGlobalCompactionMark(compactionFeedback.segmentCompactionMark);
+            dataStore.updateGlobalCompactionMark(compactionFeedback.groupCompactionMark);
             logMetadata.pruneStreamSpace(compactionFeedback.addressesToPrune);
             segmentManager.remapCompactedSegment(inputStreamSegment, outputStreamSegment);
 
@@ -159,8 +185,7 @@ public class StreamLogCompactor {
             // But the lock should not take long time as garbage segment is small (several MB).
             inputGarbageSegment.getSegmentLock().lock();
             try {
-                compactGarbageSegment(inputGarbageSegment, outputGarbageSegment,
-                        compactionFeedback.garbageEntriesToPrune);
+                compactGarbageSegment(inputGarbageSegment, outputGarbageSegment, compactionFeedback);
                 segmentManager.remapCompactedSegment(inputGarbageSegment, outputGarbageSegment);
             } finally {
                 inputGarbageSegment.getSegmentLock().unlock();
@@ -179,30 +204,46 @@ public class StreamLogCompactor {
         }
     }
 
-    private CompactionFeedback compactStreamSegment(StreamLogSegment inputStreamSegment,
-                                                    StreamLogSegment outputStreamSegment,
-                                                    GarbageLogSegment inputGarbageSegment) {
+    private CompactionFeedback compactStreamSegmentGroup(List<SegmentId> segmentGroup,
+                                                         StreamLogSegment outputStreamSegment) {
         int flushBatchCount = 0;
         List<LogData> batch = new ArrayList<>();
-        Map<Long, SMRGarbageEntry> garbageInfoMap = inputGarbageSegment.getGarbageEntryMap();
         CompactionFeedback compactionFeedback = new CompactionFeedback();
 
-        // Scan the input StreamLogSegment and compact entries.
-        for (IndexedLogEntry indexedEntry : inputStreamSegment) {
-            LogData logData = getLogData(indexedEntry.logEntry);
-            long address = logData.getGlobalAddress();
-            LogData newLogData = compactStreamLogEntry(logData, address,
-                    garbageInfoMap.get(address), compactionFeedback);
-            // If the entire LogData is compacted, do not append to new segment.
-            if (newLogData != null) {
-                batch.add(newLogData);
-            }
+        for (SegmentId segmentId : segmentGroup) {
+            StreamLogSegment inputStreamSegment = null;
+            GarbageLogSegment inputGarbageSegment = null;
+            try {
+                // Open a new segment that does not contain indexing metadata to save time and memory
+                // as this segment is the compaction input which is only needed for linear scanning.
+                inputStreamSegment = segmentManager.createCompactionInputStreamSegment(segmentId);
+                inputGarbageSegment = segmentManager.createCompactionInputGarbageSegment(segmentId);
+                Map<Long, SMRGarbageEntry> garbageInfoMap = inputGarbageSegment.getGarbageEntryMap();
 
-            // Write batch to the output segment.
-            flushBatchCount = writeBatchToCompactionOutput(batch,
-                    STREAM_COMPACTION_BATCH_SIZE, flushBatchCount, outputStreamSegment);
+                // Scan the input stream log segment and compact entries.
+                for (IndexedLogEntry indexedEntry : inputStreamSegment) {
+                    LogData logData = getLogData(indexedEntry.logEntry);
+                    long address = logData.getGlobalAddress();
+                    LogData newLogData = compactStreamLogEntry(logData, address,
+                            garbageInfoMap.get(address), compactionFeedback);
+                    // If the entire LogData is compacted, do not append to new segment.
+                    if (newLogData != null) {
+                        batch.add(newLogData);
+                    }
+                    // Write batch to the output segment.
+                    flushBatchCount = writeBatchToCompactionOutput(batch,
+                            STREAM_COMPACTION_BATCH_SIZE, flushBatchCount, outputStreamSegment);
+                }
+                writeBatchToCompactionOutput(batch, outputStreamSegment);
+
+            } catch (Throwable t) {
+                log.error("compactStreamSegmentGroup: encountered an exception " +
+                        "when compacting segment: {}", segmentId, t);
+                throw t;
+            } finally {
+                closeSegments(inputStreamSegment, inputGarbageSegment);
+            }
         }
-        writeBatchToCompactionOutput(batch, outputStreamSegment);
 
         return compactionFeedback;
     }
@@ -300,7 +341,7 @@ public class StreamLogCompactor {
 
     private void compactGarbageSegment(GarbageLogSegment inputGarbageSegment,
                                        GarbageLogSegment outputGarbageSegment,
-                                       Map<Long, Map<UUID, List<Integer>>> entriesToPrune) {
+                                       CompactionFeedback compactionFeedback) {
         int flushBatchCount = 0;
         List<LogData> batch = new ArrayList<>();
 
@@ -308,7 +349,8 @@ public class StreamLogCompactor {
                 inputGarbageSegment.getGarbageEntryMap().entrySet()) {
             long address = mapEntry.getKey();
             SMRGarbageEntry entry = mapEntry.getValue();
-            Map<UUID, List<Integer>> entryToPrune = entriesToPrune.get(address);
+            Map<UUID, List<Integer>> entryToPrune =
+                    compactionFeedback.garbageEntriesToPrune.get(address);
 
             // If this entry was already used to compact stream entry, prune it.
             entry.prune(entryToPrune);
@@ -350,6 +392,7 @@ public class StreamLogCompactor {
     private void writeBatchToCompactionOutput(List<LogData> batch,
                                               AbstractLogSegment compactionOutput) {
         compactionOutput.appendCompacted(batch);
+        batch.clear();
         compactionOutput.sync();
     }
 
@@ -379,7 +422,7 @@ public class StreamLogCompactor {
         // Used to prune stream address bitmap.
         private Map<UUID, List<Long>> addressesToPrune = new HashMap<>();
         // Used to update global compaction mark.
-        private long segmentCompactionMark = Address.NON_ADDRESS;
+        private long groupCompactionMark = Address.NON_ADDRESS;
 
         private void addGarbageRecordToPrune(long address, UUID streamId, int index) {
             Map<UUID, List<Integer>> entries = garbageEntriesToPrune.computeIfAbsent(
@@ -406,7 +449,7 @@ public class StreamLogCompactor {
         }
 
         private void updateSegmentCompactionMark(long address) {
-            segmentCompactionMark = Math.max(address, segmentCompactionMark);
+            groupCompactionMark = Math.max(address, groupCompactionMark);
         }
     }
 }

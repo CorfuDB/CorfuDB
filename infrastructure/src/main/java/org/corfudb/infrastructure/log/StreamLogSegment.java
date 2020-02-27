@@ -39,11 +39,11 @@ class StreamLogSegment extends AbstractLogSegment {
     // Entry index map of the global logical address to physical offset in this file.
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
 
-    StreamLogSegment(long ordinal, StreamLogParams logParams,
+    StreamLogSegment(SegmentId segmentId, StreamLogParams logParams,
                      String filePath, ResourceQuota logSizeQuota,
-                     CompactionMetadata compactionMetaData,
+                     CompactionStats compactionStats,
                      StreamLogDataStore dataStore) {
-        super(ordinal, logParams, filePath, logSizeQuota, compactionMetaData);
+        super(segmentId, logParams, filePath, logSizeQuota, compactionStats);
         this.dataStore = dataStore;
     }
 
@@ -71,7 +71,7 @@ class StreamLogSegment extends AbstractLogSegment {
 
             return readRecord(metaData);
         } catch (ClosedChannelException cce) {
-            log.warn("Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("Segment channel closed. Segment: {}, file: {}", segmentId, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("read[{}]: IOException when reading an entry.", address, ioe);
@@ -115,12 +115,13 @@ class StreamLogSegment extends AbstractLogSegment {
 
             AddressMetaData addressMetaData = writeRecord(address, entry);
             knownAddresses.put(address, addressMetaData);
-            compactionMetaData.updateTotalPayloadSize(Collections.singletonList(entry));
+            compactionStats.updateStreamEntryCount(1);
+            compactionStats.updateTotalPayloadSize(Collections.singletonList(entry));
             log.trace("append[{}]: Written one entry to disk.", address);
 
         } catch (ClosedChannelException cce) {
             log.warn("append[{}]: Segment channel closed. Segment: {}, file: {}",
-                    entry, ordinal, filePath);
+                    entry, segmentId, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("append[{}]: IOException when writing an entry.", address, ioe);
@@ -151,11 +152,12 @@ class StreamLogSegment extends AbstractLogSegment {
 
             Map<Long, AddressMetaData> addressMetaData = writeRecords(entries);
             knownAddresses.putAll(addressMetaData);
-            compactionMetaData.updateTotalPayloadSize(entries);
+            compactionStats.updateStreamEntryCount(entries.size());
+            compactionStats.updateTotalPayloadSize(entries);
             log.trace("append: Written entries to disk: {}", entries);
 
         } catch (ClosedChannelException cce) {
-            log.warn("append: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+            log.warn("append: Segment channel closed. Segment: {}, file: {}", segmentId, filePath);
             throw new ClosedSegmentException(cce);
         } catch (IOException ioe) {
             log.error("append: IOException when writing entries: {}", entries, ioe);
@@ -180,7 +182,8 @@ class StreamLogSegment extends AbstractLogSegment {
             }
             Map<Long, AddressMetaData> addressMetaData = writeRecords(entries);
             knownAddresses.putAll(addressMetaData);
-            compactionMetaData.updateTotalPayloadSize(entries);
+            compactionStats.updateStreamEntryCount(entries.size());
+            compactionStats.updateTotalPayloadSize(entries);
             log.trace("appendCompacted: Written entries to disk: {}", entries);
         } catch (IOException ioe) {
             log.error("appendCompacted: IOException when writing entries: {}", entries, ioe);
@@ -238,7 +241,8 @@ class StreamLogSegment extends AbstractLogSegment {
 
             knownAddresses.put(indexedEntry.logEntry.getGlobalAddress(), addressMetadata);
             LogData logData = getLogData(indexedEntry.logEntry);
-            compactionMetaData.updateTotalPayloadSize(Collections.singletonList(logData));
+            compactionStats.updateStreamEntryCount(1);
+            compactionStats.updateTotalPayloadSize(Collections.singletonList(logData));
         }
     }
 }

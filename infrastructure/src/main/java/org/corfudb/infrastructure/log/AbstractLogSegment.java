@@ -9,7 +9,6 @@ import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
-import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 import javax.annotation.Nonnull;
@@ -53,7 +52,7 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 public abstract class AbstractLogSegment implements
         Iterable<AbstractLogSegment.IndexedLogEntry> {
 
-    protected final long ordinal;
+    protected final SegmentId segmentId;
 
     @NonNull
     protected final StreamLogParams logParams;
@@ -65,7 +64,7 @@ public abstract class AbstractLogSegment implements
     protected final ResourceQuota logSizeQuota;
 
     @NonNull
-    protected final CompactionMetadata compactionMetaData;
+    protected final CompactionStats compactionStats;
 
     @NonNull
     protected FileChannel writeChannel;
@@ -77,14 +76,14 @@ public abstract class AbstractLogSegment implements
 
     private volatile boolean closing = false;
 
-    AbstractLogSegment(long ordinal, StreamLogParams logParams,
+    AbstractLogSegment(SegmentId segmentId, StreamLogParams logParams,
                        String filePath, ResourceQuota logSizeQuota,
-                       CompactionMetadata compactionMetaData) {
-        this.ordinal = ordinal;
+                       CompactionStats compactionStats) {
+        this.segmentId = segmentId;
         this.logParams = logParams;
         this.filePath = filePath;
         this.logSizeQuota = logSizeQuota;
-        this.compactionMetaData = compactionMetaData;
+        this.compactionStats = compactionStats;
 
         try {
             this.writeChannel = getChannel(filePath, false);
@@ -358,7 +357,7 @@ public abstract class AbstractLogSegment implements
                     }
                 }
             } catch (ClosedChannelException cce) {
-                log.warn("SegmentIterator: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+                log.warn("SegmentIterator: Segment channel closed. Segment: {}, file: {}", segmentId, filePath);
                 throw new ClosedSegmentException(cce);
             } catch (IOException ioe) {
                 log.error("SegmentIterator: Error reading file: {}", filePath, ioe);
@@ -400,7 +399,7 @@ public abstract class AbstractLogSegment implements
                 return true;
 
             } catch (ClosedChannelException cce) {
-                log.warn("SegmentIterator: Segment channel closed. Segment: {}, file: {}", ordinal, filePath);
+                log.warn("SegmentIterator: Segment channel closed. Segment: {}, file: {}", segmentId, filePath);
                 throw new ClosedSegmentException(cce);
             } catch (IOException ioe) {
                 log.error("SegmentIterator: Error reading file: {}", filePath, ioe);

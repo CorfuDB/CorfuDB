@@ -16,12 +16,15 @@ public interface CompactionPolicy {
     }
 
     /**
-     * Returns a list of segments selected for compaction based on
-     * the compaction policy implementation.
+     * Returns a list of grouped segments selected for compaction. Different
+     * compaction policy may return different groups. Grouping is based on
+     * the criteria that the total number of entries in the group does not
+     * exceed the capacity of a single segment.
      *
-     * @param compactibleSegments metadata of unprotected segments that
-     *                            can be selected for compaction
-     * @return a list of ordinals whose associated segments are selected for compaction.
+     * @param compactibleSegments a list of segment compaction stats ordered by
+     *                            segment ID that are allowed to be selected
+     *                            for compaction
+     * @return a list of grouped segments selected for compaction
      */
-    List<Long> getSegmentsToCompact(List<CompactionMetadata> compactibleSegments);
+    List<List<SegmentId>> getSegmentsToCompact(List<CompactionStats> compactibleSegments);
 }
