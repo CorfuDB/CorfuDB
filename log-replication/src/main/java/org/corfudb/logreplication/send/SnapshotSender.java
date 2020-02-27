@@ -92,7 +92,7 @@ public class SnapshotSender {
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
-                    System.out.println("****** TRIMMED EXCEPTION!!!!!! *********");
+                    System.out.println("****** TRIMMED EXCEPTION!!!!!! *********" + te);
                     log.warn("Cancel snapshot sync due to trimmed exception.", te);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
                     cancel = true;
