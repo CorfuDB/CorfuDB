@@ -30,7 +30,7 @@ import java.util.UUID;
 public class LogEntrySender {
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     public static final int DEFAULT_READER_QUEUE_SIZE = 1;
-    public static final int DEFAULT_RESENT_TIMER = 500;
+    public static final int DEFAULT_RESENT_TIMER = 5000;
     public static final int DEFAULT_MAX_RETRY = 5;
 
     /*

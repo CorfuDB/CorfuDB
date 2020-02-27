@@ -92,6 +92,7 @@ public class SnapshotSender {
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
+                    System.out.println("****** TRIMMED EXCEPTION!!!!!! *********");
                     log.warn("Cancel snapshot sync due to trimmed exception.", te);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
                     cancel = true;
@@ -194,13 +195,13 @@ public class SnapshotSender {
      * @param error specific error cause
      */
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
+        // Report error to the application through the dataSender
+        dataSender.onError(error, snapshotSyncEventId);
+
         // Enqueue cancel event, this will cause a transition to the require snapshot sync request, which
         // will notify application through the data control about this request.
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncEventId)));
-
-        // Report error to the application through the dataSender
-        dataSender.onError(error, snapshotSyncEventId);
     }
 
     /**
