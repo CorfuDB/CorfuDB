@@ -1,7 +1,10 @@
 package org.corfudb.logreplication;
 
+import com.google.common.annotations.VisibleForTesting;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
@@ -18,8 +21,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
-import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEUE_SIZE;
-import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_RESENT_TIMER;
+import static org.corfudb.logreplication.send.LogEntrySender.*;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -30,10 +32,9 @@ import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_RESENT_TIME
 @Slf4j
 public class SinkManager implements DataReceiver {
     private static final String config_file = "/config/corfu/corfu_replication_config.properties";
-    private static final int DEFAULT_ACK_CNT = 1;
 
-    private int ackCycleTime = DEFAULT_ACK_CNT;
-    private int ackCycleCnt;
+    private int ackCycleTime = DEFAULT_RESENT_TIMER/DEFAULT_MAX_RETRY;
+    private int ackCycleCnt = DEFAULT_READER_QUEUE_SIZE;
 
     private CorfuRuntime runtime;
     private StreamsSnapshotWriter snapshotWriter;
@@ -44,6 +45,12 @@ public class SinkManager implements DataReceiver {
     private DataControl dataControl;
     private LogReplicationConfig config;
     private UUID snapshotRequestId = new UUID(0L, 0L);
+
+    private int rxMessageCounter = 0;
+    // Count number of received messages, used for testing purposes
+    @VisibleForTesting
+    @Getter
+    private ObservableValue rxMessageCount = new ObservableValue(rxMessageCounter);
 
     private int ackCnt = 0;
     private long ackTime = 0;
@@ -95,8 +102,8 @@ public class SinkManager implements DataReceiver {
             int logWriterQueueSize = Integer.parseInt(props.getProperty("log_writer_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
             logEntryWriter.setMaxMsgQueSize(logWriterQueueSize);
 
-            ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count", Integer.toString(DEFAULT_READER_QUEUE_SIZE/5)));
-            ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(DEFAULT_RESENT_TIMER/5)));
+            ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
+            ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(DEFAULT_RESENT_TIMER)));
             reader.close();
             log.info("log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
                     logWriterQueueSize, ackCycleCnt, ackCycleTime);
@@ -134,8 +141,11 @@ public class SinkManager implements DataReceiver {
     @Override
     public void receive(DataMessage dataMessage) {
 
+        rxMessageCounter++;
+        rxMessageCount.setValue(rxMessageCounter);
+
         if (log.isTraceEnabled()) {
-            log.trace("Received dataMessage by Sink Manager");
+            log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
         }
 
         // Buffer data (out of order) and apply
@@ -176,7 +186,6 @@ public class SinkManager implements DataReceiver {
             return true;
         }
 
-        ackCnt++;
         return false;
     }
 
@@ -188,9 +197,8 @@ public class SinkManager implements DataReceiver {
         if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
             persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
 
-            // TODO: this will be changed to be sent every T seconds instead on every apply
-            // Prepare ACK message for Log Entry Sync
             if (shouldAck()) {
+                // Prepare ACK message for Log Entry Sync
                 LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED,
                         message.getMetadata().getSyncRequestId(), ackTs,
                         message.getMetadata().getSnapshotTimestamp());
