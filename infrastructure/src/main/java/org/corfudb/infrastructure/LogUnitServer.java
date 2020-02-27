@@ -296,7 +296,13 @@ public class LogUnitServer extends AbstractServer {
 
         ReadResponse rr = new ReadResponse();
         try {
-            ILogData logData = dataCache.get(address, cacheable);
+            ILogData logData;
+            if(address < streamLog.getTrimMark()) {
+                logData = LogData.getTrimmed(address);
+            } else {
+                logData = dataCache.get(address, cacheable);
+            }
+
             if (logData == null) {
                 rr.put(address, LogData.getEmpty(address));
             } else {
@@ -317,7 +323,14 @@ public class LogUnitServer extends AbstractServer {
         ReadResponse rr = new ReadResponse();
         try {
             for (Long address : msg.getPayload().getAddresses()) {
-                ILogData logData = dataCache.get(address, cacheable);
+                ILogData logData;
+
+                if(address < streamLog.getTrimMark()) {
+                    logData = LogData.getTrimmed(address);
+                } else {
+                    logData = dataCache.get(address, cacheable);
+                }
+
                 if (logData == null) {
                     rr.put(address, LogData.getEmpty(address));
                 } else {
