@@ -8,7 +8,6 @@ import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
-import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.DataMessage;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.message.MessageType;
@@ -24,9 +23,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * This class represents the Log Replication Manager at the source.
+ * This class represents the Log Replication Manager at the source site.
  *
- * It is the entry point for log replication at the sender.
+ * It is the entry point for log replication at the sender, it allows
+ * initializing, stopping or cancelling log replication. It also
+ * provides the interface to receive messages from the DataSender (Data Path)
+ * or DataControl (Control Path).
  *
  **/
 @Data

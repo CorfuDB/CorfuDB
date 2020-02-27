@@ -20,7 +20,9 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Queue;
@@ -346,17 +348,21 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     private void writeToStream() {
         UUID streamA = UUID.nameUUIDFromBytes(TEST_STREAM_NAME.getBytes());
+        List<TokenResponse> writeTokens = new ArrayList<>();
 
         // Write
         for (int i=0; i<NUM_ENTRIES; i++) {
             TokenResponse response = runtime.getSequencerView().next(streamA);
+            writeTokens.add(response);
             runtime.getAddressSpaceView().write(response, String.format(PAYLOAD_FORMAT, i).getBytes());
         }
 
         // Read to verify data is there
-        for (int i=0; i<NUM_ENTRIES; i++) {
-            assertThat(runtime.getAddressSpaceView().read((long)i).getPayload(getRuntime()))
-                    .isEqualTo( String.format(PAYLOAD_FORMAT, i).getBytes());
+        int index = 0;
+        for (TokenResponse token : writeTokens) {
+            assertThat(runtime.getAddressSpaceView().read((long)token.getSequence()).getPayload(getRuntime()))
+                    .isEqualTo( String.format(PAYLOAD_FORMAT, index).getBytes());
+            index++;
         }
     }
 

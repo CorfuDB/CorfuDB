@@ -12,15 +12,15 @@
         <module>common</module>
         <module>cmdlets</module>
         <module>corfudb-tools</module>
-        <module>test</module>
+        <module>log-replication</module>
+        <module>generator</module>
+        <module>coverage</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
         <module>samples</module>
         <module>debian</module>
-        <module>generator</module>
+        <module>test</module>
         <module>it</module>
-        <module>coverage</module>
-    <module>log-replication</module>
   </modules>
 
 

@@ -19,9 +19,12 @@ import java.util.UUID;
  */
 public class TestSnapshotReader implements SnapshotReader {
 
+    final int FIRST_ADDRESS = 2;
+
     private TestReaderConfiguration config;
 
-    private int globalIndex = 0;
+    // Initialized to 2, as 0, 1 are always used to persist metadata
+    private int globalIndex = FIRST_ADDRESS;
 
     private CorfuRuntime runtime;
 
@@ -38,7 +41,7 @@ public class TestSnapshotReader implements SnapshotReader {
         int index = globalIndex;
 
         // Read numEntries in consecutive address space and add to messages to return
-        for (int i=index; (i<(index+config.getBatchSize()) && index<config.getNumEntries()) ; i++) {
+        for (int i=index; (i<(index+config.getBatchSize()) && index<(config.getNumEntries() + FIRST_ADDRESS)) ; i++) {
             Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
             // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
             // and overwrite it in the TestDataSender with the correct one, before sending the message out
@@ -48,12 +51,12 @@ public class TestSnapshotReader implements SnapshotReader {
             globalIndex++;
         }
 
-        return new SnapshotReadMessage(messages, globalIndex == config.getNumEntries());
+        return new SnapshotReadMessage(messages, globalIndex == (config.getNumEntries() + FIRST_ADDRESS));
     }
 
     @Override
     public void reset(long snapshotTimestamp) {
-        globalIndex = 0;
+        globalIndex = FIRST_ADDRESS;
     }
 
     public void setBatchSize(int batchSize) {
