@@ -36,13 +36,12 @@ import java.util.stream.Stream;
  */
 public class StreamsSnapshotReader implements SnapshotReader {
     public static final int MAX_NUM_SMR_ENTRY = 5;
-    private long globalSnapshot;
+    private long snapshotTimestamp;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
     private CorfuRuntime rt;
     private long preMsgTs;
     private long currentMsgTs;
-    private LogReplicationConfig config;
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
 
@@ -51,12 +50,12 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
-        this.config = config;
         streams = config.getStreamsToReplicate();
     }
 
     /**
      * Verify that the OpaqueEntry has the correct information.
+     *
      * @param stream
      * @param entry
      * @return
@@ -85,7 +84,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
     /**
      * Given a list of entries with the same stream, will generate an OpaqueEntry and
-     * use the opaqueentry to generate a TxMessage.
+     * use the opaque entry to generate a TxMessage.
      * @param stream
      * @param entries
      * @return
@@ -95,17 +94,18 @@ public class StreamsSnapshotReader implements SnapshotReader {
         OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
         if (!stream.iterator.hasNext()) {
             //mark the end of the current stream.
-            currentMsgTs = globalSnapshot;
+            currentMsgTs = snapshotTimestamp;
         }
 
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, opaqueEntry);
 
         LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, snapshotRequestId, currentMsgTs,
-                preMsgTs, globalSnapshot, sequence, buf.array());
+                preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
+        System.out.println("Generate TxMsg " + txMsg.getMetadata());
         return txMsg;
     }
 
@@ -127,6 +127,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
+            System.out.println("catch trimmed exception " + e);
             throw e;
         }
         return list;
@@ -141,7 +142,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
         LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
-        log.info("Successfully pass a stream {} for globalSnapshot {}", stream.name, globalSnapshot);
+        log.info("Successfully pass a stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
 
@@ -153,16 +154,17 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     @Override
     public SnapshotReadMessage read(UUID syncRequestId) {
-        // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
-        // and process the remaining entries.
-        boolean endStream;
-        boolean endFullSync = false;
+
+        boolean endSnapshotSync = false;
         List msgs = new ArrayList<DataMessage>();
 
+        // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
+        // and process the remaining entries.
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
-                currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, globalSnapshot);
+                System.out.println(">>>>> Creating Opaque Stream Iterator");
+                currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, snapshotTimestamp);
 
                 // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
@@ -180,16 +182,16 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (!currentStreamInfo.iterator.hasNext()) {
-            log.debug("Snapshot reader finish reading stream {}", currentStreamInfo.uuid);
+            log.debug("Snapshot reader finished reading stream {}", currentStreamInfo.uuid);
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot reader finish reading all streams {}", streams);
-                endFullSync = true;
+                log.info("Snapshot reader finished reading all streams {}", streams);
+                endSnapshotSync = true;
             }
         }
 
-        return new SnapshotReadMessage(msgs, endFullSync);
+        return new SnapshotReadMessage(msgs, endSnapshotSync);
     }
 
     @Override
@@ -197,7 +199,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
-        globalSnapshot = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
+        this.snapshotTimestamp = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
         currentStreamInfo = null;
         sequence = 0;
     }
@@ -214,6 +216,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;
             uuid = CorfuRuntime.getStreamID(name);
+            System.out.println(">>>>> Stream Up To Beginning " + snapshot);
             Stream stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;
