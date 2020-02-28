@@ -22,6 +22,48 @@ import java.util.stream.Stream;
 public class OpaqueStreamTest extends AbstractViewTest {
 
     @Test
+    public void testMagicByte() {
+        CorfuRuntime rt = getDefaultRuntime();
+
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
+        Serializers.registerSerializer(customSerializer);
+
+        UUID streamId = CorfuRuntime.getStreamID("stream1");
+
+        CorfuTable<Integer, Integer> map = rt.getObjectsView()
+                .build()
+                .setStreamID(streamId)
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .setSerializer(customSerializer)
+                .open() ;
+
+
+        rt.getObjectsView().TXBegin();
+        final int key1 = 1;
+        final int key2 = 2;
+        final int key3 = 3;
+        map.put(key1, key1);
+        map.put(key2, key2);
+        map.put(key3, key3);
+        rt.getObjectsView().TXEnd();
+
+
+        Serializers.removeSerializer(customSerializer);
+
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView sv = rt2.getStreamsView().get(streamId);
+        OpaqueStream opaqueStream = new OpaqueStream(rt2, sv);
+        final long snapshot = 100;
+        Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
+
+        stream.forEach(entry -> {
+            System.out.println(entry.getVersion() + " " + entry.getEntries());
+        });
+
+    }
+
+    @Test
     public void testBasicStreaming() {
         CorfuRuntime rt = getDefaultRuntime();
 
