@@ -131,7 +131,11 @@ public class SourceManager implements DataReceiver {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
-        this.logReplicationFSM = new LogReplicationFSM(runtime, config, dataSender, dataControl, readProcessor,
+        // If this runtime has opened other streams, it appends non opaque entries and because
+        // the cache is shared we end up doing deserialization. We need guarantees that this runtime is dedicated
+        // for log replication exclusively.
+        CorfuRuntime dedicatedRuntime = CorfuRuntime.fromParameters(runtime.getParameters()).connect();
+        this.logReplicationFSM = new LogReplicationFSM(dedicatedRuntime, config, dataSender, dataControl, readProcessor,
                 logReplicationFSMWorkers);
     }
 
