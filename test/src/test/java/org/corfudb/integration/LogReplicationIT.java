@@ -229,8 +229,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        System.out.println("\nTest siteId " + REMOTE_SITE_ID);
-
         readerMetaDataTable = srcTestRuntime.getObjectsView()
                 .build()
                 .setStreamName(PersistedReaderMetadata.getPersistedReaderMetadataTableName(REMOTE_SITE_ID))
@@ -343,8 +341,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         if (cntDelete > 0) {
             System.out.println("delete cnt " + cntDelete);
         }
-
-        System.out.println("set expectedTimestamp as " + expectedAckTimestamp);
     }
 
 
@@ -1188,13 +1184,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Let's generate data on Source Corfu Server to be Replicated
         // Write a very large number of entries, so we can be sure the trim happens during snapshot sync
+        System.out.println("****** Generate TX Data");
         generateTXData(srcCorfuTables, srcDataForVerification, num_keys, srcDataRuntime, 0);
 
         // Replicate the only table we created, block until 10 messages are received,
         // then enforce a trim on the log.
+        System.out.println("****** Start Log Entry Sync");
         expectedAckMessages = num_keys;
         LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK),
                 false, new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
+
+        System.out.println("****** Total " + num_keys + " ACK messages received. Verify State.");
 
         // Verify its in log entry sync state and that data was completely transferred to destination
         checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
