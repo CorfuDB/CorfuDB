@@ -240,6 +240,10 @@ public class SinkManager implements DataReceiver {
                 || rxState == RxState.LOG_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
+    public void shutdown() {
+        this.runtime.shutdown();
+    }
+
     @Override
     public void receive(List<DataMessage> messages) {
         for (DataMessage msg : messages) {
