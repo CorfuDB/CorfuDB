@@ -778,14 +778,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR);
 
         checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
-
-        // Verify Data on Destination site
-        System.out.println("****** Verify Data on Destination");
-        // Because t2 is not specified as a replicated table, we should not see it on the destination
-        srcDataForVerification.get(t2).clear();
-
-        // Verify Destination
-        verifyData(dstCorfuTables, srcDataForVerification);
     }
 
     /**
