@@ -133,7 +133,7 @@ public class LogEntrySender {
             log.info("log reader config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
                     maxRetry, readerBatchSize, msgTimer, errorOnMsgTimeout);
         } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file", e);
+            log.warn("Caught an exception while reading the config file {}", e.getCause());
         }
     }
 
