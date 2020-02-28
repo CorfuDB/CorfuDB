@@ -42,13 +42,14 @@ import java.util.stream.Stream;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 @Slf4j
 public class ReplicationReaderWriterIT extends AbstractIT {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
     static private final int START_VAL = 11;
-    static private final int NUM_KEYS = 100;
+    static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
     static private final int NUM_TRANSACTIONS = 100;
 
@@ -211,37 +212,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void trim(long address, CorfuRuntime rt) {
-        Token token = Token.of(0, address);
-        rt.getAddressSpaceView().prefixTrim(token);
-        Token trimMark = rt.getAddressSpaceView().getTrimMark();
-
-        while (trimMark.getSequence() != (token.getSequence() + 1)) {
-            System.out.println("trimMark " + trimMark + " trimToken " + token);
-            trimMark = rt.getAddressSpaceView().getTrimMark();
-        }
-
-        rt.getAddressSpaceView().invalidateServerCaches();
-        System.out.println("trim " + token);
-    }
-
-    /**
-     * enforce checkpoint entries at the streams.
-     */
-    public static void ckStreams(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
-        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        for (CorfuTable map : tables.values()) {
-            mcw1.addMap(map);
-        }
-
-        Token checkpointAddress = mcw1.appendCheckpoints(rt, "test");
-
-        // Trim the log
-        rt.getAddressSpaceView().prefixTrim(checkpointAddress);
-        rt.getAddressSpaceView().gc();
-        rt.getAddressSpaceView().invalidateServerCaches();
-        rt.getAddressSpaceView().invalidateClientCache();
-    }
 
     void verifyTxStream(CorfuRuntime rt) {
         StreamOptions options = StreamOptions.builder()
@@ -256,7 +226,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+    public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws
+            TrimmedException {
         LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
@@ -266,16 +237,17 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
             if (message == null) {
                 System.out.println("**********data message is null");
-                assertThat(false);
+                assertThat(false).isTrue();
             } else {
                 DataMessage dataMessage = new DataMessage(message.serialize());
                 if (dataMessage == null) {
                     System.out.println("**********data message is null");
-                    assertThat(false);
+                    assertThat(false).isTrue();
                 }
 
                 //System.out.println("generate the message " + i);
                 msgQ.add(deserializeTest(message));
+                //System.out.println("msgQ size " + msgQ.size());
             }
         }
     }
@@ -294,12 +266,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
-        }
-    }
-
-    public static void clearTables(HashMap<String, CorfuTable<Long, Long>> tables) {
-        for (CorfuTable<Long, Long> table : tables.values()) {
-            table.clear();
         }
     }
 
@@ -377,6 +343,74 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
+    public static void clearTables(HashMap<String, CorfuTable<Long, Long>> tables) {
+        for (CorfuTable<Long, Long> table : tables.values()) {
+            table.clear();
+        }
+    }
+
+    public static void trimAlone (long address, CorfuRuntime rt) {
+        // Trim the log
+        Token token = new Token(0, address);
+        rt.getAddressSpaceView().prefixTrim(token);
+        rt.getAddressSpaceView().gc();
+        rt.getAddressSpaceView().invalidateServerCaches();
+        rt.getAddressSpaceView().invalidateClientCache();
+        System.out.println("trim at " + token + " currentTail " + rt.getAddressSpaceView().getLogTail());
+    }
+
+    /**
+     * enforce checkpoint entries at the streams.
+     */
+    public static Token ckStreamsAndTrim(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
+        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+        for (CorfuTable map : tables.values()) {
+            mcw1.addMap(map);
+        }
+
+        Token checkpointAddress = mcw1.appendCheckpoints(rt, "test");
+
+        // Trim the log
+        trimAlone(checkpointAddress.getSequence(), rt);
+        return checkpointAddress;
+    }
+
+    public void trim(long address, CorfuRuntime rt) {
+        Token token = ckStreamsAndTrim(rt, srcTables);
+
+        Token trimMark = rt.getAddressSpaceView().getTrimMark();
+
+        while (trimMark.getSequence() != (token.getSequence() + 1)) {
+            System.out.println("trimMark " + trimMark + " trimToken " + token);
+            trimMark = rt.getAddressSpaceView().getTrimMark();
+        }
+
+        rt.getAddressSpaceView().invalidateServerCaches();
+        System.out.println("trim " + token);
+    }
+
+    void trimDelay() {
+        try {
+            while(msgQ.isEmpty()) {
+                sleep(1);
+            }
+            trim(srcDataRuntime.getAddressSpaceView().getLogTail()- 2, srcDataRuntime);
+        } catch (Exception e) {
+            System.out.println("caught an exception " + e);
+        }
+    }
+
+    void trimAloneDelay() {
+        try {
+            while(msgQ.isEmpty()) {
+                sleep(1);
+            }
+            trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail(), srcDataRuntime);
+        } catch ( Exception e) {
+            System.out.println("caught an exception " + e);
+        }
+    }
+
     /**
      * Generate some transactions, and start a txstream. Do a trim
      * To see if a trimmed exception happens
@@ -386,7 +420,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         final int reads = 10;
         setupEnv();
         openStreams(srcTables, srcDataRuntime);
-        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+        generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
 
         // Open a tx stream
         IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
@@ -408,28 +442,39 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    void trimDelay() {
+
+    @Test
+    public void testOpenTableAfterTrimWithoutCheckpoint () throws IOException {
+        setupEnv();
+        openStreams(srcTables, srcDataRuntime);
+        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail() - 20, srcDataRuntime);
+
         try {
-            while(msgQ.isEmpty()) {
-                sleep(1);
-            }
-            trim(srcDataRuntime.getAddressSpaceView().getLogTail(), srcDataRuntime);
+            CorfuTable<Long, Long> testTable = srcTestRuntime.getObjectsView()
+                    .build()
+                    .setStreamName("test0")
+                    .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
+                    })
+                    .setSerializer(Serializers.PRIMITIVE)
+                    .open();
+            long size = testTable.size();
         } catch (Exception e) {
-            System.out.println("caught an exception " + e);
+            System.out.println("caught a exception " + e);
+            assertThat(e).isInstanceOf(TrimmedException.class);
         }
     }
-
 
     @Test
     public void testTrimmedExceptionForLogEntryReader() throws IOException {
         setupEnv();
-
         openStreams(srcTables, srcDataRuntime);
-        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+        generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
         long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
 
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
-        scheduledExecutorService.submit(this::trimDelay);
+        scheduledExecutorService.submit(this::trimAloneDelay);
         Exception result = null;
 
         try {
@@ -449,7 +494,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         setupEnv();
 
         openStreams(srcTables, srcDataRuntime, 1);
-        generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+        generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
 
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
         scheduledExecutorService.submit(this::trimDelay);
@@ -466,6 +511,18 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         } finally {
             assertThat(result).isInstanceOf(TrimmedException.class);
         }
+
+
+        try {
+            readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+        } catch (Exception e) {
+            result = e;
+            System.out.println("msgQ size " + msgQ.size());
+            System.out.println("second time caught an exception " + e + " tail " + tail);
+        } finally {
+            assertThat(result).isInstanceOf(TrimmedException.class);
+        }
+
     }
 
 

@@ -28,7 +28,6 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -52,6 +51,7 @@ import static java.lang.Thread.sleep;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
 import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapDone;
 import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
@@ -248,6 +248,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .open();
     }
 
+    private void cleanEnv() {
+        if (srcDataRuntime != null) {
+            srcDataRuntime.shutdown();
+            srcTestRuntime.shutdown();
+            dstDataRuntime.shutdown();
+            dstTestRuntime.shutdown();
+
+            readerRuntime.shutdown();
+            writerRuntime.shutdown();
+        }
+    }
 
     /**
      * Open numStreams with fixed names 'TABLE_PREFIX' index and add them to 'tables'
@@ -446,7 +457,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
 
         // Write data into Source Tables
-        generateData(srcCorfuTables, srcDataForVerification, NUM_KEYS, NUM_KEYS);
+        //generateData(srcCorfuTables, srcDataForVerification, NUM_KEYS, NUM_KEYS);
+        generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
         // Verify data just written against in-memory copy
         System.out.println("****** Verify Source Data");
@@ -610,6 +622,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify No Data On Destination
         verifyNoData(dstCorfuTables);
+
+        cleanEnv();
     }
 
     /**
@@ -646,6 +660,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify No Data On Destination
         verifyNoData(dstCorfuTables);
+        cleanEnv();
     }
 
     /**
@@ -687,6 +702,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify No Data On Destination
         verifyNoData(dstCorfuTables);
+
+        cleanEnv();
     }
 
     /**
@@ -761,14 +778,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR);
 
         checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
-
-        // Verify Data on Destination site
-        System.out.println("****** Verify Data on Destination");
-        // Because t2 is not specified as a replicated table, we should not see it on the destination
-        //srcDataForVerification.get(t2).clear();
-
-        // Verify Destination
-        //verifyData(dstCorfuTables, srcDataForVerification);
     }
 
     /**
@@ -925,6 +934,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                SNAPSHOT_SYNC_DROPS + 2);
     }
 
+
     private void testResendRequireSnapshotSyncRequest(int expectedDataControlMessages,
                                                       int expectedRescheduleSnapshotSyncMessages) throws Exception {
         // Setup Environment
@@ -1022,8 +1032,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Because data is loaded in memory by the snapshot reader on initial access, the log
      * replication will not perceive the Trimmed Exception and it should complete successfully.
      */
+    @Test
     public void testSnapshotSyncWithTrimmedExceptions() throws Exception {
-        final int RX_MESSAGES_LIMIT = 1;
+        final int RX_MESSAGES_LIMIT = 2;
         final int TRIM_RATIO = NUM_KEYS_LARGE - 10;
 
         // Setup Environment: two corfu servers (source & destination)
@@ -1036,29 +1047,28 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Write a very large number of entries, so we can be sure the trim happens during snapshot sync
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS_LARGE, srcDataRuntime, 0);
 
-        // Replicate the only table we created, block until 10 messages are received,
+        // Replicate the only table we created, block until 2 messages are received,
         // then enforce a trim on the log.
         expectedSinkReceivedMessages = RX_MESSAGES_LIMIT;
-        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
-        testConfig.setWaitOn(WAIT.ON_ACK);
-        SourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_SINK_RECEIVE),
+        expectedAckTimestamp = -1;
+        testConfig.setWaitOn(WAIT.ON_ACK_TS);
+        SourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE),
                 new DefaultDataControlConfig(true, NUM_KEYS));
 
-        // Unblocked as soon as 50 messages are received (even though snapshot sync continues)
-        // Force a trim on 4/5 space of the log (16K) to ensure we're ahead of the read point
-        trim(srcDataRuntime, TRIM_RATIO);
+        // KWrite a checkpoint and trim
+        Token token = ckStreamsAndTrim(srcDataRuntime, srcCorfuTables);
         srcDataRuntime.getAddressSpaceView().invalidateServerCaches();
+        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
+
+        System.out.println("****** Wait until an Trimmed Error happens");
+        blockUntilExpectedValueReached.acquire();
+        System.out.println("****** Got an expected Error");
 
         // Be sure log was trimmed
         while (srcDataRuntime.getAddressSpaceView().getTrimMark().getSequence()
-                < TRIM_RATIO) {
+                < token.getSequence()) {
             // no-op
         }
-
-        // Because the log was trimmed, an access on the table should throw a trimmed exception
-        assertThatThrownBy(() -> {
-            openStreams(srcTestTables, srcTestRuntime, 1);
-            srcTestTables.get(TABLE_PREFIX + 0).size(); }).isInstanceOf(TrimmedException.class);
 
         // Block until snapshot sync is completed (ack is received)
         System.out.println("****** Wait until snapshot sync is completed (ack received)");
@@ -1124,38 +1134,39 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         openStreams(dstCorfuTables, dstDataRuntime, 1);
 
         // Let's generate data on Source Corfu Server to be Replicated
-        // Write a very large number of entries, so we can be sure the trim happens during snapshot sync
+        // Write a large number of entries, so we can be sure the trim happens during log entry sync
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS_LARGE, srcDataRuntime, 0);
 
         // Replicate the only table we created, block until 10 messages are received,
         // then enforce a trim on the log.
         expectedSinkReceivedMessages = RX_MESSAGES_LIMIT;
-        //expectedAckMessages = NUM_KEYS_VERY_LARGE;
-        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE),
-                false, new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
+        // Then wait for till ACKTS
+        expectedAckTimestamp = -1;
+        testConfig.clear();
+        testConfig.setWaitOn(WAIT.ON_ACK_TS);
+        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_SINK_RECEIVE),
+                false, new DefaultDataControlConfig(false, NUM_KEYS_LARGE));
 
-        System.out.println("****** Trim log");
+        System.out.println("****** Trim log, will trigger a full snapshot sync");
         // Unblocked as soon as 50 messages are received (even though snapshot sync continues)
         // Force a trim on 4/5 space of the log (16K) to ensure we're ahead of the read point
-        trim(srcDataRuntime, TRIM_RATIO);
+        //trim(srcDataRuntime, TRIM_RATIO);
+        Token toke = ckStreamsAndTrim(srcDataRuntime, srcCorfuTables);
+        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
 
         // Be sure log was trimmed
-        while (srcDataRuntime.getAddressSpaceView().getTrimMark().getSequence() < TRIM_RATIO) {
+        while (srcDataRuntime.getAddressSpaceView().getTrimMark().getSequence() < toke.getSequence()) {
             // no-op
         }
 
-        // Because the log was trimmed, an access on the table should throw a trimmed exception
-        assertThatThrownBy(() -> {
-            openStreams(srcTestTables, srcTestRuntime, 1);
-            srcTestTables.get(TABLE_PREFIX + 0).size(); }).isInstanceOf(TrimmedException.class);
+        System.out.println("****** Wait till IN_SNAPSHOT_SYNC");
+        checkStateChange(fsm, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        // Block until error occurs (trim exception is caught)
-        System.out.println("****** Wait until log entry sync is completed (ack received)");
+        System.out.println("Block untill full snapshot transfer complete");
         blockUntilExpectedValueReached.acquire();
 
-        // Verify its in log entry sync state and that data was completely transferred to destination
-        checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
-        verifyData(dstCorfuTables, srcDataForVerification);
+        verifyData(dstCorfuTables, dstDataForVerification);
+        cleanEnv();
     }
 
     /**
@@ -1187,66 +1198,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify its in log entry sync state and that data was completely transferred to destination
         checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
-        verifyData(dstCorfuTables, srcDataForVerification);
-    }
-
-    /**
-     * Test that we can initiate two independent Corfu Servers and write to each of them.
-     * Verify data written is correct.
-     *
-     * @throws IOException
-     */
-    @Test
-    public void testTwoIndependentCorfuServers() throws IOException {
-        setupEnv();
-
-        openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
-        openStreams(srcTestTables, srcTestRuntime, NUM_STREAMS);
-        openStreams(dstCorfuTables, dstDataRuntime ,NUM_STREAMS);
-        openStreams(dstTestTables, dstTestRuntime, NUM_STREAMS);
-
-        // Generate data at sourceServer
-        generateData(srcCorfuTables, srcDataForVerification, NUM_KEYS, NUM_KEYS);
-
-        // Generate data at destinationServer
-        generateData(dstCorfuTables, dstDataForVerification, NUM_KEYS, NUM_KEYS*2);
-
-        verifyData(srcCorfuTables, srcDataForVerification);
-        verifyData(srcTestTables, srcDataForVerification);
-
         verifyData(dstCorfuTables, dstDataForVerification);
-        verifyData(dstTestTables, dstDataForVerification);
+        cleanEnv();
     }
 
-    @Test
-    public void testSnapTransfer() throws IOException {
-        // setup environment
-        setupEnv();
-
-        openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
-        generateData(srcCorfuTables, srcDataForVerification, NUM_KEYS, NUM_KEYS);
-        verifyData(srcCorfuTables, srcDataForVerification);
-
-        printTails("after writing to sourceServer");
-
-        //read snapshot from srcServer and put msgs into Queue
-        readMsgs(msgQ, srcDataForVerification.keySet(), readerRuntime);
-
-        long dstEntries = msgQ.size()* srcDataForVerification.keySet().size();
-        long dstPreTail = dstDataRuntime.getAddressSpaceView().getLogTail();
-
-        //play messages at dst server
-        writeMsgs(msgQ, srcDataForVerification.keySet(), writerRuntime);
-
-        long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;
-        assertThat(diff == dstEntries);
-        printTails("after writing to destinationServer");
-
-        //verify data with hashtable
-        openStreams(dstCorfuTables, dstDataRuntime, NUM_STREAMS);
-        verifyData(dstCorfuTables, srcDataForVerification);
-        System.out.println("test done");
-    }
 
     /* ********************** AUXILIARY METHODS ********************** */
 
@@ -1299,10 +1254,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     }
 
+
     private void trim(CorfuRuntime rt, int trimAddress) {
         System.out.println("Trim at: " + trimAddress);
         rt.getAddressSpaceView().prefixTrim(new Token(0, trimAddress));
-        //rt.getAddressSpaceView().invalidateServerCaches();
+        rt.getAddressSpaceView().invalidateServerCaches();
     }
 
     /**
@@ -1505,8 +1461,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 break;
             case ON_ACK_TS:
                 verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
-                long ts = writerMetaDataTable.get(LastLogProcessed.getVal());
-                assertThat(ts >= logReplicationEntry.metadata.timestamp).isTrue();
                 break;
         }
     }

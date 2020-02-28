@@ -12,6 +12,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -51,23 +52,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
     public StreamsSnapshotReader(CorfuRuntime rt, LogReplicationConfig config) {
         this.rt = rt;
         streams = config.getStreamsToReplicate();
-    }
-
-    /**
-     * Verify that the OpaqueEntry has the correct information.
-     *
-     * @param stream
-     * @param entry
-     * @return
-     */
-    boolean verify(OpaqueStreamIterator stream, OpaqueEntry entry) {
-        Set<UUID> keySet = entry.getEntries().keySet();
-
-        if (keySet.size() != 1 || !keySet.contains(stream.uuid)) {
-            log.error("OpaqueEntry is wrong ", entry);
-            return false;
-        }
-        return true;
     }
 
     /**
@@ -120,12 +104,12 @@ public class StreamsSnapshotReader implements SnapshotReader {
         try {
             while (stream.iterator.hasNext() && list.size() < numEntries) {
                 OpaqueEntry entry = (OpaqueEntry) stream.iterator.next();
-                verify(stream, entry);
                 stream.maxVersion = Math.max(stream.maxVersion, entry.getVersion());
                 list.addAll(entry.getEntries().get(stream.uuid));
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
+            System.out.println("snapshot reader catch trimmed exception " + e);
             throw e;
         }
         return list;
@@ -161,7 +145,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
-
                 currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, snapshotTimestamp);
 
                 // If the new stream has entries to be processed, go to the next step
@@ -214,7 +197,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;
             uuid = CorfuRuntime.getStreamID(name);
-            Stream stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid))).streamUpTo(snapshot);
+            StreamOptions options = StreamOptions.builder()
+                    .ignoreTrimmed(false)
+                    .cacheEntries(false)
+                    .build();
+            Stream stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid, options))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;
          }
