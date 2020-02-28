@@ -102,6 +102,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     @Override
     public void apply(LogReplicationEntry message) {
         verifyMetadata(message.getMetadata());
+        System.out.println("writer got recv seq " + message.getMetadata().getSnapshotSyncSeqNum());
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expecting sequencer {} != recvSeq {}",
                     message.getMetadata().getSnapshotSyncSeqNum(), recvSeq);

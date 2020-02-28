@@ -9,23 +9,19 @@ import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.io.File;
-import java.io.FileReader;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,6 +33,8 @@ import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEU
  * Process TxMessage that contains transaction logs for registered streams.
  */
 public class LogEntryWriter {
+    private final static int MAX_NUM_TX_RETRY = 3;
+
     @Setter
     private int maxMsgQueSize = DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
 
@@ -45,17 +43,19 @@ public class LogEntryWriter {
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
-    private HashMap<Long, LogReplicationEntry> msgQ; //If the received messages are out of order, buffer them. Can be queried according to the preTs.
+    private PersistedWriterMetadata persistedWriterMetadata;
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
+    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, PersistedWriterMetadata persistedWriterMetadata) {
         this.rt = rt;
+        this.persistedWriterMetadata = persistedWriterMetadata;
+
         Set<String> streams = config.getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
 
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
-        msgQ = new HashMap<>();
+        //msgQ = new HashMap<>();
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
 
@@ -85,7 +85,8 @@ public class LogEntryWriter {
      * @param txMessage
      */
     void processMsg(LogReplicationEntry txMessage) {
-        // Convert from byte[] to OpaqueEntry
+        boolean doRetry = true;
+        int numRetry = 0;
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getPayload()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
 
@@ -94,51 +95,37 @@ public class LogEntryWriter {
             throw new ReplicationWriterException("Wrong streams set");
         }
 
-        try {
-            MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
+        long msgTs = txMessage.metadata.timestamp;
+        long persistTs = Address.NON_ADDRESS;
 
-            for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-                for(SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                    multiObjectSMREntry.addTo(uuid, smrEntry);
+        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
+            try {
+                rt.getObjectsView().TXBegin();
+                persistTs = persistedWriterMetadata.getLastProcessedLogTimestamp();
+                if (msgTs > persistTs ) {
+                    MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
+                    for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                        for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                            multiObjectSMREntry.addTo(uuid, smrEntry);
+                        }
+                    }
+
+                    //todo: xiaoqin Need to verify that .append follow the transaction schema
+                    rt.getStreamsView().append(multiObjectSMREntry, null, opaqueEntry.getEntries().keySet().toArray(new UUID[0]));
+                    persistedWriterMetadata.setLastProcessedLogTimestamp(msgTs);
+
+                    log.trace("Append msg {} as its timestamp is not later than the persisted one {}", txMessage.metadata, persistTs);
+                } else {
+                    log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}", txMessage.metadata, persistTs);
                 }
-            }
-            rt.getStreamsView().append(multiObjectSMREntry, null, opaqueEntry.getEntries().keySet().toArray(new UUID[0]));
-        } catch (Exception e) {
-            log.warn("Caught an exception ", e);
-            throw e;
-        }
-
-        lastMsgTs = txMessage.getMetadata().getTimestamp();
-        log.trace("process message " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
-    }
-
-    /**
-     * Go over the queue, if the expecting messages in queue, process it.
-     */
-    void processQueue() {
-        while (true) {
-            long preTs = lastMsgTs;
-            LogReplicationEntry txMessage = msgQ.get(lastMsgTs);
-            if (txMessage == null) {
-                log.info("process queue, tx null " + " Qsize " + msgQ.size());
-                return;
-            }
-            log.info("msgQ remove one entry " + txMessage.metadata.timestamp + " Qsize " + msgQ.size());
-            processMsg(txMessage);
-            msgQ.remove(preTs);
-        }
-    }
-
-    /**
-     * Remove entries that has timestamp smaller than msgTs
-     * @param msgTs
-     */
-    void cleanMsgQ(long msgTs) {
-        for (long address : msgQ.keySet()) {
-            if (msgQ.get(address).getMetadata().getTimestamp() <= lastMsgTs) {
-                msgQ.remove(address);
+                doRetry = false;
+            } catch (TransactionAbortedException e) {
+                log.warn("Caught an exception {} , will retry", e);
+            } finally {
+                rt.getObjectsView().TXEnd();
             }
         }
+        lastMsgTs = Math.max(persistTs, msgTs);
     }
 
     /**
@@ -162,11 +149,12 @@ public class LogEntryWriter {
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
             lastMsgTs = srcGlobalSnapshot;
-            cleanMsgQ(lastMsgTs);
         }
 
         // we will skip the entries has been processed.
         if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
+            log.warn("Received message with snapshot {} is smaller than lastMsgTs {}.Ignore it",
+                    msg.getMetadata().getSnapshotTimestamp(), lastMsgTs);
             return Address.NON_ADDRESS;
         }
 
@@ -174,16 +162,7 @@ public class LogEntryWriter {
         //the messages in the queue.
         if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
             processMsg(msg);
-            processQueue();
             return lastMsgTs;
-        }
-
-        //If the entry's ts is larger than the entry processed, put it to the queue
-        if (msgQ.size() < maxMsgQueSize) {
-            msgQ.putIfAbsent(msg.getMetadata().getPreviousTimestamp(), msg);
-            log.info("msgQ add one entry " + msg.metadata.timestamp + " Qsize " + msgQ.size());
-        } else if (msgQ.get(msg.getMetadata().getPreviousTimestamp()) != null) {
-            log.warn("The message is out of order and the queue is full, will drop the message {}", msg.getMetadata());
         }
 
         return Address.NON_ADDRESS;
@@ -200,6 +179,5 @@ public class LogEntryWriter {
     public void setTimestamp(long snapshot, long ackTimestamp) {
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
-        cleanMsgQ(ackTimestamp);
     }
 }

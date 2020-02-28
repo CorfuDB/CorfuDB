@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.send;
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.logreplication.DataSender;
@@ -78,6 +79,7 @@ public class LogEntrySender {
     /*
      * The log entry has been sent to the receiver but hasn't ACKed yet.
      */
+    @Getter
     LogReplicationEntryQueue pendingEntries;
 
     private long ackTs = Address.NON_ADDRESS;
@@ -130,10 +132,11 @@ public class LogEntrySender {
             errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout", "true"));
             reader.close();
 
+        } catch (Exception e) {
+            log.warn("The config file is not available {} , will use the default vaules for config.", e.getCause());
+        } finally {
             log.info("log reader config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
                     maxRetry, readerBatchSize, msgTimer, errorOnMsgTimeout);
-        } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file {}", e.getCause());
         }
     }
 
@@ -235,6 +238,7 @@ public class LogEntrySender {
     public void reset(PersistedReaderMetadata readerMetadata) {
         taskActive = true;
         logEntryReader.reset(readerMetadata.getLastSentBaseSnapshotTimestamp(), readerMetadata.getLastAckedTimestamp());
+        pendingEntries.evictAll();
     }
 
     /**
@@ -298,6 +302,10 @@ public class LogEntrySender {
 
         public LogReplicationEntryQueue(int size) {
             this.size = size;
+            list = new ArrayList<>();
+        }
+
+        public void evictAll() {
             list = new ArrayList<>();
         }
 
