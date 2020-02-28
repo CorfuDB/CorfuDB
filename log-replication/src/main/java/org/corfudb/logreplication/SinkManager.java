@@ -75,7 +75,7 @@ public class SinkManager implements DataReceiver {
      * @param rt Corfu Runtime
      */
     public SinkManager(CorfuRuntime rt, DataSender dataSender, DataControl dataControl) {
-        this.runtime = rt;
+        this.runtime =  CorfuRuntime.fromParameters(rt.getParameters()).connect();
         this.rxState = RxState.LOG_SYNC;
         this.dataSender = dataSender;
         this.dataControl = dataControl;
@@ -108,7 +108,7 @@ public class SinkManager implements DataReceiver {
             log.info("log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
                     logWriterQueueSize, ackCycleCnt, ackCycleTime);
         } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file", e);
+            log.warn("Caught an exception while reading the config file: {}", e.getCause());
         }
     }
     /**
