@@ -75,7 +75,9 @@ public class SinkManager implements DataReceiver {
      * @param rt Corfu Runtime
      */
     public SinkManager(CorfuRuntime rt, DataSender dataSender, DataControl dataControl) {
-        this.runtime =  CorfuRuntime.fromParameters(rt.getParameters()).connect();
+        CorfuRuntime dedicatedRuntime = CorfuRuntime.fromParameters(rt.getParameters());
+        dedicatedRuntime.parseConfigurationString(rt.getLayoutServers().get(0)).connect();
+        this.runtime =  dedicatedRuntime;
         this.rxState = RxState.LOG_SYNC;
         this.dataSender = dataSender;
         this.dataControl = dataControl;
