@@ -19,11 +19,13 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -32,7 +34,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -141,6 +142,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams) {
+        openStreams(tables, rt, num_streams, Serializers.PRIMITIVE);
+    }
+
+    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams,
+                                                 ISerializer serializer) {
         for (int i = 0; i < num_streams; i++) {
             String name = "test" + i;
 
@@ -149,7 +155,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                     .setStreamName(name)
                     .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
                     })
-                    .setSerializer(Serializers.PRIMITIVE)
+                    .setSerializer(serializer)
                     .open();
             tables.put(name, table);
         }
@@ -252,9 +258,10 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-
-        LogEntryWriter writer = new LogEntryWriter(rt, config);
+        UUID uuid = UUID.randomUUID();
+        LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid);
+        LogEntryWriter writer = new LogEntryWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
@@ -618,12 +625,13 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
 
     @Test
-    public void testLogEntryTransfer() throws IOException {
+    public void testLogEntryTransferWithNoSerializer() throws IOException {
         // setup environment
         System.out.println("\ntest start ok");
         setupEnv();
-
-        openStreams(srcTables, srcDataRuntime);
+        ISerializer serializer = new TestSerializer(Byte.MAX_VALUE);
+        
+        openStreams(srcTables, srcDataRuntime, NUM_STREAMS, serializer);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
 
         HashMap<String, CorfuTable<Long, Long>> singleTables = new HashMap<>();
@@ -647,13 +655,45 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         writeLogEntryMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
 
         long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;
-        assertThat(diff).isEqualTo(dstEntries);
         printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
 
         //verify data with hashtable
-        openStreams(dstTables, dstDataRuntime);
+        openStreams(dstTables, dstDataRuntime, NUM_STREAMS, serializer);
+
+        Exception result = null;
+        try {
+            verifyData("after log writing at dst", dstTables, srcHashMap);
+        } catch (Exception e) {
+            System.out.println("caught an exception");
+            result = e;
+        } finally {
+            assertThat(result instanceof SerializerException).isTrue();
+        }
+    }
+
+    @Test
+    public void testLogEntryTransferWithSerializer() throws IOException {
+        // setup environment
+        System.out.println("\ntest start ok");
+        setupEnv();
+        ISerializer serializer = new TestSerializer(Byte.MAX_VALUE);
+
+        openStreams(srcTables, srcDataRuntime, NUM_STREAMS, serializer);
+        generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
+
+        //read snapshot from srcServer and put msgs into Queue
+        readLogEntryMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+
+        //play messages at dst server
+        writeLogEntryMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
+
+
+        //verify data with hashtable
+        openStreams(dstTables, dstDataRuntime, NUM_STREAMS, serializer);
+
+        Serializers.registerSerializer(serializer);
         verifyData("after log writing at dst", dstTables, srcHashMap);
-        System.out.println("test done");
+        Serializers.removeSerializer(serializer);
     }
 }
 
