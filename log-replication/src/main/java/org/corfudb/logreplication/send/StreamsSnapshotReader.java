@@ -109,7 +109,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
-            System.out.println("snapshot reader catch trimmed exception " + e);
             throw e;
         }
         return list;
@@ -124,7 +123,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
         LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
-        log.info("Successfully pass a stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
 

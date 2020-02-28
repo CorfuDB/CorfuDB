@@ -47,11 +47,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ReplicationReaderWriterIT extends AbstractIT {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
-    static final String WRTIER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
+    static final String WRITER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
     static private final int START_VAL = 11;
     static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
-    static private final int NUM_TRANSACTIONS = 100;
+    static public final int NUM_TRANSACTIONS = 100;
 
     Process server1;
     Process server2;
@@ -68,7 +68,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     // Connect with server2 to verify data
     CorfuRuntime dstDataRuntime = null;
 
-    Random random = new Random();
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
 
@@ -120,15 +119,15 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         readerRuntime.setTransactionLogging(true).connect();
 
         writerRuntime = CorfuRuntime.fromParameters(params);
-        writerRuntime.parseConfigurationString(WRTIER_ENDPOINT);
+        writerRuntime.parseConfigurationString(WRITER_ENDPOINT);
         writerRuntime.setTransactionLogging(true).connect();
 
         dstDataRuntime = CorfuRuntime.fromParameters(params);
-        dstDataRuntime.parseConfigurationString(WRTIER_ENDPOINT);
+        dstDataRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstDataRuntime.setTransactionLogging(true).connect();
 
         dstTestRuntime = CorfuRuntime.fromParameters(params);
-        dstTestRuntime.parseConfigurationString(WRTIER_ENDPOINT);
+        dstTestRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstTestRuntime.setTransactionLogging(true).connect();
     }
 
@@ -143,7 +142,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams) {
         for (int i = 0; i < num_streams; i++) {
-            String name = "test" + Integer.toString(i);
+            String name = "test" + i;
 
             CorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
@@ -445,11 +444,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     @Test
     public void testOpenTableAfterTrimWithoutCheckpoint () throws IOException {
+        final int offset = 20;
         setupEnv();
         openStreams(srcTables, srcDataRuntime);
         generateTransactions(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
-        trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail() - 20, srcDataRuntime);
+        trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail() - offset, srcDataRuntime);
 
         try {
             CorfuTable<Long, Long> testTable = srcTestRuntime.getObjectsView()

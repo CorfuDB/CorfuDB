@@ -186,6 +186,9 @@ public class LogReplicationFSM {
         this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
 
         logReplicationFSMConsumer.submit(this::consume);
+
+        log.info("Log Replication FSM initialized, streams to replicate {} to remote site {}",
+                config.getStreamsToReplicate(), config.getSiteID());
     }
 
     /**
@@ -220,7 +223,7 @@ public class LogReplicationFSM {
                 // Log: not accepting events, in stopped state
                 return;
             }
-            log.info("Enqueue event {} ", event);
+            log.info("Enqueue event {} with ID {}", event.getType(), event.getEventID());
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             log.error("Log Replication interrupted Exception: ", ex);

@@ -71,7 +71,8 @@ public class SnapshotSender {
      */
     public void transmit(UUID snapshotSyncEventId) {
 
-        log.debug("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId, baseSnapshotTimestamp);
+        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
+                baseSnapshotTimestamp);
 
         boolean completed = false;    // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled

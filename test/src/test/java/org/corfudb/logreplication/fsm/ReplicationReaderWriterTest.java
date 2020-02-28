@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.fsm;
 
+import org.corfudb.integration.ReplicationReaderWriterIT;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.receive.LogEntryWriter;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
@@ -15,7 +16,6 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
@@ -29,14 +29,12 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
-    static private final int NUM_TRANS = 2;
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
     CorfuRuntime readerRuntime = null;
     CorfuRuntime writerRuntime = null;
 
-    Random random = new Random();
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
     LogEntryReader logEntryReader;
@@ -69,7 +67,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         setup();
 
         openStreams(srcTables, srcDataRuntime);
-        generateTransactions(srcTables, hashMap, NUM_TRANS, srcDataRuntime, START_VAL);
+        generateTransactions(srcTables, hashMap, ReplicationReaderWriterIT.NUM_TRANSACTIONS, srcDataRuntime, START_VAL);
         printTails("after writing data to src tables", srcDataRuntime, dstDataRuntime);
 
         readLogEntryMsgs(msgQ, srcTables.keySet(), readerRuntime);
@@ -111,7 +109,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         setup();
         openStreams(srcTables, srcDataRuntime);
 
-        generateTransactions(srcTables, hashMap, NUM_TRANS, srcDataRuntime, START_VAL);
+        generateTransactions(srcTables, hashMap, ReplicationReaderWriterIT.NUM_TRANSACTIONS, srcDataRuntime, START_VAL);
         printTails("after writing data to src tables", srcDataRuntime, dstDataRuntime);
 
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
