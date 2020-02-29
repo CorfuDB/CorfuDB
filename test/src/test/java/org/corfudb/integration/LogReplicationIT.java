@@ -256,6 +256,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             readerRuntime.shutdown();
             writerRuntime.shutdown();
         }
+
+        if (sourceDataSender != null) {
+            sourceDataSender.shutdown();
+        }
     }
 
     /**
@@ -530,6 +534,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2).clear();
         verifyData(dstCorfuTables, srcDataForVerification);
+
+        cleanEnv();
     }
 
     /**
@@ -562,6 +568,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2).clear();
         verifyData(dstCorfuTables, srcDataForVerification);
+        cleanEnv();
     }
 
     /**
@@ -584,6 +591,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Snapshot Sync, indicating an empty set of tables to replicate. This is not allowed
         // and we should expect an exception.
         assertThatThrownBy(() -> startSnapshotSync(new HashSet<>())).isInstanceOf(IllegalArgumentException.class);
+        cleanEnv();
     }
 
     /**

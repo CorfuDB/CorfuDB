@@ -35,6 +35,7 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class SourceManager implements DataReceiver {
 
+    private CorfuRuntime runtime;
     /*
      * Default number of Log Replication State Machine Worker Threads
      */
@@ -135,10 +136,10 @@ public class SourceManager implements DataReceiver {
         // If this runtime has opened other streams, it appends non opaque entries and because
         // the cache is shared we end up doing deserialization. We need guarantees that this runtime is dedicated
         // for log replication exclusively.
-        CorfuRuntime dedicatedRuntime = CorfuRuntime.fromParameters(runtime.getParameters());
-        dedicatedRuntime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        this.runtime = CorfuRuntime.fromParameters(runtime.getParameters());
+        this.runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
 
-        this.logReplicationFSM = new LogReplicationFSM(dedicatedRuntime, config, dataSender, dataControl, readProcessor,
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, dataSender, dataControl, readProcessor,
                 logReplicationFSMWorkers);
     }
 
@@ -198,6 +199,8 @@ public class SourceManager implements DataReceiver {
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
      */
     public void shutdown() {
+        this.runtime.shutdown();
+
         log.info("Shutdown Log Replication. To enable Log Replication a JVM restart is required.");
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
