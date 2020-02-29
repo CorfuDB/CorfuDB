@@ -1,6 +1,6 @@
 ; Pings the endpoint given as the first argument
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
-
+(import java.util.UUID)
 (import org.docopt.Docopt) ; parse some cmdline opts
 
 (def usage "corfu_ping, ping Corfu servers.
@@ -30,7 +30,7 @@ Options:
 (doseq [endpoint (.toArray (.. localcmd (get "<endpoint>")))]
   (do
      (println (format "PING %s" endpoint))
-     (let [ping (time-expression (.. (get-base-client (get-router server localcmd) 0) (pingSync)))]
+     (let [ping (time-expression (.. (get-base-client (get-router server localcmd) 0 (.UUID (.fromString "00000000-0000-0000-0000-000000000000"))) (pingSync)))]
        (if (:result ping) (println (format "ACK time=%.3fms" (/ (:time ping) 1000000.0)))
            (println (format "NACK timeout=%.3fms" (/ (:time ping) 1000000.0)))
        )

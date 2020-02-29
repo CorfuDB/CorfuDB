@@ -86,6 +86,7 @@ public class SequencerServer extends AbstractServer {
     /**
      * Inherit from CorfuServer a server context.
      */
+    @Getter
     private final ServerContext serverContext;
 
     /**

@@ -1,22 +1,21 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableList;
-
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.view.Layout;
 
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import java.util.Optional;
+import java.util.Set;
 
 
 /**
@@ -34,6 +33,10 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     private final Map<CorfuMsgType, AbstractServer> handlerMap;
 
     /**
+     * This node's server context.
+     */
+    private final ServerContext serverContext;
+    /**
      * The epoch of this router. This is managed by the base server implementation.
      */
     @Getter
@@ -41,20 +44,23 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     volatile long serverEpoch;
 
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
-    final List<AbstractServer> servers;
+    private final ImmutableList<AbstractServer> servers;
 
     /** Construct a new {@link NettyServerRouter}.
      *
      * @param servers   A list of {@link AbstractServer}s this router will route
      *                  messages for.
      */
-    public NettyServerRouter(List<AbstractServer> servers) {
-        // Initialize the router epoch from the persisted server epoch
-        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
-        this.servers = ImmutableList.copyOf(servers);
+    public NettyServerRouter(ImmutableList<AbstractServer> servers, ServerContext serverContext) {
+        this.serverContext = serverContext;
+        this.serverEpoch = serverContext.getServerEpoch();
+        this.servers = servers;
         handlerMap = new EnumMap<>(CorfuMsgType.class);
-        servers.forEach(server -> server.getHandler().getHandledTypes()
-            .forEach(x -> handlerMap.put(x, server)));
+
+        servers.forEach(server -> {
+            Set<CorfuMsgType> handledTypes = server.getHandler().getHandledTypes();
+            handledTypes.forEach(handledType -> handlerMap.put(handledType, server));
+        });
     }
 
     /**
@@ -77,6 +83,11 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         return servers;
     }
 
+    @Override
+    public void setServerContext(ServerContext serverContext) {
+        throw new UnsupportedOperationException("The operation is not supported.");
+    }
+
     /**
      * Send a netty message through this router, setting the fields in the outgoing message.
      *
@@ -90,25 +101,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         log.trace("Sent response: {}", outMsg);
     }
 
-    /**
-     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
-     * the server is in the wrong epoch. Ignored if the message type is reset (which
-     * is valid in any epoch).
-     *
-     * @param msg The incoming message to validate.
-     * @param ctx The context of the channel handler.
-     * @return True, if the epoch is correct, but false otherwise.
-     */
-    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
-        long serverEpoch = getServerEpoch();
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
-            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
-                    serverEpoch));
-            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), serverEpoch, msg);
-            return false;
-        }
-        return true;
+    @Override
+    public Optional<Layout> getCurrentLayout() {
+        return Optional.ofNullable(serverContext.getCurrentLayout());
     }
 
     /**
@@ -129,7 +124,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                 // The message was unregistered, we are dropping it.
                 log.warn("Received unregistered message {}, dropping", m);
             } else {
-                if (validateEpoch(m, ctx)) {
+                if (messageIsValid(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
                         log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);

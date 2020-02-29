@@ -2,6 +2,7 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
+(import java.util.UUID)
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
 (def usage "corfu_layouts, work with the Corfu layout view.
@@ -82,7 +83,7 @@ Options:
                                          (doseq [server (into [] (remove (set (.getLayoutServers layout)) (.getLayoutServers new-layout)))]
                                                 (do
                                                     (try
-                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0) new-layout))
+                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0 (.UUID (fromString "00000000-0000-0000-0000-000000000000"))) new-layout))
                                                       (catch Exception e
                                                         (println server ":" (.getMessage e))
                                                         (throw e)))

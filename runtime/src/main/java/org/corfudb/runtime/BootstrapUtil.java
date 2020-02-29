@@ -55,7 +55,7 @@ public class BootstrapUtil {
      */
     private static void bootstrapLayoutServer(IClientRouter router, Layout layout)
             throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
-        LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch());
+        LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch(), layout.getClusterId());
 
         try {
             CFUtils.getUninterruptibly(layoutClient.bootstrapLayout(layout),
@@ -78,7 +78,7 @@ public class BootstrapUtil {
     private static void bootstrapManagementServer(IClientRouter router, Layout layout)
             throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
         ManagementClient managementClient
-                = new ManagementClient(router, layout.getEpoch());
+                = new ManagementClient(router, layout.getEpoch(), layout.getClusterId());
 
         try {
             CFUtils.getUninterruptibly(managementClient.bootstrapManagement(layout),

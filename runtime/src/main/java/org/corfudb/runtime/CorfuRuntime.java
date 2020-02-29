@@ -951,7 +951,7 @@ public class CorfuRuntime {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture =
-                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
+                                new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
