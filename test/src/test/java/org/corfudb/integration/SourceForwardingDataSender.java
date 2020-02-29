@@ -147,4 +147,14 @@ public class SourceForwardingDataSender implements DataSender {
     public CorfuRuntime getWriterRuntime() {
         return this.runtime;
     }
+
+    public void shutdown() {
+        if (destinationDataSender != null && destinationDataSender.getSourceManager() != null) {
+            destinationDataSender.getSourceManager().shutdown();
+        }
+
+        if (destinationLogReplicationManager != null) {
+            destinationLogReplicationManager.shutdown();
+        }
+    }
 }
