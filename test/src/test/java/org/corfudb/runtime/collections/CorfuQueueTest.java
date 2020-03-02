@@ -80,6 +80,11 @@ public class CorfuQueueTest extends AbstractViewTest {
         final int expected = 3;
         List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
         assertThat(records.size()).isEqualTo(expected);
+
+        List<CorfuQueueRecord<String>> recAfter = corfuQueue.entryList(
+                records.get(0).getRecordId().getEntryId(),
+                records.size());
+        assertThat(recAfter.size()).isEqualTo(records.size() - 1);
     }
 
     @Test
