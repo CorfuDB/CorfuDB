@@ -121,32 +121,31 @@ public class RebootUtil {
                                boolean resetData,
                                Optional<UUID> clusterId) {
 
-        IClientRouter router = new NettyClientRouter(NodeLocator.parseString(endpoint),
-                corfuRuntimeParameters);
-        router.addClient(new BaseHandler());
-        BaseClient baseClient = new BaseClient(router, Layout.INVALID_EPOCH,
-                clusterId.orElse(DEFAULT_CLUSTER_ID));
+        try (NettyClientRouter router = new NettyClientRouter(NodeLocator.parseString(endpoint),
+                corfuRuntimeParameters)) {
+            router.addClient(new BaseHandler());
+            BaseClient baseClient = new BaseClient(router, Layout.INVALID_EPOCH, clusterId.orElse(DEFAULT_CLUSTER_ID));
 
-        while (retries-- > 0) {
-            try {
-                if (resetData) {
-                    log.info("Attempting to reset server: {}", endpoint);
-                    CFUtils.getUninterruptibly(baseClient.reset());
-                } else {
-                    log.info("Attempting to restart server: {}", endpoint);
-                    CFUtils.getUninterruptibly(baseClient.restart());
+            while (retries-- > 0) {
+                try {
+                    if (resetData) {
+                        log.info("Attempting to reset server: {}", endpoint);
+                        CFUtils.getUninterruptibly(baseClient.reset());
+                    } else {
+                        log.info("Attempting to restart server: {}", endpoint);
+                        CFUtils.getUninterruptibly(baseClient.restart());
+                    }
+                    break;
+                } catch (Exception e) {
+                    log.error("Rebooting node: {} failed with exception:", endpoint, e);
+                    if (retries == 0) {
+                        throw new RetryExhaustedException("Rebooting node: retry exhausted");
+                    }
+                    log.warn("Retrying reboot {} times in {}ms.", retries, retryDuration.toMillis());
+                    Sleep.sleepUninterruptibly(retryDuration);
                 }
-                break;
-            } catch (Exception e) {
-                log.error("Rebooting node: {} failed with exception:", endpoint, e);
-                if (retries == 0) {
-                    throw new RetryExhaustedException("Rebooting node: retry exhausted");
-                }
-                log.warn("Retrying reboot {} times in {}ms.", retries, retryDuration.toMillis());
-                Sleep.sleepUninterruptibly(retryDuration);
             }
+            log.info("Successfully rebooted server:{}", endpoint);
         }
-        log.info("Successfully rebooted server:{}", endpoint);
-        router.stop();
     }
 }
