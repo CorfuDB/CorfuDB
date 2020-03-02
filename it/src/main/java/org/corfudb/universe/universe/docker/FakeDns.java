@@ -2,7 +2,6 @@ package org.corfudb.universe.universe.docker;
 
 import com.google.common.base.Throwables;
 import com.google.common.net.InetAddresses;
-
 import org.corfudb.util.Utils;
 
 import java.lang.reflect.Field;

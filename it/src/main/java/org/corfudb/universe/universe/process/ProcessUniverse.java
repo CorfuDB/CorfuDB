@@ -52,6 +52,7 @@ public class ProcessUniverse extends AbstractUniverse<NodeParams, UniverseParams
             return ProcessCorfuCluster.builder()
                     .universeParams(universeParams)
                     .corfuClusterParams(ClassUtils.cast(groupParams))
+                    .loggingParams(loggingParams)
                     .build();
         }
 

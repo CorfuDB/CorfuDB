@@ -23,7 +23,8 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
     @NonNull
     protected final LoggingParams loggingParams;
 
-    protected AbstractCorfuServer(@NonNull T params, @NonNull U universeParams, LoggingParams loggingParams) {
+    protected AbstractCorfuServer(@NonNull T params, @NonNull U universeParams,
+                                  @NonNull LoggingParams loggingParams) {
         this.params = params;
         this.universeParams = universeParams;
         this.loggingParams = loggingParams;

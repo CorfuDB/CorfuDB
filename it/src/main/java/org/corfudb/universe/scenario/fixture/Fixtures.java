@@ -164,7 +164,7 @@ public interface Fixtures {
                     .mode(CorfuServer.Mode.CLUSTER)
                     .persistence(CorfuServer.Persistence.DISK)
                     .stopTimeout(Duration.ofSeconds(1))
-                    .serverJarDirectory(Paths.get("target"))
+                    .universeDirectory(Paths.get("target"))
                     .dockerImage(CorfuServerParams.DOCKER_IMAGE_NAME)
                     .logSizeQuotaPercentage(100);
 
